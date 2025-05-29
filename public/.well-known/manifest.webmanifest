@@ -1,0 +1,22 @@
+{
+  "name": "U&A IWA Test",
+  "short_name": "U&AIWATest",
+  "description": "U&A modified Isolated Web App to test the Controlled Frame API.",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "theme_color": "white",
+  "background_color": "white",
+  "version": "1.0.2",
+  "permissions_policy": {
+    "controlled-frame": ["self"],
+    "cross-origin-isolated": ["self"],
+    "fullscreen": ["self", "*"]
+  }
+}
