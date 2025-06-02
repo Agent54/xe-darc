@@ -1,21 +1,27 @@
 {
-  "name": "U&A IWA Test",
-  "short_name": "U&AIWATest",
+  "name": "Darc",
+  "short_name": "Darc",
   "description": "U&A modified Isolated Web App to test the Controlled Frame API.",
+  "categories": ["productivity"],
+  "lang": ["en"],
+  "dir": "ltr",
+  "orientation": "landscape",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any"
     }
   ],
+  "display_override": ["window-controls-overlay"],
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
-  "theme_color": "white",
-  "background_color": "white",
-  "version": "1.0.2",
+  "theme_color": "black",
+  "background_color": "black",
+  "version": "1.0.4",
   "permissions_policy": {
-    "controlled-frame": ["self"],
+    "controlled-frame": ["self", "about://*", "chrome-extension://fgeflhglmchkilcegppfkgmmabpppcia"],
     "cross-origin-isolated": ["self"],
     "fullscreen": ["self", "*"]
   }
