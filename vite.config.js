@@ -17,7 +17,8 @@
 import { defineConfig } from 'vite';
 import fs from 'fs';
 import injectHTML from 'vite-plugin-html-inject';
-import react from '@vitejs/plugin-react';
+// import react from '@vitejs/plugin-react';
+import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 import wbn from 'rollup-plugin-webbundle';
 import * as wbnSign from 'wbn-sign';
@@ -27,7 +28,8 @@ dotenv.config();
 
 const plugins = [
   injectHTML(),
-  react({refresh: false, fastRefresh: false}),
+  // react({refresh: false, fastRefresh: false}),
+  svelte(),
 ];
 
   // // something
@@ -52,32 +54,32 @@ const plugins = [
 
 if (process.env.NODE_ENV === 'production') {
   // Get the key and decrypt it to sign the web bundle
-  const key = wbnSign.parsePemKey(
-    process.env.KEY || fs.readFileSync('./certs/encrypted_key.pem'),
-    process.env.KEY_PASSPHRASE ||
-      (await wbnSign.readPassphrase(
-        /*description=*/ './certs/encrypted_key.pem',
-      )),
-  );
+  // const key = wbnSign.parsePemKey(
+  //   process.env.KEY || fs.readFileSync('./certs/encrypted_key.pem'),
+  //   process.env.KEY_PASSPHRASE ||
+  //     (await wbnSign.readPassphrase(
+  //       /*description=*/ './certs/encrypted_key.pem',
+  //     )),
+  // );
 
   // Add the wbn bundle only during a production build
-  plugins.push({
-    ...wbn({
-      // Ensures the web bundle is signed as an isolated web app
-      baseURL: new wbnSign.WebBundleId(key).serializeWithIsolatedWebAppOrigin(),
-      // Ensure that all content in the `public` directory is included in the web bundle
-      static: {
-        dir: 'public',
-      },
-      // The name of the output web bundle
-      output: 'controlled-frame-test-app.swbn',
-      // This ensures the web bundle is signed with the key
-      integrityBlockSign: {
-        strategy: new wbnSign.NodeCryptoSigningStrategy(key),
-      },
-    }),
-    enforce: 'post',
-  });
+  // plugins.push({
+  //   ...wbn({
+  //     // Ensures the web bundle is signed as an isolated web app
+  //     baseURL: new wbnSign.WebBundleId(key).serializeWithIsolatedWebAppOrigin(),
+  //     // Ensure that all content in the `public` directory is included in the web bundle
+  //     static: {
+  //       dir: 'public',
+  //     },
+  //     // The name of the output web bundle
+  //     output: 'controlled-frame-test-app.swbn',
+  //     // This ensures the web bundle is signed with the key
+  //     integrityBlockSign: {
+  //       strategy: new wbnSign.NodeCryptoSigningStrategy(key),
+  //     },
+  //   }),
+  //   enforce: 'post',
+  // });
 
 }
 // } else {
@@ -127,8 +129,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
-        web_request_test: './web_request_test.html',
-        tldraw_webview: './tldraw_webview.html'
+        // web_request_test: './web_request_test.html',
+        // tldraw_webview: './tldraw_webview.html'
       },
     },
   },
