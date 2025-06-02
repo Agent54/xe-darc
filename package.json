@@ -13,10 +13,12 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tldraw/assets": "^3.6.0",
     "lit": "^3.2.1",
+    "pouchdb-browser": "^9.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "svelte": "^5.33.11",
-    "tldraw": "^3.6.0"
+    "tldraw": "^3.6.0",
+    "vite-plugin-node-polyfills": "^0.23.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
