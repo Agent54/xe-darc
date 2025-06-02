@@ -4,4 +4,5 @@ body, html {
     margin: 0;
     /* -webkit-app-region: drag;
     app-region: drag; */
+    font-family: 'Inter', sans-serif;
 }

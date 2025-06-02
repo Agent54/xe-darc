@@ -23,6 +23,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import wbn from 'rollup-plugin-webbundle';
 import * as wbnSign from 'wbn-sign';
 import dotenv from 'dotenv';
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 dotenv.config();
 
@@ -30,6 +31,7 @@ const plugins = [
   injectHTML(),
   // react({refresh: false, fastRefresh: false}),
   svelte(),
+  nodePolyfills()
 ];
 
   // // something
