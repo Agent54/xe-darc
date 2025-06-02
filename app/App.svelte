@@ -14,11 +14,21 @@
         updateTabAudioState(event.target)
     }
     
-    function navigateToExample() {
-      controlledFrame.navigate('https://example.com')
-    }
+    // function navigateToExample() {
+    //   controlledFrame.navigate('https://example.com')
+    // }
 
     let tabs = $state([
+        { 
+            id: 'tab-0',
+            url: 'http://lanes.localhost/', 
+            title: 'Lanes', 
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://lanes.pm&size=64',
+            audioPlaying: false,
+            screenshot: null,
+            pinned: false,
+            muted: false
+        },
         { 
             id: 'tab-1',
             url: 'https://operaneon.com/', 
@@ -70,6 +80,9 @@
     let isTrashItemHover = $state(false)
     let contextMenu = $state({ visible: false, x: 0, y: 0, tab: null })
     let hovercardCheckInterval = null
+    let isDragEnabled = $state(true)
+    let hovercardRecentlyActive = $state(false)
+    let hovercardResetTimer = null
 
     function handleNewWindow(e) {
         console.log('New window:', e)
@@ -103,6 +116,9 @@
     function handleKeyDown(event) {
         if ((event.metaKey || event.ctrlKey) && event.key === 't') {
             event.preventDefault()
+            event.stopPropagation()
+            event.stopImmediatePropagation()
+            event.cancelBubble = true
             openNewTab()
         }
         if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
@@ -146,6 +162,14 @@
         event.preventDefault()
         event.stopPropagation()
         
+        // Prevent opening a second context menu if one is already visible
+        if (contextMenu.visible) {
+            return
+        }
+        
+        // Disable drag while context menu is open
+        isDragEnabled = false
+        
         contextMenu = {
             visible: true,
             x: event.clientX,
@@ -157,6 +181,16 @@
 
     function hideContextMenu() {
         contextMenu = { visible: false, x: 0, y: 0, tab: null, index: null }
+        // Re-enable drag when context menu closes
+        isDragEnabled = true
+    }
+
+    // Handle right-clicks anywhere to close context menu
+    function handleGlobalContextMenu(event) {
+        if (contextMenu.visible) {
+            event.preventDefault()
+            hideContextMenu()
+        }
     }
 
     function reloadTab(tab) {
@@ -242,7 +276,10 @@
 
     $effect(() => {
         if (tabs) {
-            if (observer) observer.disconnect()
+            console.log('fix obeserver effect')
+            if (observer) {
+                observer.disconnect()
+            }
             observer = setupIntersectionObserver()
         }
     })
@@ -251,7 +288,12 @@
     $effect(() => {
         return () => {
             stopHovercardPositionCheck()
-            if (observer) observer.disconnect()
+            if (observer) {
+                observer.disconnect()
+            }
+            if (hovercardResetTimer) {
+                clearTimeout(hovercardResetTimer)
+            }
         }
     })
 
@@ -293,108 +335,29 @@
                 }
             }
             
-            // Try the modern controlled frame API method with retries
-            if (typeof frame.captureVisibleRegion === 'function') {
-                const imageDetails = {
-                    format: 'png',
-                    quality: 80
-                }
-                
-                // Retry mechanism for flaky captures
-                for (let attempt = 1; attempt <= 3; attempt++) {
-                    try {
-                        console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
-                        screenshot = await frame.captureVisibleRegion(imageDetails)
-                        if (screenshot) {
-                            console.log(`Screenshot successful on attempt ${attempt}`)
-                            break
-                        }
-                    } catch (captureError) {
-                        console.log(`Capture attempt ${attempt} failed:`, captureError.message)
-                        if (attempt < 3) {
-                            // Wait before retry, increasing delay each time
-                            await new Promise(resolve => setTimeout(resolve, attempt * 500))
-                        }
+            const imageDetails = {
+                format: 'png',
+                quality: 80
+            }
+            
+            // Retry mechanism for flaky captures
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
+                    screenshot = await frame.captureVisibleRegion(imageDetails)
+                    if (screenshot) {
+                        console.log(`Screenshot successful on attempt ${attempt}`)
+                        break
+                    }
+                } catch (captureError) {
+                    console.log(`Capture attempt ${attempt} failed:`, captureError.message)
+                    if (attempt < 3) {
+                        // Wait before retry, increasing delay each time
+                        await new Promise(resolve => setTimeout(resolve, attempt * 500))
                     }
                 }
             }
             
-            // Fallback to executeScript method if captureVisibleRegion fails
-            if (!screenshot && typeof frame.executeScript === 'function') {
-                try {
-                    console.log('Trying executeScript fallback for screenshot')
-                    screenshot = await frame.executeScript({
-                        code: `
-                            new Promise((resolve) => {
-                                try {
-                                    // Create a simple canvas representation
-                                    const canvas = document.createElement('canvas');
-                                    const ctx = canvas.getContext('2d');
-                                    const width = Math.min(document.documentElement.scrollWidth || window.innerWidth, 1200);
-                                    const height = Math.min(document.documentElement.scrollHeight || window.innerHeight, 800);
-                                    
-                                    canvas.width = width;
-                                    canvas.height = height;
-                                    
-                                    // Get page background color
-                                    const bgColor = window.getComputedStyle(document.body).backgroundColor || '#ffffff';
-                                    ctx.fillStyle = bgColor !== 'rgba(0, 0, 0, 0)' ? bgColor : '#ffffff';
-                                    ctx.fillRect(0, 0, width, height);
-                                    
-                                    // Add page title if available
-                                    if (document.title) {
-                                        ctx.fillStyle = '#333333';
-                                        ctx.font = 'bold 24px system-ui, -apple-system, sans-serif';
-                                        ctx.textAlign = 'center';
-                                        ctx.fillText(document.title, width/2, height/2 - 20);
-                                    }
-                                    
-                                    // Add URL
-                                    ctx.fillStyle = '#666666';
-                                    ctx.font = '14px system-ui, -apple-system, sans-serif';
-                                    ctx.fillText(window.location.href, width/2, height/2 + 20);
-                                    
-                                    // Add page favicon if available
-                                    const favicon = document.querySelector('link[rel*="icon"]');
-                                    if (favicon && favicon.href) {
-                                        const img = new Image();
-                                        img.onload = () => {
-                                            try {
-                                                ctx.drawImage(img, width/2 - 16, height/2 - 60, 32, 32);
-                                                resolve(canvas.toDataURL('image/png', 0.8));
-                                            } catch (e) {
-                                                resolve(canvas.toDataURL('image/png', 0.8));
-                                            }
-                                        };
-                                        img.onerror = () => {
-                                            resolve(canvas.toDataURL('image/png', 0.8));
-                                        };
-                                        img.src = favicon.href;
-                                        
-                                        // Timeout fallback
-                                        setTimeout(() => {
-                                            resolve(canvas.toDataURL('image/png', 0.8));
-                                        }, 2000);
-                                    } else {
-                                        resolve(canvas.toDataURL('image/png', 0.8));
-                                    }
-                                } catch (error) {
-                                    console.log('Canvas fallback error:', error);
-                                    resolve(null);
-                                }
-                            })
-                        `
-                    })
-                } catch (scriptError) {
-                    console.log('ExecuteScript fallback failed:', scriptError)
-                }
-            }
-            
-            // Generate a themed placeholder if all else fails
-            if (!screenshot) {
-                console.log('Generating placeholder screenshot')
-                screenshot = generatePlaceholderScreenshot(tab)
-            }
             
             if (screenshot) {
                 const tabIndex = tabs.findIndex(t => t.id === tab.id)
@@ -409,58 +372,13 @@
         return null
     }
 
-    function generatePlaceholderScreenshot(tab) {
-        // Create a canvas-based placeholder that matches the site's theme
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        canvas.width = 1200
-        canvas.height = 800
-        
-        // Dark theme gradient background
-        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height)
-        gradient.addColorStop(0, '#1a1a1a')
-        gradient.addColorStop(1, '#2a2a2a')
-        ctx.fillStyle = gradient
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        
-        // Add subtle grid pattern
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'
-        ctx.lineWidth = 1
-        for (let i = 0; i < canvas.width; i += 50) {
-            ctx.beginPath()
-            ctx.moveTo(i, 0)
-            ctx.lineTo(i, canvas.height)
-            ctx.stroke()
-        }
-        for (let i = 0; i < canvas.height; i += 50) {
-            ctx.beginPath()
-            ctx.moveTo(0, i)
-            ctx.lineTo(canvas.width, i)
-            ctx.stroke()
-        }
-        
-        // Add content
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
-        ctx.font = 'bold 48px system-ui, -apple-system, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText(tab.title || 'Loading...', canvas.width/2, canvas.height/2 - 40)
-        
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
-        ctx.font = '24px system-ui, -apple-system, sans-serif'
-        ctx.fillText(tab.url, canvas.width/2, canvas.height/2 + 20)
-        
-        // Add loading indicator
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'
-        ctx.font = '18px system-ui, -apple-system, sans-serif'
-        ctx.fillText('Preview will update when page loads', canvas.width/2, canvas.height/2 + 80)
-        
-        return canvas.toDataURL('image/png', 0.8)
-    }
-
     function handleTabMouseEnter(tab, event) {
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
         }
+        
+        // Use longer delay initially, shorter delay if recently active
+        const delay = hovercardRecentlyActive ? 200 : 800
         
         hoverTimeout = setTimeout(() => {
             const tabElement = event.target.closest('.tab')
@@ -468,7 +386,7 @@
             
             hovercardPosition = {
                 x: rect.left + rect.width / 2,
-                y: rect.bottom + 8
+                y: rect.bottom
             }
             
             isTrashItemHover = false
@@ -477,9 +395,20 @@
                 captureTabScreenshot(tab)
             }
             
+            // Mark hovercards as recently active
+            hovercardRecentlyActive = true
+            
+            // Reset the "recently active" state after 3 seconds of no hover activity
+            if (hovercardResetTimer) {
+                clearTimeout(hovercardResetTimer)
+            }
+            hovercardResetTimer = setTimeout(() => {
+                hovercardRecentlyActive = false
+            }, 3000)
+            
             // Start checking cursor position
             startHovercardPositionCheck()
-        }, 200)
+        }, delay)
     }
 
     function handleTabMouseLeave() {
@@ -489,16 +418,27 @@
         }
         
         setTimeout(() => {
-            hoveredTab = null
-            isTrashItemHover = false
-            stopHovercardPositionCheck()
-        }, 50)
+            // Only close if not hovering over hovercard
+            const mouseX = window.mouseX || 0
+            const mouseY = window.mouseY || 0
+            const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+            
+            if (!elementUnderCursor?.closest('.tab-hovercard')) {
+                hoveredTab = null
+                isTrashItemHover = false
+                stopHovercardPositionCheck()
+            }
+        }, 100)
     }
 
     function handleTrashItemMouseEnter(tab, event) {
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
+            hoverTimeout = null
         }
+        
+        // Use longer delay initially, shorter delay if recently active
+        const delay = hovercardRecentlyActive ? 200 : 800
         
         hoverTimeout = setTimeout(() => {
             const trashItem = event.target.closest('.trash-menu-item')
@@ -536,22 +476,40 @@
                 captureTabScreenshot(tab)
             }
             
+            // Mark hovercards as recently active
+            hovercardRecentlyActive = true
+            
+            // Reset the "recently active" state after 3 seconds of no hover activity
+            if (hovercardResetTimer) {
+                clearTimeout(hovercardResetTimer)
+            }
+            hovercardResetTimer = setTimeout(() => {
+                hovercardRecentlyActive = false
+            }, 3000)
+            
             // Start checking cursor position
             startHovercardPositionCheck()
-        }, 200)
+        }, delay)
     }
 
     function handleTrashItemMouseLeave() {
         if (hoverTimeout) {
-            clearTimeout(hoverTimeout)
+            clearTimeout(hovertimeout)
             hoverTimeout = null
         }
         
         setTimeout(() => {
-            hoveredTab = null
-            isTrashItemHover = false
-            stopHovercardPositionCheck()
-        }, 50)
+            // Only close if not hovering over hovercard
+            const mouseX = window.mouseX || 0
+            const mouseY = window.mouseY || 0
+            const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+            
+            if (!elementUnderCursor?.closest('.tab-hovercard')) {
+                hoveredTab = null
+                isTrashItemHover = false
+                stopHovercardPositionCheck()
+            }
+        }, 100)
     }
 
     function startHovercardPositionCheck() {
@@ -578,10 +536,13 @@
                 return
             }
             
-            // Check if cursor is still over the triggering element
+            // Check if cursor is still over the triggering element or the hovercard
             let isStillHovering = false
             
-            if (isTrashItemHover) {
+            // Check if hovering over the entire hovercard (including padding)
+            if (elementUnderCursor.closest('.tab-hovercard')) {
+                isStillHovering = true
+            } else if (isTrashItemHover) {
                 // Check if still over trash menu or trash icon
                 isStillHovering = elementUnderCursor.closest('.trash-menu-item') || 
                                 elementUnderCursor.closest('.trash-menu') ||
@@ -601,7 +562,7 @@
                 isTrashItemHover = false
                 stopHovercardPositionCheck()
             }
-        }, 100) // Check every 100ms
+        }, 50) // Reduced from 100ms to 50ms for more responsive checking
     }
 
     function stopHovercardPositionCheck() {
@@ -627,21 +588,25 @@
     }, 1500)
 </script>
 
-<svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} onmousemove={handleGlobalMouseMove}/>
+
+<svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove}/>
 
 <header>
-    <!-- Drag handle for header free space -->
-    <div class="header-drag-handle"></div>
-    
-    <ul style="padding: 0; margin: 6px;">
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled}></div>
+     
+    <ul style="padding: 0; margin: 0;top: 7px;left: 7px;">
         {#each tabs as tab, i}
-            <li class="tab" class:active={i===activeTabIndex} class:pinned={tab.pinned}>
-                <div 
-                    onclick={() => openTab(tab, i)}
-                    oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
-                    onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                    onmouseleave={handleTabMouseLeave}
-                >
+            <li class="tab" 
+                class:active={i===activeTabIndex} 
+                class:pinned={tab.pinned}
+                role="tab"
+                tabindex="0"
+                onclick={() => openTab(tab, i)}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTab(tab, i) } }}
+                oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
+                onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                onmouseleave={handleTabMouseLeave}>
+                <div>
                     {#if tab.pinned}
                         📌
                     {/if}
@@ -652,7 +617,7 @@
                         🔇 &nbsp;
                     {/if}{tab.title || tab.url}</span>
                     {#if !tab.pinned}
-                        <button class="close-btn" onclick={() => closeTab(tab, event)}>×</button>
+                        <button class="close-btn" onclick={() => closeTab(tab, event)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e) } }}>×</button>
                     {/if}
                 </div>
             </li>
@@ -666,7 +631,10 @@
                 <div class="trash-menu-header">Recently Closed  </div>
                 {#each closed.slice(-5) as closedTab}
                     <div class="trash-menu-item" 
-                         onclick={() => restoreTab(closedTab)}
+                         role="button"
+                         tabindex="0"
+                         onmousedown={() => restoreTab(closedTab)}
+                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); restoreTab(closedTab) } }}
                          onmouseenter={(e) => handleTrashItemMouseEnter(closedTab, e)}
                          onmouseleave={handleTrashItemMouseLeave}>
                         <img src={closedTab.favicon} alt="" class="favicon" />
@@ -675,7 +643,11 @@
                 {/each}
                 {#if closed.length > 0}
                     <div class="trash-menu-separator"></div>
-                    <div class="trash-menu-clear" onclick={() => clearAllClosedTabs()}>
+                    <div class="trash-menu-clear" 
+                         onclick={() => clearAllClosedTabs()} 
+                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearAllClosedTabs() } }}
+                         tabindex="0" 
+                         role="button">
                         <span>🗑️</span>
                         <span>Clear All ({closed.length})</span>
                     </div>
@@ -686,17 +658,20 @@
 </header>
 
 <!-- Edge drag handles -->
-<div class="drag-handle-left"></div>
-<div class="drag-handle-right"></div>
-<div class="drag-handle-bottom"></div>
+<div class="drag-handle-left" class:drag-enabled={isDragEnabled}></div>
+<div class="drag-handle-right" class:drag-enabled={isDragEnabled}></div>
+<div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
 {#if contextMenu.visible && contextMenu.tab}
     <!-- Transparent scrim to handle clicks outside context menu -->
-    <div class="context-menu-scrim" onclick={hideContextMenu}></div>
+    <div class="context-menu-scrim" 
+         onmousedowncapture={hideContextMenu}
+         oncontextmenu={(e) => { e.preventDefault(); hideContextMenu(); }}></div>
     
     <div class="context-menu" 
          style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
-         onclick={(e) => e.stopPropagation()}>
+         onclick={(e) => e.stopPropagation()}
+         oncontextmenu={(e) => e.preventDefault()}>
         <div class="context-menu-item" onclick={() => reloadTab(contextMenu.tab)}>
             <span class="context-menu-icon">🔄</span>
             <span>Reload</span>
@@ -709,7 +684,13 @@
             <span class="context-menu-icon">{contextMenu.tab.muted ? '🔊' : '🔇'}</span>
             <span>{contextMenu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
         </div>
+        <div class="context-menu-item" onclick={() => {}}>
+            <span class="context-menu-icon">🖼️</span>
+            <span>Take Screenshot</span>
+        </div>
+
         <div class="context-menu-separator"></div>
+
         <div class="context-menu-item danger" onclick={() => closeTabFromMenu(contextMenu.tab)}>
             <span class="context-menu-icon">✕</span>
             <span>Close Tab</span>
@@ -722,24 +703,50 @@
          class:trash-item={isTrashItemHover}
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
         <div class="hovercard-content">
+            <div class="hovercard-info"
+                 role="region"
+                 onmouseenter={() => {}}
+                 onmouseleave={() => {
+                     setTimeout(() => {
+                         // Only close if not hovering over the original trigger element
+                         const mouseX = window.mouseX || 0
+                         const mouseY = window.mouseY || 0
+                         const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+                         
+                         let shouldKeepOpen = false
+                         
+                         if (isTrashItemHover) {
+                             shouldKeepOpen = elementUnderCursor?.closest('.trash-menu-item') || 
+                                            elementUnderCursor?.closest('.trash-menu') ||
+                                            elementUnderCursor?.closest('.trash-icon')
+                         } else {
+                             const hoveredTabElement = elementUnderCursor?.closest('.tab')
+                             if (hoveredTabElement) {
+                                 const tabIndex = Array.from(hoveredTabElement.parentElement.children).indexOf(hoveredTabElement)
+                                 shouldKeepOpen = tabs[tabIndex]?.id === hoveredTab.id
+                             }
+                         }
+                         
+                         if (!shouldKeepOpen) {
+                             hoveredTab = null
+                             isTrashItemHover = false
+                             stopHovercardPositionCheck()
+                         }
+                     }, 100)
+                 }}>
+                <div class="hovercard-title">{hoveredTab.title || 'Untitled'}</div>
+                <div class="hovercard-url">{hoveredTab.url}</div>
+            </div>
             {#if hoveredTab.screenshot}
                 <div class="hovercard-screenshot">
                     <img src={hoveredTab.screenshot} alt="Page preview" />
                 </div>
-            {:else}
-                <div class="hovercard-screenshot placeholder">
-                    <div class="loading-spinner"></div>
-                </div>
             {/if}
-            <div class="hovercard-info">
-                <div class="hovercard-title">{hoveredTab.title || 'Untitled'}</div>
-                <div class="hovercard-url">{hoveredTab.url}</div>
-            </div>
         </div>
     </div>
 {/if}
 
-<div class="controlled-frame-container browser-frame w-full h-full"  style="width: 100%; height: 100%; box-sizing: border-box;">
+<div class="controlled-frame-container browser-frame"  style="box-sizing: border-box;">
     {#each tabs as tab}
         <controlledframe 
             id="tab_{tab.id}"
@@ -751,20 +758,14 @@
     {/each}
 </div>
 
-<!-- <button on:click={navigateToExample}>Navigate to Example</button>
-<button on:click={() => controlledFrame.back()}>Back</button>
-<button on:click={() => controlledFrame.forward()}>Forward</button> -->
-
 <style>
     header {
-        /* -webkit-app-region: no-drag;
-        app-region: no-drag; */
         position: fixed;
-        top: 0;
-        left: 80px;
+        left: env(titlebar-area-x, 80px);
+        top: env(titlebar-area-y, 0);
+        width: env(titlebar-area-width, 100%);
+        height: env(titlebar-area-height, 33px);
         z-index: 1000;
-        width: 100%;
-        height: 38px;
         background-color: #000;
         color: #fff;
         display: flex;
@@ -787,10 +788,13 @@
         left: 0;
         right: 0;
         height: 100%;
-        -webkit-app-region: drag;
-        app-region: drag;
         pointer-events: auto;
         z-index: -1;
+    }
+
+    .header-drag-handle.drag-enabled {
+        -webkit-app-region: drag;
+        app-region: drag;
     }
 
     .drag-handle-left {
@@ -799,10 +803,13 @@
         left: 0;
         width: 8px;
         height: 100vh;
-        -webkit-app-region: drag;
-        app-region: drag;
         z-index: 999;
         pointer-events: auto;
+    }
+
+    .drag-handle-left.drag-enabled {
+        -webkit-app-region: drag;
+        app-region: drag;
     }
 
     .drag-handle-right {
@@ -811,10 +818,13 @@
         right: 0;
         width: 8px;
         height: 100vh;
-        -webkit-app-region: drag;
-        app-region: drag;
         z-index: 999;
         pointer-events: auto;
+    }
+
+    .drag-handle-right.drag-enabled {
+        -webkit-app-region: drag;
+        app-region: drag;
     }
 
     .drag-handle-bottom {
@@ -823,10 +833,13 @@
         left: 0;
         right: 0;
         height: 8px;
-        -webkit-app-region: drag;
-        app-region: drag;
         z-index: 999;
         pointer-events: auto;
+    }
+
+    .drag-handle-bottom.drag-enabled {
+        -webkit-app-region: drag;
+        app-region: drag;
     }
 
     ul {
@@ -934,7 +947,7 @@
 
     .trash-icon {
         position: fixed;
-        top: 8px;
+        top: 9px;
         right: 87px;
         width: 32px;
         height: 22px;
@@ -948,7 +961,7 @@
         opacity: 0.7;
         transition: all 0.3s ease;
         backdrop-filter: blur(10px);
-        z-index: 1000;
+        z-index: 10000;
         user-select: none;
         -webkit-app-region: no-drag;
         app-region: no-drag;
@@ -962,12 +975,14 @@
 
     .trash-count {
         margin-left: 4px;
+        margin-bottom: 1px;
         font-size: 11px;
         color: rgba(255, 255, 255, 0.8);
         font-weight: 500;
     }
 
     .trash-menu {
+        z-index: 10005;
         font-family: 'Inter', sans-serif;
         position: absolute;
         top: 10px;
@@ -990,6 +1005,8 @@
         z-index: 10000;
         pointer-events: none;
         overflow: hidden;
+        pointer-events: all;
+        padding-top: 12px;
     }
 
     .trash-icon:hover .trash-menu {
@@ -1052,6 +1069,11 @@
         background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
         margin: 8px 0;
     }
+    @media (display-mode: window-controls-overlay) {
+        header {
+            display: flex;
+        }
+    }
 
     .trash-menu-clear {
         padding: 12px 16px;
@@ -1086,7 +1108,8 @@
     }
 
     .controlled-frame-container {
-      position: fixed;
+      height: calc(100vh - 38px);
+      position: absolute;
       overflow-x: auto;
       overflow-y: hidden;
       padding: 9px;
@@ -1097,19 +1120,20 @@
       justify-content: flex-start;
       align-items: flex-start;
       width: 100%;
-      height: 100%;
       gap: 9px;
       /* -webkit-app-region: drag;
       app-region: drag; */
       -webkit-app-region: no-drag;
       app-region: no-drag;
-      top: 38px;
+      /* top: 38px; */
+      bottom: 0;
       scrollbar-width: thin;
       scrollbar-color: #888 #f1f1f1;
       overscroll-behavior-x: none;
       -webkit-overflow-scrolling: touch;
       scroll-behavior: smooth;
-      scroll-snap-type: x mandatory;
+      scroll-snap-type: x proximity;
+      scroll-padding-left: 9px;
     }
     
     .controlled-frame-container::-webkit-scrollbar {
@@ -1135,7 +1159,7 @@
       box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     }
     
-    :global(controlledframe) {
+    controlledframe {
       width: calc(100vw - 18px);
       height: calc(100vh - 56px);
       border: none;
@@ -1149,17 +1173,34 @@
       -webkit-app-region: no-drag;
       app-region: no-drag;
       user-select: none;
+      scroll-snap-align: start;
+      scroll-snap-stop: normal;
+    }
+
+    @media not (display-mode: window-controls-overlay) {
+        header {
+            display: none;
+        }
+
+        /* todo: delay this until change has effect */
+        .controlled-frame-container {
+            height: 100vh;
+        }
+        controlledframe {
+            height: calc(100vh - 18px);
+        }
     }
 
     .tab-hovercard {
         position: fixed;
         transform: translateX(-50%);
-        z-index: 10001;
-        pointer-events: none;
+        z-index: 10006;
+        pointer-events: all;
         opacity: 0;
         animation: hovercard-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
         app-region: no-drag;
+        padding-top: 12px;
     }
 
     .tab-hovercard.trash-item {
@@ -1203,6 +1244,36 @@
         max-width: 90vw;
     }
 
+    .hovercard-info {
+        padding: 16px;
+        font-family: 'Inter', sans-serif;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .hovercard-info:last-child {
+        border-bottom: none;
+    }
+
+    .hovercard-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 6px;
+        line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .hovercard-url {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+        line-height: 1.3;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
     .hovercard-screenshot {
         width: 100%;
         height: 180px;
@@ -1237,31 +1308,6 @@
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
-    }
-
-    .hovercard-info {
-        padding: 16px;
-        font-family: 'Inter', sans-serif;
-    }
-
-    .hovercard-title {
-        font-size: 14px;
-        font-weight: 600;
-        color: rgba(255, 255, 255, 0.9);
-        margin-bottom: 6px;
-        line-height: 1.4;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .hovercard-url {
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.6);
-        line-height: 1.3;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
 
     .tab.pinned {
