@@ -2,11 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="target-densitydpi=device-dpi, width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title> </title>
     <link rel="manifest" href="/.well-known/manifest.webmanifest" />
     <link rel="stylesheet" href="/app/main.css" />
     <script type="module" src="/app/main.js"></script>
+    <script>
+      document.addEventListener('touchmove', function (event) {
+        console.log(event)
+        if (event.scale !== 1) { event.preventDefault(); }
+      }, { passive: false });
+
+      document.addEventListener("wheel", e => {
+        // suppress browsers default zoom-behavior:
+        e.preventDefault();
+
+        // execution of my own custom zooming-behavior:
+        if (e.deltaY > 0) {
+            this._zoom(1);
+        } else {
+            this._zoom(-1);
+        }
+    })
+    </script>
   </head>
   <body>
     <div id="app"></div>
