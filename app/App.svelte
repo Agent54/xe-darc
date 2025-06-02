@@ -25,7 +25,9 @@
             title: 'Opera Neon', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://operaneon.com&size=64',
             audioPlaying: false,
-            screenshot: null
+            screenshot: null,
+            pinned: false,
+            muted: false
         },
         {
             id: 'tab-2',
@@ -33,7 +35,9 @@
             title: 'Spotify', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://open.spotify.com&size=64',
             audioPlaying: true,
-            screenshot: null
+            screenshot: null,
+            pinned: false,
+            muted: false
         },
         {
             id: 'tab-3',
@@ -41,7 +45,9 @@
             title: 'Google', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
             audioPlaying: false,
-            screenshot: null
+            screenshot: null,
+            pinned: false,
+            muted: false
         },
         {
             id: 'tab-4',
@@ -49,7 +55,9 @@
             title: 'New Tab', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
             audioPlaying: false,
-            screenshot: null
+            screenshot: null,
+            pinned: false,
+            muted: false
         }
     ])
 
@@ -60,6 +68,8 @@
     let hoverTimeout = null
     let hovercardPosition = $state({ x: 0, y: 0 })
     let isTrashItemHover = $state(false)
+    let contextMenu = $state({ visible: false, x: 0, y: 0, tab: null })
+    let hovercardCheckInterval = null
 
     function handleNewWindow(e) {
         console.log('New window:', e)
@@ -69,7 +79,9 @@
             title: e.title, 
             favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.targetUrl}&size=64`,
             audioPlaying: false,
-            screenshot: null
+            screenshot: null,
+            pinned: false,
+            muted: false
         })
     }
 
@@ -80,7 +92,9 @@
             title: 'Google', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
             audioPlaying: false,
-            screenshot: null
+            screenshot: null,
+            pinned: false,
+            muted: false
         }
         tabs.push(newTab)
         activeTabIndex = tabs.length - 1
@@ -114,6 +128,7 @@
 
     function closeTab(tab, event) {
         if (event) event.stopPropagation()
+        if (tab.pinned) return // Don't close pinned tabs
         closed.push(tab)
         tabs = tabs.filter(t => t !== tab)
     }
@@ -125,6 +140,65 @@
 
     function clearAllClosedTabs() {
         closed = []
+    }
+
+    function handleTabContextMenu(event, tab, index) {
+        event.preventDefault()
+        event.stopPropagation()
+        
+        contextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            tab: tab,
+            index: index
+        }
+    }
+
+    function hideContextMenu() {
+        contextMenu = { visible: false, x: 0, y: 0, tab: null, index: null }
+    }
+
+    function reloadTab(tab) {
+        const frame = document.getElementById(`tab_${tab.id}`)
+        if (frame && typeof frame.reload === 'function') {
+            frame.reload()
+        } else if (frame) {
+            // Fallback: navigate to same URL
+            frame.src = tab.url
+        }
+        hideContextMenu()
+    }
+
+    function togglePinTab(tab) {
+        const tabIndex = tabs.findIndex(t => t.id === tab.id)
+        if (tabIndex !== -1) {
+            tabs[tabIndex].pinned = !tabs[tabIndex].pinned
+        }
+        hideContextMenu()
+    }
+
+    function toggleMuteTab(tab) {
+        const tabIndex = tabs.findIndex(t => t.id === tab.id)
+        if (tabIndex !== -1) {
+            tabs[tabIndex].muted = !tabs[tabIndex].muted
+            const frame = document.getElementById(`tab_${tab.id}`)
+            if (frame && typeof frame.setAudioMuted === 'function') {
+                frame.setAudioMuted(tabs[tabIndex].muted)
+            }
+        }
+        hideContextMenu()
+    }
+
+    function closeTabFromMenu(tab) {
+        const tabIndex = tabs.findIndex(t => t.id === tab.id)
+        if (tabIndex !== -1) {
+            closeTab(tab)
+            if (activeTabIndex >= tabs.length) {
+                activeTabIndex = tabs.length - 1
+            }
+        }
+        hideContextMenu()
     }
 
     function setupIntersectionObserver() {
@@ -170,6 +244,14 @@
         if (tabs) {
             if (observer) observer.disconnect()
             observer = setupIntersectionObserver()
+        }
+    })
+
+    // Cleanup on component destroy
+    $effect(() => {
+        return () => {
+            stopHovercardPositionCheck()
+            if (observer) observer.disconnect()
         }
     })
 
@@ -394,6 +476,9 @@
             if (!tab.screenshot) {
                 captureTabScreenshot(tab)
             }
+            
+            // Start checking cursor position
+            startHovercardPositionCheck()
         }, 200)
     }
 
@@ -406,7 +491,8 @@
         setTimeout(() => {
             hoveredTab = null
             isTrashItemHover = false
-        }, 100)
+            stopHovercardPositionCheck()
+        }, 50)
     }
 
     function handleTrashItemMouseEnter(tab, event) {
@@ -418,16 +504,40 @@
             const trashItem = event.target.closest('.trash-menu-item')
             const rect = trashItem.getBoundingClientRect()
             
-            hovercardPosition = {
-                x: rect.left - 160, // Position to the left of the trash menu
-                y: rect.top + rect.height / 2
+            // Calculate better positioning
+            const hovercardWidth = 320 // hovercard width from CSS
+            const hovercardHeight = 180 + 60 // screenshot height + info padding
+            
+            // Position to the left of the trash menu with some margin
+            let x = rect.left - hovercardWidth - 20
+            let y = rect.top + rect.height / 2
+            
+            // Ensure hovercard doesn't go off screen on the left
+            if (x < 10) {
+                x = rect.right + 20 // Position to the right if needed
             }
+            
+            // Ensure hovercard doesn't go off screen at the top
+            if (y - hovercardHeight / 2 < 10) {
+                y = hovercardHeight / 2 + 10
+            }
+            
+            // Ensure hovercard doesn't go off screen at the bottom
+            const maxY = window.innerHeight - hovercardHeight / 2 - 10
+            if (y > maxY) {
+                y = maxY
+            }
+            
+            hovercardPosition = { x, y }
             
             isTrashItemHover = true
             hoveredTab = tab
             if (!tab.screenshot) {
                 captureTabScreenshot(tab)
             }
+            
+            // Start checking cursor position
+            startHovercardPositionCheck()
         }, 200)
     }
 
@@ -440,7 +550,71 @@
         setTimeout(() => {
             hoveredTab = null
             isTrashItemHover = false
-        }, 100)
+            stopHovercardPositionCheck()
+        }, 50)
+    }
+
+    function startHovercardPositionCheck() {
+        stopHovercardPositionCheck() // Clear any existing interval
+        
+        hovercardCheckInterval = setInterval(() => {
+            if (!hoveredTab) {
+                stopHovercardPositionCheck()
+                return
+            }
+            
+            // Get current mouse position
+            const mouseX = window.mouseX || 0
+            const mouseY = window.mouseY || 0
+            
+            // Get element under cursor
+            const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+            
+            if (!elementUnderCursor) {
+                // Cursor might be outside window
+                hoveredTab = null
+                isTrashItemHover = false
+                stopHovercardPositionCheck()
+                return
+            }
+            
+            // Check if cursor is still over the triggering element
+            let isStillHovering = false
+            
+            if (isTrashItemHover) {
+                // Check if still over trash menu or trash icon
+                isStillHovering = elementUnderCursor.closest('.trash-menu-item') || 
+                                elementUnderCursor.closest('.trash-menu') ||
+                                elementUnderCursor.closest('.trash-icon')
+            } else {
+                // Check if still over the tab
+                const hoveredTabElement = elementUnderCursor.closest('.tab')
+                if (hoveredTabElement) {
+                    // Make sure it's the same tab
+                    const tabIndex = Array.from(hoveredTabElement.parentElement.children).indexOf(hoveredTabElement)
+                    isStillHovering = tabs[tabIndex]?.id === hoveredTab.id
+                }
+            }
+            
+            if (!isStillHovering) {
+                hoveredTab = null
+                isTrashItemHover = false
+                stopHovercardPositionCheck()
+            }
+        }, 100) // Check every 100ms
+    }
+
+    function stopHovercardPositionCheck() {
+        if (hovercardCheckInterval) {
+            clearInterval(hovercardCheckInterval)
+            hovercardCheckInterval = null
+        }
+    }
+
+    // Track mouse position globally
+    function handleGlobalMouseMove(event) {
+        window.mouseX = event.clientX
+        window.mouseY = event.clientY
     }
 
     setInterval(() => {
@@ -453,22 +627,33 @@
     }, 1500)
 </script>
 
-<svelte:window onkeydowncapture={handleKeyDown}/>
+<svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} onmousemove={handleGlobalMouseMove}/>
 
 <header>
+    <!-- Drag handle for header free space -->
+    <div class="header-drag-handle"></div>
+    
     <ul style="padding: 0; margin: 6px;">
         {#each tabs as tab, i}
-            <li class="tab" class:active={i===activeTabIndex}>
+            <li class="tab" class:active={i===activeTabIndex} class:pinned={tab.pinned}>
                 <div 
                     onclick={() => openTab(tab, i)}
+                    oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
                     onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                     onmouseleave={handleTabMouseLeave}
                 >
+                    {#if tab.pinned}
+                        📌
+                    {/if}
                     <img src={tab.favicon} alt="" class="favicon" />
-                    <span> {#if tab.audioPlaying}
+                    <span> {#if tab.audioPlaying && !tab.muted}
                         🔊 &nbsp;
-                     {/if}{tab.title || tab.url}</span>
-                    <button class="close-btn" onclick={() => closeTab(tab, event)}>×</button>
+                    {:else if tab.muted}
+                        🔇 &nbsp;
+                    {/if}{tab.title || tab.url}</span>
+                    {#if !tab.pinned}
+                        <button class="close-btn" onclick={() => closeTab(tab, event)}>×</button>
+                    {/if}
                 </div>
             </li>
         {/each}
@@ -499,6 +684,38 @@
         </div>
     {/if}
 </header>
+
+<!-- Edge drag handles -->
+<div class="drag-handle-left"></div>
+<div class="drag-handle-right"></div>
+<div class="drag-handle-bottom"></div>
+
+{#if contextMenu.visible && contextMenu.tab}
+    <!-- Transparent scrim to handle clicks outside context menu -->
+    <div class="context-menu-scrim" onclick={hideContextMenu}></div>
+    
+    <div class="context-menu" 
+         style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+         onclick={(e) => e.stopPropagation()}>
+        <div class="context-menu-item" onclick={() => reloadTab(contextMenu.tab)}>
+            <span class="context-menu-icon">🔄</span>
+            <span>Reload</span>
+        </div>
+        <div class="context-menu-item" onclick={() => togglePinTab(contextMenu.tab)}>
+            <span class="context-menu-icon">{contextMenu.tab.pinned ? '📌' : '📍'}</span>
+            <span>{contextMenu.tab.pinned ? 'Unpin' : 'Pin'} Tab</span>
+        </div>
+        <div class="context-menu-item" onclick={() => toggleMuteTab(contextMenu.tab)}>
+            <span class="context-menu-icon">{contextMenu.tab.muted ? '🔊' : '🔇'}</span>
+            <span>{contextMenu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item danger" onclick={() => closeTabFromMenu(contextMenu.tab)}>
+            <span class="context-menu-icon">✕</span>
+            <span>Close Tab</span>
+        </div>
+    </div>
+{/if}
 
 {#if hoveredTab}
     <div class="tab-hovercard" 
@@ -563,6 +780,55 @@
         justify-content: flex-start;
         align-items: flex-start;
     }
+
+    .header-drag-handle {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 100%;
+        -webkit-app-region: drag;
+        app-region: drag;
+        pointer-events: auto;
+        z-index: -1;
+    }
+
+    .drag-handle-left {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 8px;
+        height: 100vh;
+        -webkit-app-region: drag;
+        app-region: drag;
+        z-index: 999;
+        pointer-events: auto;
+    }
+
+    .drag-handle-right {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 8px;
+        height: 100vh;
+        -webkit-app-region: drag;
+        app-region: drag;
+        z-index: 999;
+        pointer-events: auto;
+    }
+
+    .drag-handle-bottom {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 8px;
+        -webkit-app-region: drag;
+        app-region: drag;
+        z-index: 999;
+        pointer-events: auto;
+    }
+
     ul {
         display: flex;
         flex-direction: row;
@@ -574,6 +840,10 @@
         overflow: hidden;
         /* width: 100%; */
         /* max-width: 100px; */
+        -webkit-app-region: no-drag;
+        app-region: no-drag;
+        position: relative;
+        z-index: 1;
     }
     .favicon {
         width: 16px;
@@ -596,10 +866,11 @@
         max-width: 150px;
         width: 200px;
         flex: 0 0 auto;
+        -webkit-app-region: no-drag;
+        app-region: no-drag;
     }
     .tab:hover, .tab.active:hover {
-        background-color: #4a4a4a;
-        
+        background-color: #2b2b2b;
     }
     .tab.active {
         background-color: hsl(0 0% 10% / 1);
@@ -619,19 +890,15 @@
         padding: 0 4px;
         position: relative;
     }
-
     .tab.active div {
         color: #999999;
     }
     .tab.active .favicon, .tab:hover .favicon {
         opacity: 1;
     }
-
-   
     .tab:hover div{
         color: #fff;
     }
-
     .tab div span {
         overflow: hidden;
         text-overflow: ellipsis;
@@ -683,6 +950,8 @@
         backdrop-filter: blur(10px);
         z-index: 1000;
         user-select: none;
+        -webkit-app-region: no-drag;
+        app-region: no-drag;
     }
 
     .trash-icon:hover {
@@ -731,14 +1000,11 @@
     }
 
     .trash-menu-header {
-        padding: 12px 16px 8px;
-        font-size: 11px;
-        color: rgba(255, 255, 255, 0.6);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-weight: 600;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 12px 16px;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.9);
+        font-weight: 400;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .trash-menu-item {
@@ -760,18 +1026,6 @@
 
     .trash-menu-item:hover {
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
-        transform: translateX(2px);
-    }
-
-    .trash-menu-item:hover::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 3px;
-        background: linear-gradient(180deg, #3b82f6, #1d4ed8);
-        border-radius: 0 2px 2px 0;
     }
 
     .trash-menu-item span {
@@ -813,18 +1067,10 @@
 
     .trash-menu-clear:hover {
         background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.15));
-        transform: translateX(2px);
     }
 
-    .trash-menu-clear:hover::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 3px;
-        background: linear-gradient(180deg, #ef4444, #dc2626);
-        border-radius: 0 2px 2px 0;
+    .trash-menu-clear:hover span:last-child {
+        color: rgba(255, 255, 255, 1);
     }
 
     .trash-menu-clear span:first-child {
@@ -840,7 +1086,7 @@
     }
 
     .controlled-frame-container {
-      position: absolute;
+      position: fixed;
       overflow-x: auto;
       overflow-y: hidden;
       padding: 9px;
@@ -855,7 +1101,9 @@
       gap: 9px;
       /* -webkit-app-region: drag;
       app-region: drag; */
-      padding-top: 38px;
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+      top: 38px;
       scrollbar-width: thin;
       scrollbar-color: #888 #f1f1f1;
       overscroll-behavior-x: none;
@@ -888,9 +1136,8 @@
     }
     
     :global(controlledframe) {
-      min-width: calc(100vw - 18px);
       width: calc(100vw - 18px);
-      height: 100%;
+      height: calc(100vh - 56px);
       border: none;
       display: block;
       border-radius: inherit;
@@ -899,6 +1146,9 @@
       flex: 0 0 auto;
       /* -webkit-app-region: no-drag;
       app-region: no-drag; */
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+      user-select: none;
     }
 
     .tab-hovercard {
@@ -908,6 +1158,8 @@
         pointer-events: none;
         opacity: 0;
         animation: hovercard-fade-in 0.2s ease-out forwards;
+        -webkit-app-region: no-drag;
+        app-region: no-drag;
     }
 
     .tab-hovercard.trash-item {
@@ -1010,6 +1262,96 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .tab.pinned {
+        background-color: hsl(210 100% 15% / 1);
+        border: 1px solid hsl(210 100% 25% / 0.3);
+    }
+
+    .tab.pinned:hover {
+        background-color: hsl(210 100% 20% / 1);
+    }
+
+    .tab.pinned .close-btn {
+        display: none;
+    }
+
+    .context-menu {
+        position: fixed;
+        z-index: 10002;
+        background: rgba(0, 0, 0, 0.95);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        min-width: 180px;
+        box-shadow: 
+            0 20px 40px rgba(0, 0, 0, 0.4),
+            0 8px 16px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+        font-family: 'Inter', sans-serif;
+        animation: context-menu-appear 0.15s ease-out;
+        -webkit-app-region: no-drag;
+        app-region: no-drag;
+    }
+
+    @keyframes context-menu-appear {
+        from {
+            opacity: 0;
+            transform: scale(0.95) translateY(-5px);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+    }
+
+    .context-menu-item {
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.9);
+        user-select: none;
+    }
+
+    .context-menu-item:hover {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
+    }
+
+    .context-menu-item.danger:hover {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.15));
+        color: rgba(255, 255, 255, 1);
+    }
+
+    .context-menu-icon {
+        width: 16px;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 12px;
+    }
+
+    .context-menu-separator {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+        margin: 4px 0;
+    }
+
+    .context-menu-scrim {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        z-index: 10001;
     }
 </style>
   
