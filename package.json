@@ -1,0 +1,31 @@
+{
+  "name": "test_app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "bump-version": "node ./bump_version.js"
+  },
+  "dependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tldraw/assets": "^3.6.0",
+    "lit": "^3.2.1",
+    "pouchdb-browser": "^9.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "svelte": "^5.33.11",
+    "tldraw": "^3.6.0",
+    "vite-plugin-node-polyfills": "^0.23.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.0",
+    "dotenv": "^16.4.5",
+    "rollup-plugin-webbundle": "^0.2.0",
+    "vite": "6.3.5",
+    "vite-plugin-html-inject": "^1.1.2",
+    "wbn-sign": "^0.2.1"
+  }
+}

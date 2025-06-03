@@ -1,0 +1,14 @@
+:root {
+    touch-action: pan-x pan-y;
+    height: 100%;
+}
+
+body, html {
+    background-color: black;
+    padding: 0;
+    margin: 0;
+    /* -webkit-app-region: drag;
+    app-region: drag; */
+    font-family: 'Inter', sans-serif;
+    touch-action: manipulation;
+}
