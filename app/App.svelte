@@ -13,10 +13,6 @@
         console.log('Page loaded:', event.url)
         updateTabAudioState(event.target)
     }
-    
-    // function navigateToExample() {
-    //   controlledFrame.navigate('https://example.com')
-    // }
 
     let tabs = $state([
         { 
@@ -70,7 +66,7 @@
             muted: false
         }
     ])
-
+    
     let closed = $state([])
     let activeTabIndex = $state(0)
     let visibilityTimers = new Map()
@@ -83,7 +79,12 @@
     let isDragEnabled = $state(true)
     let hovercardRecentlyActive = $state(false)
     let hovercardResetTimer = null
+    let isWindowControlsOverlay = $state(false)
 
+    const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
+    isWindowControlsOverlay = mediaQueryList.matches
+    mediaQueryList.addEventListener('change', e => setTimeout(() => { isWindowControlsOverlay = e.matches }, 0))
+    
     function handleNewWindow(e) {
         console.log('New window:', e)
         tabs.push({ 
@@ -284,6 +285,11 @@
         }
     })
 
+    // Initialize display mode handling on mount
+    // $effect(() => {
+        // initializeDisplayMode()
+    // })
+
     // Cleanup on component destroy
     $effect(() => {
         return () => {
@@ -313,7 +319,11 @@
 
     async function captureTabScreenshot(tab) {
         const frame = document.getElementById(`tab_${tab.id}`)
-        if (!frame) return null
+        if (!frame) {
+            console.log('Frame not found for tab:', tab.id)
+            return null
+        }
+        await new Promise(resolve => setTimeout(resolve, 500))
 
         try {
             let screenshot = null
@@ -494,7 +504,7 @@
 
     function handleTrashItemMouseLeave() {
         if (hoverTimeout) {
-            clearTimeout(hovertimeout)
+            clearTimeout(hoverTimeout)
             hoverTimeout = null
         }
         
@@ -591,7 +601,7 @@
 
 <svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove}/>
 
-<header>
+<header class:window-controls-overlay={isWindowControlsOverlay}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled}></div>
      
     <ul style="padding: 0; margin: 0;top: 7px;left: 7px;">
@@ -663,7 +673,6 @@
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
 {#if contextMenu.visible && contextMenu.tab}
-    <!-- Transparent scrim to handle clicks outside context menu -->
     <div class="context-menu-scrim" 
          onmousedowncapture={hideContextMenu}
          oncontextmenu={(e) => { e.preventDefault(); hideContextMenu(); }}></div>
@@ -746,9 +755,10 @@
     </div>
 {/if}
 
-<div class="controlled-frame-container browser-frame"  style="box-sizing: border-box;">
+<div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} style="box-sizing: border-box;">
     {#each tabs as tab}
         <controlledframe 
+            class:window-controls-overlay={isWindowControlsOverlay}
             id="tab_{tab.id}"
             src={tab.url}
             partition="persist:myapp"
@@ -768,7 +778,7 @@
         z-index: 1000;
         background-color: #000;
         color: #fff;
-        display: flex;
+        display: none;
         align-items: center;
         color: #fff;
         font-size: 16px;
@@ -780,6 +790,10 @@
         flex-wrap: nowrap;
         justify-content: flex-start;
         align-items: flex-start;
+    }
+
+    header.window-controls-overlay {
+        display: flex;
     }
 
     .header-drag-handle {
@@ -863,6 +877,8 @@
         height: 16px;
         flex-shrink: 0;
         opacity: 0.5;
+        border-radius: 4px;
+        /* FIXME: lanes icon has white corners!!! */
     }
     .tab {
         user-select: none;
@@ -1069,11 +1085,6 @@
         background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
         margin: 8px 0;
     }
-    @media (display-mode: window-controls-overlay) {
-        header {
-            display: flex;
-        }
-    }
 
     .trash-menu-clear {
         padding: 12px 16px;
@@ -1108,7 +1119,7 @@
     }
 
     .controlled-frame-container {
-      height: calc(100vh - 38px);
+      height: 100vh;
       position: absolute;
       overflow-x: auto;
       overflow-y: hidden;
@@ -1134,6 +1145,10 @@
       scroll-behavior: smooth;
       scroll-snap-type: x proximity;
       scroll-padding-left: 9px;
+    }
+
+    .controlled-frame-container.window-controls-overlay {
+        height: calc(100vh - 38px);
     }
     
     .controlled-frame-container::-webkit-scrollbar {
@@ -1161,7 +1176,7 @@
     
     controlledframe {
       width: calc(100vw - 18px);
-      height: calc(100vh - 56px);
+      height: calc(100vh - 18px);
       border: none;
       display: block;
       border-radius: inherit;
@@ -1177,18 +1192,8 @@
       scroll-snap-stop: normal;
     }
 
-    @media not (display-mode: window-controls-overlay) {
-        header {
-            display: none;
-        }
-
-        /* todo: delay this until change has effect */
-        .controlled-frame-container {
-            height: 100vh;
-        }
-        controlledframe {
-            height: calc(100vh - 18px);
-        }
+    controlledframe.window-controls-overlay {
+        height: calc(100vh - 56px);
     }
 
     .tab-hovercard {
