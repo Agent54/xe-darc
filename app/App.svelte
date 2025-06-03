@@ -503,8 +503,8 @@
     }
 
     function handleTrashItemMouseLeave() {
-        if (hoverTimeout) {
-            clearTimeout(hoverTimeout)
+        if (hovertimeout) {
+            clearTimeout(hovertimeout)
             hoverTimeout = null
         }
         
@@ -674,33 +674,58 @@
 
 {#if contextMenu.visible && contextMenu.tab}
     <div class="context-menu-scrim" 
+         role="button"
+         tabindex="0"
          onmousedowncapture={hideContextMenu}
          oncontextmenu={(e) => { e.preventDefault(); hideContextMenu(); }}></div>
     
     <div class="context-menu" 
+         role="menu"
+         tabindex="0"
          style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
          onclick={(e) => e.stopPropagation()}
+         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
          oncontextmenu={(e) => e.preventDefault()}>
-        <div class="context-menu-item" onclick={() => reloadTab(contextMenu.tab)}>
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onclick={() => reloadTab(contextMenu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reloadTab(contextMenu.tab) } }}>
             <span class="context-menu-icon">🔄</span>
             <span>Reload</span>
         </div>
-        <div class="context-menu-item" onclick={() => togglePinTab(contextMenu.tab)}>
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onclick={() => togglePinTab(contextMenu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinTab(contextMenu.tab) } }}>
             <span class="context-menu-icon">{contextMenu.tab.pinned ? '📌' : '📍'}</span>
             <span>{contextMenu.tab.pinned ? 'Unpin' : 'Pin'} Tab</span>
         </div>
-        <div class="context-menu-item" onclick={() => toggleMuteTab(contextMenu.tab)}>
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onclick={() => toggleMuteTab(contextMenu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(contextMenu.tab) } }}>
             <span class="context-menu-icon">{contextMenu.tab.muted ? '🔊' : '🔇'}</span>
             <span>{contextMenu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
         </div>
-        <div class="context-menu-item" onclick={() => {}}>
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onclick={() => {}}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
             <span class="context-menu-icon">🖼️</span>
             <span>Take Screenshot</span>
         </div>
 
         <div class="context-menu-separator"></div>
 
-        <div class="context-menu-item danger" onclick={() => closeTabFromMenu(contextMenu.tab)}>
+        <div class="context-menu-item danger" 
+             role="menuitem"
+             tabindex="0"
+             onclick={() => closeTabFromMenu(contextMenu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTabFromMenu(contextMenu.tab) } }}>
             <span class="context-menu-icon">✕</span>
             <span>Close Tab</span>
         </div>
@@ -808,7 +833,6 @@
 
     .header-drag-handle.drag-enabled {
         -webkit-app-region: drag;
-        app-region: drag;
     }
 
     .drag-handle-left {
@@ -823,7 +847,6 @@
 
     .drag-handle-left.drag-enabled {
         -webkit-app-region: drag;
-        app-region: drag;
     }
 
     .drag-handle-right {
@@ -838,7 +861,6 @@
 
     .drag-handle-right.drag-enabled {
         -webkit-app-region: drag;
-        app-region: drag;
     }
 
     .drag-handle-bottom {
@@ -853,7 +875,6 @@
 
     .drag-handle-bottom.drag-enabled {
         -webkit-app-region: drag;
-        app-region: drag;
     }
 
     ul {
@@ -868,7 +889,6 @@
         /* width: 100%; */
         /* max-width: 100px; */
         -webkit-app-region: no-drag;
-        app-region: no-drag;
         position: relative;
         z-index: 1;
     }
@@ -896,7 +916,6 @@
         width: 200px;
         flex: 0 0 auto;
         -webkit-app-region: no-drag;
-        app-region: no-drag;
     }
     .tab:hover, .tab.active:hover {
         background-color: #2b2b2b;
@@ -980,7 +999,6 @@
         z-index: 10000;
         user-select: none;
         -webkit-app-region: no-drag;
-        app-region: no-drag;
     }
 
     .trash-icon:hover {
@@ -1135,7 +1153,6 @@
       /* -webkit-app-region: drag;
       app-region: drag; */
       -webkit-app-region: no-drag;
-      app-region: no-drag;
       /* top: 38px; */
       bottom: 0;
       scrollbar-width: thin;
@@ -1183,10 +1200,8 @@
       border-radius: 8px;
       overflow: hidden;
       flex: 0 0 auto;
-      /* -webkit-app-region: no-drag;
-      app-region: no-drag; */
+      /* -webkit-app-region: no-drag; */
       -webkit-app-region: no-drag;
-      app-region: no-drag;
       user-select: none;
       scroll-snap-align: start;
       scroll-snap-stop: normal;
@@ -1204,7 +1219,6 @@
         opacity: 0;
         animation: hovercard-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
-        app-region: no-drag;
         padding-top: 12px;
     }
 
@@ -1297,19 +1311,6 @@
         object-position: top;
     }
 
-    .hovercard-screenshot.placeholder {
-        background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
-    }
-
-    .loading-spinner {
-        width: 24px;
-        height: 24px;
-        border: 2px solid rgba(255, 255, 255, 0.1);
-        border-top: 2px solid rgba(255, 255, 255, 0.4);
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-    }
-
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
@@ -1344,7 +1345,6 @@
         font-family: 'Inter', sans-serif;
         animation: context-menu-appear 0.15s ease-out;
         -webkit-app-region: no-drag;
-        app-region: no-drag;
     }
 
     @keyframes context-menu-appear {
