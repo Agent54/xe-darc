@@ -667,10 +667,6 @@
     {/if}
 </header>
 
-<div class="drag-handle-left" class:drag-enabled={isDragEnabled}></div>
-<div class="drag-handle-right" class:drag-enabled={isDragEnabled}></div>
-<div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
-
 {#if contextMenu.visible && contextMenu.tab}
     <div class="context-menu-scrim" 
          role="button"
@@ -792,6 +788,10 @@
     {/each}
 </div>
 
+<div class="drag-handle-left" class:drag-enabled={isDragEnabled}></div>
+<div class="drag-handle-right" class:drag-enabled={isDragEnabled}></div>
+<div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
+
 <style>
     header {
         position: fixed;
@@ -830,10 +830,6 @@
         z-index: -1;
     }
 
-    .header-drag-handle.drag-enabled {
-        -webkit-app-region: drag;
-    }
-
     .drag-handle-left {
         position: fixed;
         top: 0;
@@ -842,10 +838,6 @@
         height: 100vh;
         z-index: 999;
         pointer-events: auto;
-    }
-
-    .drag-handle-left.drag-enabled {
-        -webkit-app-region: drag;
     }
 
     .drag-handle-right {
@@ -858,10 +850,6 @@
         pointer-events: auto;
     }
 
-    .drag-handle-right.drag-enabled {
-        -webkit-app-region: drag;
-    }
-
     .drag-handle-bottom {
         position: fixed;
         bottom: 0;
@@ -870,10 +858,6 @@
         height: 8px;
         z-index: 999;
         pointer-events: auto;
-    }
-
-    .drag-handle-bottom.drag-enabled {
-        -webkit-app-region: drag;
     }
 
     ul {
@@ -1403,5 +1387,8 @@
         background: transparent;
         z-index: 10001;
     }
+
+    .drag-enabled {
+        -webkit-app-region: drag;
+    }
 </style>
-  
