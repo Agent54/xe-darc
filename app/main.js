@@ -18,6 +18,23 @@ if (typeof window !== 'undefined' && window.trustedTypes && window.trustedTypes.
   }
 }
 
+document.addEventListener('touchmove', function (event) {
+  console.log(event)
+  if (event.scale !== 1) { event.preventDefault(); }
+}, { passive: false });
+
+document.addEventListener("wheel", e => {
+  // suppress browsers default zoom-behavior:
+  e.preventDefault();
+
+  // execution of my own custom zooming-behavior:
+  if (e.deltaY > 0) {
+      this._zoom(1);
+  } else {
+      this._zoom(-1);
+  }
+})
+
 import { mount } from 'svelte'
 import App from './App.svelte'
 
