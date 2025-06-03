@@ -503,8 +503,8 @@
     }
 
     function handleTrashItemMouseLeave() {
-        if (hovertimeout) {
-            clearTimeout(hovertimeout)
+        if (hoverTimeout) {
+            clearTimeout(hoverTimeout)
             hoverTimeout = null
         }
         
