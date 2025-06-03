@@ -667,7 +667,6 @@
     {/if}
 </header>
 
-<!-- Edge drag handles -->
 <div class="drag-handle-left" class:drag-enabled={isDragEnabled}></div>
 <div class="drag-handle-right" class:drag-enabled={isDragEnabled}></div>
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
