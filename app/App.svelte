@@ -80,6 +80,8 @@
     let hovercardRecentlyActive = $state(false)
     let hovercardResetTimer = null
     let isWindowControlsOverlay = $state(false)
+    let isScrolling = $state(false)
+    let scrollTimeout = null
 
     const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
     isWindowControlsOverlay = mediaQueryList.matches
@@ -596,6 +598,18 @@
             }
         })
     }, 1500)
+
+    function handleScroll() {
+        isScrolling = true
+        
+        if (scrollTimeout) {
+            clearTimeout(scrollTimeout)
+        }
+        
+        scrollTimeout = setTimeout(() => {
+            isScrolling = false
+        }, 150)
+    }
 </script>
 
 
@@ -775,10 +789,11 @@
     </div>
 {/if}
 
-<div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} style="box-sizing: border-box;">
+<div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} class:scrolling={isScrolling} onscroll={handleScroll} style="box-sizing: border-box;">
     {#each tabs as tab}
         <controlledframe 
             class:window-controls-overlay={isWindowControlsOverlay}
+            class:no-pointer-events={isScrolling}
             id="tab_{tab.id}"
             src={tab.url}
             partition="persist:myapp"
@@ -1194,6 +1209,15 @@
         height: calc(100vh - 56px);
     }
 
+    controlledframe.no-pointer-events {
+        pointer-events: none;
+        user-select: none;
+    }
+
+    .controlled-frame-container.scrolling {
+        scroll-behavior: auto;
+    }
+
     .tab-hovercard {
         position: fixed;
         transform: translateX(-50%);
@@ -1202,7 +1226,7 @@
         opacity: 0;
         animation: hovercard-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
-        padding-top: 12px;
+        padding-top: 9px;
     }
 
     .tab-hovercard.trash-item {
