@@ -23,7 +23,8 @@
             audioPlaying: false,
             screenshot: null,
             pinned: false,
-            muted: false
+            muted: false,
+            loading: false
         },
         { 
             id: 'tab-1',
@@ -33,7 +34,8 @@
             audioPlaying: false,
             screenshot: null,
             pinned: false,
-            muted: false
+            muted: false,
+            loading: false
         },
         {
             id: 'tab-2',
@@ -43,7 +45,8 @@
             audioPlaying: true,
             screenshot: null,
             pinned: false,
-            muted: false
+            muted: false,
+            loading: false
         },
         {
             id: 'tab-3',
@@ -53,7 +56,8 @@
             audioPlaying: false,
             screenshot: null,
             pinned: false,
-            muted: false
+            muted: false,
+            loading: false
         },
         {
             id: 'tab-4',
@@ -63,7 +67,8 @@
             audioPlaying: false,
             screenshot: null,
             pinned: false,
-            muted: false
+            muted: false,
+            loading: false
         }
     ])
     
@@ -97,7 +102,8 @@
             audioPlaying: false,
             screenshot: null,
             pinned: false,
-            muted: false
+            muted: false,
+            loading: false
         })
     }
 
@@ -110,7 +116,8 @@
             audioPlaying: false,
             screenshot: null,
             pinned: false,
-            muted: false
+            muted: false,
+            loading: false
         }
         tabs.push(newTab)
         activeTabIndex = tabs.length - 1
@@ -287,11 +294,6 @@
         }
     })
 
-    // Initialize display mode handling on mount
-    // $effect(() => {
-        // initializeDisplayMode()
-    // })
-
     // Cleanup on component destroy
     $effect(() => {
         return () => {
@@ -317,6 +319,22 @@
                 console.log('Error getting audio state:', err)
             })
         }
+    }
+
+    function handleAudioStateChanged(event) {
+        const tabId = event.target.id.replace('tab_', '')
+        const tabIndex = tabs.findIndex(t => t.id === tabId)
+        if (tabIndex !== -1) {
+            tabs[tabIndex].audioPlaying = event.audible
+        }
+    }
+
+    function handleLoadStart(tab) {
+       tab.loading = true
+    }
+
+    function handleLoadStop(tab) {
+        tab.loading = false
     }
 
     async function captureTabScreenshot(tab) {
@@ -393,7 +411,7 @@
         const delay = hovercardRecentlyActive ? 200 : 800
         
         hoverTimeout = setTimeout(() => {
-            const tabElement = event.target.closest('.tab')
+            const tabElement = event.target.closest('.tab-container')
             const rect = tabElement.getBoundingClientRect()
             
             hovercardPosition = {
@@ -561,7 +579,7 @@
                                 elementUnderCursor.closest('.trash-icon')
             } else {
                 // Check if still over the tab
-                const hoveredTabElement = elementUnderCursor.closest('.tab')
+                const hoveredTabElement = elementUnderCursor.closest('.tab-container')
                 if (hoveredTabElement) {
                     // Make sure it's the same tab
                     const tabIndex = Array.from(hoveredTabElement.parentElement.children).indexOf(hoveredTabElement)
@@ -590,15 +608,6 @@
         window.mouseY = event.clientY
     }
 
-    setInterval(() => {
-        tabs.forEach(tab => {
-            const frame = document.getElementById(`tab_${tab.id}`)
-            if (frame) {
-                updateTabAudioState(frame)
-            }
-        })
-    }, 1500)
-
     function handleScroll() {
         isScrolling = true
         
@@ -616,12 +625,13 @@
 <svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove}/>
 
 <header class:window-controls-overlay={isWindowControlsOverlay}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled}></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 45px;' : ''}"></div>
      
     <ul style="padding: 0; margin: 0;top: 7px;left: 7px;">
         {#each tabs as tab, i}
-            <li class="tab" 
+            <li class="tab-container" 
                 class:active={i===activeTabIndex} 
+                class:hovered={tab.id === hoveredTab?.id}
                 class:pinned={tab.pinned}
                 role="tab"
                 tabindex="0"
@@ -630,9 +640,19 @@
                 oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
                 onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                 onmouseleave={handleTabMouseLeave}>
-                <div>
+                <div class="tab">
                     {#if tab.pinned}
                         📌
+                    {/if}
+
+                    {#if tab.loading}
+                        <svg class="tab-loading-spinner" viewBox="0 0 16 16">
+                            <path d="M8 2 A6 6 0 0 1 14 8" 
+                                  fill="none" 
+                                  stroke="rgba(255, 255, 255, 0.8)" 
+                                  stroke-width="2" 
+                                  stroke-linecap="round"/>
+                        </svg>
                     {/if}
                     <img src={tab.favicon} alt="" class="favicon" />
                     <span> {#if tab.audioPlaying && !tab.muted}
@@ -698,7 +718,7 @@
         <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
-             onclick={() => reloadTab(contextMenu.tab)}
+             onmouseup={() => reloadTab(contextMenu.tab)}
              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reloadTab(contextMenu.tab) } }}>
             <span class="context-menu-icon">🔄</span>
             <span>Reload</span>
@@ -706,7 +726,7 @@
         <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
-             onclick={() => togglePinTab(contextMenu.tab)}
+             onmouseup={() => togglePinTab(contextMenu.tab)}
              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinTab(contextMenu.tab) } }}>
             <span class="context-menu-icon">{contextMenu.tab.pinned ? '📌' : '📍'}</span>
             <span>{contextMenu.tab.pinned ? 'Unpin' : 'Pin'} Tab</span>
@@ -714,7 +734,7 @@
         <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
-             onclick={() => toggleMuteTab(contextMenu.tab)}
+             onmouseup={() => toggleMuteTab(contextMenu.tab)}
              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(contextMenu.tab) } }}>
             <span class="context-menu-icon">{contextMenu.tab.muted ? '🔊' : '🔇'}</span>
             <span>{contextMenu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
@@ -722,7 +742,7 @@
         <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
-             onclick={() => {}}
+             onmouseup={() => {}}
              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
             <span class="context-menu-icon">🖼️</span>
             <span>Take Screenshot</span>
@@ -733,7 +753,7 @@
         <div class="context-menu-item danger" 
              role="menuitem"
              tabindex="0"
-             onclick={() => closeTabFromMenu(contextMenu.tab)}
+             onmouseup={() => closeTabFromMenu(contextMenu.tab)}
              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTabFromMenu(contextMenu.tab) } }}>
             <span class="context-menu-icon">✕</span>
             <span>Close Tab</span>
@@ -763,7 +783,7 @@
                                             elementUnderCursor?.closest('.trash-menu') ||
                                             elementUnderCursor?.closest('.trash-icon')
                          } else {
-                             const hoveredTabElement = elementUnderCursor?.closest('.tab')
+                             const hoveredTabElement = elementUnderCursor?.closest('.tab-container')
                              if (hoveredTabElement) {
                                  const tabIndex = Array.from(hoveredTabElement.parentElement.children).indexOf(hoveredTabElement)
                                  shouldKeepOpen = tabs[tabIndex]?.id === hoveredTab.id
@@ -799,6 +819,10 @@
             partition="persist:myapp"
             onloadcommit={handleLoadCommit}
             onnewwindow={(e) => { handleNewWindow(e)} }
+            onaudiostatechanged={handleAudioStateChanged}
+            allowscaling={true}
+            onloadstart={() => { handleLoadStart(tab) }}
+            onloadstop={() => { handleLoadStop(tab) }}
         ></controlledframe>
     {/each}
 </div>
@@ -896,9 +920,9 @@
         flex-shrink: 0;
         opacity: 0.5;
         border-radius: 4px;
-        /* FIXME: lanes icon has white corners!!! */
+        /* FIXME: lanes favicon has white corners!!! */
     }
-    .tab {
+    .tab-container {
         user-select: none;
         cursor: pointer;
         font-size: 13px;
@@ -915,13 +939,13 @@
         flex: 0 0 auto;
         -webkit-app-region: no-drag;
     }
-    .tab:hover, .tab.active:hover {
+    .tab-container:hover, .tab-container.hovered, .tab-container.active:hover, .tab-container.active.hovered {
         background-color: #2b2b2b;
     }
-    .tab.active {
+    .tab-container.active {
         background-color: hsl(0 0% 10% / 1);
     }
-    .tab div {
+    .tab-container .tab {
         user-select: none;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -936,18 +960,31 @@
         padding: 0 4px;
         position: relative;
     }
-    .tab.active div {
+    .tab-container.active .tab {
         color: #999999;
     }
-    .tab.active .favicon, .tab:hover .favicon {
+    .tab-container.active .favicon, .tab-container:hover .favicon, .tab-container.hovered .favicon {
         opacity: 1;
     }
-    .tab:hover div{
+    .tab-container:hover .tab, .tab-container.hovered .tab {
         color: #fff;
     }
-    .tab div span {
+    .tab-container .tab span {
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+    .tab-loading-spinner {
+        position: absolute;
+        top: 2px;
+        left: 4px;
+        width: 16px;
+        height: 16px;
+        animation: spin 1s linear infinite;
+        z-index: 2;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
 
     .close-btn {
@@ -974,7 +1011,7 @@
         color: #fff;
     }
 
-    .tab:hover .close-btn {
+    .tab-container:hover .close-btn, .tab-container.hovered .close-btn {
         opacity: 1;
     }
 
@@ -1014,7 +1051,7 @@
     }
 
     .trash-menu {
-        z-index: 10005;
+        z-index: 10010;
         font-family: 'Inter', sans-serif;
         position: absolute;
         top: 10px;
@@ -1038,10 +1075,9 @@
         pointer-events: none;
         overflow: hidden;
         pointer-events: all;
-        padding-top: 12px;
     }
 
-    .trash-icon:hover .trash-menu {
+    .trash-icon:hover .trash-menu, .trash-menu:hover {
         opacity: 1;
         visibility: visible;
         transform: translateY(0) scale(1);
@@ -1226,7 +1262,7 @@
         opacity: 0;
         animation: hovercard-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
-        padding-top: 9px;
+        padding-top: 11px;
     }
 
     .tab-hovercard.trash-item {
@@ -1323,16 +1359,16 @@
         100% { transform: rotate(360deg); }
     }
 
-    .tab.pinned {
+    .tab-container.pinned {
         background-color: hsl(210 100% 15% / 1);
         border: 1px solid hsl(210 100% 25% / 0.3);
     }
 
-    .tab.pinned:hover {
+    .tab-container.pinned:hover {
         background-color: hsl(210 100% 20% / 1);
     }
 
-    .tab.pinned .close-btn {
+    .tab-container.pinned .close-btn {
         display: none;
     }
 
