@@ -9,7 +9,7 @@
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "/photon_logo.png",
       "sizes": "any"
     }
   ],

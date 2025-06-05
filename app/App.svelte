@@ -71,6 +71,17 @@
         },
         {
             id: 'tab-5',
+            url: 'https://github.com/orgs/Agent54', 
+            title: 'Agent54', 
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://github.com&size=64',
+            audioPlaying: false,
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
+        {
+            id: 'tab-6',
             url: 'https://badssl.com/', 
             title: 'Bad SSL', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://badssl.com&size=64',
@@ -766,6 +777,24 @@
             <span class="context-menu-icon">{contextMenu.tab.muted ? '🔊' : '🔇'}</span>
             <span>{contextMenu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
         </div>
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onmouseup={() => {}}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
+            <span class="context-menu-icon">💤</span>
+            <span>Hybernate</span>
+        </div>
+
+        <div class="context-menu-item"  
+             role="menuitem"
+             tabindex="0"
+             onmouseup={() => {}}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
+            <span class="context-menu-icon">🔄</span>
+            <span>Move Tab</span>
+        </div>
+
         <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
