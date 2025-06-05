@@ -97,6 +97,7 @@
     let isWindowControlsOverlay = $state(false)
     let isScrolling = $state(false)
     let scrollTimeout = null
+    let hovercardShowTime = null
 
     const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
     isWindowControlsOverlay = mediaQueryList.matches
@@ -430,6 +431,7 @@
             
             isTrashItemHover = false
             hoveredTab = tab
+            hovercardShowTime = Date.now()
             if (!tab.screenshot) {
                 captureTabScreenshot(tab)
             }
@@ -457,6 +459,11 @@
         }
         
         setTimeout(() => {
+            // Don't hide if hovercard was just shown (prevent flicker during animation)
+            if (hovercardShowTime && Date.now() - hovercardShowTime < 300) {
+                return
+            }
+            
             // Only close if not hovering over hovercard
             const mouseX = window.mouseX || 0
             const mouseY = window.mouseY || 0
@@ -465,9 +472,10 @@
             if (!elementUnderCursor?.closest('.tab-hovercard')) {
                 hoveredTab = null
                 isTrashItemHover = false
+                hovercardShowTime = null
                 stopHovercardPositionCheck()
             }
-        }, 100)
+        }, 250)
     }
 
     function handleTrashItemMouseEnter(tab, event) {
@@ -511,6 +519,7 @@
             
             isTrashItemHover = true
             hoveredTab = tab
+            hovercardShowTime = Date.now()
             if (!tab.screenshot) {
                 captureTabScreenshot(tab)
             }
@@ -538,6 +547,11 @@
         }
         
         setTimeout(() => {
+            // Don't hide if hovercard was just shown (prevent flicker during animation)
+            if (hovercardShowTime && Date.now() - hovercardShowTime < 300) {
+                return
+            }
+            
             // Only close if not hovering over hovercard
             const mouseX = window.mouseX || 0
             const mouseY = window.mouseY || 0
@@ -546,9 +560,10 @@
             if (!elementUnderCursor?.closest('.tab-hovercard')) {
                 hoveredTab = null
                 isTrashItemHover = false
+                hovercardShowTime = null
                 stopHovercardPositionCheck()
             }
-        }, 100)
+        }, 250)
     }
 
     function startHovercardPositionCheck() {
@@ -648,8 +663,11 @@
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTab(tab, i) } }}
                 oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
                 onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                onmouseleave={handleTabMouseLeave}>
+                onmouseleave={handleTabMouseLeave}
+                >
                 <div class="tab">
+
+                    <!-- -->
                     {#if tab.pinned}
                         📌
                     {/if}
@@ -780,6 +798,7 @@
                  onmouseenter={() => {}}
                  onmouseleave={() => {
                      setTimeout(() => {
+                        // return
                          // Only close if not hovering over the original trigger element
                          const mouseX = window.mouseX || 0
                          const mouseY = window.mouseY || 0
@@ -1274,7 +1293,7 @@
         opacity: 0;
         animation: hovercard-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
-        padding-top: 11px;
+        padding-top: 12px;
     }
 
     .tab-hovercard.trash-item {
