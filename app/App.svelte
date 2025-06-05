@@ -11,10 +11,20 @@
 
     function handleLoadCommit(event) {
         console.log('Page loaded:', event.url)
-        updateTabAudioState(event.target)
     }
 
     let tabs = $state([
+        {
+            id: 'tab-2',
+            url: 'https://open.spotify.com/', 
+            title: 'Spotify', 
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://open.spotify.com&size=64',
+            audioPlaying: true,
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
         { 
             id: 'tab-0',
             url: 'http://lanes.localhost/', 
@@ -38,17 +48,6 @@
             loading: false
         },
         {
-            id: 'tab-2',
-            url: 'https://open.spotify.com/', 
-            title: 'Spotify', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://open.spotify.com&size=64',
-            audioPlaying: true,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        {
             id: 'tab-3',
             url: 'https://google.com', 
             title: 'Google', 
@@ -64,6 +63,17 @@
             url: 'about:newtab', 
             title: 'New Tab', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
+            audioPlaying: false,
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
+        {
+            id: 'tab-5',
+            url: 'https://badssl.com/', 
+            title: 'Bad SSL', 
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://badssl.com&size=64',
             audioPlaying: false,
             screenshot: null,
             pinned: false,
@@ -120,7 +130,6 @@
             loading: false
         }
         tabs.push(newTab)
-        activeTabIndex = tabs.length - 1
     }
 
     function handleKeyDown(event) {
@@ -812,6 +821,7 @@
 <div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} class:scrolling={isScrolling} onscroll={handleScroll} style="box-sizing: border-box;">
     {#each tabs as tab}
         <controlledframe 
+            bind:this={tab.frame}
             class:window-controls-overlay={isWindowControlsOverlay}
             class:no-pointer-events={isScrolling}
             id="tab_{tab.id}"
@@ -821,6 +831,8 @@
             onnewwindow={(e) => { handleNewWindow(e)} }
             onaudiostatechanged={handleAudioStateChanged}
             allowscaling={true}
+            autosize={true}
+            allowtransparency={false}
             onloadstart={() => { handleLoadStart(tab) }}
             onloadstop={() => { handleLoadStop(tab) }}
         ></controlledframe>
