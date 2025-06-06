@@ -136,8 +136,8 @@
     function openNewTab() {
         const newTab = { 
             id: crypto.randomUUID(),
-            url: 'https://google.com', 
-            title: 'Google', 
+            url: 'about:newtab', 
+            title: 'New Tab', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
             audioPlaying: false,
             screenshot: null,
@@ -146,6 +146,7 @@
             loading: false
         }
         tabs.push(newTab)
+        activeTabIndex = tabs.length - 1 // Switch to the new tab
     }
 
     function handleKeyDown(event) {
@@ -789,6 +790,16 @@
                 {#if viewMode === 'canvas'}<span class="checkmark">✓</span>{/if}
             </div>
         </div>
+    </div>
+
+    <div class="new-tab-button" 
+         role="button"
+         tabindex="0"
+         onclick={openNewTab}
+         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
+         title="New Tab (⌘T)"
+         style="{closed.length > 0 ? 'right: 163px;' : 'right: 125px;'}">
+        <span class="new-tab-icon">+</span>
     </div>
 
     {#if closed.length > 0}
@@ -1653,6 +1664,46 @@
 
     .tab-container.pinned .close-btn {
         display: none;
+    }
+
+    .new-tab-button {
+        position: fixed;
+        top: 9px;
+        width: 32px;
+        height: 22px;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 12px;
+        opacity: 0.7;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+        z-index: 10000;
+        user-select: none;
+        -webkit-app-region: no-drag;
+        border: none;
+    }
+
+    .new-tab-button:hover {
+        opacity: 1;
+        background: rgba(0, 0, 0, 0.9);
+        transform: scale(1.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .new-tab-icon {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 14px;
+        font-weight: 300;
+        line-height: 1;
+        transition: color 0.3s ease;
+    }
+
+    .new-tab-button:hover .new-tab-icon {
+        color: rgba(255, 255, 255, 1);
     }
 
     .context-menu {
