@@ -14,6 +14,7 @@
         grainFlicker = 0.3,
         grainSpread = 1.0,
         animationSpeed = 1.0,
+        lineThickness = 0.025,
         audioLevel = 0,
         audioFrequency = 0
     } = $props()
@@ -184,9 +185,9 @@
         const segments = 80
         
         // Use audio to affect curve complexity (mouse speed handled globally in animate function)
-        const audioMultiplier = 1 + smoothAudioLevel * 0.3 + smoothAudioFrequency * 0.01  // Simplified audio impact
-        const speedMultiplier = 1 + smoothAudioLevel * 0.5  // Reduced speed up with audio to prevent stuttering
-        const mouseInfluence = mouseSpeed * 0.8 + smoothAudioLevel * 0.1      // Reduced audio influence on shape
+        const audioMultiplier = 1 + smoothAudioLevel * 1.5 + smoothAudioFrequency * 0.05  // Increased audio impact for more responsiveness
+        const speedMultiplier = 1 + smoothAudioLevel * 2  // Increased speed up with audio
+        const mouseInfluence = mouseSpeed * 0.8 + smoothAudioLevel * 0.4      // Increased audio influence on shape
         
         for (let i = 0; i <= segments; i++) {
             const t = i / segments
@@ -196,18 +197,18 @@
             
             if (curveType === 'figure8') {
                 // Figure-8 pattern that responds to mouse and audio
-                const audioScale = 1 + smoothAudioLevel * 0.2  // Simplified audio scale impact
+                const audioScale = 1 + smoothAudioLevel * 0.8  // Increased audio scale impact for more visual response
                 const scale = radius * audioScale + Math.sin(time * 0.6 * speedMultiplier + timeOffset) * (0.2 + mouseInfluence)
                 const mouseDistortion = smoothMouseX * 0.3 + smoothMouseY * 0.2  // Strong mouse influence
-                const audioDistortion = smoothAudioLevel * 0.1  // Simplified audio distortion - no trig functions
+                const audioDistortion = Math.sin(smoothAudioFrequency * 2) * smoothAudioLevel * 0.3  // Added frequency distortion back
                 
                 // Curves bend towards mouse position and react to audio
                 x = Math.sin(angle + time * 0.8 * rotDirection * speedMultiplier + mouseDistortion + audioDistortion) * scale + smoothMouseX * 0.4
-                y = Math.sin(angle * 2 + time * 0.8 * rotDirection * speedMultiplier + smoothMouseX * 0.3) * scale * (0.5 + mouseSpeed * 0.3 + smoothAudioLevel * 0.05) + offsetY + smoothMouseY * 0.4
-                z = Math.cos(angle * 3 + time * 1.0 * speedMultiplier + timeOffset + smoothMouseY * 0.2) * (0.3 + mouseSpeed * 0.2 + smoothAudioLevel * 0.05)
+                y = Math.sin(angle * 2 + time * 0.8 * rotDirection * speedMultiplier + smoothMouseX * 0.3 + smoothAudioFrequency * 0.05) * scale * (0.5 + mouseSpeed * 0.3 + smoothAudioLevel * 0.2) + offsetY + smoothMouseY * 0.4
+                z = Math.cos(angle * 3 + time * 1.0 * speedMultiplier + timeOffset + smoothMouseY * 0.2) * (0.3 + mouseSpeed * 0.2 + smoothAudioLevel * 0.2)
                 
                 // Add twist influenced by mouse movement and audio
-                const twist = angle * 2 + time * 1.2 * rotDirection * speedMultiplier + mouseVelX * 0.5 + smoothAudioLevel * 0.5
+                const twist = angle * 2 + time * 1.2 * rotDirection * speedMultiplier + mouseVelX * 0.5 + smoothAudioLevel * 2
                 const cosT = Math.cos(twist)
                 const sinT = Math.sin(twist)
                 const tempY = y
@@ -216,20 +217,20 @@
                 
             } else {
                 // Twisted torus/pretzel pattern that responds to mouse and audio
-                const audioScale = 1 + smoothAudioLevel * 0.15  // Simplified audio scale
+                const audioScale = 1 + smoothAudioLevel * 0.6  // Increased audio scale for more visual response
                 const majorRadius = radius * audioScale + Math.sin(time * 0.8 * speedMultiplier + timeOffset) * (0.15 + mouseInfluence)
-                const minorRadius = 0.3 + Math.cos(time * 1.0 * speedMultiplier + timeOffset) * (0.1 + mouseSpeed * 0.2) + smoothAudioLevel * 0.05
+                const minorRadius = 0.3 + Math.cos(time * 1.0 * speedMultiplier + timeOffset) * (0.1 + mouseSpeed * 0.2) + smoothAudioLevel * 0.2
                 
                 const mouseWarp = smoothMouseX * 0.4 + smoothMouseY * 0.3  // Strong mouse warping
-                const audioWarp = smoothAudioLevel * 0.1  // Simplified audio warping - no trig functions
+                const audioWarp = Math.cos(smoothAudioFrequency * 3) * smoothAudioLevel * 0.3  // Added frequency warping back for more ripples
                 
                 // Torus gravitates towards mouse and pulses with audio
-                x = (majorRadius + minorRadius * Math.cos(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + mouseWarp + audioWarp)) * Math.cos(angle + time * 0.8 * rotDirection * speedMultiplier + smoothMouseY * 0.3) + smoothMouseX * 0.35
-                y = (majorRadius + minorRadius * Math.cos(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + mouseWarp + audioWarp)) * Math.sin(angle + time * 0.8 * rotDirection * speedMultiplier + smoothMouseX * 0.3) * (0.6 + smoothAudioLevel * 0.02) + offsetY + smoothMouseY * 0.35
-                z = minorRadius * Math.sin(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + timeOffset + mouseWarp + audioWarp) * (0.8 + mouseSpeed * 0.3 + smoothAudioLevel * 0.03)
+                x = (majorRadius + minorRadius * Math.cos(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + mouseWarp + audioWarp)) * Math.cos(angle + time * 0.8 * rotDirection * speedMultiplier + smoothMouseY * 0.3 + smoothAudioFrequency * 0.03) + smoothMouseX * 0.35
+                y = (majorRadius + minorRadius * Math.cos(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + mouseWarp + audioWarp)) * Math.sin(angle + time * 0.8 * rotDirection * speedMultiplier + smoothMouseX * 0.3) * (0.6 + smoothAudioLevel * 0.15) + offsetY + smoothMouseY * 0.35
+                z = minorRadius * Math.sin(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + timeOffset + mouseWarp + audioWarp) * (0.8 + mouseSpeed * 0.3 + smoothAudioLevel * 0.2)
                 
                 // Add additional twist influenced by mouse velocity and audio
-                const twist = angle * 1.5 + time * 1.8 * rotDirection * speedMultiplier + mouseVelY * 0.6 + smoothAudioLevel * 0.3
+                const twist = angle * 1.5 + time * 1.8 * rotDirection * speedMultiplier + mouseVelY * 0.6 + smoothAudioLevel * 1.5
                 const cosT = Math.cos(twist)
                 const sinT = Math.sin(twist)
                 const tempX = x
@@ -242,14 +243,14 @@
         
         // Create smooth closed curve and convert to tube for thickness
         const curve = new THREE.CatmullRomCurve3(points, true)
-        return new THREE.TubeGeometry(curve, 100, 0.025, 8, true) // radius 0.025 for visible thickness
+        return new THREE.TubeGeometry(curve, 100, lineThickness, 8, true) // Use adjustable line thickness
     }
     
     function animate() {
         if (!isAnimating) return
         
         // Dynamic time increment based on mouse speed, audio, and animation speed control
-        const audioSpeedBoost = Math.min(smoothAudioLevel * 0.5, 0.2) // Reduced audio speed impact to prevent stuttering
+        const audioSpeedBoost = Math.min(smoothAudioLevel * 2, 0.6) // Increased audio speed impact for more responsiveness
         const speedFactor = 1 + Math.min(mouseSpeed * 2, 1) + audioSpeedBoost
         time += baseTimeIncrement * speedFactor * animationSpeed
         frameCount++
@@ -264,9 +265,9 @@
             if (geometry1) geometry1.dispose()
             if (geometry2) geometry2.dispose()
             
-            // Update geometries with different curve types - reduced audio impact for performance
-            geometry1 = createTwistedCurveGeometry(1.1 + smoothAudioLevel * 0.1, 0.2, 0, 1, 'figure8')
-            geometry2 = createTwistedCurveGeometry(0.9 + smoothAudioLevel * 0.08, -0.2, Math.PI, -1, 'torus')
+            // Update geometries with different curve types - increased audio impact for more responsiveness
+            geometry1 = createTwistedCurveGeometry(1.1 + smoothAudioLevel * 0.5, 0.2, 0, 1, 'figure8')
+            geometry2 = createTwistedCurveGeometry(0.9 + smoothAudioLevel * 0.4, -0.2, Math.PI, -1, 'torus')
         }
         
         animationId = requestAnimationFrame(animate)
@@ -345,12 +346,12 @@
         // Speed affects rotation dynamically
         const speedRotation = mouseSpeed * 2
         
-        // Update positions with strong gravitation effect and minimal audio influence for performance
-        curve1Position.set([target1X + smoothAudioLevel * 0.05, target1Y + smoothAudioLevel * 0.04, mouseSpeed * 0.5 + smoothAudioLevel * 0.05])
-        curve1Rotation.set([targetRot1X + smoothAudioFrequency * 0.002, targetRot1Y + smoothAudioLevel * 0.06, speedRotation + smoothAudioLevel * 0.08])
+        // Update positions with strong gravitation effect and increased audio influence for more responsiveness
+        curve1Position.set([target1X + smoothAudioLevel * 0.2, target1Y + smoothAudioLevel * 0.15, mouseSpeed * 0.5 + smoothAudioLevel * 0.2])
+        curve1Rotation.set([targetRot1X + smoothAudioFrequency * 0.01, targetRot1Y + smoothAudioLevel * 0.3, speedRotation + smoothAudioLevel * 0.4])
         
-        curve2Position.set([target2X + smoothAudioLevel * 0.04, target2Y + smoothAudioLevel * 0.03, -mouseSpeed * 0.3 + smoothAudioLevel * 0.04])
-        curve2Rotation.set([targetRot2X + smoothAudioFrequency * 0.001, targetRot2Y + smoothAudioLevel * 0.05, -speedRotation * 0.8 + smoothAudioLevel * 0.06])
+        curve2Position.set([target2X + smoothAudioLevel * 0.15, target2Y + smoothAudioLevel * 0.12, -mouseSpeed * 0.3 + smoothAudioLevel * 0.15])
+        curve2Rotation.set([targetRot2X + smoothAudioFrequency * 0.008, targetRot2Y + smoothAudioLevel * 0.25, -speedRotation * 0.8 + smoothAudioLevel * 0.3])
         
         // Store previous position
         prevMouseX = smoothMouseX
@@ -422,11 +423,11 @@
     {@const radius = 0.5 + (i % 10) * 0.3}
     {@const height = ((i % 20) - 10) * 0.2}
     <T.Mesh position={[
-        Math.sin(angle1 + time * (0.2 + smoothAudioLevel * 0.1)) * radius * (1 + smoothAudioLevel * 0.05) + Math.cos(i * 0.1 + time * 0.3) * 0.5 + smoothMouseX * 0.3,
-        Math.cos(angle2 + time * (0.15 + smoothAudioLevel * 0.08)) * radius * 0.6 * (1 + smoothAudioLevel * 0.06) + height + Math.sin(i * 0.05 + time * 0.2) * 0.3 + smoothMouseY * 0.3,
-        Math.sin(angle1 * 0.7 + time * (0.25 + smoothAudioFrequency * 0.008)) * 0.8 + Math.cos(i * 0.03 + time * 0.1) * 0.4
+        Math.sin(angle1 + time * (0.2 + smoothAudioLevel * 0.5)) * radius * (1 + smoothAudioLevel * 0.3) + Math.cos(i * 0.1 + time * 0.3) * 0.5 + smoothMouseX * 0.3,
+        Math.cos(angle2 + time * (0.15 + smoothAudioLevel * 0.4)) * radius * 0.6 * (1 + smoothAudioLevel * 0.25) + height + Math.sin(i * 0.05 + time * 0.2) * 0.3 + smoothMouseY * 0.3,
+        Math.sin(angle1 * 0.7 + time * (0.25 + smoothAudioFrequency * 0.03)) * 0.8 + Math.cos(i * 0.03 + time * 0.1) * 0.4
     ]}>
-        <T.SphereGeometry args={[0.003 + (i % 5) * 0.001 + smoothAudioLevel * 0.0005]} />
+        <T.SphereGeometry args={[0.003 + (i % 5) * 0.001 + smoothAudioLevel * 0.002]} />
         <T.ShaderMaterial
             uniforms={filmGrainMaterial2.uniforms}
             vertexShader={filmGrainMaterial2.vertexShader}
@@ -440,11 +441,11 @@
 <!-- Speed-reactive particles with film grain -->
 {#each Array(8) as _, i}
     <T.Mesh position={[
-        Math.sin(i * Math.PI / 4 + time * (0.6 + smoothAudioLevel * 0.3)) * (1.4 + mouseSpeed * 2 + smoothAudioLevel * 0.1) + smoothMouseX * 0.5, 
-        Math.cos(i * Math.PI / 4 + time * (0.5 + smoothAudioLevel * 0.25)) * (0.8 + mouseSpeed * 1.5 + smoothAudioLevel * 0.08) + smoothMouseY * 0.5,
-        Math.sin(i * 0.8 + time * (0.8 + smoothAudioFrequency * 0.02)) * (0.3 + mouseSpeed * 1 + smoothAudioLevel * 0.06)
+        Math.sin(i * Math.PI / 4 + time * (0.6 + smoothAudioLevel * 1.5)) * (1.4 + mouseSpeed * 2 + smoothAudioLevel * 0.6) + smoothMouseX * 0.5, 
+        Math.cos(i * Math.PI / 4 + time * (0.5 + smoothAudioLevel * 1.2)) * (0.8 + mouseSpeed * 1.5 + smoothAudioLevel * 0.5) + smoothMouseY * 0.5,
+        Math.sin(i * 0.8 + time * (0.8 + smoothAudioFrequency * 0.08)) * (0.3 + mouseSpeed * 1 + smoothAudioLevel * 0.3)
     ]}>
-        <T.SphereGeometry args={[0.006 + mouseSpeed * 0.02 + smoothAudioLevel * 0.001]} />
+        <T.SphereGeometry args={[0.006 + mouseSpeed * 0.02 + smoothAudioLevel * 0.005]} />
         <T.ShaderMaterial
             uniforms={filmGrainMaterial1.uniforms}
             vertexShader={filmGrainMaterial1.vertexShader}

@@ -15,6 +15,7 @@
     let grainFlicker = $state(0)
     let grainSpread = $state(0.01)
     let animationSpeed = $state(1.5)
+    let lineThickness = $state(0.025)
     let showControls = $state(false)
     
     // Audio controls
@@ -155,7 +156,7 @@
             <!-- 3D Scene Container - positioned above input -->
             <div class="threlte-container relative w-full h-64 pointer-events-none">
                 <Canvas>
-                    <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} {animationSpeed} {audioLevel} {audioFrequency} />
+                    <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} {animationSpeed} {lineThickness} {audioLevel} {audioFrequency} />
                 </Canvas>
             </div>
             
@@ -227,9 +228,14 @@
                         <input type="range" min="0.0001" max="2" step="0.0001" bind:value={grainSpread} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
-                    <div class="control-group">
+                    <div class="control-group mb-4">
                         <label class="block text-white/80 text-sm mb-2">Animation Speed: {animationSpeed.toFixed(2)}</label>
                         <input type="range" min="0.1" max="5" step="0.1" bind:value={animationSpeed} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label class="block text-white/80 text-sm mb-2">Line Thickness: {lineThickness.toFixed(3)}</label>
+                        <input type="range" min="0.005" max="1" step="0.001" bind:value={lineThickness} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                 </div>
             {/if}
