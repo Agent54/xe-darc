@@ -28,14 +28,14 @@
     let prevMouseY = 0
     let mouseVelX = 0
     let mouseVelY = 0
-    let mouseSpeed = 0
+    let mouseSpeed = $state(0)
     
     // Add mouse position smoothing
-    let smoothMouseX = 0
-    let smoothMouseY = 0
+    let smoothMouseX = $state(0)
+    let smoothMouseY = $state(0)
     
     // Animation state
-    let time = 0
+    let time = $state(0)
     let baseTimeIncrement = 0.016
     let animationId
     let isAnimating = true

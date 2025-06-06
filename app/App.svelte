@@ -788,6 +788,10 @@
                     </div>
                 </li>
             {/each}
+            <li class="tab-spacer">
+                <div class="spacer-drag-area"></div>
+                <div class="spacer-scroll-area"></div>
+            </li>
         </ul>
     </div>
 
@@ -1750,6 +1754,41 @@
 
     .tab-container.pinned .close-btn {
         display: none;
+    }
+
+    .tab-spacer {
+        width: calc(100% - 80px);
+        height: 22px;
+        flex-shrink: 0;
+        list-style: none;
+        pointer-events: auto;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        -webkit-app-region: no-drag;
+    }
+
+    .spacer-drag-area {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 50%;
+        -webkit-app-region: drag;
+        cursor: move;
+        pointer-events: auto;
+        z-index: 2;
+    }
+
+    .spacer-scroll-area {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 50%;
+        -webkit-app-region: no-drag;
+        pointer-events: none;
+        z-index: 1;
     }
 
     .new-tab-button {
