@@ -111,6 +111,8 @@
     let scrollTimeout = null
     let hovercardShowTime = null
     let isTabListOverflowing = $state(false)
+    let isTabListAtEnd = $state(false)
+    let isTabListAtStart = $state(true)
 
     let viewMode = $state('default')
     let lastUsedViewMode = $state('tile') // Default to tile as the alternative
@@ -703,7 +705,24 @@
         const tabList = document.querySelector('.tab-list')
         if (tabList) {
             isTabListOverflowing = tabList.scrollWidth > tabList.clientWidth
+            checkTabListScrollPosition(tabList)
         }
+    }
+
+    function checkTabListScrollPosition(tabList = null) {
+        if (!tabList) {
+            tabList = document.querySelector('.tab-list')
+        }
+        if (tabList) {
+            // Check if scrolled to the end (with 1px tolerance for rounding)
+            isTabListAtEnd = tabList.scrollLeft + tabList.clientWidth >= tabList.scrollWidth - 1
+            // Check if at the start (with 1px tolerance for rounding)
+            isTabListAtStart = tabList.scrollLeft <= 1
+        }
+    }
+
+    function handleTabListScroll(event) {
+        checkTabListScrollPosition(event.target)
     }
 
     // Check overflow when tabs change
@@ -726,8 +745,8 @@
 <header class:window-controls-overlay={isWindowControlsOverlay}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 115px;' : 'right: 80px;'}"></div>
      
-    <div class="tab-wrapper" class:overflowing={isTabListOverflowing} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 180px)' : 'calc(100% - 142px)'};">
-        <ul class="tab-list" style="padding: 0; margin: 0;">
+    <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 180px)' : 'calc(100% - 142px)'};">
+        <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll}>
             {#each tabs as tab, i}
                 <li class="tab-container" 
                     class:active={i===activeTabIndex} 
@@ -1097,7 +1116,7 @@
         z-index: 1;
     }
 
-    .tab-wrapper.overflowing::after {
+    .tab-wrapper.overflowing-right::after {
         content: '';
         position: absolute;
         top: 0;
@@ -1105,6 +1124,18 @@
         width: 20px;
         height: 100%;
         background: linear-gradient(to left, #000 0%, transparent 100%);
+        pointer-events: none;
+        z-index: 2;
+    }
+
+    .tab-wrapper.overflowing-left::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 20px;
+        height: 100%;
+        background: linear-gradient(to right, #000 0%, transparent 100%);
         pointer-events: none;
         z-index: 2;
     }
