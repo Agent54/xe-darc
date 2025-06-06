@@ -699,9 +699,10 @@
 <svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove}/>
 
 <header class:window-controls-overlay={isWindowControlsOverlay}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 163px;' : 'right: 125px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 135px;' : 'right: 90px;'}"></div>
      
-    <ul style="padding: 0; margin: 0;top: 7px;left: 7px;">
+    <!-- <div class="tab-wrapper"> -->
+    <ul class="tab-list" style="padding: 0; margin: 0;top: 7px;left: 7px; max-width: {closed.length > 0 ? 'calc(100% - 180px)' : 'calc(100% - 142px)'};">
         {#each tabs as tab, i}
             <li class="tab-container" 
                 class:active={i===activeTabIndex} 
@@ -725,10 +726,10 @@
                     {#if tab.loading}
                         <svg class="tab-loading-spinner" viewBox="0 0 16 16">
                             <path d="M8 2 A6 6 0 0 1 14 8" 
-                                  fill="none" 
-                                  stroke="rgba(255, 255, 255, 0.8)" 
-                                  stroke-width="2" 
-                                  stroke-linecap="round"/>
+                                fill="none" 
+                                stroke="rgba(255, 255, 255, 0.8)" 
+                                stroke-width="2" 
+                                stroke-linecap="round"/>
                         </svg>
                     {/if}
                     <img src={tab.favicon} alt="" class="favicon" />
@@ -744,6 +745,7 @@
             </li>
         {/each}
     </ul>
+    <!-- </div> -->
 
     <div class="view-mode-icon" 
          role="button"
@@ -1064,7 +1066,7 @@
         pointer-events: auto;
     }
 
-    ul {
+    .tab-list {
         display: flex;
         flex-direction: row;
         flex-wrap: nowrap;
@@ -1072,12 +1074,29 @@
         align-items: flex-start;
         display: flex;
         gap: 7px;
-        overflow: hidden;
-        /* width: 100%; */
-        /* max-width: 100px; */
+        overflow-x: auto;
+        overflow-y: hidden;
         -webkit-app-region: no-drag;
         position: relative;
         z-index: 1;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .tab-list::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 20px;
+        height: 100%;
+        background: linear-gradient(to left, #000 0%, transparent 100%);
+        pointer-events: none;
+        z-index: 2;
+    }
+
+    ul::-webkit-scrollbar {
+        display: none;
     }
     .favicon {
         width: 16px;
@@ -1561,6 +1580,7 @@
         animation: hovercard-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
         padding-top: 12px;
+        user-select: none;
     }
 
     .tab-hovercard.trash-item {
