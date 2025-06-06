@@ -110,6 +110,7 @@
     let isScrolling = $state(false)
     let scrollTimeout = null
     let hovercardShowTime = null
+    let isTabListOverflowing = $state(false)
 
     let viewMode = $state('default')
     let lastUsedViewMode = $state('tile') // Default to tile as the alternative
@@ -131,6 +132,7 @@
             muted: false,
             loading: false
         })
+        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
     }
 
     function openNewTab() {
@@ -147,6 +149,7 @@
         }
         tabs.push(newTab)
         activeTabIndex = tabs.length - 1 // Switch to the new tab
+        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
     }
 
     function handleKeyDown(event) {
@@ -183,11 +186,13 @@
         if (tab.pinned) return // Don't close pinned tabs
         closed.push(tab)
         tabs = tabs.filter(t => t !== tab)
+        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
     }
 
     function restoreTab(tab) {
         tabs.push(tab)
         closed = closed.filter(t => t !== tab)
+        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
     }
 
     function clearAllClosedTabs() {
@@ -693,59 +698,79 @@
             default: return '📋'
         }
     }
+
+    function checkTabListOverflow() {
+        const tabList = document.querySelector('.tab-list')
+        if (tabList) {
+            isTabListOverflowing = tabList.scrollWidth > tabList.clientWidth
+        }
+    }
+
+    // Check overflow when tabs change
+    $effect(() => {
+        if (tabs) {
+            // Use longer timeout to ensure DOM is fully updated
+            setTimeout(checkTabListOverflow, 100)
+        }
+    })
+
+    // Check overflow on window resize
+    function handleResize() {
+        checkTabListOverflow()
+    }
 </script>
 
 
-<svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove}/>
+<svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove} onresize={handleResize}/>
 
 <header class:window-controls-overlay={isWindowControlsOverlay}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 135px;' : 'right: 90px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 115px;' : 'right: 80px;'}"></div>
      
-    <!-- <div class="tab-wrapper"> -->
-    <ul class="tab-list" style="padding: 0; margin: 0;top: 7px;left: 7px; max-width: {closed.length > 0 ? 'calc(100% - 180px)' : 'calc(100% - 142px)'};">
-        {#each tabs as tab, i}
-            <li class="tab-container" 
-                class:active={i===activeTabIndex} 
-                class:hovered={tab.id === hoveredTab?.id}
-                class:pinned={tab.pinned}
-                role="tab"
-                tabindex="0"
-                onclick={() => openTab(tab, i)}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTab(tab, i) } }}
-                oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
-                onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                onmouseleave={handleTabMouseLeave}
-                >
-                <div class="tab">
+    <div class="tab-wrapper" class:overflowing={isTabListOverflowing} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 180px)' : 'calc(100% - 142px)'};">
+        <ul class="tab-list" style="padding: 0; margin: 0;">
+            {#each tabs as tab, i}
+                <li class="tab-container" 
+                    class:active={i===activeTabIndex} 
+                    class:hovered={tab.id === hoveredTab?.id}
+                    class:pinned={tab.pinned}
+                    role="tab"
+                    tabindex="0"
+                    onclick={() => openTab(tab, i)}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTab(tab, i) } }}
+                    oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
+                    onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                    onmouseleave={handleTabMouseLeave}
+                    >
+                    <div class="tab">
 
-                    <!-- -->
-                    {#if tab.pinned}
-                        📌
-                    {/if}
+                        <!-- -->
+                        {#if tab.pinned}
+                            📌
+                        {/if}
 
-                    {#if tab.loading}
-                        <svg class="tab-loading-spinner" viewBox="0 0 16 16">
-                            <path d="M8 2 A6 6 0 0 1 14 8" 
-                                fill="none" 
-                                stroke="rgba(255, 255, 255, 0.8)" 
-                                stroke-width="2" 
-                                stroke-linecap="round"/>
-                        </svg>
-                    {/if}
-                    <img src={tab.favicon} alt="" class="favicon" />
-                    <span> {#if tab.audioPlaying && !tab.muted}
-                        🔊 &nbsp;
-                    {:else if tab.muted}
-                        🔇 &nbsp;
-                    {/if}{tab.title || tab.url}</span>
-                    {#if !tab.pinned}
-                        <button class="close-btn" onclick={() => closeTab(tab, event)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e) } }}>×</button>
-                    {/if}
-                </div>
-            </li>
-        {/each}
-    </ul>
-    <!-- </div> -->
+                        {#if tab.loading}
+                            <svg class="tab-loading-spinner" viewBox="0 0 16 16">
+                                <path d="M8 2 A6 6 0 0 1 14 8" 
+                                    fill="none" 
+                                    stroke="rgba(255, 255, 255, 0.8)" 
+                                    stroke-width="2" 
+                                    stroke-linecap="round"/>
+                            </svg>
+                        {/if}
+                        <img src={tab.favicon} alt="" class="favicon" />
+                        <span> {#if tab.audioPlaying && !tab.muted}
+                            🔊 &nbsp;
+                        {:else if tab.muted}
+                            🔇 &nbsp;
+                        {/if}{tab.title || tab.url}</span>
+                        {#if !tab.pinned}
+                            <button class="close-btn" onclick={() => closeTab(tab, event)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e) } }}>×</button>
+                        {/if}
+                    </div>
+                </li>
+            {/each}
+        </ul>
+    </div>
 
     <div class="view-mode-icon" 
          role="button"
@@ -1066,24 +1091,13 @@
         pointer-events: auto;
     }
 
-    .tab-list {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: nowrap;
-        justify-content: flex-start;
-        align-items: flex-start;
-        display: flex;
-        gap: 7px;
-        overflow-x: auto;
-        overflow-y: hidden;
-        -webkit-app-region: no-drag;
+    .tab-wrapper {
         position: relative;
+        -webkit-app-region: no-drag;
         z-index: 1;
-        scrollbar-width: none;
-        -ms-overflow-style: none;
     }
 
-    .tab-list::after {
+    .tab-wrapper.overflowing::after {
         content: '';
         position: absolute;
         top: 0;
@@ -1093,6 +1107,24 @@
         background: linear-gradient(to left, #000 0%, transparent 100%);
         pointer-events: none;
         z-index: 2;
+    }
+
+    .tab-list {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        align-items: flex-start;
+        gap: 7px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-app-region: no-drag;
+        position: relative;
+        z-index: 1;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        width: 100%;
+        height: 100%;
     }
 
     ul::-webkit-scrollbar {
@@ -1117,10 +1149,9 @@
         transition: border-color 0.3s ease;
         border-radius: 8px;
         background-color: hsl(0 0% 6% / 1);
-        min-width: 60px;
-        max-width: 150px;
-        width: 200px;
-        flex: 0 0 auto;
+        min-width: 130px;
+        max-width: 200px;
+        flex: 1 1 200px;
         -webkit-app-region: no-drag;
     }
     .tab-container:hover, .tab-container.hovered, .tab-container.active:hover, .tab-container.active.hovered {
