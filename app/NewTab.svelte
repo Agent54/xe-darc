@@ -14,6 +14,7 @@
     let grainSize = $state(450)
     let grainFlicker = $state(0)
     let grainSpread = $state(0.01)
+    let animationSpeed = $state(1.5)
     let showControls = $state(false)
     
     // Audio controls
@@ -154,7 +155,7 @@
             <!-- 3D Scene Container - positioned above input -->
             <div class="threlte-container relative w-full h-64 pointer-events-none">
                 <Canvas>
-                    <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} {audioLevel} {audioFrequency} />
+                    <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} {animationSpeed} {audioLevel} {audioFrequency} />
                 </Canvas>
             </div>
             
@@ -193,9 +194,9 @@
                     <span class="relative z-10">{isListening ? 'listening' : 'listen'}</span>
                 </button>
                 
-                <!-- <button onclick={() => showControls = !showControls} class="action-btn controls-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
+                <button onclick={() => showControls = !showControls} class="action-btn controls-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
                     {showControls ? 'hide' : 'shader'}
-                </button> -->
+                </button>
             </div>
             
             {#if showControls}
@@ -221,9 +222,14 @@
                         <input type="range" min="0" max="50" step="0.01" bind:value={grainFlicker} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
-                    <div class="control-group">
+                    <div class="control-group mb-4">
                         <label class="block text-white/80 text-sm mb-2">Grain Spread: {grainSpread.toFixed(2)}</label>
                         <input type="range" min="0.0001" max="2" step="0.0001" bind:value={grainSpread} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label class="block text-white/80 text-sm mb-2">Animation Speed: {animationSpeed.toFixed(2)}</label>
+                        <input type="range" min="0.1" max="5" step="0.1" bind:value={animationSpeed} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                 </div>
             {/if}
