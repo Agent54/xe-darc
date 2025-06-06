@@ -241,6 +241,7 @@
     .new-tab {
         background-color: black;
         position: relative;
+        -webkit-app-region: drag;
     }
     
     .new-tab::before {
@@ -258,6 +259,7 @@
     .content-container {
         position: relative;
         z-index: 1;
+        -webkit-app-region: no-drag;
     }
     
     /* Custom slider styling */

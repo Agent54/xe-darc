@@ -745,7 +745,11 @@
         {/each}
     </ul>
 
-    <div class="view-mode-icon" onclick={toggleViewMode}>
+    <div class="view-mode-icon" 
+         role="button"
+         tabindex="0"
+         onclick={toggleViewMode}
+         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleViewMode() } }}>
         {getViewModeIcon(viewMode)}
         <div class="view-mode-menu">
             <div class="view-mode-menu-header">View Mode</div>
@@ -1669,7 +1673,7 @@
     .new-tab-button {
         position: fixed;
         top: 9px;
-        width: 32px;
+        width: 25px;
         height: 22px;
         background: rgba(0, 0, 0, 0.8);
         border-radius: 6px;
@@ -1684,14 +1688,16 @@
         z-index: 10000;
         user-select: none;
         -webkit-app-region: no-drag;
-        border: none;
+        border: 1px solid transparent;
+        z-index: 10;
+        padding-bottom: 2px;
     }
 
     .new-tab-button:hover {
         opacity: 1;
         background: rgba(0, 0, 0, 0.9);
         transform: scale(1.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     .new-tab-icon {
