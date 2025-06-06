@@ -12,6 +12,8 @@
   "dependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tailwindcss/vite": "^4.1.8",
+    "@threlte/core": "^8.0.4",
+    "@threlte/extras": "^9.2.1",
     "@tldraw/assets": "^3.6.0",
     "events": "^3.3.0",
     "lit": "^3.2.1",
