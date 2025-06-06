@@ -1,5 +1,6 @@
 <script>
     import PouchDB from 'pouchdb-browser'
+    import NewTab from './NewTab.svelte'
 
     const db = new PouchDB('darc')
 
@@ -110,6 +111,8 @@
     let scrollTimeout = null
     let hovercardShowTime = null
 
+    let viewMode = $state('default')
+
     const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
     isWindowControlsOverlay = mediaQueryList.matches
     mediaQueryList.addEventListener('change', e => setTimeout(() => { isWindowControlsOverlay = e.matches }, 0))
@@ -167,9 +170,9 @@
     function openTab(tab, index) {
         console.log('Opening tab:', tab)
         activeTabIndex = index
-        const controlledFrame = document.getElementById(`tab_${tab.id}`)
-        if (controlledFrame) {
-            controlledFrame.scrollIntoView({ behavior: 'smooth' })
+        const frame = document.getElementById(`tab_${tab.id}`)
+        if (frame) {
+            frame.scrollIntoView({ behavior: 'smooth' })
         }
     }
 
@@ -294,7 +297,7 @@
             root: document.querySelector('.controlled-frame-container')
         })
 
-        // Observe all controlled frames
+        // Observe all frames (both controlledframes and NewTab components)
         tabs.forEach(tab => {
             const frame = document.getElementById(`tab_${tab.id}`)
             if (frame) observer.observe(frame)
@@ -328,10 +331,10 @@
         }
     })
 
-    function updateTabAudioState(controlledFrame) {
-        if (typeof controlledFrame.getAudioState === 'function') {
-            controlledFrame.getAudioState().then(audible => {
-                const tabId = controlledFrame.id.replace('tab_', '')
+    function updateTabAudioState(frame) {
+        if (frame && typeof frame.getAudioState === 'function') {
+            frame.getAudioState().then(audible => {
+                const tabId = frame.id.replace('tab_', '')
                 const tabIndex = tabs.findIndex(t => t.id === tabId)
                 if (tabIndex !== -1) {
                     tabs[tabIndex].audioPlaying = audible
@@ -364,6 +367,13 @@
             console.log('Frame not found for tab:', tab.id)
             return null
         }
+        
+        // Only capture screenshots for controlledframes, not NewTab components
+        if (typeof frame.captureVisibleRegion !== 'function') {
+            console.log('Frame does not support screenshot capture:', tab.id)
+            return null
+        }
+        
         await new Promise(resolve => setTimeout(resolve, 500))
 
         try {
@@ -654,13 +664,17 @@
             isScrolling = false
         }, 150)
     }
+
+    function selectViewMode(mode) {
+        viewMode = mode
+    }
 </script>
 
 
 <svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove}/>
 
 <header class:window-controls-overlay={isWindowControlsOverlay}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 45px;' : ''}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 163px;' : 'right: 125px;'}"></div>
      
     <ul style="padding: 0; margin: 0;top: 7px;left: 7px;">
         {#each tabs as tab, i}
@@ -705,6 +719,53 @@
             </li>
         {/each}
     </ul>
+
+    <div class="view-mode-icon">
+        📋
+        <div class="view-mode-menu">
+            <div class="view-mode-menu-header">View Mode</div>
+            <div class="view-mode-menu-item" 
+                 class:active={viewMode === 'default'}
+                 role="button"
+                 tabindex="0"
+                 onclick={() => selectViewMode('default')}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectViewMode('default') } }}>
+                <span class="view-mode-icon-item">🌐</span>
+                <span>Default</span>
+                {#if viewMode === 'default'}<span class="checkmark">✓</span>{/if}
+            </div>
+            <div class="view-mode-menu-item" 
+                 class:active={viewMode === 'tile'}
+                 role="button"
+                 tabindex="0"
+                 onclick={() => selectViewMode('tile')}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectViewMode('tile') } }}>
+                <span class="view-mode-icon-item">🔲</span>
+                <span>Tile View</span>
+                {#if viewMode === 'tile'}<span class="checkmark">✓</span>{/if}
+            </div>
+            <div class="view-mode-menu-item" 
+                 class:active={viewMode === 'squat'}
+                 role="button"
+                 tabindex="0"
+                 onclick={() => selectViewMode('squat')}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectViewMode('squat') } }}>
+                <span class="view-mode-icon-item">📱</span>
+                <span>Squat View</span>
+                {#if viewMode === 'squat'}<span class="checkmark">✓</span>{/if}
+            </div>
+            <div class="view-mode-menu-item" 
+                 class:active={viewMode === 'canvas'}
+                 role="button"
+                 tabindex="0"
+                 onclick={() => selectViewMode('canvas')}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectViewMode('canvas') } }}>
+                <span class="view-mode-icon-item">🎨</span>
+                <span>Canvas View</span>
+                {#if viewMode === 'canvas'}<span class="checkmark">✓</span>{/if}
+            </div>
+        </div>
+    </div>
 
     {#if closed.length > 0}
         <div class="trash-icon">
@@ -868,22 +929,27 @@
 
 <div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} class:scrolling={isScrolling} onscroll={handleScroll} style="box-sizing: border-box;">
     {#each tabs as tab}
-        <controlledframe 
-            bind:this={tab.frame}
-            class:window-controls-overlay={isWindowControlsOverlay}
-            class:no-pointer-events={isScrolling}
-            id="tab_{tab.id}"
-            src={tab.url}
-            partition="persist:myapp"
-            onloadcommit={handleLoadCommit}
-            onnewwindow={(e) => { handleNewWindow(e)} }
-            onaudiostatechanged={handleAudioStateChanged}
-            allowscaling={true}
-            autosize={true}
-            allowtransparency={false}
-            onloadstart={() => { handleLoadStart(tab) }}
-            onloadstop={() => { handleLoadStop(tab) }}
-        ></controlledframe>
+        {#if tab.url === 'about:newtab'}
+            <NewTab class="frame" id="tab_{tab.id}" {tab} />
+        {:else}
+            <controlledframe 
+                bind:this={tab.frame}
+                class:window-controls-overlay={isWindowControlsOverlay}
+                class:no-pointer-events={isScrolling}
+                id="tab_{tab.id}"
+                class="frame"
+                src={tab.url}
+                partition="persist:myapp"
+                onloadcommit={handleLoadCommit}
+                onnewwindow={(e) => { handleNewWindow(e)} }
+                onaudiostatechanged={handleAudioStateChanged}
+                allowscaling={true}
+                autosize={true}
+                allowtransparency={false}
+                onloadstart={() => { handleLoadStart(tab) }}
+                onloadstop={() => { handleLoadStop(tab) }}
+            ></controlledframe>
+        {/if}
     {/each}
 </div>
 
@@ -1078,7 +1144,7 @@
     .trash-icon {
         position: fixed;
         top: 9px;
-        right: 87px;
+        right: 125px;
         width: 32px;
         height: 22px;
         background: rgba(0, 0, 0, 0.8);
@@ -1230,6 +1296,137 @@
         flex: 1;
     }
 
+    .view-mode-icon {
+        position: fixed;
+        top: 9px;
+        right: 87px;
+        width: 32px;
+        height: 22px;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 12px;
+        opacity: 0.7;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+        z-index: 10000;
+        user-select: none;
+        -webkit-app-region: no-drag;
+    }
+
+    .view-mode-icon:hover {
+        opacity: 1;
+        background: rgba(0, 0, 0, 0.9);
+        transform: scale(1.05);
+    }
+
+    .view-mode-menu {
+        z-index: 10010;
+        font-family: 'Inter', sans-serif;
+        position: absolute;
+        top: 10px;
+        right: 0;
+        margin-top: 8px;
+        background: rgba(0, 0, 0, 0.95);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        min-width: 180px;
+        max-width: 220px;
+        box-shadow: 
+            0 20px 40px rgba(0, 0, 0, 0.4),
+            0 8px 16px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-10px) scale(0.95);
+        transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 10000;
+        pointer-events: none;
+        overflow: hidden;
+    }
+
+    .view-mode-icon:hover .view-mode-menu, .view-mode-menu:hover {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+    }
+
+    .view-mode-menu-header {
+        padding: 12px 16px;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.9);
+        font-weight: 400;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .view-mode-menu-item {
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .view-mode-menu-item:last-of-type {
+        border-bottom: none;
+        border-radius: 0 0 12px 12px;
+    }
+
+    .view-mode-menu-item:hover {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
+    }
+
+    .view-mode-menu-item.active {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.15));
+    }
+
+    .view-mode-menu-item.active:hover {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.2));
+    }
+
+    .view-mode-menu-item span {
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 13px;
+        font-weight: 400;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        line-height: 1.4;
+    }
+
+    .view-mode-menu-item span:nth-child(2) {
+        flex: 1;
+    }
+
+    .view-mode-icon-item {
+        width: 16px;
+        height: 16px;
+        opacity: 0.9;
+        flex-shrink: 0;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: 0;
+    }
+
+    .checkmark {
+        margin-left: auto;
+        color: rgba(34, 197, 94, 0.9);
+        font-weight: 600;
+        font-size: 12px;
+    }
+
     .controlled-frame-container {
       height: 100vh;
       position: absolute;
@@ -1285,7 +1482,7 @@
       box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     }
     
-    controlledframe {
+    :global(.frame) {
       width: calc(100vw - 18px);
       height: calc(100vh - 18px);
       border: none;
@@ -1301,11 +1498,11 @@
       scroll-snap-stop: normal;
     }
 
-    controlledframe.window-controls-overlay {
+    :global(.frame.window-controls-overlay) {
         height: calc(100vh - 56px);
     }
 
-    controlledframe.no-pointer-events {
+    :global(.frame.no-pointer-events) {
         pointer-events: none;
         user-select: none;
     }

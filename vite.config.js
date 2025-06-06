@@ -20,18 +20,19 @@ import injectHTML from 'vite-plugin-html-inject';
 // import react from '@vitejs/plugin-react';
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
-import wbn from 'rollup-plugin-webbundle';
-import * as wbnSign from 'wbn-sign';
+// import wbn from 'rollup-plugin-webbundle';
+// import * as wbnSign from 'wbn-sign';
 import dotenv from 'dotenv';
-import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import tailwindcss from '@tailwindcss/vite'
 
 dotenv.config();
 
 const plugins = [
+  // globals window setting
   injectHTML(),
   // react({refresh: false, fastRefresh: false}),
   svelte(),
-  nodePolyfills()
+  tailwindcss()
 ];
 
   // // something
@@ -118,6 +119,7 @@ if (process.env.NODE_ENV === 'production') {
 
 export default defineConfig({
   plugins,
+  define: { globals: 'window' },
   server: {
     port: 5193,
     strictPort: true,
