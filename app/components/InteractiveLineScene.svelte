@@ -15,11 +15,11 @@
         grainSpread = 1.0
     } = $props()
     
-    // Create tweened values for smooth animations with slower, smoother response
-    const curve1Position = tweened([0, 0, 0], { duration: 800, easing: cubicOut })
-    const curve1Rotation = tweened([0, 0, 0], { duration: 1000, easing: cubicOut })
-    const curve2Position = tweened([0, 0, 0], { duration: 900, easing: cubicOut })
-    const curve2Rotation = tweened([0, 0, 0], { duration: 1100, easing: cubicOut })
+    // Create tweened values for smooth animations with responsive movement
+    const curve1Position = tweened([0, 0, 0], { duration: 400, easing: cubicOut })
+    const curve1Rotation = tweened([0, 0, 0], { duration: 500, easing: cubicOut })
+    const curve2Position = tweened([0, 0, 0], { duration: 450, easing: cubicOut })
+    const curve2Rotation = tweened([0, 0, 0], { duration: 550, easing: cubicOut })
     
     // Mouse velocity tracking with smoothing
     let prevMouseX = 0
@@ -27,12 +27,10 @@
     let mouseVelX = 0
     let mouseVelY = 0
     let mouseSpeed = 0
-    let maxSpeed = 0
     
     // Add mouse position smoothing
     let smoothMouseX = 0
     let smoothMouseY = 0
-    const smoothingFactor = 0.85 // Higher = more smoothing
     
     // Animation state
     let time = 0
@@ -178,8 +176,8 @@
         const segments = 80
         
         // Use mouse speed to affect curve complexity - much more subtle
-        const speedMultiplier = 1 + mouseSpeed * 0.5  // Reduced from 2 to 0.5
-        const mouseInfluence = mouseSpeed * 0.1        // Reduced from 0.5 to 0.1
+        const speedMultiplier = 1 + mouseSpeed * 3  // Speed up with mouse movement
+        const mouseInfluence = mouseSpeed * 0.8      // Stronger mouse influence on shape
         
         for (let i = 0; i <= segments; i++) {
             const t = i / segments
@@ -188,16 +186,17 @@
             let x, y, z
             
             if (curveType === 'figure8') {
-                // Figure-8 twisted pattern with barely perceptible mouse influence
+                // Figure-8 pattern that gravitates towards mouse
                 const scale = radius + Math.sin(time * 0.6 * speedMultiplier + timeOffset) * (0.2 + mouseInfluence)
-                const mouseDistortion = smoothMouseX * 0.03 + smoothMouseY * 0.025  // Use smoothed values, very minimal
+                const mouseDistortion = smoothMouseX * 0.3 + smoothMouseY * 0.2  // Strong mouse influence
                 
-                x = Math.sin(angle + time * 0.8 * rotDirection * speedMultiplier + mouseDistortion) * scale
-                y = Math.sin(angle * 2 + time * 0.8 * rotDirection * speedMultiplier + smoothMouseX * 0.04) * scale * (0.5 + mouseSpeed * 0.1) + offsetY
-                z = Math.cos(angle * 3 + time * 1.0 * speedMultiplier + timeOffset + smoothMouseY * 0.03) * (0.3 + mouseSpeed * 0.05)
+                // Curves bend towards mouse position
+                x = Math.sin(angle + time * 0.8 * rotDirection * speedMultiplier + mouseDistortion) * scale + smoothMouseX * 0.4
+                y = Math.sin(angle * 2 + time * 0.8 * rotDirection * speedMultiplier + smoothMouseX * 0.3) * scale * (0.5 + mouseSpeed * 0.3) + offsetY + smoothMouseY * 0.4
+                z = Math.cos(angle * 3 + time * 1.0 * speedMultiplier + timeOffset + smoothMouseY * 0.2) * (0.3 + mouseSpeed * 0.2)
                 
-                // Add twist influenced by mouse movement - barely noticeable
-                const twist = angle * 2 + time * 1.2 * rotDirection * speedMultiplier + mouseVelX * 0.05
+                // Add twist influenced by mouse movement - more dynamic
+                const twist = angle * 2 + time * 1.2 * rotDirection * speedMultiplier + mouseVelX * 0.5
                 const cosT = Math.cos(twist)
                 const sinT = Math.sin(twist)
                 const tempY = y
@@ -205,18 +204,19 @@
                 z = tempY * sinT + z * cosT
                 
             } else {
-                // Twisted torus/pretzel pattern with barely perceptible mouse influence
+                // Twisted torus/pretzel pattern that gravitates towards mouse
                 const majorRadius = radius + Math.sin(time * 0.8 * speedMultiplier + timeOffset) * (0.15 + mouseInfluence)
-                const minorRadius = 0.3 + Math.cos(time * 1.0 * speedMultiplier + timeOffset) * (0.1 + mouseSpeed * 0.05)
+                const minorRadius = 0.3 + Math.cos(time * 1.0 * speedMultiplier + timeOffset) * (0.1 + mouseSpeed * 0.2)
                 
-                const mouseWarp = smoothMouseX * 0.04 + smoothMouseY * 0.03  // Use smoothed values, very minimal
+                const mouseWarp = smoothMouseX * 0.4 + smoothMouseY * 0.3  // Strong mouse warping
                 
-                x = (majorRadius + minorRadius * Math.cos(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + mouseWarp)) * Math.cos(angle + time * 0.8 * rotDirection * speedMultiplier + smoothMouseY * 0.05)
-                y = (majorRadius + minorRadius * Math.cos(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + mouseWarp)) * Math.sin(angle + time * 0.8 * rotDirection * speedMultiplier + smoothMouseX * 0.05) * 0.6 + offsetY
-                z = minorRadius * Math.sin(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + timeOffset + mouseWarp) * (0.8 + mouseSpeed * 0.1)
+                // Torus gravitates towards mouse
+                x = (majorRadius + minorRadius * Math.cos(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + mouseWarp)) * Math.cos(angle + time * 0.8 * rotDirection * speedMultiplier + smoothMouseY * 0.3) + smoothMouseX * 0.35
+                y = (majorRadius + minorRadius * Math.cos(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + mouseWarp)) * Math.sin(angle + time * 0.8 * rotDirection * speedMultiplier + smoothMouseX * 0.3) * 0.6 + offsetY + smoothMouseY * 0.35
+                z = minorRadius * Math.sin(angle * 3 + time * 1.5 * rotDirection * speedMultiplier + timeOffset + mouseWarp) * (0.8 + mouseSpeed * 0.3)
                 
-                // Add additional twist influenced by mouse velocity - barely noticeable
-                const twist = angle * 1.5 + time * 1.8 * rotDirection * speedMultiplier + mouseVelY * 0.08
+                // Add additional twist influenced by mouse velocity - dynamic
+                const twist = angle * 1.5 + time * 1.8 * rotDirection * speedMultiplier + mouseVelY * 0.6
                 const cosT = Math.cos(twist)
                 const sinT = Math.sin(twist)
                 const tempX = x
@@ -235,8 +235,8 @@
     function animate() {
         if (!isAnimating) return
         
-        // Much more subtle dynamic time increment based on mouse speed
-        const speedFactor = 1 + mouseSpeed * 0.3 // Reduced from 3 to 0.3 for subtle effect
+        // Dynamic time increment based on mouse speed - speeds up with movement
+        const speedFactor = 1 + mouseSpeed * 15 // Increase animation speed with mouse movement
         time += baseTimeIncrement * speedFactor
         
         // Update film grain shader time for both materials
@@ -265,72 +265,71 @@
         filmGrainMaterial2.uniforms.grainSpread.value = grainSpread
     })
 
-    // Enhanced mouse movement reactions with heavy smoothing
-    let lastMouseUpdate = 0
+    // Track mouse values without effects
+    let targetMouseX = 0
+    let targetMouseY = 0
+    
+    // Only update target values when mouse actually moves
     $effect(() => {
-        const now = Date.now()
-        
+        targetMouseX = mouseX
+        targetMouseY = mouseY
+    })
+    
+    // Separate animation frame for smooth mouse tracking
+    let mouseTrackingFrame
+    function updateMouseSmoothing() {
         // Apply heavy smoothing to mouse position
-        smoothMouseX = smoothMouseX * smoothingFactor + mouseX * (1 - smoothingFactor)
-        smoothMouseY = smoothMouseY * smoothingFactor + mouseY * (1 - smoothingFactor)
+        smoothMouseX = smoothMouseX * 0.95 + targetMouseX * 0.05  // Even heavier smoothing
+        smoothMouseY = smoothMouseY * 0.95 + targetMouseY * 0.05
         
-        // Calculate velocity using smoothed values with much smaller bounds
+        // Calculate velocity for dynamic movement
         const deltaX = smoothMouseX - prevMouseX
         const deltaY = smoothMouseY - prevMouseY
         
-        // Very aggressive velocity clamping
-        mouseVelX = Math.max(-0.02, Math.min(0.02, deltaX))
-        mouseVelY = Math.max(-0.02, Math.min(0.02, deltaY))
+        // Allow larger velocity for more dynamic movement
+        mouseVelX = Math.max(-0.1, Math.min(0.1, deltaX))
+        mouseVelY = Math.max(-0.1, Math.min(0.1, deltaY))
         
-        // Calculate speed with very tight bounds
+        // Calculate speed with higher cap for more dynamic animation
         const rawSpeed = Math.sqrt(mouseVelX * mouseVelX + mouseVelY * mouseVelY)
-        mouseSpeed = Math.min(rawSpeed, 0.01) // Much tighter cap
+        mouseSpeed = Math.min(rawSpeed, 0.05)
         
-        // Track maximum speed for normalization with decay
-        if (mouseSpeed > maxSpeed) {
-            maxSpeed = mouseSpeed
-        }
+        // Always update for smoother gravitation effect
+        // Curves gravitate towards mouse position
+        const gravityStrength = 0.6  // How strongly curves are pulled to mouse
+        const velocityInfluence = 1.2  // How much velocity affects movement
         
-        // Normalize mouse speed with better bounds
-        mouseSpeed = maxSpeed > 0 ? Math.min(mouseSpeed / Math.max(maxSpeed, 0.005), 1) : 0
+        // Curve 1 gravitates strongly towards mouse
+        const target1X = smoothMouseX * gravityStrength + mouseVelX * velocityInfluence
+        const target1Y = smoothMouseY * gravityStrength + mouseVelY * velocityInfluence
+        const targetRot1Y = smoothMouseX * 0.3 + mouseVelX * 0.5
+        const targetRot1X = smoothMouseY * 0.3 + mouseVelY * 0.5
         
-        // Apply exponential decay to max speed
-        maxSpeed *= 0.98
+        // Curve 2 gravitates with some offset for variety
+        const target2X = smoothMouseX * (gravityStrength * 0.8) + mouseVelX * (velocityInfluence * 0.9)
+        const target2Y = smoothMouseY * (gravityStrength * 0.8) + mouseVelY * (velocityInfluence * 0.9)
+        const targetRot2Y = smoothMouseX * 0.25 - mouseVelX * 0.4
+        const targetRot2X = smoothMouseY * 0.25 - mouseVelY * 0.4
         
-        // Ensure maxSpeed doesn't get too small
-        if (maxSpeed < 0.005) {
-            maxSpeed = 0.005
-        }
+        // Speed affects rotation dynamically
+        const speedRotation = mouseSpeed * 2
         
-        // Much less frequent updates for smoother animation
-        if (now - lastMouseUpdate > 100) { // Only update every 100ms (10fps)
-            // Extremely subtle reactions using smoothed mouse position
-            const target1X = smoothMouseX * 0.08 + mouseVelX * 0.2  // Very gentle
-            const target1Y = smoothMouseY * 0.06 + mouseVelY * 0.15
-            const targetRot1Y = smoothMouseX * 0.02 + mouseVelX * 0.1
-            const targetRot1X = smoothMouseY * 0.015 + mouseVelY * 0.08
-            
-            const target2X = smoothMouseX * 0.05 + mouseVelX * 0.15
-            const target2Y = smoothMouseY * 0.07 + mouseVelY * 0.2  
-            const targetRot2Y = smoothMouseX * 0.015 + mouseVelX * 0.08
-            const targetRot2X = smoothMouseY * 0.025 + mouseVelY * 0.12
-            
-            // Barely perceptible speed influence
-            const speedRotation = mouseSpeed * 0.005
-            
-            curve1Position.set([target1X, target1Y, mouseSpeed * 0.05])
-            curve1Rotation.set([targetRot1X, targetRot1Y, time * (0.04 + speedRotation)])
-            
-            curve2Position.set([target2X, target2Y, -mouseSpeed * 0.03])
-            curve2Rotation.set([targetRot2X, targetRot2Y, -time * (0.03 + speedRotation)])
-            
-            lastMouseUpdate = now
-        }
+        // Update positions with strong gravitation effect
+        curve1Position.set([target1X, target1Y, mouseSpeed * 0.5])
+        curve1Rotation.set([targetRot1X, targetRot1Y, speedRotation])
         
-        // Store previous smoothed mouse position
+        curve2Position.set([target2X, target2Y, -mouseSpeed * 0.3])
+        curve2Rotation.set([targetRot2X, targetRot2Y, -speedRotation * 0.8])
+        
+        // Store previous position
         prevMouseX = smoothMouseX
         prevMouseY = smoothMouseY
-    })
+        
+        mouseTrackingFrame = requestAnimationFrame(updateMouseSmoothing)
+    }
+    
+    // Start mouse smoothing
+    updateMouseSmoothing()
     
     // Initialize geometries and start animation
     geometry1 = createTwistedCurveGeometry(1.1, 0.2, 0, 1, 'figure8')
@@ -342,6 +341,9 @@
         isAnimating = false
         if (animationId) {
             cancelAnimationFrame(animationId)
+        }
+        if (mouseTrackingFrame) {
+            cancelAnimationFrame(mouseTrackingFrame)
         }
         filmGrainMaterial1.dispose()
         filmGrainMaterial2.dispose()
@@ -389,8 +391,8 @@
     {@const radius = 0.5 + (i % 10) * 0.3}
     {@const height = ((i % 20) - 10) * 0.2}
     <T.Mesh position={[
-        Math.sin(angle1 + time * 0.2) * radius + Math.cos(i * 0.1 + time * 0.3) * 0.5,
-        Math.cos(angle2 + time * 0.15) * radius * 0.6 + height + Math.sin(i * 0.05 + time * 0.2) * 0.3,
+        Math.sin(angle1 + time * 0.2) * radius + Math.cos(i * 0.1 + time * 0.3) * 0.5 + smoothMouseX * 0.3,
+        Math.cos(angle2 + time * 0.15) * radius * 0.6 + height + Math.sin(i * 0.05 + time * 0.2) * 0.3 + smoothMouseY * 0.3,
         Math.sin(angle1 * 0.7 + time * 0.25) * 0.8 + Math.cos(i * 0.03 + time * 0.1) * 0.4
     ]}>
         <T.SphereGeometry args={[0.003 + (i % 5) * 0.001]} />
@@ -407,11 +409,11 @@
 <!-- Speed-reactive particles with film grain -->
 {#each Array(8) as _, i}
     <T.Mesh position={[
-        Math.sin(i * Math.PI / 4 + time * (0.6 + mouseSpeed)) * (1.4 + mouseSpeed * 0.8), 
-        Math.cos(i * Math.PI / 4 + time * (0.5 + mouseSpeed)) * (0.8 + mouseSpeed * 0.4),
-        Math.sin(i * 0.8 + time * (0.8 + mouseSpeed * 2)) * (0.3 + mouseSpeed * 0.3)
+        Math.sin(i * Math.PI / 4 + time * (0.6 + mouseSpeed * 5)) * (1.4 + mouseSpeed * 2) + smoothMouseX * 0.5, 
+        Math.cos(i * Math.PI / 4 + time * (0.5 + mouseSpeed * 4)) * (0.8 + mouseSpeed * 1.5) + smoothMouseY * 0.5,
+        Math.sin(i * 0.8 + time * (0.8 + mouseSpeed * 6)) * (0.3 + mouseSpeed * 1)
     ]}>
-        <T.SphereGeometry args={[0.006 + mouseSpeed * 0.004]} />
+        <T.SphereGeometry args={[0.006 + mouseSpeed * 0.02]} />
         <T.ShaderMaterial
             uniforms={filmGrainMaterial1.uniforms}
             vertexShader={filmGrainMaterial1.vertexShader}

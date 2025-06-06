@@ -9,11 +9,11 @@
     let mouseY = $state(0)
     
     // Shader controls
-    let grainOpacity = $state(1.0)
-    let grainAmount = $state(0.8)
-    let grainSize = $state(10.0)
-    let grainFlicker = $state(0.3)
-    let grainSpread = $state(2.0)
+    let grainOpacity = $state(0.04)
+    let grainAmount = $state(38)
+    let grainSize = $state(450)
+    let grainFlicker = $state(0)
+    let grainSpread = $state(0.01)
     let showControls = $state(false)
     
     function handleSubmit(event) {
@@ -58,11 +58,11 @@
                         type="text"
                         bind:value={inputValue}
                         placeholder="Search, enter URL, or ask AI..."
-                        class="omnibar-input w-full px-5 py-3 text-base bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl text-white/80 placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-opacity-60 focus:border-white/20 focus:text-white transition-all duration-300 hover:border-white/20"
+                        class="omnibar-input w-full px-5 py-3 text-base bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl text-white/80 placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-white/10 focus:ring-opacity-60 focus:border-white/20 focus:text-white transition-all duration-300 hover:border-white/20"
                         autocomplete="off"
                         spellcheck="false"
                     />
-                    <div class="input-accent absolute inset-0 rounded-xl bg-gradient-to-r from-gray-400/20 to-slate-400/20 opacity-0 transition-opacity duration-300 pointer-events-none"></div>
+                    <!-- <div class="input-accent absolute inset-0 rounded-xl bg-gradient-to-r from-gray-400/20 to-slate-400/20 opacity-0 transition-opacity duration-300 pointer-events-none"></div> -->
                 </div>
             </form>
             
@@ -88,27 +88,27 @@
                 <div class="shader-controls max-w-sm mx-auto mt-6 p-4 bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl">
                     <div class="control-group mb-4">
                         <label class="block text-white/80 text-sm mb-2">Opacity: {grainOpacity.toFixed(2)}</label>
-                        <input type="range" min="0" max="10" step="0.01" bind:value={grainOpacity} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" min="0" max="1" step="0.001" bind:value={grainOpacity} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group mb-4">
                         <label class="block text-white/80 text-sm mb-2">Grain Amount: {grainAmount.toFixed(2)}</label>
-                        <input type="range" min="0" max="500" step="0.1" bind:value={grainAmount} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" min="0" max="100" step="0.01" bind:value={grainAmount} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group mb-4">
                         <label class="block text-white/80 text-sm mb-2">Grain Size: {grainSize.toFixed(1)}</label>
-                        <input type="range" min="0.1" max="1000" step="0.1" bind:value={grainSize} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" min="0.01" max="500" step="0.01" bind:value={grainSize} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group mb-4">
                         <label class="block text-white/80 text-sm mb-2">Flicker: {grainFlicker.toFixed(2)}</label>
-                        <input type="range" min="0" max="300" step="0.01" bind:value={grainFlicker} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" min="0" max="50" step="0.01" bind:value={grainFlicker} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group">
                         <label class="block text-white/80 text-sm mb-2">Grain Spread: {grainSpread.toFixed(2)}</label>
-                        <input type="range" min="0.1" max="1000" step="0.01" bind:value={grainSpread} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" min="0.0001" max="2" step="0.0001" bind:value={grainSpread} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                 </div>
             {/if}
