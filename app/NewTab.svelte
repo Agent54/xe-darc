@@ -16,6 +16,15 @@
     let grainSpread = $state(0.01)
     let showControls = $state(false)
     
+    // Audio controls
+    let isListening = $state(false)
+    let audioLevel = $state(0)
+    let audioFrequency = $state(0)
+    let audioContext = null
+    let analyser = null
+    let microphone = null
+    let animationFrame = null
+    
     function handleSubmit(event) {
         event.preventDefault()
         
@@ -38,17 +47,114 @@
         mouseX = (event.clientX / window.innerWidth) * 2 - 1
         mouseY = -(event.clientY / window.innerHeight) * 2 + 1
     }
+    
+    async function toggleListen() {
+        if (!isListening) {
+            try {
+                // Request microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                
+                // Set up Web Audio API
+                audioContext = new (window.AudioContext || window.webkitAudioContext)()
+                analyser = audioContext.createAnalyser()
+                analyser.fftSize = 256
+                analyser.smoothingTimeConstant = 0.8
+                
+                microphone = audioContext.createMediaStreamSource(stream)
+                microphone.connect(analyser)
+                
+                isListening = true
+                analyzeAudio()
+            } catch (error) {
+                console.error('Microphone access denied:', error)
+                
+                // Provide user feedback
+                if (error.name === 'NotAllowedError') {
+                    alert('Microphone access was denied. Please check your browser permissions and try again.')
+                } else if (error.name === 'NotFoundError') {
+                    alert('No microphone found. Please connect a microphone and try again.')
+                } else {
+                    alert(`Error accessing microphone: ${error.message}`)
+                }
+            }
+        } else {
+            stopListening()
+        }
+    }
+    
+    function analyzeAudio() {
+        if (!isListening) return
+        
+        const bufferLength = analyser.frequencyBinCount
+        const dataArray = new Uint8Array(bufferLength)
+        const frequencyData = new Float32Array(bufferLength)
+        
+        analyser.getByteFrequencyData(dataArray)
+        analyser.getFloatFrequencyData(frequencyData)
+        
+        // Calculate average volume level
+        let sum = 0
+        for (let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i]
+        }
+        audioLevel = (sum / bufferLength) / 255 // Normalize to 0-1
+        
+        // Find dominant frequency
+        let maxIndex = 0
+        let maxValue = -Infinity
+        for (let i = 0; i < bufferLength; i++) {
+            if (frequencyData[i] > maxValue) {
+                maxValue = frequencyData[i]
+                maxIndex = i
+            }
+        }
+        
+        // Convert index to frequency (sample rate / 2) / bins
+        const nyquist = audioContext.sampleRate / 2
+        audioFrequency = (maxIndex * nyquist) / bufferLength / 1000 // Convert to kHz for easier use
+        
+        animationFrame = requestAnimationFrame(analyzeAudio)
+    }
+    
+    function stopListening() {
+        isListening = false
+        
+        if (animationFrame) {
+            cancelAnimationFrame(animationFrame)
+        }
+        
+        if (microphone) {
+            microphone.disconnect()
+            microphone.mediaStream.getTracks().forEach(track => track.stop())
+        }
+        
+        if (audioContext) {
+            audioContext.close()
+        }
+        
+        audioLevel = 0
+        audioFrequency = 0
+    }
+    
+    // Cleanup on component destroy
+    $effect(() => {
+        return () => {
+            if (isListening) {
+                stopListening()
+            }
+        }
+    })
 </script>
 
 <div id="tab_{tab.id}" class="{className} new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove}>
     
-    <div class="content-container relative z-10 pt-[20vh] w-full">
+    <div class="content-container relative z-10 pt-[15vh] w-full">
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
             
             <!-- 3D Scene Container - positioned above input -->
             <div class="threlte-container relative w-full h-64 pointer-events-none">
                 <Canvas>
-                    <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} />
+                    <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} {audioLevel} {audioFrequency} />
                 </Canvas>
             </div>
             
@@ -57,7 +163,7 @@
                     <input
                         type="text"
                         bind:value={inputValue}
-                        placeholder="Search, enter URL, or ask AI..."
+                        placeholder="You can do anything..."
                         class="omnibar-input w-full px-5 py-3 text-base bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl text-white/80 placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-white/10 focus:ring-opacity-60 focus:border-white/20 focus:text-white transition-all duration-300 hover:border-white/20"
                         autocomplete="off"
                         spellcheck="false"
@@ -76,8 +182,11 @@
                 <button class="action-btn do-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
                     do
                 </button>
-                <button class="action-btn do-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
-                    listen
+                <button onclick={toggleListen} class="action-btn listen-btn px-4 py-2 text-sm {isListening ? 'bg-white/20' : 'bg-black/80'} text-white/80 rounded-lg border {isListening ? 'border-white/30' : 'border-white/10'} hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200 relative overflow-hidden">
+                    {#if isListening}
+                        <div class="absolute inset-0 bg-white/20 origin-left transition-transform duration-100" style="transform: scaleX({audioLevel})"></div>
+                    {/if}
+                    <span class="relative z-10">{isListening ? 'listening' : 'listen'}</span>
                 </button>
                 <button onclick={() => showControls = !showControls} class="action-btn controls-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
                     {showControls ? 'hide' : 'shader'}

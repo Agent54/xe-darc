@@ -19,10 +19,13 @@
   "display": "fullscreen",
   "theme_color": "black",
   "background_color": "black",
-  "version": "1.0.4",
+  "version": "1.0.5",
+  "permissions": ["audioCapture"],
   "permissions_policy": {
     "controlled-frame": ["self", "about://*", "chrome-extension://fgeflhglmchkilcegppfkgmmabpppcia"],
     "cross-origin-isolated": ["self"],
-    "fullscreen": ["self", "*"]
+    "fullscreen": ["self", "*"],
+    "microphone": ["self"],
+    "camera": ["self"]
   }
 }
