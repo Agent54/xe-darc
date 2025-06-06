@@ -37,6 +37,7 @@
     let baseTimeIncrement = 0.016
     let animationId
     let isAnimating = true
+    let frameCount = 0
     
     // Reactive geometries that update with time
     let geometry1 = $state(null)
@@ -238,14 +239,22 @@
         // Dynamic time increment based on mouse speed - speeds up with movement
         const speedFactor = 1 + mouseSpeed * 15 // Increase animation speed with mouse movement
         time += baseTimeIncrement * speedFactor
+        frameCount++
         
         // Update film grain shader time for both materials
         filmGrainMaterial1.uniforms.time.value = time
         filmGrainMaterial2.uniforms.time.value = time
         
-        // Update geometries with different curve types
-        geometry1 = createTwistedCurveGeometry(1.1, 0.2, 0, 1, 'figure8')
-        geometry2 = createTwistedCurveGeometry(0.9, -0.2, Math.PI, -1, 'torus')
+        // Only update geometries every 3 frames to reduce memory allocation
+        if (frameCount % 3 === 0) {
+            // Dispose old geometries before creating new ones to prevent memory leak
+            if (geometry1) geometry1.dispose()
+            if (geometry2) geometry2.dispose()
+            
+            // Update geometries with different curve types
+            geometry1 = createTwistedCurveGeometry(1.1, 0.2, 0, 1, 'figure8')
+            geometry2 = createTwistedCurveGeometry(0.9, -0.2, Math.PI, -1, 'torus')
+        }
         
         animationId = requestAnimationFrame(animate)
     }
@@ -385,9 +394,9 @@
 {/if}
 
 <!-- Cloud of grain particles spread throughout the scene -->
-{#each Array(200) as _, i}
-    {@const angle1 = (i / 200) * Math.PI * 8}
-    {@const angle2 = (i / 200) * Math.PI * 6}
+{#each Array(50) as _, i}
+    {@const angle1 = (i / 50) * Math.PI * 8}
+    {@const angle2 = (i / 50) * Math.PI * 6}
     {@const radius = 0.5 + (i % 10) * 0.3}
     {@const height = ((i % 20) - 10) * 0.2}
     <T.Mesh position={[

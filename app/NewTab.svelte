@@ -46,7 +46,7 @@
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
             
             <!-- 3D Scene Container - positioned above input -->
-            <div class="threlte-container relative w-full h-64 mb-6 pointer-events-none">
+            <div class="threlte-container relative w-full h-64 pointer-events-none">
                 <Canvas>
                     <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} />
                 </Canvas>
