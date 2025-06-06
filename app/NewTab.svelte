@@ -148,7 +148,7 @@
 
 <div id="tab_{tab.id}" class="{className} new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove}>
     
-    <div class="content-container relative z-10 pt-[15vh] w-full">
+    <div class="content-container relative pt-[15vh] w-full">
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
             
             <!-- 3D Scene Container - positioned above input -->
@@ -239,7 +239,25 @@
     }
     
     .new-tab {
-        background: radial-gradient(ellipse 1200px 400px at center 40%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.02) 50%, transparent 100%), black;
+        background-color: black;
+        position: relative;
+    }
+    
+    .new-tab::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(ellipse 1200px 400px at 50% calc(15vh + 285px), rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.02) 50%, transparent 100%);
+        pointer-events: none;
+        z-index: 0;
+    }
+    
+    .content-container {
+        position: relative;
+        z-index: 1;
     }
     
     /* Custom slider styling */

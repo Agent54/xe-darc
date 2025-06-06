@@ -112,6 +112,7 @@
     let hovercardShowTime = null
 
     let viewMode = $state('default')
+    let lastUsedViewMode = $state('tile') // Default to tile as the alternative
 
     const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
     isWindowControlsOverlay = mediaQueryList.matches
@@ -666,7 +667,30 @@
     }
 
     function selectViewMode(mode) {
+        // Track the last non-default view mode
+        if (viewMode !== 'default') {
+            lastUsedViewMode = viewMode
+        }
         viewMode = mode
+    }
+    
+    function toggleViewMode() {
+        if (viewMode === 'default') {
+            viewMode = lastUsedViewMode
+        } else {
+            lastUsedViewMode = viewMode
+            viewMode = 'default'
+        }
+    }
+    
+    function getViewModeIcon(mode) {
+        switch (mode) {
+            case 'default': return '🌐'
+            case 'tile': return '🔲'
+            case 'squat': return '📱'
+            case 'canvas': return '🎨'
+            default: return '📋'
+        }
     }
 </script>
 
@@ -720,16 +744,16 @@
         {/each}
     </ul>
 
-    <div class="view-mode-icon">
-        📋
+    <div class="view-mode-icon" onclick={toggleViewMode}>
+        {getViewModeIcon(viewMode)}
         <div class="view-mode-menu">
             <div class="view-mode-menu-header">View Mode</div>
             <div class="view-mode-menu-item" 
                  class:active={viewMode === 'default'}
                  role="button"
                  tabindex="0"
-                 onclick={() => selectViewMode('default')}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectViewMode('default') } }}>
+                 onclick={(e) => { e.stopPropagation(); selectViewMode('default') }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('default') } }}>
                 <span class="view-mode-icon-item">🌐</span>
                 <span>Default</span>
                 {#if viewMode === 'default'}<span class="checkmark">✓</span>{/if}
@@ -738,8 +762,8 @@
                  class:active={viewMode === 'tile'}
                  role="button"
                  tabindex="0"
-                 onclick={() => selectViewMode('tile')}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectViewMode('tile') } }}>
+                 onclick={(e) => { e.stopPropagation(); selectViewMode('tile') }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('tile') } }}>
                 <span class="view-mode-icon-item">🔲</span>
                 <span>Tile View</span>
                 {#if viewMode === 'tile'}<span class="checkmark">✓</span>{/if}
@@ -748,8 +772,8 @@
                  class:active={viewMode === 'squat'}
                  role="button"
                  tabindex="0"
-                 onclick={() => selectViewMode('squat')}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectViewMode('squat') } }}>
+                 onclick={(e) => { e.stopPropagation(); selectViewMode('squat') }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('squat') } }}>
                 <span class="view-mode-icon-item">📱</span>
                 <span>Squat View</span>
                 {#if viewMode === 'squat'}<span class="checkmark">✓</span>{/if}
@@ -758,8 +782,8 @@
                  class:active={viewMode === 'canvas'}
                  role="button"
                  tabindex="0"
-                 onclick={() => selectViewMode('canvas')}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectViewMode('canvas') } }}>
+                 onclick={(e) => { e.stopPropagation(); selectViewMode('canvas') }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('canvas') } }}>
                 <span class="view-mode-icon-item">🎨</span>
                 <span>Canvas View</span>
                 {#if viewMode === 'canvas'}<span class="checkmark">✓</span>{/if}
@@ -1363,6 +1387,8 @@
         font-weight: 400;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
+    
+
 
     .view-mode-menu-item {
         padding: 12px 16px;
