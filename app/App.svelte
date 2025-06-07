@@ -455,8 +455,25 @@
             const tabElement = event.target.closest('.tab-container')
             const rect = tabElement.getBoundingClientRect()
             
+            // Calculate hovercard dimensions
+            const hovercardWidth = 320 // From CSS
+            const halfWidth = hovercardWidth / 2
+            
+            // Start with tab-centered position
+            let x = rect.left + rect.width / 2
+            
+            // Check left boundary (account for hovercard width)
+            if (x - halfWidth < 10) {
+                x = halfWidth + 10
+            }
+            
+            // Check right boundary
+            if (x + halfWidth > window.innerWidth - 10) {
+                x = window.innerWidth - halfWidth - 10
+            }
+            
             hovercardPosition = {
-                x: rect.left + rect.width / 2,
+                x: x,
                 y: rect.bottom
             }
             
@@ -746,7 +763,7 @@
 <header class:window-controls-overlay={isWindowControlsOverlay}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 115px;' : 'right: 80px;'}"></div>
      
-    <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 180px)' : 'calc(100% - 142px)'};">
+    <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 200px)' : 'calc(100% - 170px)'};">
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll}>
             {#each tabs as tab, i}
                 <li class="tab-container" 
@@ -788,7 +805,7 @@
                         {/if}
                     </div>
                 </li>
-            {/each}
+                        {/each}
             <li class="tab-spacer">
                 <div class="spacer-drag-area"></div>
                 <div class="spacer-scroll-area"></div>
@@ -862,18 +879,20 @@
             🗑️ <span class="trash-count">{closed.length}</span>
             <div class="trash-menu">
                 <div class="trash-menu-header">Recently Closed  </div>
-                {#each closed.slice(-5) as closedTab}
-                    <div class="trash-menu-item" 
-                         role="button"
-                         tabindex="0"
-                         onmousedown={() => restoreTab(closedTab)}
-                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); restoreTab(closedTab) } }}
-                         onmouseenter={(e) => handleTrashItemMouseEnter(closedTab, e)}
-                         onmouseleave={handleTrashItemMouseLeave}>
-                        <img src={closedTab.favicon} alt="" class="favicon" />
-                        <span>{closedTab.title || closedTab.url}</span>
-                    </div>
-                {/each}
+                <div class="trash-menu-items">
+                    {#each closed as closedTab}
+                        <div class="trash-menu-item" 
+                             role="button"
+                             tabindex="0"
+                             onmousedown={() => restoreTab(closedTab)}
+                             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); restoreTab(closedTab) } }}
+                             onmouseenter={(e) => handleTrashItemMouseEnter(closedTab, e)}
+                             onmouseleave={handleTrashItemMouseLeave}>
+                            <img src={closedTab.favicon} alt="" class="favicon" />
+                            <span>{closedTab.title || closedTab.url}</span>
+                        </div>
+                    {/each}
+                </div>
                 {#if closed.length > 0}
                     <div class="trash-menu-separator"></div>
                     <div class="trash-menu-clear" 
@@ -1018,7 +1037,7 @@
 {/if}
 
 <div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} class:scrolling={isScrolling} onscroll={handleScroll} style="box-sizing: border-box;">
-    {#each tabs as tab}
+    {#each tabs as tab (tab.id)}
         {#if tab.url === 'about:newtab'}
             <NewTab class="frame" id="tab_{tab.id}" {tab} />
         {:else}
@@ -1254,7 +1273,8 @@
         margin-left: auto;
         opacity: 0;
         transition: opacity 0.2s ease;
-        margin-right: 4px;
+        /* margin-right: 4px */
+        margin-top: -2px;
     }
 
     .close-btn:hover {
@@ -1314,6 +1334,7 @@
         border-radius: 12px;
         min-width: 280px;
         max-width: 350px;
+        max-height: 60vh;
         box-shadow: 
             0 20px 40px rgba(0, 0, 0, 0.4),
             0 8px 16px rgba(0, 0, 0, 0.2),
@@ -1326,6 +1347,8 @@
         pointer-events: none;
         overflow: hidden;
         pointer-events: all;
+        display: flex;
+        flex-direction: column;
     }
 
     .trash-icon:hover .trash-menu, .trash-menu:hover {
@@ -1341,6 +1364,32 @@
         color: rgba(255, 255, 255, 0.9);
         font-weight: 400;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        flex-shrink: 0;
+    }
+
+    .trash-menu-items {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+
+    .trash-menu-items::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .trash-menu-items::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .trash-menu-items::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+
+    .trash-menu-items::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
     }
 
     .trash-menu-item {
@@ -1387,6 +1436,7 @@
         height: 1px;
         background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
         margin: 8px 0;
+        flex-shrink: 0;
     }
 
     .trash-menu-clear {
@@ -1399,6 +1449,7 @@
         position: relative;
         overflow: hidden;
         border-radius: 0 0 12px 12px;
+        flex-shrink: 0;
     }
 
     .trash-menu-clear:hover {
@@ -1758,9 +1809,9 @@
     }
 
     .tab-spacer {
-        width: calc(100% - 80px);
+        flex: 1 0 50px;
         height: 22px;
-        flex-shrink: 0;
+        min-width: 220px;
         list-style: none;
         pointer-events: auto;
         position: relative;
@@ -1774,7 +1825,7 @@
         top: 0;
         left: 0;
         right: 0;
-        height: 50%;
+        height: 100%;
         -webkit-app-region: drag;
         cursor: move;
         pointer-events: auto;
@@ -1786,7 +1837,7 @@
         bottom: 0;
         left: 0;
         right: 0;
-        height: 50%;
+        height: 0%;
         -webkit-app-region: no-drag;
         pointer-events: none;
         z-index: 1;

@@ -265,7 +265,7 @@
     .new-tab {
         background-color: black;
         position: relative;
-        -webkit-app-region: drag;
+        /* -webkit-app-region: drag; breaks pointer events */
     }
     
     .new-tab::before {
