@@ -779,8 +779,6 @@
                     onmouseleave={handleTabMouseLeave}
                     >
                     <div class="tab">
-
-                        <!-- -->
                         {#if tab.pinned}
                             📌
                         {/if}
@@ -1039,7 +1037,7 @@
 <div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} class:scrolling={isScrolling} onscroll={handleScroll} style="box-sizing: border-box;">
     {#each tabs as tab (tab.id)}
         {#if tab.url === 'about:newtab'}
-            <NewTab class="frame" id="tab_{tab.id}" {tab} />
+            <NewTab class="frame {isWindowControlsOverlay ? 'window-controls-overlay': ''}" id="tab_{tab.id}" {tab} />
         {:else}
             <controlledframe 
                 bind:this={tab.frame}

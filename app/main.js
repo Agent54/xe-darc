@@ -20,20 +20,30 @@ if (typeof window !== 'undefined' && window.trustedTypes && window.trustedTypes.
 
 document.addEventListener('touchmove', function (event) {
   console.log(event)
-  if (event.scale !== 1) { event.preventDefault(); }
-}, { passive: false });
+  if (event.scale !== 1) { event.preventDefault() }
+}, { passive: false })
 
 document.addEventListener("wheel", e => {
   // suppress browsers default zoom-behavior:
-  e.preventDefault();
+  // console.log(e)
 
-  // execution of my own custom zooming-behavior:
-  if (e.deltaY > 0) {
-      this._zoom(1);
-  } else {
-      this._zoom(-1);
-  }
-})
+  // prevent default when zooming but not scrolling
+
+  // detect scaling from mouse event
+
+  // if (e.deltaY > 0) {
+  //   console.log('zooming', e)
+  //   e.preventDefault()
+  // }
+  // e.preventDefault()
+
+  // // execution of my own custom zooming-behavior:
+  // if (e.deltaY > 0) {
+  //     this?._zoom?.(1)
+  // } else {
+  //     this?._zoom?.(-1)
+  // }
+}, { passive: false })
 
 import { mount } from 'svelte'
 import App from './App.svelte'

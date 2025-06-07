@@ -9,12 +9,12 @@
     let mouseY = $state(0)
     
     // Shader controls
-    let grainOpacity = $state(0.04)
-    let grainAmount = $state(38)
-    let grainSize = $state(450)
+    let grainOpacity = $state(0.2) //0.16)
+    let grainAmount = $state(31.7)// 36.57)
+    let grainSize = $state(310.1) //395)
     let grainFlicker = $state(0)
-    let grainSpread = $state(0.01)
-    let animationSpeed = $state(1.5)
+    let grainSpread = $state(0.02)
+    let animationSpeed = $state(1.7)
     let lineThickness = $state(0.025)
     let blur = $state(0)
     let showControls = $state(false)
@@ -166,7 +166,7 @@
                     <input
                         type="text"
                         bind:value={inputValue}
-                        placeholder="You can do anything..."
+                        placeholder="We can do anything..."
                         class="omnibar-input w-full px-5 py-3 text-base bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl text-white/80 placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-white/10 focus:ring-opacity-60 focus:border-white/20 focus:text-white transition-all duration-300 hover:border-white/20"
                         autocomplete="off"
                         spellcheck="false"
