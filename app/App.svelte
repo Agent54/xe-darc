@@ -1,6 +1,6 @@
 <script>
     import PouchDB from 'pouchdb-browser'
-    import NewTab from './NewTab.svelte'
+    import NewTab from './components/NewTab.svelte'
 
     const db = new PouchDB('darc')
 
@@ -10,8 +10,14 @@
         console.log(rows)
     })
 
-    function handleLoadCommit(event) {
+    function handleLoadCommit(tab, event) {
         console.log('Page loaded:', event.url)
+        
+        // Update the URL immediately
+        // tab.url = event.url
+        
+        // Update the favicon URL
+        // tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${event.url}&size=64`
     }
 
     let tabs = $state([
@@ -392,10 +398,84 @@
 
     function handleLoadStop(tab) {
         tab.loading = false
+
+        tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
+        
+        // Update title and capture screenshot after page loads
+        setTimeout(async () => {
+            await updateTabTitle(tab)
+            await captureTabScreenshot(tab)
+        }, 2) // Wait a bit for the page to fully render
     }
 
-    async function captureTabScreenshot(tab) {
-        const frame = document.getElementById(`tab_${tab.id}`)
+    async function updateTabTitle(tab, frame = null) {
+        if (!frame) {
+            frame = document.getElementById(`tab_${tab.id}`)
+        }
+        if (!frame) return
+
+        try {
+            let title = null
+
+            // Method 1: Try executeScript to get document.title
+            if (typeof frame.executeScript === 'function') {
+                try {
+                    const result = await frame.executeScript({
+                        code: 'document.title'
+                    })
+                    if (result && result[0] && result[0].trim()) {
+                        title = result[0].trim()
+                    }
+                } catch (scriptErr) {
+                    console.log('executeScript failed for title:', scriptErr)
+                }
+            }
+
+            // Method 2: Try to get title from frame.contentDocument
+            if (!title && frame.contentDocument && frame.contentDocument.title) {
+                title = frame.contentDocument.title.trim()
+            }
+
+            // Method 3: Try frame.title attribute
+            if (!title && frame.title) {
+                title = frame.title.trim()
+            }
+
+            // Method 4: Try getTitle method if available
+            if (!title && typeof frame.getTitle === 'function') {
+                try {
+                    title = await frame.getTitle()
+                    if (title) title = title.trim()
+                } catch (getTitleErr) {
+                    console.log('getTitle failed:', getTitleErr)
+                }
+            }
+
+            // Update the tab title directly
+            if (title && title !== 'about:blank') {
+                tab.title = title
+            } else {
+                // Fallback to URL if no title is available
+                const url = tab.url
+                if (url && url !== 'about:blank') {
+                    try {
+                        const urlObj = new URL(url)
+                        tab.title = urlObj.hostname || url
+                    } catch {
+                        tab.title = url
+                    }
+                }
+            }
+
+        } catch (err) {
+            console.log('Error updating tab title:', err)
+        }
+    }
+
+    async function captureTabScreenshot(tab, frame = null) {
+        if (!frame) {
+            frame = document.getElementById(`tab_${tab.id}`)
+        }
         if (!frame) {
             console.log('Frame not found for tab:', tab.id)
             return null
@@ -454,10 +534,7 @@
             
             
             if (screenshot) {
-                const tabIndex = tabs.findIndex(t => t.id === tab.id)
-                if (tabIndex !== -1) {
-                    tabs[tabIndex].screenshot = screenshot
-                }
+                tab.screenshot = screenshot
                 return screenshot
             }
         } catch (err) {
@@ -829,7 +906,7 @@
                                     stroke-linecap="round"/>
                             </svg>
                         {/if}
-                        <img src={tab.favicon} alt="" class="favicon" />
+                        <img src={tab.favicon} alt="favicon" class="favicon" />
                         <span> {#if tab.audioPlaying && !tab.muted}
                             🔊 &nbsp;
                         {:else if tab.muted}
@@ -1159,6 +1236,7 @@
                 onloadstart={e => { handleLoadStart(tab, e) }}
                 onloadstop={e => { handleLoadStop(tab, e) }}
 
+                oncontentload={e => handleContentLoad(tab, e)}
                 onclose={e => { handleEvent('onclose', tab, e) }}
                 oncontentresize={e => { handleEvent('oncontentresize',tab, e) }}
                 ondialog={e => { handleEvent('ondialog',tab, e) }}
@@ -1179,6 +1257,11 @@
                 onsizechanged={e => { handleEvent('onsizechanged',tab, e) }}
                 onunresponsive={e => { handleEvent(tab, e, 'onunresponsive') }}
             ></controlledframe>
+            <!--
+                onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
+                onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
+                onzoomchange={e => { handleEvent(tab, e, 'onzoomchange') }}
+            -->
         {/if}
     {/each}
 </div>

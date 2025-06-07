@@ -1,6 +1,6 @@
 <script>
     import { Canvas } from '@threlte/core'
-    import Scene from './components/InteractiveLineScene.svelte'
+    import Scene from './InteractiveLineScene.svelte'
     
     let { tab } = $props()
     
