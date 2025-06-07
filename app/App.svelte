@@ -765,7 +765,7 @@
      
     <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 200px)' : 'calc(100% - 170px)'};">
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll}>
-            {#each tabs as tab, i}
+            {#each tabs as tab, i (tab.id)}
                 <li class="tab-container" 
                     class:active={i===activeTabIndex} 
                     class:hovered={tab.id === hoveredTab?.id}
@@ -1035,6 +1035,15 @@
 {/if}
 
 <div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} class:scrolling={isScrolling} onscroll={handleScroll} style="box-sizing: border-box;">
+    <div class="frame-title-bar">
+        <div class="frame-header-title">
+            {hoveredTab?.title || 'Untitled'}
+        </div>
+        <div class="frame-header-url">
+            {hoveredTab?.url}
+        </div>
+    </div>
+
     {#each tabs as tab (tab.id)}
         {#if tab.url === 'about:newtab'}
             <NewTab class="frame {isWindowControlsOverlay ? 'window-controls-overlay': ''}" id="tab_{tab.id}" {tab} />
@@ -1961,5 +1970,27 @@
 
     .drag-enabled {
         -webkit-app-region: drag;
+    }
+
+    .frame-title-bar {
+        position: fixed;
+        margin-top: -18px;
+        height: 21px;
+        width: calc(100% - 18px);
+        background: #1a1a1a;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+        z-index: 1;
+        opacity: 0;
+        transition: opacity 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94), margin-top 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        overflow: hidden;
+    }
+
+    .frame-title-bar:hover {
+        margin-top: -9px;
+        z-index: 100;
+        opacity: 1;
+        transition: opacity 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, margin-top 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s;
+        box-shadow:0 6px 35px 5px rgb(0 0 0 / 36%);
     }
 </style>
