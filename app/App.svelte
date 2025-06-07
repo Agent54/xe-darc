@@ -831,10 +831,10 @@
                     </div>
                 </li>
                         {/each}
-            <li class="tab-spacer">
-                <div class="spacer-drag-area"></div>
-                <div class="spacer-scroll-area"></div>
-            </li>
+            <div class="tab-spacer">
+                <!-- <div class="spacer-drag-area"></div>
+                <div class="spacer-scroll-area"></div> -->
+            </div>
         </ul>
     </div>
 
@@ -1893,18 +1893,18 @@
     }
 
     .tab-spacer {
-        flex: 1 0 50px;
-        height: 22px;
+        /* flex: 1 0 50px; */
+        height: 28px;
         min-width: 220px;
-        list-style: none;
+        /* list-style: none;
         pointer-events: auto;
         position: relative;
         display: flex;
-        flex-direction: column;
-        -webkit-app-region: no-drag;
+        flex-direction: column; */
+        -webkit-app-region: drag;
     }
 
-    .spacer-drag-area {
+    /* .spacer-drag-area {
         position: absolute;
         top: 0;
         left: 0;
@@ -1915,7 +1915,6 @@
         pointer-events: auto;
         z-index: 2;
     }
-
     .spacer-scroll-area {
         position: absolute;
         bottom: 0;
@@ -1925,7 +1924,7 @@
         -webkit-app-region: no-drag;
         pointer-events: none;
         z-index: 1;
-    }
+    } */
 
     .new-tab-button {
         position: fixed;
