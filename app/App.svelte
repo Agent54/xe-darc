@@ -1180,7 +1180,7 @@
         right: 0;
         height: 100%;
         pointer-events: auto;
-        z-index: -1;
+        z-index: 1;
     }
 
     .drag-handle-left {
@@ -1902,6 +1902,7 @@
         display: flex;
         flex-direction: column; */
         -webkit-app-region: drag;
+        z-index: 1;
     }
 
     /* .spacer-drag-area {
