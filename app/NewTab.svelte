@@ -2,7 +2,7 @@
     import { Canvas } from '@threlte/core'
     import Scene from './components/InteractiveLineScene.svelte'
     
-    let { tab, class: className = '' } = $props()
+    let { tab } = $props()
     
     let inputValue = $state('')
     let mouseX = $state(0)
@@ -149,7 +149,7 @@
     })
 </script>
 
-<div id="tab_{tab.id}" class="{className} new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove}>
+<div class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove}>
     
     <div class="content-container relative pt-[15vh] w-full">
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
