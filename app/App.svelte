@@ -16,6 +16,17 @@
 
     let tabs = $state([
         {
+            id: 'tab-4',
+            url: 'about:newtab', 
+            title: 'New Tab', 
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://vercel.com&size=64',
+            audioPlaying: false,
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
+        {
             id: 'tab-2',
             url: 'https://open.spotify.com/', 
             title: 'Spotify', 
@@ -59,17 +70,7 @@
             muted: false,
             loading: false
         },
-        {
-            id: 'tab-4',
-            url: 'about:newtab', 
-            title: 'New Tab', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
+
         {
             id: 'tab-5',
             url: 'https://github.com/orgs/Agent54', 

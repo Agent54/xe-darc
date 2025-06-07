@@ -16,6 +16,7 @@
     let grainSpread = $state(0.01)
     let animationSpeed = $state(1.5)
     let lineThickness = $state(0.025)
+    let blur = $state(0)
     let showControls = $state(false)
     
     // Audio controls
@@ -154,7 +155,7 @@
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
             
             <!-- 3D Scene Container - positioned above input -->
-            <div class="threlte-container relative w-full h-64 pointer-events-none">
+            <div class="threlte-container relative w-full h-64 pointer-events-none" style="filter: blur({blur}px);">
                 <Canvas>
                     <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} {animationSpeed} {lineThickness} {audioLevel} {audioFrequency} />
                 </Canvas>
@@ -233,9 +234,14 @@
                         <input type="range" min="0.1" max="5" step="0.1" bind:value={animationSpeed} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
-                    <div class="control-group">
+                    <div class="control-group mb-4">
                         <label class="block text-white/80 text-sm mb-2">Line Thickness: {lineThickness.toFixed(3)}</label>
                         <input type="range" min="0.005" max="1" step="0.001" bind:value={lineThickness} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label class="block text-white/80 text-sm mb-2">Blur: {blur.toFixed(1)}px</label>
+                        <input type="range" min="0" max="20" step="0.1" bind:value={blur} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                 </div>
             {/if}
