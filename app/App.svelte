@@ -143,7 +143,7 @@
             id: crypto.randomUUID(),
             url: 'about:newtab', 
             title: 'New Tab', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://vercel.com&size=64',
             audioPlaying: false,
             screenshot: null,
             pinned: false,
