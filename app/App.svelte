@@ -248,6 +248,33 @@
         hideContextMenu()
     }
 
+    function goBack() {
+        const activeTab = tabs[activeTabIndex]
+        if (activeTab) {
+            const frame = document.getElementById(`tab_${activeTab.id}`)
+            if (frame && typeof frame.back === 'function') {
+                frame.back()
+            }
+        }
+    }
+
+    function goForward() {
+        const activeTab = tabs[activeTabIndex]
+        if (activeTab) {
+            const frame = document.getElementById(`tab_${activeTab.id}`)
+            if (frame && typeof frame.forward === 'function') {
+                frame.forward()
+            }
+        }
+    }
+
+    function reloadActiveTab() {
+        const activeTab = tabs[activeTabIndex]
+        if (activeTab) {
+            reloadTab(activeTab)
+        }
+    }
+
     function togglePinTab(tab) {
         const tabIndex = tabs.findIndex(t => t.id === tab.id)
         if (tabIndex !== -1) {
@@ -711,11 +738,11 @@
     
     function getViewModeIcon(mode) {
         switch (mode) {
-            case 'default': return '🌐'
-            case 'tile': return '🔲'
-            case 'squat': return '📱'
-            case 'canvas': return '🎨'
-            default: return '📋'
+            case 'default': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3s-4.5 4.03-4.5 9 2.015 9 4.5 9Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2 12h20" /></svg>`
+            case 'tile': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5m18.375 2.625a1.125 1.125 0 0 0 1.125-1.125m-1.125 1.125v-1.5m0 0V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m0-1.125v-1.5m0 0V5.625c0-.621.504-1.125 1.125-1.125M20.625 4.5H3.375c-.621 0-1.125.504-1.125 1.125v6c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-6c0-.621-.504-1.125-1.125-1.125Z" /></svg>`
+            case 'squat': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" /></svg>`
+            case 'canvas': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" /></svg>`
+            default: return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>`
         }
     }
 
@@ -816,7 +843,7 @@
          tabindex="0"
          onclick={toggleViewMode}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleViewMode() } }}>
-        {getViewModeIcon(viewMode)}
+        {@html getViewModeIcon(viewMode)}
         <div class="view-mode-menu">
             <div class="view-mode-menu-header">View Mode</div>
             <div class="view-mode-menu-item" 
@@ -825,9 +852,9 @@
                  tabindex="0"
                  onclick={(e) => { e.stopPropagation(); selectViewMode('default') }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('default') } }}>
-                <span class="view-mode-icon-item">🌐</span>
+                <span class="view-mode-icon-item"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3s-4.5 4.03-4.5 9 2.015 9 4.5 9Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2 12h20" /></svg></span>
                 <span>Default</span>
-                {#if viewMode === 'default'}<span class="checkmark">✓</span>{/if}
+                {#if viewMode === 'default'}<span class="checkmark">•</span>{/if}
             </div>
             <div class="view-mode-menu-item" 
                  class:active={viewMode === 'tile'}
@@ -835,9 +862,9 @@
                  tabindex="0"
                  onclick={(e) => { e.stopPropagation(); selectViewMode('tile') }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('tile') } }}>
-                <span class="view-mode-icon-item">🔲</span>
+                <span class="view-mode-icon-item"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5m18.375 2.625a1.125 1.125 0 0 0 1.125-1.125m-1.125 1.125v-1.5m0 0V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m0-1.125v-1.5m0 0V5.625c0-.621.504-1.125 1.125-1.125M20.625 4.5H3.375c-.621 0-1.125.504-1.125 1.125v6c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-6c0-.621-.504-1.125-1.125-1.125Z" /></svg></span>
                 <span>Tile View</span>
-                {#if viewMode === 'tile'}<span class="checkmark">✓</span>{/if}
+                {#if viewMode === 'tile'}<span class="checkmark">•</span>{/if}
             </div>
             <div class="view-mode-menu-item" 
                  class:active={viewMode === 'squat'}
@@ -845,9 +872,9 @@
                  tabindex="0"
                  onclick={(e) => { e.stopPropagation(); selectViewMode('squat') }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('squat') } }}>
-                <span class="view-mode-icon-item">📱</span>
+                <span class="view-mode-icon-item"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" /></svg></span>
                 <span>Squat View</span>
-                {#if viewMode === 'squat'}<span class="checkmark">✓</span>{/if}
+                {#if viewMode === 'squat'}<span class="checkmark">•</span>{/if}
             </div>
             <div class="view-mode-menu-item" 
                  class:active={viewMode === 'canvas'}
@@ -855,9 +882,9 @@
                  tabindex="0"
                  onclick={(e) => { e.stopPropagation(); selectViewMode('canvas') }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('canvas') } }}>
-                <span class="view-mode-icon-item">🎨</span>
+                <span class="view-mode-icon-item"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" /></svg></span>
                 <span>Canvas View</span>
-                {#if viewMode === 'canvas'}<span class="checkmark">✓</span>{/if}
+                {#if viewMode === 'canvas'}<span class="checkmark">•</span>{/if}
             </div>
         </div>
     </div>
@@ -874,7 +901,10 @@
 
     {#if closed.length > 0}
         <div class="trash-icon">
-            🗑️ <span class="trash-count">{closed.length}</span>
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+            </svg> 
+            <span class="trash-count">{closed.length}</span>
             <div class="trash-menu">
                 <div class="trash-menu-header">Recently Closed  </div>
                 <div class="trash-menu-items">
@@ -898,7 +928,7 @@
                          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearAllClosedTabs() } }}
                          tabindex="0" 
                          role="button">
-                        <span>🗑️</span>
+                        <span><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg></span>
                         <span>Clear All ({closed.length})</span>
                     </div>
                 {/if}
@@ -1036,11 +1066,53 @@
 
 <div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} class:scrolling={isScrolling} onscroll={handleScroll} style="box-sizing: border-box;">
     <div class="frame-title-bar">
-        <div class="frame-header-title">
-            {hoveredTab?.title || 'Untitled'}
+        <div class="frame-header-controls">
+            <button class="frame-button" title="Back" onclick={goBack}>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                </svg>
+            </button>
+            <button class="frame-button" title="Forward" onclick={goForward}>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                </svg>
+            </button>
+            <button class="frame-button" title="Reload" onclick={reloadActiveTab}>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+            </button>
         </div>
-        <div class="frame-header-url">
-            {hoveredTab?.url}
+        
+        <div class="frame-header-url-container">
+            <div class="frame-header-url">
+                {tabs[activeTabIndex]?.url || ''}
+            </div>
+        </div>
+
+        <div class="frame-header-actions">
+            <button class="frame-button" title="{tabs[activeTabIndex]?.pinned ? 'Unpin Tab' : 'Pin Tab'}" onclick={() => togglePinTab(tabs[activeTabIndex])}>
+                {#if tabs[activeTabIndex]?.pinned}
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2a1 1 0 0 1 2 0v2h6V2a1 1 0 0 1 2 0v2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v6a1 1 0 0 1-1 1h-2v3a1 1 0 0 1-2 0v-3H8a1 1 0 0 1-1-1V9H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1z" />
+                    </svg>
+                {:else}
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2a1 1 0 0 1 2 0v2h6V2a1 1 0 0 1 2 0v2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v6a1 1 0 0 1-1 1h-2v3a1 1 0 0 1-2 0v-3H8a1 1 0 0 1-1-1V9H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1z" />
+                    </svg>
+                {/if}
+            </button>
+            <button class="frame-button" title="Settings">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+            </button>
+            <button class="frame-button frame-close" title="Close Tab" onclick={(e) => closeTab(tabs[activeTabIndex], e)}>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+            </button>
         </div>
     </div>
 
@@ -1322,7 +1394,6 @@
 
     .trash-count {
         margin-left: 4px;
-        margin-bottom: 1px;
         font-size: 11px;
         color: rgba(255, 255, 255, 0.8);
         font-weight: 500;
@@ -1334,22 +1405,22 @@
         position: absolute;
         top: 10px;
         right: 0;
-        margin-top: 8px;
-        background: rgba(0, 0, 0, 0.95);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        min-width: 280px;
-        max-width: 350px;
+        margin-top: 6px;
+        background: rgba(8, 8, 8, 0.98);
+        backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+        min-width: 260px;
+        max-width: 320px;
         max-height: 60vh;
         box-shadow: 
-            0 20px 40px rgba(0, 0, 0, 0.4),
-            0 8px 16px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            0 12px 32px rgba(0, 0, 0, 0.6),
+            0 4px 12px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.03);
         opacity: 0;
         visibility: hidden;
-        transform: translateY(-10px) scale(0.95);
-        transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+        transform: translateY(-8px) scale(0.96);
+        transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 10000;
         pointer-events: none;
         overflow: hidden;
@@ -1366,11 +1437,13 @@
     }
 
     .trash-menu-header {
-        padding: 12px 16px;
-        font-size: 13px;
-        color: rgba(255, 255, 255, 0.9);
-        font-weight: 400;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 8px 12px;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
         flex-shrink: 0;
     }
 
@@ -1400,35 +1473,33 @@
     }
 
     .trash-menu-item {
-        padding: 12px 16px;
+        padding: 8px 12px;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 8px;
         cursor: pointer;
-        transition: all 0.2s ease;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.15s ease;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
         position: relative;
         overflow: hidden;
     }
 
     .trash-menu-item:last-of-type {
         border-bottom: none;
-        border-radius: 0 0 12px 12px;
+        border-radius: 0 0 8px 8px;
     }
 
-    .trash-menu-item:hover {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
-    }
+
 
     .trash-menu-item span {
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 13px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
         font-weight: 400;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         flex: 1;
-        line-height: 1.4;
+        line-height: 1.3;
     }
 
     .trash-menu-item .favicon {
@@ -1447,20 +1518,20 @@
     }
 
     .trash-menu-clear {
-        padding: 12px 16px;
+        padding: 8px 12px;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 8px;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.15s ease;
         position: relative;
         overflow: hidden;
-        border-radius: 0 0 12px 12px;
+        border-radius: 0 0 8px 8px;
         flex-shrink: 0;
     }
 
     .trash-menu-clear:hover {
-        background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.15));
+        background: rgb(255 255 255 / 8%);
     }
 
     .trash-menu-clear:hover span:last-child {
@@ -1474,8 +1545,8 @@
 
     .trash-menu-clear span:last-child {
         color: rgba(255, 255, 255, 0.8);
-        font-size: 13px;
-        font-weight: 500;
+        font-size: 12px;
+        font-weight: 400;
         flex: 1;
     }
 
@@ -1510,23 +1581,23 @@
         z-index: 10010;
         font-family: 'Inter', sans-serif;
         position: absolute;
-        top: 10px;
+        top: 0;
         right: 0;
-        margin-top: 8px;
-        background: rgba(0, 0, 0, 0.95);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        min-width: 180px;
-        max-width: 220px;
+        margin-top: 17px;
+        background: rgba(8, 8, 8, 0.98);
+        backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+        min-width: 160px;
+        max-width: 180px;
         box-shadow: 
-            0 20px 40px rgba(0, 0, 0, 0.4),
-            0 8px 16px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            0 12px 32px rgba(0, 0, 0, 0.6),
+            0 4px 12px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.03);
         opacity: 0;
         visibility: hidden;
-        transform: translateY(-10px) scale(0.95);
-        transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+        transform: translateY(-8px) scale(0.96);
+        transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 10000;
         pointer-events: none;
         overflow: hidden;
@@ -1540,52 +1611,58 @@
     }
 
     .view-mode-menu-header {
-        padding: 12px 16px;
-        font-size: 13px;
-        color: rgba(255, 255, 255, 0.9);
-        font-weight: 400;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 8px 12px;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
     }
     
 
 
     .view-mode-menu-item {
-        padding: 12px 16px;
+        padding: 8px 12px;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 8px;
         cursor: pointer;
-        transition: all 0.2s ease;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.15s ease;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
         position: relative;
         overflow: hidden;
     }
 
     .view-mode-menu-item:last-of-type {
         border-bottom: none;
-        border-radius: 0 0 12px 12px;
+        border-radius: 0 0 8px 8px;
     }
 
-    .view-mode-menu-item:hover {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
+
+
+    .view-mode-menu-item:hover,
+    .trash-menu-item:hover,
+    .trash-menu-clear:hover {
+        background: rgb(255 255 255 / 8%);
     }
 
     .view-mode-menu-item.active {
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.15));
+        background: rgb(255 255 255 / 5%);
     }
 
     .view-mode-menu-item.active:hover {
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.2));
+        background: rgb(255 255 255 / 10%);
     }
 
     .view-mode-menu-item span {
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 13px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
         font-weight: 400;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        line-height: 1.4;
+        line-height: 1.3;
     }
 
     .view-mode-menu-item span:nth-child(2) {
@@ -1607,9 +1684,9 @@
 
     .checkmark {
         margin-left: auto;
-        color: rgba(34, 197, 94, 0.9);
-        font-weight: 600;
-        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+        font-weight: 400;
+        font-size: 10px;
     }
 
     .controlled-frame-container {
@@ -1622,6 +1699,7 @@
       display: flex;
       flex-direction: row;
       flex-wrap: nowrap;
+      align-items: flex-end;
       justify-content: flex-start;
       align-items: flex-start;
       width: 100%;
@@ -1852,9 +1930,9 @@
 
     .new-tab-button {
         position: fixed;
-        top: 9px;
-        width: 25px;
-        height: 22px;
+        top: 7px;
+        width: 28px;
+        height: 25px;
         background: rgba(0, 0, 0, 0.8);
         border-radius: 6px;
         display: flex;
@@ -1882,7 +1960,7 @@
 
     .new-tab-icon {
         color: rgba(255, 255, 255, 0.8);
-        font-size: 14px;
+        font-size: 18px;
         font-weight: 300;
         line-height: 1;
         transition: color 0.3s ease;
@@ -1974,23 +2052,118 @@
 
     .frame-title-bar {
         position: fixed;
-        margin-top: -18px;
-        height: 21px;
+        margin-top: -34px;
+        height: 34px;
         width: calc(100% - 18px);
         background: #1a1a1a;
         border-top-left-radius: 8px;
         border-top-right-radius: 8px;
         z-index: 1;
         opacity: 0;
-        transition: opacity 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94), margin-top 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        transition: opacity 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94)0.5s, margin-top 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, box-shadow 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s;
         overflow: hidden;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        font-family: 'Inter', sans-serif;
+        border-bottom: 1px solid rgb(255 255 255 / 6%);
     }
 
     .frame-title-bar:hover {
         margin-top: -9px;
         z-index: 100;
         opacity: 1;
-        transition: opacity 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, margin-top 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s;
-        box-shadow:0 6px 35px 5px rgb(0 0 0 / 36%);
+        transition: opacity 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, margin-top 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, box-shadow 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s;
+        box-shadow: 0 6px 35px 5px rgb(0 0 0 / 36%);
+    }
+
+    .frame-header-controls {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .frame-header-url-container {
+        flex: 1;
+        min-width: 0;
+        margin: 0 8px;
+    }
+
+    .frame-header-url {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.7);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: 'SF Mono', Consolas, monospace;
+        font-weight: 400;
+        user-select: none;
+        cursor: default;
+    }
+
+    .frame-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .frame-button {
+        width: 20px;
+        height: 20px;
+        border: none;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.6);
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 0;
+    }
+
+    .frame-button:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .frame-button.frame-close:hover {
+        background: rgba(239, 68, 68, 0.2);
+        color: rgba(255, 255, 255, 1);
+    }
+
+    .w-4 {
+        width: 14px;
+    }
+
+    .h-4 {
+        height: 14px;
+    }
+
+    .w-3 {
+        width: 12px;
+    }
+
+    .h-3 {
+        height: 12px;
+    }
+
+    .view-mode-icon svg {
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .trash-icon svg {
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .view-mode-menu-item svg {
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    .trash-menu svg {
+        color: rgba(255, 255, 255, 0.6);
     }
 </style>
