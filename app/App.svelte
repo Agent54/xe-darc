@@ -1270,7 +1270,7 @@
         gap: 7px;
         overflow-x: auto;
         overflow-y: hidden;
-        /* -webkit-app-region: no-drag; */
+        -webkit-app-region: no-drag;
         position: relative;
         z-index: 1;
         scrollbar-width: none;
@@ -1389,7 +1389,8 @@
         top: 9px;
         right: 125px;
         width: 32px;
-        height: 22px;
+        height: 30px;
+        padding-bottom: 8px;
         background: rgba(0, 0, 0, 0.8);
         border-radius: 6px;
         display: flex;
@@ -1574,7 +1575,8 @@
         top: 9px;
         right: 87px;
         width: 32px;
-        height: 22px;
+        height: 30px;
+        padding-bottom: 8px;
         background: rgba(0, 0, 0, 0.8);
         border-radius: 6px;
         display: flex;
@@ -1913,7 +1915,7 @@
 
     .tab-spacer {
         /* flex: 1 0 50px; */
-        height: 28px;
+        height: 25px;
         min-width: 220px;
         /* list-style: none;
         pointer-events: auto;

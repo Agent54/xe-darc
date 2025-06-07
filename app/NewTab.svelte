@@ -197,7 +197,7 @@
                 </button>
                 
                 <button onclick={() => showControls = !showControls} class="action-btn controls-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
-                    {showControls ? 'hide' : 'shader'}
+                    {showControls ? 'see' : 'see'}
                 </button>
             </div>
             
