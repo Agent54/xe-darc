@@ -122,7 +122,7 @@
     isWindowControlsOverlay = mediaQueryList.matches
     mediaQueryList.addEventListener('change', e => setTimeout(() => { isWindowControlsOverlay = e.matches }, 0))
     
-    function handleNewWindow(e) {
+    function handleNewWindow(tab, e) {
         console.log('New window:', e)
         tabs.push({ 
             id: crypto.randomUUID(),
@@ -368,26 +368,22 @@
         }
     })
 
-    function updateTabAudioState(frame) {
-        if (frame && typeof frame.getAudioState === 'function') {
-            frame.getAudioState().then(audible => {
-                const tabId = frame.id.replace('tab_', '')
-                const tabIndex = tabs.findIndex(t => t.id === tabId)
-                if (tabIndex !== -1) {
-                    tabs[tabIndex].audioPlaying = audible
-                }
-            }).catch(err => {
-                console.log('Error getting audio state:', err)
-            })
-        }
-    }
+    // function updateTabAudioState (frame) {
+    //     if (frame && typeof frame.getAudioState === 'function') {
+    //         frame.getAudioState().then(audible => {
+    //             const tabId = frame.id.replace('tab_', '')
+    //             const tabIndex = tabs.findIndex(t => t.id === tabId)
+    //             if (tabIndex !== -1) {
+    //                 tabs[tabIndex].audioPlaying = audible
+    //             }
+    //         }).catch(err => {
+    //             console.log('Error getting audio state:', err)
+    //         })
+    //     }
+    // }
 
-    function handleAudioStateChanged(event) {
-        const tabId = event.target.id.replace('tab_', '')
-        const tabIndex = tabs.findIndex(t => t.id === tabId)
-        if (tabIndex !== -1) {
-            tabs[tabIndex].audioPlaying = event.audible
-        }
+    function handleAudioStateChanged (tab, event) {
+        tab.audioPlaying = event.audible
     }
 
     function handleLoadStart(tab) {
@@ -782,6 +778,14 @@
     function handleResize() {
         checkTabListOverflow()
     }
+
+    function handleEvent(eventName, tab, event) {
+        console.log(eventName, tab, event)
+    }
+
+    function handleContentLoad(tab, event) {
+        setTimeout(() => updateTabTitle(tab), 100)
+    }
 </script>
 
 
@@ -1146,14 +1150,34 @@
                 class="frame"
                 src={tab.url}
                 partition="persist:myapp"
-                onloadcommit={handleLoadCommit}
-                onnewwindow={(e) => { handleNewWindow(e)} }
-                onaudiostatechanged={handleAudioStateChanged}
+                onloadcommit={e => handleLoadCommit(tab, e)}
+                onnewwindow={(e) => { handleNewWindow(tab, e)} }
+                onaudiostatechanged={e => handleAudioStateChanged(tab, e)}
                 allowscaling={true}
                 autosize={true}
                 allowtransparency={false}
-                onloadstart={() => { handleLoadStart(tab) }}
-                onloadstop={() => { handleLoadStop(tab) }}
+                onloadstart={e => { handleLoadStart(tab, e) }}
+                onloadstop={e => { handleLoadStop(tab, e) }}
+
+                onclose={e => { handleEvent('onclose', tab, e) }}
+                oncontentresize={e => { handleEvent('oncontentresize',tab, e) }}
+                ondialog={e => { handleEvent('ondialog',tab, e) }}
+                onexit={e => { handleEvent('onexit',tab, e) }}
+                onloadabort={e => { handleEvent('onloadabort',tab, e) }}
+                onloadredirect={(e) => { 
+                    handleEvent('onloadredirect',tab, e)
+                    // Update URL on redirect
+                    // if (e.newUrl) {
+                    //     tab.url = e.newUrl
+                    //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
+                    // }
+                    return false
+                }}
+                onpermissionrequest={e => { handleEvent('onpermissionrequest',tab, e) }}
+                onresize={e => { handleEvent('onresize',tab, e) }}
+                onresponsive={e => { handleEvent('onresponsive',tab, e) }}
+                onsizechanged={e => { handleEvent('onsizechanged',tab, e) }}
+                onunresponsive={e => { handleEvent(tab, e, 'onunresponsive') }}
             ></controlledframe>
         {/if}
     {/each}
