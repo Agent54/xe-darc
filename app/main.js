@@ -24,26 +24,16 @@ document.addEventListener('touchmove', function (event) {
 }, { passive: false })
 
 document.addEventListener("wheel", e => {
-  // suppress browsers default zoom-behavior:
-  // console.log(e)
+  if (e.ctrlKey) {
+    e.preventDefault()
+  }
 
-  // prevent default when zooming but not scrolling
-
-  // detect scaling from mouse event
-
-  // if (e.deltaY > 0) {
-  //   console.log('zooming', e)
-  //   e.preventDefault()
-  // }
-  // e.preventDefault()
-
-  // // execution of my own custom zooming-behavior:
-  // if (e.deltaY > 0) {
-  //     this?._zoom?.(1)
-  // } else {
-  //     this?._zoom?.(-1)
-  // }
 }, { passive: false })
+
+
+window.addEventListener('gesturestart', e => e.preventDefault());
+window.addEventListener('gesturechange', e => e.preventDefault());
+window.addEventListener('gestureend', e => e.preventDefault());
 
 import { mount } from 'svelte'
 import App from './App.svelte'

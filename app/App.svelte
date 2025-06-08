@@ -14,10 +14,32 @@
 
     let tabs = $state([
         {
-            id: 'tab-4',
+            id: '4',
             url: 'about:newtab', 
-            title: 'New Tab', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://vercel.com&size=64',
+            title: 'New Tab',
+            audioPlaying: false,
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
+
+        // FIXME about: support
+        // {
+        //     id: '11',
+        //     url: 'about://blank',
+        //     title: 'blank',
+        //     audioPlaying: false,
+        //     screenshot: null,
+        //     pinned: false,
+        // },
+
+        // https://testpages.eviltester.com/styled/index.html#:~:text=Index,-About%20Related%20Sites
+        {
+            id: '10',
+            url: 'https://wicg.github.io/controlled-frame',
+            title: 'Controlled Frame API',
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://wicg.github.io&size=64',
             audioPlaying: false,
             screenshot: null,
             pinned: false,
@@ -25,7 +47,7 @@
             loading: false
         },
         {
-            id: 'tab-2',
+            id: '2',
             url: 'https://open.spotify.com/', 
             title: 'Spotify', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://open.spotify.com&size=64',
@@ -36,7 +58,7 @@
             loading: false
         },
         { 
-            id: 'tab-0',
+            id: '0',
             url: 'http://lanes.localhost/', 
             title: 'Lanes', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://lanes.pm&size=64',
@@ -47,7 +69,7 @@
             loading: false
         },
         { 
-            id: 'tab-1',
+            id: '1',
             url: 'https://operaneon.com/', 
             title: 'Opera Neon', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://operaneon.com&size=64',
@@ -58,7 +80,7 @@
             loading: false
         },
         {
-            id: 'tab-3',
+            id: '3',
             url: 'https://google.com', 
             title: 'Google', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
@@ -70,7 +92,7 @@
         },
 
         {
-            id: 'tab-5',
+            id: '5',
             url: 'https://github.com/orgs/Agent54', 
             title: 'Agent54', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://github.com&size=64',
@@ -81,7 +103,7 @@
             loading: false
         },
         {
-            id: 'tab-6',
+            id: '6',
             url: 'https://badssl.com/', 
             title: 'Bad SSL', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://badssl.com&size=64',
@@ -125,8 +147,7 @@
         const newTab = { 
             id: crypto.randomUUID(),
             url: 'about:newtab', 
-            title: 'New Tab', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://vercel.com&size=64',
+            title: 'New Tab',
             audioPlaying: false,
             screenshot: null,
             pinned: false,
@@ -774,14 +795,10 @@
     }
     
     function handleControlledFrameBlur() {
-        // Small delay to allow focus to potentially move to another controlled frame
-        setTimeout(() => {
-            controlledFrameHasFocus = false
-            updateWindowFocusState()
-        }, 100)
+        controlledFrameHasFocus = false
+        updateWindowFocusState()
     }
 </script>
-
 
 {#snippet trashIcon()}
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
@@ -789,7 +806,16 @@
     </svg>
 {/snippet}
 
-<svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove} onresize={handleResize} onfocus={updateWindowFocusState} onblur={updateWindowFocusState}/>
+<svelte:window
+    onkeydowncapture={handleKeyDown}
+    onclick={hideContextMenu}
+    oncontextmenu={handleGlobalContextMenu}
+    onmousemove={handleGlobalMouseMove}
+    onresize={handleResize}
+    onfocus={updateWindowFocusState}
+    onblur={updateWindowFocusState}
+    onvisibilitychange={() => { console.log('visibilitychange', document.visibilityState) }}
+/>
 
 <header class:window-controls-overlay={isWindowControlsOverlay} class:window-background={isWindowBackground}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 115px;' : 'right: 80px;'}"></div>
@@ -823,7 +849,10 @@
                                     stroke-linecap="round"/>
                             </svg>
                         {/if}
-                        <img src={tab.favicon} alt="favicon" class="favicon" />
+                        {#if tab.favicon}
+    
+                            <img src={tab.favicon} alt="favicon" class="favicon" />
+                        {/if}
                         <span class="tab-title"> {#if tab.audioPlaying && !tab.muted}
                             🔊 &nbsp;
                         {:else if tab.muted}
@@ -1353,8 +1382,8 @@
         min-width: 0;
         text-align: left;
         white-space: nowrap;
-        mask: linear-gradient(to right, black 0%, black 70%, transparent 100%);
-        -webkit-mask: linear-gradient(to right, black 0%, black 70%, transparent 100%);
+        mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
+        -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
     }
 
     .close-btn {
@@ -1363,7 +1392,7 @@
         color: #717171;
         cursor: pointer;
         font-size: 18px;
-        padding: 0 4px;
+        padding: 0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1380,6 +1409,7 @@
     .close-btn:hover {
         background-color: #2a2a2a;
         color: #fff;
+        padding: 0 4px;
     }
 
     .tab-container:hover .close-btn, .tab-container.hovered .close-btn {
@@ -1390,7 +1420,7 @@
 
     .trash-icon {
         position: fixed;
-        top: 9px;
+        top: 8px;
         right: 122px;
         width: 32px;
         height: 30px;
@@ -1733,8 +1763,7 @@
       -webkit-app-region: no-drag;
       /* top: 38px; */
       bottom: 0;
-      scrollbar-width: thin;
-      scrollbar-color: #888 #f1f1f1;
+      scrollbar-width: none;
       overscroll-behavior-x: none;
       -webkit-overflow-scrolling: touch;
       scroll-behavior: smooth;
@@ -1747,21 +1776,7 @@
     }
     
     .controlled-frame-container::-webkit-scrollbar {
-      height: 8px;
-    }
-    
-    .controlled-frame-container::-webkit-scrollbar-track {
-      background: #f1f1f1;
-      border-radius: 4px;
-    }
-    
-    .controlled-frame-container::-webkit-scrollbar-thumb {
-      background: #888;
-      border-radius: 4px;
-    }
-    
-    .controlled-frame-container::-webkit-scrollbar-thumb:hover {
-      background: #555;
+      display: none;
     }
     
     .browser-frame {

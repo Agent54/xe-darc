@@ -19,7 +19,7 @@
   "display": "fullscreen",
   "theme_color": "black",
   "background_color": "black",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "permissions": ["audioCapture"],
   "permissions_policy": {
     "controlled-frame": ["self", "about://*", "chrome-extension://fgeflhglmchkilcegppfkgmmabpppcia"],
