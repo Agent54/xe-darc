@@ -2278,27 +2278,6 @@
     .h-4 {
         height: 14px;
     }
-
-    .w-3 {
-        width: 12px;
-    }
-
-    .h-3 {
-        height: 12px;
-    }
-
-    .view-mode-icon svg {
-        color: rgba(255, 255, 255, 0.8);
-    }
-
-    .trash-icon svg {
-        color: rgba(255, 255, 255, 0.8);
-    }
-
-    .view-mode-menu-item svg {
-        color: rgba(255, 255, 255, 0.6);
-    }
-
     .trash-menu svg {
         color: rgba(255, 255, 255, 0.6);
     }

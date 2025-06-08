@@ -205,43 +205,43 @@
                 <div class="shader-controls max-w-sm mx-auto mt-6 p-4 bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl">
                     
                     <div class="control-group mb-4">
-                        <label class="block text-white/80 text-sm mb-2">Opacity: {grainOpacity.toFixed(2)}</label>
-                        <input type="range" min="0" max="1" step="0.001" bind:value={grainOpacity} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <label for="opacity-control" class="block text-white/80 text-sm mb-2">Opacity: {grainOpacity.toFixed(2)}</label>
+                        <input id="opacity-control" type="range" min="0" max="1" step="0.001" bind:value={grainOpacity} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group mb-4">
-                        <label class="block text-white/80 text-sm mb-2">Grain Amount: {grainAmount.toFixed(2)}</label>
-                        <input type="range" min="0" max="100" step="0.01" bind:value={grainAmount} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <label for="grain-amount-control" class="block text-white/80 text-sm mb-2">Grain Amount: {grainAmount.toFixed(2)}</label>
+                        <input id="grain-amount-control" type="range" min="0" max="100" step="0.01" bind:value={grainAmount} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group mb-4">
-                        <label class="block text-white/80 text-sm mb-2">Grain Size: {grainSize.toFixed(1)}</label>
-                        <input type="range" min="0.01" max="500" step="0.01" bind:value={grainSize} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <label for="grain-size-control" class="block text-white/80 text-sm mb-2">Grain Size: {grainSize.toFixed(1)}</label>
+                        <input id="grain-size-control" type="range" min="0.01" max="500" step="0.01" bind:value={grainSize} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group mb-4">
-                        <label class="block text-white/80 text-sm mb-2">Flicker: {grainFlicker.toFixed(2)}</label>
-                        <input type="range" min="0" max="50" step="0.01" bind:value={grainFlicker} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <label for="flicker-control" class="block text-white/80 text-sm mb-2">Flicker: {grainFlicker.toFixed(2)}</label>
+                        <input id="flicker-control" type="range" min="0" max="50" step="0.01" bind:value={grainFlicker} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group mb-4">
-                        <label class="block text-white/80 text-sm mb-2">Grain Spread: {grainSpread.toFixed(2)}</label>
-                        <input type="range" min="0.0001" max="2" step="0.0001" bind:value={grainSpread} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <label for="grain-spread-control" class="block text-white/80 text-sm mb-2">Grain Spread: {grainSpread.toFixed(2)}</label>
+                        <input id="grain-spread-control" type="range" min="0.0001" max="2" step="0.0001" bind:value={grainSpread} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group mb-4">
-                        <label class="block text-white/80 text-sm mb-2">Animation Speed: {animationSpeed.toFixed(2)}</label>
-                        <input type="range" min="0.1" max="5" step="0.1" bind:value={animationSpeed} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <label for="animation-speed-control" class="block text-white/80 text-sm mb-2">Animation Speed: {animationSpeed.toFixed(2)}</label>
+                        <input id="animation-speed-control" type="range" min="0.1" max="5" step="0.1" bind:value={animationSpeed} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group mb-4">
-                        <label class="block text-white/80 text-sm mb-2">Line Thickness: {lineThickness.toFixed(3)}</label>
-                        <input type="range" min="0.005" max="1" step="0.001" bind:value={lineThickness} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <label for="line-thickness-control" class="block text-white/80 text-sm mb-2">Line Thickness: {lineThickness.toFixed(3)}</label>
+                        <input id="line-thickness-control" type="range" min="0.005" max="1" step="0.001" bind:value={lineThickness} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                     
                     <div class="control-group">
-                        <label class="block text-white/80 text-sm mb-2">Blur: {blur.toFixed(1)}px</label>
-                        <input type="range" min="0" max="20" step="0.1" bind:value={blur} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
+                        <label for="blur-control" class="block text-white/80 text-sm mb-2">Blur: {blur.toFixed(1)}px</label>
+                        <input id="blur-control" type="range" min="0" max="20" step="0.1" bind:value={blur} class="slider w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer">
                     </div>
                 </div>
             {/if}
@@ -254,9 +254,9 @@
 </div>
 
 <style>
-    .omnibar-input:focus + .input-accent {
+    /* .omnibar-input:focus + .input-accent {
         opacity: 1;
-    }
+    } */
     
     .omnibar-input::selection {
         background-color: rgba(156, 163, 175, 0.3);
