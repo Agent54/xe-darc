@@ -167,7 +167,7 @@
                         type="text"
                         bind:value={inputValue}
                         placeholder="We can do anything..."
-                        class="omnibar-input w-full px-5 py-3 text-base bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl text-white/80 placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-white/10 focus:ring-opacity-60 focus:border-white/20 focus:text-white transition-all duration-300 hover:border-white/20"
+                        class="omnibar-input w-full px-5 py-3 text-base bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl text-white/80 placeholder-white/15 focus:outline-none focus:ring-1 focus:ring-white/10 focus:ring-opacity-60 focus:border-white/20 focus:text-white transition-all duration-300 hover:border-white/20"
                         autocomplete="off"
                         spellcheck="false"
                     />
@@ -257,6 +257,12 @@
     /* .omnibar-input:focus + .input-accent {
         opacity: 1;
     } */
+
+    :global(body) {
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
+    }
     
     .omnibar-input::selection {
         background-color: rgba(156, 163, 175, 0.3);

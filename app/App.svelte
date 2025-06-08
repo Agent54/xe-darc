@@ -1,6 +1,8 @@
 <script>
+    import { flip } from 'svelte/animate'
     import PouchDB from 'pouchdb-browser'
     import NewTab from './components/NewTab.svelte'
+    import ControlledFrame from './components/ControlledFrame.svelte'
 
     const db = new PouchDB('darc')
 
@@ -9,16 +11,6 @@
     }).then(({rows}) => {
         console.log(rows)
     })
-
-    function handleLoadCommit(tab, event) {
-        console.log('Page loaded:', event.url)
-        
-        // Update the URL immediately
-        // tab.url = event.url
-        
-        // Update the favicon URL
-        // tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${event.url}&size=64`
-    }
 
     let tabs = $state([
         {
@@ -123,26 +115,11 @@
 
     let viewMode = $state('default')
     let lastUsedViewMode = $state('tile') // Default to tile as the alternative
+    let showFixedNewTabButton = $state(false)
 
     const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
     isWindowControlsOverlay = mediaQueryList.matches
     mediaQueryList.addEventListener('change', e => setTimeout(() => { isWindowControlsOverlay = e.matches }, 0))
-    
-    function handleNewWindow(tab, e) {
-        console.log('New window:', e)
-        tabs.push({ 
-            id: crypto.randomUUID(),
-            url: e.targetUrl, 
-            title: e.title, 
-            favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.targetUrl}&size=64`,
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        })
-        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
-    }
 
     function openNewTab() {
         const newTab = { 
@@ -373,104 +350,6 @@
             }
         }
     })
-
-    // function updateTabAudioState (frame) {
-    //     if (frame && typeof frame.getAudioState === 'function') {
-    //         frame.getAudioState().then(audible => {
-    //             const tabId = frame.id.replace('tab_', '')
-    //             const tabIndex = tabs.findIndex(t => t.id === tabId)
-    //             if (tabIndex !== -1) {
-    //                 tabs[tabIndex].audioPlaying = audible
-    //             }
-    //         }).catch(err => {
-    //             console.log('Error getting audio state:', err)
-    //         })
-    //     }
-    // }
-
-    function handleAudioStateChanged (tab, event) {
-        tab.audioPlaying = event.audible
-    }
-
-    function handleLoadStart(tab) {
-       tab.loading = true
-    }
-
-    function handleLoadStop(tab) {
-        tab.loading = false
-
-        tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
-        
-        // Update title and capture screenshot after page loads
-        setTimeout(async () => {
-            await updateTabTitle(tab)
-            await captureTabScreenshot(tab)
-        }, 2) // Wait a bit for the page to fully render
-    }
-
-    async function updateTabTitle(tab, frame = null) {
-        if (!frame) {
-            frame = document.getElementById(`tab_${tab.id}`)
-        }
-        if (!frame) return
-
-        try {
-            let title = null
-
-            // Method 1: Try executeScript to get document.title
-            if (typeof frame.executeScript === 'function') {
-                try {
-                    const result = await frame.executeScript({
-                        code: 'document.title'
-                    })
-                    if (result && result[0] && result[0].trim()) {
-                        title = result[0].trim()
-                    }
-                } catch (scriptErr) {
-                    console.log('executeScript failed for title:', scriptErr)
-                }
-            }
-
-            // Method 2: Try to get title from frame.contentDocument
-            if (!title && frame.contentDocument && frame.contentDocument.title) {
-                title = frame.contentDocument.title.trim()
-            }
-
-            // Method 3: Try frame.title attribute
-            if (!title && frame.title) {
-                title = frame.title.trim()
-            }
-
-            // Method 4: Try getTitle method if available
-            if (!title && typeof frame.getTitle === 'function') {
-                try {
-                    title = await frame.getTitle()
-                    if (title) title = title.trim()
-                } catch (getTitleErr) {
-                    console.log('getTitle failed:', getTitleErr)
-                }
-            }
-
-            // Update the tab title directly
-            if (title && title !== 'about:blank') {
-                tab.title = title
-            } else {
-                // Fallback to URL if no title is available
-                const url = tab.url
-                if (url && url !== 'about:blank') {
-                    try {
-                        const urlObj = new URL(url)
-                        tab.title = urlObj.hostname || url
-                    } catch {
-                        tab.title = url
-                    }
-                }
-            }
-
-        } catch (err) {
-            console.log('Error updating tab title:', err)
-        }
-    }
 
     async function captureTabScreenshot(tab, frame = null) {
         if (!frame) {
@@ -824,6 +703,17 @@
         if (tabList) {
             isTabListOverflowing = tabList.scrollWidth > tabList.clientWidth
             checkTabListScrollPosition(tabList)
+            
+            // Check if inline new tab button is visible
+            const inlineNewTabButton = document.querySelector('.inline-new-tab-button')
+            if (inlineNewTabButton) {
+                const buttonRect = inlineNewTabButton.getBoundingClientRect()
+                const tabListRect = tabList.getBoundingClientRect()
+                const isInlineButtonVisible = buttonRect.right <= tabListRect.right && buttonRect.left >= tabListRect.left
+                showFixedNewTabButton = !isInlineButtonVisible
+            } else {
+                showFixedNewTabButton = isTabListOverflowing
+            }
         }
     }
 
@@ -836,6 +726,15 @@
             isTabListAtEnd = tabList.scrollLeft + tabList.clientWidth >= tabList.scrollWidth - 1
             // Check if at the start (with 1px tolerance for rounding)
             isTabListAtStart = tabList.scrollLeft <= 1
+            
+            // Update fixed new tab button visibility
+            const inlineNewTabButton = document.querySelector('.inline-new-tab-button')
+            if (inlineNewTabButton) {
+                const buttonRect = inlineNewTabButton.getBoundingClientRect()
+                const tabListRect = tabList.getBoundingClientRect()
+                const isInlineButtonVisible = buttonRect.right <= tabListRect.right && buttonRect.left >= tabListRect.left
+                showFixedNewTabButton = !isInlineButtonVisible
+            }
         }
     }
 
@@ -856,15 +755,31 @@
         checkTabListOverflow()
     }
 
-    function handleEvent(eventName, tab, event) {
-        console.log(eventName, tab, event)
-    }
-
-    function handleContentLoad(tab, event) {
-        setTimeout(() => updateTabTitle(tab), 100)
-    }
-
+  
     let isWindowBackground = $state(false)
+    let controlledFrameHasFocus = $state(false)
+    
+    function updateWindowFocusState() {
+        // Consider the window active if either the main window has focus 
+        // or any controlled frame has focus
+        const documentHasFocus = document.hasFocus()
+        const shouldBeActive = documentHasFocus || controlledFrameHasFocus
+        
+        isWindowBackground = !shouldBeActive
+    }
+    
+    function handleControlledFrameFocus() {
+        controlledFrameHasFocus = true
+        updateWindowFocusState()
+    }
+    
+    function handleControlledFrameBlur() {
+        // Small delay to allow focus to potentially move to another controlled frame
+        setTimeout(() => {
+            controlledFrameHasFocus = false
+            updateWindowFocusState()
+        }, 100)
+    }
 </script>
 
 
@@ -874,13 +789,13 @@
     </svg>
 {/snippet}
 
-<svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove} onresize={handleResize} onfocus={() => { isWindowBackground = false }} onblur={() => { isWindowBackground = true }}/>
+<svelte:window onkeydowncapture={handleKeyDown} onclick={hideContextMenu} oncontextmenu={handleGlobalContextMenu} onmousemove={handleGlobalMouseMove} onresize={handleResize} onfocus={updateWindowFocusState} onblur={updateWindowFocusState}/>
 
 <header class:window-controls-overlay={isWindowControlsOverlay} class:window-background={isWindowBackground}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 115px;' : 'right: 80px;'}"></div>
      
     <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 200px)' : 'calc(100% - 170px)'};">
-        <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll}>
+        <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} transition:flip={{duration: 100}}>
             {#each tabs as tab, i (tab.id)}
                 <li class="tab-container" 
                     class:active={i===activeTabIndex} 
@@ -909,7 +824,7 @@
                             </svg>
                         {/if}
                         <img src={tab.favicon} alt="favicon" class="favicon" />
-                        <span> {#if tab.audioPlaying && !tab.muted}
+                        <span class="tab-title"> {#if tab.audioPlaying && !tab.muted}
                             🔊 &nbsp;
                         {:else if tab.muted}
                             🔇 &nbsp;
@@ -921,10 +836,13 @@
                 </li>
             {/each}
             
-            <div class="tab-spacer">
-                <!-- <div class="spacer-drag-area"></div>
-                <div class="spacer-scroll-area"></div> -->
-            </div>
+            <button class="inline-new-tab-button" 
+                onclick={openNewTab}
+                title="New Tab (⌘T)">
+                <span class="new-tab-icon">+</span>
+            </button>
+            
+            <div class="tab-spacer"></div>
         </ul>
     </div>
 
@@ -993,7 +911,8 @@
          onclick={openNewTab}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
          title="New Tab (⌘T)"
-         style="{closed.length > 0 ? 'right: 163px;' : 'right: 125px;'}">
+         style="{closed.length > 0 ? 'right: 165px;' : 'right: 124px;'}"
+         class:visible={showFixedNewTabButton}>
         <span class="new-tab-icon">+</span>
     </div>
 
@@ -1077,10 +996,10 @@
         <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
-             onmouseup={() => {}}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
-            <span class="context-menu-icon">💤</span>
-            <span>Hybernate</span>
+             onmouseup={() => { contextMenu.tab.hibernated = !contextMenu.tab.hibernated; hideContextMenu(); }}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); contextMenu.tab.hibernated = !contextMenu.tab.hibernated; hideContextMenu(); } }}>
+            <span class="context-menu-icon">{contextMenu.tab.hibernated ? '🔄' : '💤'}</span>
+            <span>{contextMenu.tab.hibernated ? 'Wake Up' : 'Hibernate'}</span>
         </div>
 
         <div class="context-menu-item"  
@@ -1221,49 +1140,7 @@
                 <NewTab {tab} />
             </div>
         {:else}
-            <controlledframe 
-                bind:this={tab.frame}
-                class:window-controls-overlay={isWindowControlsOverlay}
-                class:no-pointer-events={isScrolling}
-                id="tab_{tab.id}"
-                class="frame"
-                src={tab.url}
-                partition="persist:myapp"
-                onloadcommit={e => handleLoadCommit(tab, e)}
-                onnewwindow={(e) => { handleNewWindow(tab, e)} }
-                onaudiostatechanged={e => handleAudioStateChanged(tab, e)}
-                allowscaling={true}
-                autosize={true}
-                allowtransparency={false}
-                onloadstart={e => { handleLoadStart(tab, e) }}
-                onloadstop={e => { handleLoadStop(tab, e) }}
-
-                oncontentload={e => handleContentLoad(tab, e)}
-                onclose={e => { handleEvent('onclose', tab, e) }}
-                oncontentresize={e => { handleEvent('oncontentresize',tab, e) }}
-                ondialog={e => { handleEvent('ondialog',tab, e) }}
-                onexit={e => { handleEvent('onexit',tab, e) }}
-                onloadabort={e => { handleEvent('onloadabort',tab, e) }}
-                onloadredirect={(e) => { 
-                    handleEvent('onloadredirect',tab, e)
-                    // Update URL on redirect
-                    // if (e.newUrl) {
-                    //     tab.url = e.newUrl
-                    //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
-                    // }
-                    return false
-                }}
-                onpermissionrequest={e => { handleEvent('onpermissionrequest',tab, e) }}
-                onresize={e => { handleEvent('onresize',tab, e) }}
-                onresponsive={e => { handleEvent('onresponsive',tab, e) }}
-                onsizechanged={e => { handleEvent('onsizechanged',tab, e) }}
-                onunresponsive={e => { handleEvent(tab, e, 'onunresponsive') }}
-            ></controlledframe>
-            <!--
-                onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
-                onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
-                onzoomchange={e => { handleEvent(tab, e, 'onzoomchange') }}
-            -->
+            <ControlledFrame {tab} {tabs} {isWindowControlsOverlay} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} />
         {/if}
     {/each}
 </div>
@@ -1410,7 +1287,6 @@
         cursor: pointer;
         font-size: 13px;
         font-weight: 400;
-        font-family: 'Inter', sans-serif;
         padding: 4px;
         list-style: none;
         transition: border-color 0.3s ease;
@@ -1420,6 +1296,9 @@
         max-width: 200px;
         flex: 1 1 200px;
         -webkit-app-region: no-drag;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
     }
     .tab-container:hover, .tab-container.hovered, .tab-container.active:hover, .tab-container.active.hovered {
         background-color: #2b2b2b;
@@ -1453,7 +1332,6 @@
     }
     .tab-container .tab span {
         overflow: hidden;
-        text-overflow: ellipsis;
     }
     .tab-loading-spinner {
         position: absolute;
@@ -1469,6 +1347,16 @@
         100% { transform: rotate(360deg); }
     }
 
+    .tab-title {
+        overflow: hidden;
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+        white-space: nowrap;
+        mask: linear-gradient(to right, black 0%, black 70%, transparent 100%);
+        -webkit-mask: linear-gradient(to right, black 0%, black 70%, transparent 100%);
+    }
+
     .close-btn {
         background: none;
         border: none;
@@ -1479,14 +1367,14 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 20px;
+        width: 0;
         height: 20px;
         border-radius: 4px;
-        margin-left: auto;
         opacity: 0;
-        transition: opacity 0.2s ease;
-        /* margin-right: 4px */
+        transition: opacity 0.2s ease, background-color 0.2s ease;
         margin-top: -2px;
+        flex-shrink: 0;
+        overflow: hidden;
     }
 
     .close-btn:hover {
@@ -1496,12 +1384,14 @@
 
     .tab-container:hover .close-btn, .tab-container.hovered .close-btn {
         opacity: 1;
+        width: 20px;
+        padding: 0 4px;
     }
 
     .trash-icon {
         position: fixed;
         top: 9px;
-        right: 125px;
+        right: 122px;
         width: 32px;
         height: 30px;
         padding-bottom: 8px;
@@ -1686,8 +1576,8 @@
 
     .view-mode-icon {
         position: fixed;
-        top: 9px;
-        right: 87px;
+        top: 8px;
+        right: 81px;
         width: 32px;
         height: 30px;
         padding-bottom: 8px;
@@ -2074,7 +1964,8 @@
         justify-content: center;
         cursor: pointer;
         font-size: 12px;
-        opacity: 0.7;
+        opacity: 0;
+        visibility: hidden;
         transition: all 0.3s ease;
         backdrop-filter: blur(10px);
         z-index: 10000;
@@ -2083,16 +1974,63 @@
         border: 1px solid transparent;
         z-index: 10;
         padding-bottom: 2px;
+        transform: translateX(20px);
     }
 
-    .new-tab-button:hover {
+    .new-tab-button.visible {
+        opacity: 0.7;
+        visibility: visible;
+        transform: translateX(0);
+    }
+
+    .new-tab-button.visible:hover {
         opacity: 1;
         background: rgba(0, 0, 0, 0.9);
         transform: scale(1.05);
         border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
-    .new-tab-icon {
+    .inline-new-tab-button {
+        list-style: none;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 400;
+        font-family: 'Inter', sans-serif;
+        padding: 4px;
+        padding-bottom: 6px;
+        transition: all 0.3s ease;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.8);
+        width: 28px;
+        height: 25px;
+        flex-shrink: 0;
+        -webkit-app-region: no-drag;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        backdrop-filter: blur(10px);
+        user-select: none;
+        opacity: 0.7;
+        margin-top: 1px;
+    }
+
+    .inline-new-tab-button:hover {
+        opacity: 1;
+        background: rgba(0, 0, 0, 0.9);
+        transform: scale(1.05);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* .inline-new-tab-content {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+    } */
+
+    .inline-new-tab-button .new-tab-icon {
         color: rgba(255, 255, 255, 0.8);
         font-size: 18px;
         font-weight: 400;
@@ -2100,7 +2038,7 @@
         transition: color 0.3s ease;
     }
 
-    .new-tab-button:hover .new-tab-icon {
+    .inline-new-tab-button:hover .new-tab-icon {
         color: rgba(255, 255, 255, 1);
     }
 
@@ -2287,5 +2225,17 @@
     }
     .trash-menu svg {
         color: rgba(255, 255, 255, 0.6);
+    }
+
+    .new-tab-button .new-tab-icon {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 18px;
+        font-weight: 400;
+        line-height: 1;
+        transition: color 0.3s ease;
+    }
+
+    .new-tab-button.visible:hover .new-tab-icon {
+        color: rgba(255, 255, 255, 1);
     }
 </style>
