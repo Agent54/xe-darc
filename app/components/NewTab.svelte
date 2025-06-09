@@ -53,10 +53,14 @@
     }
 
     const modelOptions = {
-        sharedContext: 'Try predicting what the user wants to search for on the web.',
+        sharedContext: 'Try predicting what the user is entering into the input field for this google search box. Give the top 5 possible completions separated by newlines. Do not add order numbers just pure text completions.',
         tone: 'neutral',
         format: 'plain-text',
-        length: 'short'
+        length: 'short',
+        inputQuota: 10000,
+        outputLanguage: "en",
+        expectedInputLanguages: ["en"],
+        expectedContextLanguages: ["en"],
     }
 
     async function tryWriterAPI() {
@@ -134,15 +138,9 @@
         const thisGenerationId = ++generationId
         
         console.log(`🤖 [Gen ${thisGenerationId}] Starting generation for:`, text)
-        console.log(`🤖 [Gen ${thisGenerationId}] aiWriter available:`, !!aiWriter)
-        console.log(`🤖 [Gen ${thisGenerationId}] text length:`, text.length)
         
         if (!aiWriter || !text.trim() || text.length < 2) {
-            console.log(`⚠️ [Gen ${thisGenerationId}] Skipping generation - requirements not met`)
-            if (!aiWriter) console.log(`   - No aiWriter`)
-            if (!text.trim()) console.log(`   - Empty text`)
-            if (text.length < 2) console.log(`   - Text too short`)
-            
+            console.log(`⚠️ [Gen ${thisGenerationId}] Skipping generation - requirements not met`)            
             completions = []
             showCompletions = false
             return
@@ -161,57 +159,10 @@
                 console.log(`🛑 [Gen ${thisGenerationId}] Generation cancelled before starting`)
                 return
             }
-            
-            const completionPromises = []
-            
-            // Detect which API we're using
-            const isPromptAPI = typeof aiWriter.prompt === 'function'
-            const isWriterAPI = typeof aiWriter.write === 'function'
-            
-            console.log(`🤖 [Gen ${thisGenerationId}] API type - Prompt API:`, isPromptAPI, 'Writer API:', isWriterAPI)
-            
-            // Shorter, more focused prompts for better 200-char results
-            let prompts
-            if (isPromptAPI) {
-                prompts = [
-                    `Complete: "${text}"`,
-                    `Finish: "${text}"`,
-                    `Continue: "${text}"`,
-                    `Search: "${text}"`,
-                    `Query: "${text}"`
-                ]
-            } else {
-                prompts = [
-                    `Complete: "${text}"`,
-                    `Finish: "${text}"`,
-                    `Continue: "${text}"`,
-                    `Search: "${text}"`,
-                    `Query: "${text}"`
-                ]
-            }
+    
+            showCompletions = true
 
-            console.log('🤖 Using streaming prompts:', prompts)
-
-            for (let i = 0; i < prompts.length; i++) {
-                const prompt = prompts[i]
-                console.log(`🤖 Creating streaming promise ${i + 1}/${prompts.length} for:`, prompt)
-                
-                // Check if cancelled before starting each promise
-                if (signal.aborted) {
-                    console.log('🛑 Generation cancelled during promise creation')
-                    return
-                }
-                
-                // Use streaming APIs with cancellation support
-                const streamPromise = isPromptAPI ? 
-                    generateStreamingPrompt(prompt, i + 1, signal) : 
-                    generateStreamingWriter(prompt, i + 1, signal)
-                
-                completionPromises.push(streamPromise)
-            }
-
-            console.log('🤖 Waiting for all streaming promises...')
-            const results = await Promise.all(completionPromises)
+           await generate(prompt, signal)
             
             // Check if cancelled after promises complete
             if (signal.aborted) {
@@ -219,71 +170,11 @@
                 return
             }
             
-            console.log('🤖 All streaming promises resolved:', results.filter(r => r).length, 'successful')
-            
-            // Filter and process results
-            const validCompletions = results
-                .filter((result, index) => {
-                    if (signal.aborted) return false
-                    const isValid = result && result.trim()
-                    console.log(`🔍 Result ${index + 1} valid:`, isValid, result?.substring(0, 50) + '...')
-                    return isValid
-                })
-                .map((result, index) => {
-                    if (signal.aborted) return null
-                    console.log(`🧹 Cleaning result ${index + 1}:`, result?.substring(0, 50) + '...')
-                    
-                    let cleaned = result.trim()
-                    
-                    // Remove common prefixes
-                    cleaned = cleaned.replace(/^(Complete: |Finish: |Continue: |Search: |Query: )/i, '')
-                    cleaned = cleaned.replace(/^["']|["']$/g, '')
-                    
-                    // Take only the first line and limit to 200 chars
-                    cleaned = cleaned.split('\n')[0].trim()
-                    if (cleaned.length > 200) {
-                        cleaned = cleaned.substring(0, 200).trim()
-                        // Find last complete word to avoid cutting mid-word
-                        const lastSpace = cleaned.lastIndexOf(' ')
-                        if (lastSpace > 150) { // Only trim if we're not cutting too much
-                            cleaned = cleaned.substring(0, lastSpace)
-                        }
-                    }
-                    
-                    // Remove remaining quotes and formatting
-                    cleaned = cleaned.replace(/["""'']/g, '').trim()
-                    
-                    console.log(`🧹 Cleaned result ${index + 1} (${cleaned.length} chars):`, cleaned)
-                    return cleaned
-                })
-                .filter((completion, index) => {
-                    if (signal.aborted) return false
-                    const isValid = completion && 
-                                  completion.length > text.length && 
-                                  completion.length <= 200 &&
-                                  completion.toLowerCase().startsWith(text.toLowerCase()) &&
-                                  completion.toLowerCase() !== text.toLowerCase()
-                    console.log(`✅ Final filter ${index + 1}:`, isValid, completion)
-                    return isValid
-                })
-                .slice(0, 5)
-
             // Final check before setting results
             if (signal.aborted) {
                 console.log('🛑 Generation cancelled before setting results')
                 return
             }
-
-            console.log('🤖 Valid completions before dedup:', validCompletions)
-            completions = [...new Set(validCompletions)]
-            console.log('🤖 Final completions after dedup:', completions)
-            
-            showCompletions = completions.length > 0
-            selectedCompletionIndex = -1
-            
-            console.log(`🤖 [Gen ${thisGenerationId}] Show completions:`, showCompletions)
-            console.log(`🤖 [Gen ${thisGenerationId}] Generated ${completions.length} completions:`, completions)
-            
         } catch (error) {
             if (error.name === 'AbortError' || signal.aborted) {
                 console.log('🛑 Generation cancelled:', error.message)
@@ -304,112 +195,43 @@
         }
     }
 
-    // Streaming writer API handler with cancellation
-    async function generateStreamingWriter(prompt, index, signal) {
+    async function generate(prompt, signal) {
         try {
-            console.log(`📡 Starting Writer stream ${index}...`)
+            console.log(`📡 Starting Writer stream...`)
             
             // Check if already cancelled
             if (signal.aborted) {
-                console.log(`🛑 Writer stream ${index} cancelled before starting`)
+                console.log(`🛑 Writer stream cancelled before starting`)
                 return null
             }
+
+            let responseNumber = 0
+            completions[0] = ''
             
-            const stream = aiWriter.writeStreaming(prompt, { signal })
-            let result = ''
-            let charCount = 0
+            const stream = aiWriter.writeStreaming(prompt, { signal  }) // context
             
             for await (const chunk of stream) {
                 // Check for cancellation on each chunk
                 if (signal.aborted) {
-                    console.log(`🛑 Writer stream ${index} cancelled during streaming`)
+                    console.log(`🛑 Writer stream cancelled during streaming`)
                     return null
                 }
                 
-                result += chunk
-                charCount += chunk.length
-                
-                // Stop at 200 chars to respect budget
-                if (charCount >= 200) {
-                    console.log(`📡 Writer stream ${index} stopped at 200 chars`)
-                    break
-                }
+               if (chunk.includes('\n')) {
+                    const [previous, current] = chunk.split('\n')
+                    completions[responseNumber] += previous
+                    responseNumber++
+                    completions[responseNumber] = current
+               } else {
+                    completions[responseNumber] += chunk
+               }
             }
-            
-            console.log(`📡 Writer stream ${index} complete (${result.length} chars):`, result.substring(0, 50) + '...')
-            return result
-            
         } catch (error) {
             if (error.name === 'AbortError' || signal.aborted) {
                 console.log(`🛑 Writer stream ${index} aborted:`, error.message)
                 return null
             } else {
                 console.warn(`❌ Writer stream ${index} failed:`, error)
-                return null
-            }
-        }
-    }
-
-    // Streaming prompt API handler with cancellation
-    async function generateStreamingPrompt(prompt, index, signal) {
-        try {
-            console.log(`📡 Starting Prompt stream ${index}...`)
-            
-            // Check if already cancelled
-            if (signal.aborted) {
-                console.log(`🛑 Prompt stream ${index} cancelled before starting`)
-                return null
-            }
-            
-            // Check if streaming is available
-            if (typeof aiWriter.promptStreaming === 'function') {
-                const stream = aiWriter.promptStreaming(prompt, { signal })
-                let result = ''
-                let charCount = 0
-                
-                for await (const chunk of stream) {
-                    // Check for cancellation on each chunk
-                    if (signal.aborted) {
-                        console.log(`🛑 Prompt stream ${index} cancelled during streaming`)
-                        return null
-                    }
-                    
-                    result += chunk
-                    charCount += chunk.length
-                    
-                    // Stop at 200 chars
-                    if (charCount >= 200) {
-                        console.log(`📡 Prompt stream ${index} stopped at 200 chars`)
-                        break
-                    }
-                }
-                
-                console.log(`📡 Prompt stream ${index} complete (${result.length} chars):`, result.substring(0, 50) + '...')
-                return result
-                
-            } else {
-                // Fallback to regular prompt with manual truncation and cancellation
-                console.log(`📡 Prompt stream ${index} using fallback...`)
-                
-                const result = await aiWriter.prompt(prompt, { signal })
-                
-                // Check if cancelled after the call
-                if (signal.aborted) {
-                    console.log(`🛑 Prompt fallback ${index} cancelled after completion`)
-                    return null
-                }
-                
-                const truncated = result.length > 200 ? result.substring(0, 200) : result
-                console.log(`📡 Prompt fallback ${index} complete (${truncated.length} chars):`, truncated.substring(0, 50) + '...')
-                return truncated
-            }
-            
-        } catch (error) {
-            if (error.name === 'AbortError' || signal.aborted) {
-                console.log(`🛑 Prompt stream ${index} aborted:`, error.message)
-                return null
-            } else {
-                console.warn(`❌ Prompt stream ${index} failed:`, error)
                 return null
             }
         }
