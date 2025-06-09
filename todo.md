@@ -57,3 +57,24 @@ comands:
 reminders/notes
 
 cross check: sigmaos/horse/arc/zen/stacked browrser/canvas browser/vivaldi
+
+ad hoc js and css mods as well as page specifc matchers and blockers
+
+high cpu
+
+back forward gestures!
+
+favicon server
+
+reduce delay for framenav
+
+
+setup inter frame ipfs with parent initiation, find alternatives?
+
+fix opera neon yourubte play blur event
+
+pins and apps shortcuts
+
+browser extension/ controlled frame with iframe browser dev mode
+
+background visibility api hide animation

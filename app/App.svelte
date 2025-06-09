@@ -18,6 +18,7 @@
             url: 'about:newtab', 
             title: 'New Tab',
             audioPlaying: false,
+            favicon: 'file://photon_logo.png',
             screenshot: null,
             pinned: false,
             muted: false,
@@ -850,7 +851,6 @@
                             </svg>
                         {/if}
                         {#if tab.favicon}
-    
                             <img src={tab.favicon} alt="favicon" class="favicon" />
                         {/if}
                         <span class="tab-title"> {#if tab.audioPlaying && !tab.muted}

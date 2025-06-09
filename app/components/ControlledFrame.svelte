@@ -254,6 +254,55 @@
         }, allUrlsFilter)
     }
 
+    // Context menu setup - adds a context menu entry and logs all data
+    function setupContextMenu(frame) {
+        if (!frame.contextMenus) {
+            console.log('Context Menus API not available')
+            return
+        }
+
+        // Create a context menu item called "Here"
+        frame.contextMenus.create({
+            id: 'here',
+            title: 'Here',
+            contexts: ['all'], // Show on all types of content
+            onclick: (info) => {
+                console.group('🎯 Context Menu "Here" clicked!')
+                console.log('📋 OnClickData:', {
+                    checked: info.checked,
+                    editable: info.editable,
+                    frameId: info.frameId,
+                    frameUrl: info.frameUrl,
+                    linkUrl: info.linkUrl,
+                    mediaType: info.mediaType,
+                    menuItemId: info.menuItemId,
+                    pageUrl: info.pageUrl,
+                    parentMenuId: info.parentMenuId,
+                    selectionText: info.selectionText,
+                    srcUrl: info.srcUrl,
+                    wasChecked: info.wasChecked
+                })
+                console.log('📋 Raw info object:', info)
+                console.log('📋 Tab data:', tab)
+                console.groupEnd()
+            }
+        }).then(() => {
+            console.log('✅ Context menu "Here" created successfully')
+        }).catch((err) => {
+            console.error('❌ Failed to create context menu:', err)
+        })
+
+        // Also listen to onClicked event for additional logging
+        frame.contextMenus.onClicked.addListener((info) => {
+            console.log('🎯 Context menu onClicked event:', info)
+        })
+
+        // Listen to onShow event
+        frame.contextMenus.onShow.addListener((info) => {
+            console.log('👁️ Context menu onShow event:', info)
+        })
+    }
+
     // Content script for window focus/blur handling
     function setupFocusBlurContentScript(frame) {
         //         const contentScript = {
@@ -407,6 +456,8 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
         // Setup focus/blur content scripts
         setupFocusBlurContentScript(frame)
         
+        // Setup context menu
+        setupContextMenu(frame)
     })
 </script>
 

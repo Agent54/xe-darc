@@ -8,6 +8,17 @@
     let mouseX = $state(0)
     let mouseY = $state(0)
     
+    // AI completions with proper cancellation and tracking
+    let completions = $state([])
+    let isGeneratingCompletions = $state(false)
+    let aiWriter = $state(null)
+    let aiSupported = $state(false)
+    let selectedCompletionIndex = $state(-1)
+    let showCompletions = $state(false)
+    let currentAbortController = null
+    let completionTimeout = null
+    let generationId = 0
+    
     // Shader controls
     let grainOpacity = $state(0.2) //0.16)
     let grainAmount = $state(31.7)// 36.57)
@@ -27,7 +38,507 @@
     let analyser = null
     let microphone = null
     let animationFrame = null
-    
+
+    async function initializeAI() {
+        console.log('🔄 Starting AI initialization...')
+        
+        try {
+            await tryWriterAPI()
+        } catch (error) {
+            console.error('❌ Failed to initialize any AI API:', error)
+            aiSupported = false
+        }
+        
+        console.log('🏁 AI initialization complete. Supported:', aiSupported)
+    }
+
+    const modelOptions = {
+        sharedContext: 'Try predicting what the user wants to search for on the web.',
+        tone: 'neutral',
+        format: 'plain-text',
+        length: 'short'
+    }
+
+    async function tryWriterAPI() {
+        console.log('🔍 Trying Writer API...')
+        console.log('Available APIs:', Object.keys(self))
+        
+        if ('Writer' in self) {
+            console.log('✅ Writer API detected')
+            
+            try {
+                const availability = await Writer.availability()
+                console.log('🤖 Writer availability:', availability)
+                
+                if (availability === 'available') {
+                    console.log('📝 Creating Writer instance...')
+                    
+                    try {
+                        aiWriter = await Writer.create({
+                            ...modelOptions
+                        })
+                        
+                        // Test the writer immediately
+                        // console.log('🧪 Testing Writer with simple prompt...')
+                        // const testResult = await aiWriter.write('Complete: hello')
+                        // console.log('🧪 Writer test successful:', testResult)
+                        
+                        aiSupported = true
+                        console.log('✅ Writer initialized and tested successfully')
+                        return true
+                        
+                    } catch (createError) {
+                        console.error('❌ Writer creation/test failed:', createError)
+                        if (createError.message?.includes('execution config')) {
+                            console.log('💡 Writer API execution config issue detected')
+                            console.log('💡 This usually means:')
+                            console.log('   1. Missing origin trial token')
+                            console.log('   2. Feature not fully enabled')
+                            console.log('   3. Try: chrome://flags/#writer-api-for-gemini-nano')
+                        }
+                        return false
+                    }
+                    
+                } else if (availability === 'downloadable') {
+                    console.log('📥 Downloading Writer model...')
+                    aiWriter = await Writer.create({
+                        ...modelOptions,
+                        monitor(m) {
+                            m.addEventListener("downloadprogress", e => {
+                                console.log(`📥 Downloaded ${(e.loaded / e.total * 100).toFixed(1)}%`)
+                            })
+                        }
+                    })
+                    aiSupported = true
+                    console.log('✅ Writer initialized after download')
+                    return true
+                } else {
+                    console.log('❌ Writer not available:', availability)
+                    return false
+                }
+                
+            } catch (availabilityError) {
+                console.error('❌ Writer availability check failed:', availabilityError)
+                return false
+            }
+            
+        } else {
+            console.log('❌ Writer API not available in this browser')
+            return false
+        }
+    }
+
+    // Generate AI completions with streaming and cancellation tracking
+    async function generateCompletions(text) {
+        // Assign a unique ID to this generation
+        const thisGenerationId = ++generationId
+        
+        console.log(`🤖 [Gen ${thisGenerationId}] Starting generation for:`, text)
+        console.log(`🤖 [Gen ${thisGenerationId}] aiWriter available:`, !!aiWriter)
+        console.log(`🤖 [Gen ${thisGenerationId}] text length:`, text.length)
+        
+        if (!aiWriter || !text.trim() || text.length < 2) {
+            console.log(`⚠️ [Gen ${thisGenerationId}] Skipping generation - requirements not met`)
+            if (!aiWriter) console.log(`   - No aiWriter`)
+            if (!text.trim()) console.log(`   - Empty text`)
+            if (text.length < 2) console.log(`   - Text too short`)
+            
+            completions = []
+            showCompletions = false
+            return
+        }
+
+        // Create new AbortController for this generation
+        currentAbortController = new AbortController()
+        const signal = currentAbortController.signal
+        
+        console.log(`🤖 [Gen ${thisGenerationId}] Starting streaming completion generation with cancellation support...`)
+        isGeneratingCompletions = true
+        
+        try {
+            // Check if already cancelled before starting
+            if (signal.aborted) {
+                console.log(`🛑 [Gen ${thisGenerationId}] Generation cancelled before starting`)
+                return
+            }
+            
+            const completionPromises = []
+            
+            // Detect which API we're using
+            const isPromptAPI = typeof aiWriter.prompt === 'function'
+            const isWriterAPI = typeof aiWriter.write === 'function'
+            
+            console.log(`🤖 [Gen ${thisGenerationId}] API type - Prompt API:`, isPromptAPI, 'Writer API:', isWriterAPI)
+            
+            // Shorter, more focused prompts for better 200-char results
+            let prompts
+            if (isPromptAPI) {
+                prompts = [
+                    `Complete: "${text}"`,
+                    `Finish: "${text}"`,
+                    `Continue: "${text}"`,
+                    `Search: "${text}"`,
+                    `Query: "${text}"`
+                ]
+            } else {
+                prompts = [
+                    `Complete: "${text}"`,
+                    `Finish: "${text}"`,
+                    `Continue: "${text}"`,
+                    `Search: "${text}"`,
+                    `Query: "${text}"`
+                ]
+            }
+
+            console.log('🤖 Using streaming prompts:', prompts)
+
+            for (let i = 0; i < prompts.length; i++) {
+                const prompt = prompts[i]
+                console.log(`🤖 Creating streaming promise ${i + 1}/${prompts.length} for:`, prompt)
+                
+                // Check if cancelled before starting each promise
+                if (signal.aborted) {
+                    console.log('🛑 Generation cancelled during promise creation')
+                    return
+                }
+                
+                // Use streaming APIs with cancellation support
+                const streamPromise = isPromptAPI ? 
+                    generateStreamingPrompt(prompt, i + 1, signal) : 
+                    generateStreamingWriter(prompt, i + 1, signal)
+                
+                completionPromises.push(streamPromise)
+            }
+
+            console.log('🤖 Waiting for all streaming promises...')
+            const results = await Promise.all(completionPromises)
+            
+            // Check if cancelled after promises complete
+            if (signal.aborted) {
+                console.log('🛑 Generation cancelled after completion')
+                return
+            }
+            
+            console.log('🤖 All streaming promises resolved:', results.filter(r => r).length, 'successful')
+            
+            // Filter and process results
+            const validCompletions = results
+                .filter((result, index) => {
+                    if (signal.aborted) return false
+                    const isValid = result && result.trim()
+                    console.log(`🔍 Result ${index + 1} valid:`, isValid, result?.substring(0, 50) + '...')
+                    return isValid
+                })
+                .map((result, index) => {
+                    if (signal.aborted) return null
+                    console.log(`🧹 Cleaning result ${index + 1}:`, result?.substring(0, 50) + '...')
+                    
+                    let cleaned = result.trim()
+                    
+                    // Remove common prefixes
+                    cleaned = cleaned.replace(/^(Complete: |Finish: |Continue: |Search: |Query: )/i, '')
+                    cleaned = cleaned.replace(/^["']|["']$/g, '')
+                    
+                    // Take only the first line and limit to 200 chars
+                    cleaned = cleaned.split('\n')[0].trim()
+                    if (cleaned.length > 200) {
+                        cleaned = cleaned.substring(0, 200).trim()
+                        // Find last complete word to avoid cutting mid-word
+                        const lastSpace = cleaned.lastIndexOf(' ')
+                        if (lastSpace > 150) { // Only trim if we're not cutting too much
+                            cleaned = cleaned.substring(0, lastSpace)
+                        }
+                    }
+                    
+                    // Remove remaining quotes and formatting
+                    cleaned = cleaned.replace(/["""'']/g, '').trim()
+                    
+                    console.log(`🧹 Cleaned result ${index + 1} (${cleaned.length} chars):`, cleaned)
+                    return cleaned
+                })
+                .filter((completion, index) => {
+                    if (signal.aborted) return false
+                    const isValid = completion && 
+                                  completion.length > text.length && 
+                                  completion.length <= 200 &&
+                                  completion.toLowerCase().startsWith(text.toLowerCase()) &&
+                                  completion.toLowerCase() !== text.toLowerCase()
+                    console.log(`✅ Final filter ${index + 1}:`, isValid, completion)
+                    return isValid
+                })
+                .slice(0, 5)
+
+            // Final check before setting results
+            if (signal.aborted) {
+                console.log('🛑 Generation cancelled before setting results')
+                return
+            }
+
+            console.log('🤖 Valid completions before dedup:', validCompletions)
+            completions = [...new Set(validCompletions)]
+            console.log('🤖 Final completions after dedup:', completions)
+            
+            showCompletions = completions.length > 0
+            selectedCompletionIndex = -1
+            
+            console.log(`🤖 [Gen ${thisGenerationId}] Show completions:`, showCompletions)
+            console.log(`🤖 [Gen ${thisGenerationId}] Generated ${completions.length} completions:`, completions)
+            
+        } catch (error) {
+            if (error.name === 'AbortError' || signal.aborted) {
+                console.log('🛑 Generation cancelled:', error.message)
+                completions = []
+                showCompletions = false
+            } else {
+                console.error('❌ Error generating streaming completions:', error)
+                completions = []
+                showCompletions = false
+            }
+        } finally {
+            isGeneratingCompletions = false
+            // Clear the current controller if it's the same one
+            if (currentAbortController?.signal === signal) {
+                currentAbortController = null
+            }
+            console.log('🤖 Streaming generation complete')
+        }
+    }
+
+    // Streaming writer API handler with cancellation
+    async function generateStreamingWriter(prompt, index, signal) {
+        try {
+            console.log(`📡 Starting Writer stream ${index}...`)
+            
+            // Check if already cancelled
+            if (signal.aborted) {
+                console.log(`🛑 Writer stream ${index} cancelled before starting`)
+                return null
+            }
+            
+            const stream = aiWriter.writeStreaming(prompt, { signal })
+            let result = ''
+            let charCount = 0
+            
+            for await (const chunk of stream) {
+                // Check for cancellation on each chunk
+                if (signal.aborted) {
+                    console.log(`🛑 Writer stream ${index} cancelled during streaming`)
+                    return null
+                }
+                
+                result += chunk
+                charCount += chunk.length
+                
+                // Stop at 200 chars to respect budget
+                if (charCount >= 200) {
+                    console.log(`📡 Writer stream ${index} stopped at 200 chars`)
+                    break
+                }
+            }
+            
+            console.log(`📡 Writer stream ${index} complete (${result.length} chars):`, result.substring(0, 50) + '...')
+            return result
+            
+        } catch (error) {
+            if (error.name === 'AbortError' || signal.aborted) {
+                console.log(`🛑 Writer stream ${index} aborted:`, error.message)
+                return null
+            } else {
+                console.warn(`❌ Writer stream ${index} failed:`, error)
+                return null
+            }
+        }
+    }
+
+    // Streaming prompt API handler with cancellation
+    async function generateStreamingPrompt(prompt, index, signal) {
+        try {
+            console.log(`📡 Starting Prompt stream ${index}...`)
+            
+            // Check if already cancelled
+            if (signal.aborted) {
+                console.log(`🛑 Prompt stream ${index} cancelled before starting`)
+                return null
+            }
+            
+            // Check if streaming is available
+            if (typeof aiWriter.promptStreaming === 'function') {
+                const stream = aiWriter.promptStreaming(prompt, { signal })
+                let result = ''
+                let charCount = 0
+                
+                for await (const chunk of stream) {
+                    // Check for cancellation on each chunk
+                    if (signal.aborted) {
+                        console.log(`🛑 Prompt stream ${index} cancelled during streaming`)
+                        return null
+                    }
+                    
+                    result += chunk
+                    charCount += chunk.length
+                    
+                    // Stop at 200 chars
+                    if (charCount >= 200) {
+                        console.log(`📡 Prompt stream ${index} stopped at 200 chars`)
+                        break
+                    }
+                }
+                
+                console.log(`📡 Prompt stream ${index} complete (${result.length} chars):`, result.substring(0, 50) + '...')
+                return result
+                
+            } else {
+                // Fallback to regular prompt with manual truncation and cancellation
+                console.log(`📡 Prompt stream ${index} using fallback...`)
+                
+                const result = await aiWriter.prompt(prompt, { signal })
+                
+                // Check if cancelled after the call
+                if (signal.aborted) {
+                    console.log(`🛑 Prompt fallback ${index} cancelled after completion`)
+                    return null
+                }
+                
+                const truncated = result.length > 200 ? result.substring(0, 200) : result
+                console.log(`📡 Prompt fallback ${index} complete (${truncated.length} chars):`, truncated.substring(0, 50) + '...')
+                return truncated
+            }
+            
+        } catch (error) {
+            if (error.name === 'AbortError' || signal.aborted) {
+                console.log(`🛑 Prompt stream ${index} aborted:`, error.message)
+                return null
+            } else {
+                console.warn(`❌ Prompt stream ${index} failed:`, error)
+                return null
+            }
+        }
+    }
+
+    // Handle input changes with better cancellation
+    function handleInputChange(event) {
+        const newValue = event.target.value
+        console.log('📝 Input changed:', newValue, 'AI supported:', aiSupported)
+        
+        inputValue = newValue
+        
+        // Clear completions immediately for short inputs
+        if (newValue.length < 2) {
+            completions = []
+            showCompletions = false
+            selectedCompletionIndex = -1
+            
+            // Cancel any running generation
+            if (currentAbortController) {
+                console.log('🛑 Cancelling AI generation due to short input')
+                currentAbortController.abort()
+                currentAbortController = null
+                isGeneratingCompletions = false
+            }
+            
+            // Clear timeout
+            if (completionTimeout) {
+                clearTimeout(completionTimeout)
+                completionTimeout = null
+            }
+            
+            return
+        }
+        
+        if (aiSupported && aiWriter) {
+            console.log('🤖 Triggering debounced completion generation...')
+            debouncedGenerateCompletions(inputValue)
+        } else {
+            console.log('⚠️ AI not available for completions')
+            if (!aiSupported) console.log('   - AI not supported')
+            if (!aiWriter) console.log('   - Writer not initialized')
+        }
+    }
+
+    // Debounced completion generation with cancellation and better logging
+    function debouncedGenerateCompletions(text) {
+        console.log('⏰ Setting up debounced generation for:', text)
+        
+        // Cancel any existing timeout
+        if (completionTimeout) {
+            clearTimeout(completionTimeout)
+            console.log('⏰ Cleared previous timeout')
+        }
+        
+        // Cancel any running AI generation
+        if (currentAbortController) {
+            console.log('🛑 Cancelling running AI generation for new input...')
+            currentAbortController.abort()
+            currentAbortController = null
+            isGeneratingCompletions = false
+        }
+        
+        // Clear completions immediately when input changes
+        if (text.length < 2) {
+            completions = []
+            showCompletions = false
+            console.log('🧹 Cleared completions due to short input')
+            return
+        }
+        
+        // Hide previous completions while waiting for new ones
+        if (completions.length > 0) {
+            console.log('🧹 Hiding previous completions while debouncing')
+            showCompletions = false
+        }
+        
+        // Set new timeout with longer delay for better UX
+        completionTimeout = setTimeout(() => {
+            console.log(`⏰ Debounce timeout triggered for "${text}", generating completions...`)
+            generateCompletions(text)
+        }, 500) // 500ms for better debouncing
+        
+        console.log('⏰ Timeout set for 500ms')
+    }
+
+    // Handle keyboard navigation for completions
+    function handleKeyDown(event) {
+        if (!showCompletions || completions.length === 0) return
+
+        switch (event.key) {
+            case 'ArrowDown':
+                event.preventDefault()
+                selectedCompletionIndex = Math.min(selectedCompletionIndex + 1, completions.length - 1)
+                break
+            case 'ArrowUp':
+                event.preventDefault()
+                selectedCompletionIndex = Math.max(selectedCompletionIndex - 1, -1)
+                break
+            case 'Tab':
+            case 'Enter':
+                if (selectedCompletionIndex >= 0) {
+                    event.preventDefault()
+                    selectCompletion(selectedCompletionIndex)
+                }
+                break
+            case 'Escape':
+                event.preventDefault()
+                showCompletions = false
+                selectedCompletionIndex = -1
+                break
+        }
+    }
+
+    // Select a completion
+    function selectCompletion(index) {
+        if (index >= 0 && index < completions.length) {
+            inputValue = completions[index]
+            showCompletions = false
+            selectedCompletionIndex = -1
+            
+            // Focus back to input
+            const input = document.querySelector('.omnibar-input')
+            if (input) {
+                input.focus()
+            }
+        }
+    }
+
     function handleSubmit(event) {
         event.preventDefault()
         
@@ -139,13 +650,36 @@
         audioFrequency = 0
     }
     
-    // Cleanup on component destroy
+    // Cleanup on component destroy with proper cancellation
     $effect(() => {
         return () => {
             if (isListening) {
                 stopListening()
             }
+            
+            // Cancel any running AI generation
+            if (currentAbortController) {
+                console.log('🛑 Cancelling AI generation on cleanup')
+                currentAbortController.abort()
+                currentAbortController = null
+            }
+            
+            // Clear any pending timeouts
+            if (completionTimeout) {
+                clearTimeout(completionTimeout)
+                completionTimeout = null
+            }
+            
+            // Destroy AI writer
+            if (aiWriter) {
+                aiWriter.destroy()
+            }
         }
+    })
+
+    // Initialize AI on component mount
+    $effect(() => {
+        initializeAI()
     })
 </script>
 
@@ -166,11 +700,47 @@
                     <input
                         type="text"
                         bind:value={inputValue}
+                        oninput={handleInputChange}
+                        onkeydown={handleKeyDown}
                         placeholder="We can do anything..."
                         class="omnibar-input w-full px-5 py-3 text-base bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl text-white/80 placeholder-white/15 focus:outline-none focus:ring-1 focus:ring-white/10 focus:ring-opacity-60 focus:border-white/20 focus:text-white transition-all duration-300 hover:border-white/20"
                         autocomplete="off"
                         spellcheck="false"
                     />
+                    
+                    {#if isGeneratingCompletions}
+                        <div class="ai-indicator absolute right-3 top-1/2 transform -translate-y-1/2" title="Generating AI completions...">
+                            <div class="ai-spinner w-4 h-4 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                        </div>
+                    {:else if aiSupported && aiWriter}
+                        <!-- <div class="ai-badge absolute right-3 top-1/2 transform -translate-y-1/2 px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded-md" title="AI completions ready">
+                            AI ✓
+                        </div> -->
+                    {:else if aiSupported && !aiWriter}
+                        <div class="ai-badge absolute right-3 top-1/2 transform -translate-y-1/2 px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 rounded-md" title="AI initializing...">
+                            AI ?
+                        </div>
+                    {:else}
+                        <div class="ai-badge absolute right-3 top-1/2 transform -translate-y-1/2 px-2 py-1 text-xs bg-red-500/20 text-red-400 rounded-md" title="AI Writer API not available. Check console for setup instructions.">
+                            AI ✗
+                        </div>
+                    {/if}
+                    
+                    <!-- Completions dropdown -->
+                    {#if showCompletions && completions.length > 0}
+                        <div class="completions-dropdown absolute top-full left-0 right-0 mt-2 bg-black/90 backdrop-blur-sm border border-white/10 rounded-xl overflow-hidden z-50">
+                            {#each completions as completion, index}
+                                <button
+                                    type="button"
+                                    class="completion-item w-full px-4 py-3 text-left text-white/80 hover:bg-white/10 transition-colors duration-150 border-b border-white/5 last:border-b-0 {selectedCompletionIndex === index ? 'bg-white/10' : ''}"
+                                    onclick={() => selectCompletion(index)}
+                                >
+                                    <span class="completion-text">{completion}</span>
+                                </button>
+                            {/each}
+                        </div>
+                    {/if}
+                    
                     <!-- <div class="input-accent absolute inset-0 rounded-xl bg-gradient-to-r from-gray-400/20 to-slate-400/20 opacity-0 transition-opacity duration-300 pointer-events-none"></div> -->
                 </div>
             </form>
@@ -291,6 +861,121 @@
         z-index: 1;
         -webkit-app-region: no-drag;
     }
+
+    /* AI Features Styling */
+    .ai-spinner {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* Tailwind animate-spin fallback */
+    .animate-spin {
+        animation: spin 1s linear infinite;
+    }
+
+    .ai-badge {
+        font-family: 'SF Mono', Consolas, monospace;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        backdrop-filter: blur(8px);
+        transition: all 0.2s ease;
+    }
+
+    .ai-badge:hover {
+        transform: scale(1.05);
+    }
+
+    /* AI status colors */
+    .bg-green-500\/20 {
+        background-color: rgba(34, 197, 94, 0.2);
+    }
+    .text-green-400 {
+        color: rgb(74, 222, 128);
+    }
+    .bg-yellow-500\/20 {
+        background-color: rgba(234, 179, 8, 0.2);
+    }
+    .text-yellow-400 {
+        color: rgb(250, 204, 21);
+    }
+    .bg-red-500\/20 {
+        background-color: rgba(239, 68, 68, 0.2);
+    }
+    .text-red-400 {
+        color: rgb(248, 113, 113);
+    }
+
+    .completions-dropdown {
+        box-shadow: 
+            0 20px 40px rgba(0, 0, 0, 0.4),
+            0 8px 16px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        animation: dropdown-appear 0.2s ease-out;
+        max-height: 300px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+
+    .completions-dropdown::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .completions-dropdown::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .completions-dropdown::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+
+    .completions-dropdown::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    @keyframes dropdown-appear {
+        from {
+            opacity: 0;
+            transform: translateY(-10px) scale(0.95);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    .completion-item {
+        font-size: 14px;
+        line-height: 1.4;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .completion-item:hover .completion-text {
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .completion-item.selected,
+    .completion-item:focus {
+        background: rgba(255, 255, 255, 0.15) !important;
+        outline: none;
+    }
+
+    .completion-text {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transition: color 0.15s ease;
+    }
+
+
     
     /* Custom slider styling */
     .slider::-webkit-slider-thumb {
