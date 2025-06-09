@@ -14,7 +14,6 @@
     let aiWriter = $state(null)
     let aiSupported = $state(false)
     let selectedCompletionIndex = $state(-1)
-    let showCompletions = $state(false)
     let currentAbortController = null
     let completionTimeout = null
     let generationId = 0
@@ -53,14 +52,14 @@
     }
 
     const modelOptions = {
-        sharedContext: 'Try predicting what the user is entering into the input field for this google search box. Give the top 5 possible completions separated by newlines. Do not add order numbers just pure text completions.',
+        sharedContext: 'I am a user entering text into the browser search box. Give the top 5 possible completions separated by newlines. Do not add order numbers, just pure text completions. Include the exact text from this prompt at the start. Do not add any other titles or explanations or other headers.',
         tone: 'neutral',
         format: 'plain-text',
-        length: 'short',
-        inputQuota: 10000,
-        outputLanguage: "en",
-        expectedInputLanguages: ["en"],
-        expectedContextLanguages: ["en"],
+        length: 'medium',
+        // inputQuota: 10000,
+        // outputLanguage: "en",
+        // expectedInputLanguages: ["en"],
+        // expectedContextLanguages: ["en"],
     }
 
     async function tryWriterAPI() {
@@ -135,14 +134,12 @@
     // Generate AI completions with streaming and cancellation tracking
     async function generateCompletions(text) {
         // Assign a unique ID to this generation
-        const thisGenerationId = ++generationId
         
-        console.log(`🤖 [Gen ${thisGenerationId}] Starting generation for:`, text)
+        console.log(`🤖 [Starting generation for:`, text)
         
         if (!aiWriter || !text.trim() || text.length < 2) {
-            console.log(`⚠️ [Gen ${thisGenerationId}] Skipping generation - requirements not met`)            
+            console.log(`⚠️ [Gen Skipping generation - requirements not met`)            
             completions = []
-            showCompletions = false
             return
         }
 
@@ -150,19 +147,17 @@
         currentAbortController = new AbortController()
         const signal = currentAbortController.signal
         
-        console.log(`🤖 [Gen ${thisGenerationId}] Starting streaming completion generation with cancellation support...`)
+        console.log(`🤖 [Gen Starting streaming completion generation with cancellation support...`)
         isGeneratingCompletions = true
         
         try {
             // Check if already cancelled before starting
             if (signal.aborted) {
-                console.log(`🛑 [Gen ${thisGenerationId}] Generation cancelled before starting`)
+                console.log(`🛑 [Gen Generation cancelled before starting`)
                 return
             }
     
-            showCompletions = true
-
-           await generate(prompt, signal)
+           await generate(text, signal)
             
             // Check if cancelled after promises complete
             if (signal.aborted) {
@@ -179,11 +174,9 @@
             if (error.name === 'AbortError' || signal.aborted) {
                 console.log('🛑 Generation cancelled:', error.message)
                 completions = []
-                showCompletions = false
             } else {
                 console.error('❌ Error generating streaming completions:', error)
                 completions = []
-                showCompletions = false
             }
         } finally {
             isGeneratingCompletions = false
@@ -195,9 +188,10 @@
         }
     }
 
+    let pendingText = ''
     async function generate(prompt, signal) {
         try {
-            console.log(`📡 Starting Writer stream...`)
+            console.log(`📡 Starting Writer stream... ${prompt}`)
             
             // Check if already cancelled
             if (signal.aborted) {
@@ -207,10 +201,12 @@
 
             let responseNumber = 0
             completions[0] = ''
+            let result = ''
             
-            const stream = aiWriter.writeStreaming(prompt, { signal  }) // context
+            const stream = aiWriter.writeStreaming(prompt, { signal , context: 'TRY BETTER!!' }) // context
             
             for await (const chunk of stream) {
+                result += chunk
                 // Check for cancellation on each chunk
                 if (signal.aborted) {
                     console.log(`🛑 Writer stream cancelled during streaming`)
@@ -226,106 +222,99 @@
                     completions[responseNumber] += chunk
                }
             }
+            console.log({prompt, result})
         } catch (error) {
             if (error.name === 'AbortError' || signal.aborted) {
-                console.log(`🛑 Writer stream ${index} aborted:`, error.message)
+                console.log(`🛑 Writer stream aborted:`, error.message)
                 return null
             } else {
-                console.warn(`❌ Writer stream ${index} failed:`, error)
+                console.warn(`❌ Writer stream  failed:`, error)
                 return null
             }
+        }
+
+        if (pendingText) {
+            const lastPending = pendingText
+            pendingText = ''
+            await generate(lastPending, signal)
+            
         }
     }
 
     // Handle input changes with better cancellation
     function handleInputChange(event) {
         const newValue = event.target.value
-        console.log('📝 Input changed:', newValue, 'AI supported:', aiSupported)
         
         inputValue = newValue
         
-        // Clear completions immediately for short inputs
-        if (newValue.length < 2) {
+        // Clear completions if input is empty
+        if (!newValue.trim()) {
             completions = []
-            showCompletions = false
             selectedCompletionIndex = -1
             
-            // Cancel any running generation
+            // Cancel any running AI generation
             if (currentAbortController) {
-                console.log('🛑 Cancelling AI generation due to short input')
                 currentAbortController.abort()
                 currentAbortController = null
                 isGeneratingCompletions = false
             }
-            
-            // Clear timeout
-            if (completionTimeout) {
-                clearTimeout(completionTimeout)
-                completionTimeout = null
-            }
-            
             return
         }
         
         if (aiSupported && aiWriter) {
             console.log('🤖 Triggering debounced completion generation...')
-            debouncedGenerateCompletions(inputValue)
-        } else {
-            console.log('⚠️ AI not available for completions')
-            if (!aiSupported) console.log('   - AI not supported')
-            if (!aiWriter) console.log('   - Writer not initialized')
+            debouncedGenerateCompletions(newValue)
         }
     }
 
     // Debounced completion generation with cancellation and better logging
     function debouncedGenerateCompletions(text) {
         console.log('⏰ Setting up debounced generation for:', text)
-        
-        // Cancel any existing timeout
-        if (completionTimeout) {
-            clearTimeout(completionTimeout)
-            console.log('⏰ Cleared previous timeout')
-        }
-        
-        // Cancel any running AI generation
+
         if (currentAbortController) {
-            console.log('🛑 Cancelling running AI generation for new input...')
-            currentAbortController.abort()
-            currentAbortController = null
-            isGeneratingCompletions = false
-        }
-        
-        // Clear completions immediately when input changes
-        if (text.length < 2) {
-            completions = []
-            showCompletions = false
-            console.log('🧹 Cleared completions due to short input')
+            pendingText = text
             return
         }
         
-        // Hide previous completions while waiting for new ones
-        if (completions.length > 0) {
-            console.log('🧹 Hiding previous completions while debouncing')
-            showCompletions = false
-        }
+        // Cancel any existing timeout
+        // if (completionTimeout) {
+        //     clearTimeout(completionTimeout)
+        //     console.log('⏰ Cleared previous timeout')
+        // }
+        
+        // // Cancel any running AI generation
+        // if (currentAbortController) {
+        //     console.log('🛑 Cancelling running AI generation for new input...')
+        //     currentAbortController.abort()
+        //     currentAbortController = null
+        //     isGeneratingCompletions = false
+        // }
+
+        // Clear completions immediately when input changes
+        // if (text.length < 3) {
+        //     completions = []
+        //     console.log('🧹 Cleared completions due to short input')
+        // }
         
         // Set new timeout with longer delay for better UX
-        completionTimeout = setTimeout(() => {
+        //completionTimeout = setTimeout(() => {
             console.log(`⏰ Debounce timeout triggered for "${text}", generating completions...`)
             generateCompletions(text)
-        }, 500) // 500ms for better debouncing
+        //}, 500) // 500ms for better debouncing
         
-        console.log('⏰ Timeout set for 500ms')
+        //console.log('⏰ Timeout set for 500ms')
     }
 
-    // Handle keyboard navigation for completions
     function handleKeyDown(event) {
-        if (!showCompletions || completions.length === 0) return
+        const filteredCompletions = completions.filter(c => c.trim().length > 0)
+        if (filteredCompletions.length === 0) {
+            return
+        }
 
         switch (event.key) {
             case 'ArrowDown':
                 event.preventDefault()
-                selectedCompletionIndex = Math.min(selectedCompletionIndex + 1, completions.length - 1)
+                selectedCompletionIndex = Math.min(selectedCompletionIndex + 1, filteredCompletions.length - 1)
                 break
             case 'ArrowUp':
                 event.preventDefault()
@@ -340,23 +329,49 @@
                 break
             case 'Escape':
                 event.preventDefault()
-                showCompletions = false
+                completions = []
                 selectedCompletionIndex = -1
+                
+                // Cancel any running AI generation
+                if (currentAbortController) {
+                    currentAbortController.abort()
+                    currentAbortController = null
+                    isGeneratingCompletions = false
+                }
                 break
         }
     }
 
-    // Select a completion
     function selectCompletion(index) {
-        if (index >= 0 && index < completions.length) {
-            inputValue = completions[index]
-            showCompletions = false
+        const filteredCompletions = completions.filter(c => c.trim().length > 0)
+        if (index >= 0 && index < filteredCompletions.length) {
+            inputValue = filteredCompletions[index]
             selectedCompletionIndex = -1
             
-            // Focus back to input
             const input = document.querySelector('.omnibar-input')
             if (input) {
                 input.focus()
+            }
+        }
+    }
+
+    // Handle clicks outside input/dropdown to clear completions
+    function handleClickOutside(event) {
+        const inputContainer = event.target.closest('.input-wrapper')
+        const dropdown = event.target.closest('.completions-dropdown')
+        const actionButtons = event.target.closest('.action-buttons')
+        const omnibarContainer = event.target.closest('.omnibar-container')
+        
+        // If click is outside input container, dropdown, action buttons, and omnibar area, clear completions
+        if (!inputContainer && !dropdown && !actionButtons && !omnibarContainer && completions.length > 0) {
+            completions = []
+            selectedCompletionIndex = -1
+            
+            // Cancel any running AI generation
+            if (currentAbortController) {
+                currentAbortController.abort()
+                currentAbortController = null
+                isGeneratingCompletions = false
             }
         }
     }
@@ -472,7 +487,6 @@
         audioFrequency = 0
     }
     
-    // Cleanup on component destroy with proper cancellation
     $effect(() => {
         return () => {
             if (isListening) {
@@ -499,14 +513,13 @@
         }
     })
 
-    // Initialize AI on component mount
     $effect(() => {
         initializeAI()
     })
 </script>
 
-<div class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove}>
-    
+<div class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
+
     <div class="content-container relative pt-[15vh] w-full">
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
             
@@ -518,7 +531,7 @@
             </div>
             
             <form onsubmit={handleSubmit} class="relative">
-                <div class="input-wrapper relative">
+                <div class="input-wrapper relative" onclick={(e) => e.stopPropagation()}>
                     <input
                         type="text"
                         bind:value={inputValue}
@@ -548,10 +561,9 @@
                         </div>
                     {/if}
                     
-                    <!-- Completions dropdown -->
-                    {#if showCompletions && completions.length > 0}
-                        <div class="completions-dropdown absolute top-full left-0 right-0 mt-2 bg-black/90 backdrop-blur-sm border border-white/10 rounded-xl overflow-hidden z-50">
-                            {#each completions as completion, index}
+                    {#if completions.length > 0}
+                        <div class="completions-dropdown absolute top-full left-0 right-0 mt-2 mb-20 bg-black/90 backdrop-blur-sm border border-white/10 rounded-xl overflow-hidden z-50" onclick={(e) => e.stopPropagation()}>
+                            {#each completions.filter(c => c.trim().length > 0) as completion, index}
                                 <button
                                     type="button"
                                     class="completion-item w-full px-4 py-3 text-left text-white/80 hover:bg-white/10 transition-colors duration-150 border-b border-white/5 last:border-b-0 {selectedCompletionIndex === index ? 'bg-white/10' : ''}"
@@ -711,13 +723,6 @@
         transform: scale(1.05);
     }
 
-    /* AI status colors */
-    .bg-green-500\/20 {
-        background-color: rgba(34, 197, 94, 0.2);
-    }
-    .text-green-400 {
-        color: rgb(74, 222, 128);
-    }
     .bg-yellow-500\/20 {
         background-color: rgba(234, 179, 8, 0.2);
     }
@@ -732,15 +737,17 @@
     }
 
     .completions-dropdown {
+        margin-top: 75px;
         box-shadow: 
             0 20px 40px rgba(0, 0, 0, 0.4),
             0 8px 16px rgba(0, 0, 0, 0.2),
             inset 0 1px 0 rgba(255, 255, 255, 0.05);
         animation: dropdown-appear 0.2s ease-out;
-        max-height: 300px;
+        max-height: 280px;
         overflow-y: auto;
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        margin-bottom: 80px;
     }
 
     .completions-dropdown::-webkit-scrollbar {
@@ -777,13 +784,15 @@
         cursor: pointer;
         position: relative;
         overflow: hidden;
+        min-height: 48px;
+        display: flex;
+        align-items: center;
     }
 
     .completion-item:hover .completion-text {
         color: rgba(255, 255, 255, 0.95);
     }
 
-    .completion-item.selected,
     .completion-item:focus {
         background: rgba(255, 255, 255, 0.15) !important;
         outline: none;
@@ -795,6 +804,9 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         transition: color 0.15s ease;
+        width: 100%;
+        min-height: 1.4em;
+        line-height: 1.4;
     }
 
 
