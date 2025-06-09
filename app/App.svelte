@@ -12,6 +12,11 @@
         console.log(rows)
     })
 
+    for (let space of [{title: 'a', id: 1}, {title: 'b', id: 2}, {title: 'c', id: 3}]) {
+        history.pushState({ direction: space.id }, space.title, "#" + space.id)
+    }
+    history.go(-1)
+
     let tabs = $state([
         {
             id: '4',
@@ -115,9 +120,41 @@
             loading: false
         }
     ])
-    
-    let closed = $state([])
+
     let activeTabIndex = $state(0)
+    window.onpopstate = handleShellNavigation // { capture: true }
+    
+    let block = false
+    function handleShellNavigation (event) {
+        if (block) {
+            block = false
+            return
+        }
+
+        console.log(
+            `location: ${document.location}`, event.state.direction,
+        )
+        // event.preventDefault()
+        // event.stopPropagation()
+        // event.stopImmediatePropagation()
+        // event.cancelBubble = true
+        
+        block = true
+        console.log(tabs, activeTabIndex)
+        if (event.state.direction === 1) {
+            tabs[activeTabIndex].frame?.back()
+            history.go(1)
+        } else {
+            tabs[activeTabIndex].frame?.forward()
+            history.go(-1)
+        }
+    }
+
+    $effect(() => {
+        console.log(activeTabIndex)
+    })
+
+    let closed = $state([])
     let visibilityTimers = new Map()
     let hoveredTab = $state(null)
     let hoverTimeout = null
@@ -156,7 +193,7 @@
             loading: false
         }
         tabs.push(newTab)
-        activeTabIndex = tabs.length - 1 // Switch to the new tab
+        // activeTabIndex = tabs.length - 1 // Switch to the new tab
         setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
     }
 
