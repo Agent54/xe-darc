@@ -52,7 +52,7 @@
     }
 
     const modelOptions = {
-        sharedContext: 'I am a user entering text into the browser search box. Give the top 5 possible completions separated by newlines. Do not add order numbers, just pure text completions. Include the exact text from this prompt at the start. Do not add any other titles or explanations or other headers.',
+        // sharedContext: 'I am a user entering text into the browser search box. Give the top 5 possible completions separated by newlines. Do not add order numbers, just pure text completions. Include the exact text from this prompt at the start. Do not add any other titles or explanations or other headers.',
         tone: 'neutral',
         format: 'plain-text',
         length: 'medium',
@@ -203,7 +203,7 @@
             completions[0] = ''
             let result = ''
             
-            const stream = aiWriter.writeStreaming(prompt, { signal , context: 'TRY BETTER!!' }) // context
+            const stream = aiWriter.writeStreaming(`Give the top 5 possible completions separated by newlines. Do not add order numbers, just pure text completions. Include the exact text from this prompt at the start. Do not add any other titles or explanations or other headers. The text to complete is: "${prompt}"`, { signal , context: 'I am a user entering text into the browser search box.'  }) // context
             
             for await (const chunk of stream) {
                 result += chunk
