@@ -17,8 +17,10 @@
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
-  "theme_color": "black",
-  "background_color": "black",
+  "theme_color": "transparent",
+  "dark_theme_color": "transparent",
+  "background_color": "transparent",
+  "dark_background_color": "transparent",
   "version": "1.0.7",
   "permissions": ["audioCapture"],
   "permissions_policy": {

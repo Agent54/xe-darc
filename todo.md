@@ -114,3 +114,55 @@ custom chrome error pages. (no content scripts in standards, provide valuable he
 scroll jank?!
 
 go back to newtab page
+
+keep close buttons aligned on closing tabs
+
+adjust icon white color to native icons, make thicker
+
+hide partitions on closed hovercards
+
+remove entries from closed menu individually
+
+favicons close menu empty state
+
+close hvoermenu on tab close
+
+apple watch voice recorder
+aggregore?
+transparent title
+shared tldraw for ideas
+redirect subresources?
+partitions > data containers
+
+visual page editor for mods
+
+find me the most relevant thing from my watch list/ relevant resurfacing of my "personal data lake" PDL?
+
+long press new button: container, incognito, space, tab group
+
+spaces sections in months/weeks/years!
+
+postpone tab by .../ acive/backlog space sections
+
+make beautiful microapp just for one favorite recipe....
+
+tweak hover menu delays and invisible padding for cursor imprecision
+
+reverse attribution with microtransactins to make verifyable contributions to people creating the model base data that is currently used
+
+public spaces:
+    mybrowser
+    myscreenshots
+    chainofthought
+
+you are not the problem: the tools are
+
+sidebaar > discord > make bookmark plugin > propose selctors > accept > try plugin > message bookmarks in sidebar
+
+what opportunities did i miss in my email history?
+
+tab active dot/ hibernated
+
+select tabs with select rectangle
+
+resurface the most relevant content i missed

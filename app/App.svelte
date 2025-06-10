@@ -142,17 +142,17 @@
     }
 
     let tabs = $state([
-        {
-            id: '111',
-            url: 'http://code.xe', 
-            title: 'Code',
-            audioPlaying: false,
-            // favicon: 'file://photon_logo.png',
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
+        // {
+        //     id: '111',
+        //     url: 'http://code.xe', 
+        //     title: 'Code',
+        //     audioPlaying: false,
+        //     // favicon: 'file://photon_logo.png',
+        //     screenshot: null,
+        //     pinned: false,
+        //     muted: false,
+        //     loading: false
+        // },
         {
             id: '4',
             url: 'about:newtab', 
@@ -885,7 +885,7 @@
 />
 
 <header class:window-controls-overlay={isWindowControlsOverlay} class:window-background={isWindowBackground}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 115px;' : 'right: 80px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 86px;' : 'right: 70px;'}"></div>
      
     <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 200px)' : 'calc(100% - 170px)'};">
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} transition:flip={{duration: 100}}>
@@ -934,6 +934,7 @@
             {/each}
             
             <button class="inline-new-tab-button" 
+                class:hidden={showFixedNewTabButton}
                 onclick={openNewTab}
                 title="New Tab (⌘T)">
                 <span class="new-tab-icon">+</span>
@@ -1172,29 +1173,31 @@
                         <div class="hovercard-title">{hoveredTab.title || 'Untitled'}</div>
                         <div class="hovercard-url">{hoveredTab.url}</div>
                     </div>
-                    <div class="partition-dropdown">
-                        <div class="partition-button" title="Select Partition">
-                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3-12v3.75M21 12v3.75M21 15v3.75M21 18v3.75M9 9h3.75m3-6v3.75M21 3v3.75" />
-                            </svg>
+                    {#if hoveredTab.url !== 'about:newtab' && !isTrashItemHover}
+                        <div class="partition-dropdown">
+                            <div class="partition-button" title="Select Partition">
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3-12v3.75M21 12v3.75M21 15v3.75M21 18v3.75M9 9h3.75m3-6v3.75M21 3v3.75" />
+                                </svg>
+                            </div>
+                            <div class="partition-menu">
+                                <div class="partition-menu-header">Data Container</div>
+                                {#each partitions as partition}
+                                    <div class="partition-menu-item" 
+                                         onclick={() => selectPartition(partition, hoveredTab)}>
+                                        <span class="partition-icon">
+                                            {#if partition.startsWith('persist')}
+                                                💾
+                                            {:else}
+                                                ⚡
+                                            {/if}
+                                        </span>
+                                        <span>{partition}</span>
+                                    </div>
+                                {/each}
+                            </div>
                         </div>
-                        <div class="partition-menu">
-                            <div class="partition-menu-header">Partition</div>
-                            {#each partitions as partition}
-                                <div class="partition-menu-item" 
-                                     onclick={() => selectPartition(partition, hoveredTab)}>
-                                    <span class="partition-icon">
-                                        {#if partition.startsWith('persist')}
-                                            💾
-                                        {:else}
-                                            ⚡
-                                        {/if}
-                                    </span>
-                                    <span>{partition}</span>
-                                </div>
-                            {/each}
-                        </div>
-                    </div>
+                    {/if}
                 </div>
             </div>
             {#if hoveredTab.screenshot}
@@ -1418,7 +1421,7 @@
         background-color: hsl(0 0% 6% / 1);
         min-width: 130px;
         max-width: 200px;
-        flex: 1 1 200px;
+        flex: 0 1 200px; /* Don't grow, can shrink from 200px basis */
         -webkit-app-region: no-drag;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
@@ -2138,14 +2141,8 @@
     }
 
     .tab-spacer {
-        /* flex: 1 0 50px; */
         height: 25px;
-        min-width: 220px;
-        /* list-style: none;
-        pointer-events: auto;
-        position: relative;
-        display: flex;
-        flex-direction: column; */
+        flex: 1 0 120px; /* Grow to fill space, don't shrink below 220px */
         -webkit-app-region: drag;
         z-index: 1;
     }
@@ -2193,7 +2190,7 @@
         user-select: none;
         -webkit-app-region: no-drag;
         border: 1px solid transparent;
-        z-index: 10;
+        z-index: 100;
         padding-bottom: 2px;
         transform: translateX(20px);
     }
@@ -2234,6 +2231,12 @@
         user-select: none;
         opacity: 0.7;
         margin-top: 1px;
+    }
+
+    .inline-new-tab-button.hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
     }
 
     .inline-new-tab-button:hover {
