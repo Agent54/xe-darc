@@ -1,5 +1,5 @@
-<scirpt context="module">
-</scirpt>
+<script module>
+</script>
 
 <script>
     import { untrack , onMount} from 'svelte'
