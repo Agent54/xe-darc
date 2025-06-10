@@ -27,19 +27,9 @@
     }
     history.go(-1)
 
-    let tabs = $state([
-        {
-            id: '4',
-            url: 'about:newtab', 
-            title: 'New Tab',
-            audioPlaying: false,
-            favicon: 'file://photon_logo.png',
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
+    const partitions = ['persist:1', 'persist:2', 'persist:3', 'ephemeral:1', 'ephemeral:2', 'ephemeral:3']
 
+    let closed = $state([
         // FIXME about: support
         // {
         //     id: '11',
@@ -151,7 +141,30 @@
         }
     }
 
-    let closed = $state([])
+    let tabs = $state([
+        {
+            id: '111',
+            url: 'http://code.xe', 
+            title: 'Code',
+            audioPlaying: false,
+            // favicon: 'file://photon_logo.png',
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
+        {
+            id: '4',
+            url: 'about:newtab', 
+            title: 'New Tab',
+            audioPlaying: false,
+            // favicon: 'file://photon_logo.png',
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
+    ])
     let visibilityTimers = new Map()
     let hoveredTab = $state(null)
     let hoverTimeout = null
@@ -834,6 +847,12 @@
         controlledFrameHasFocus = false
         updateWindowFocusState()
     }
+
+    function selectPartition(partition, tab) {
+        // Update tab partition logic would go here
+        console.log('Selected partition:', partition, 'for tab:', tab.id)
+        tab.partition = partition
+    }
 </script>
 
 {#snippet trashIcon()}
@@ -1136,8 +1155,35 @@
                          }
                      }, 100)
                  }}>
-                <div class="hovercard-title">{hoveredTab.title || 'Untitled'}</div>
-                <div class="hovercard-url">{hoveredTab.url}</div>
+                <div class="hovercard-header">
+                    <div class="hovercard-text">
+                        <div class="hovercard-title">{hoveredTab.title || 'Untitled'}</div>
+                        <div class="hovercard-url">{hoveredTab.url}</div>
+                    </div>
+                    <div class="partition-dropdown">
+                        <div class="partition-button" title="Select Partition">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3-12v3.75M21 12v3.75M21 15v3.75M21 18v3.75M9 9h3.75m3-6v3.75M21 3v3.75" />
+                            </svg>
+                        </div>
+                        <div class="partition-menu">
+                            <div class="partition-menu-header">Partition</div>
+                            {#each partitions as partition}
+                                <div class="partition-menu-item" 
+                                     onclick={() => selectPartition(partition, hoveredTab)}>
+                                    <span class="partition-icon">
+                                        {#if partition.startsWith('persist')}
+                                            💾
+                                        {:else}
+                                            ⚡
+                                        {/if}
+                                    </span>
+                                    <span>{partition}</span>
+                                </div>
+                            {/each}
+                        </div>
+                    </div>
+                </div>
             </div>
             {#if hoveredTab.screenshot}
                 <div class="hovercard-screenshot">
@@ -1458,7 +1504,7 @@
     .trash-icon {
         position: fixed;
         top: 8px;
-        right: 122px;
+        right: 125px;
         width: 32px;
         height: 30px;
         padding-bottom: 8px;
@@ -1894,7 +1940,7 @@
         backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
-        overflow: hidden;
+        overflow: visible;
         box-shadow: 
             0 20px 40px rgba(0, 0, 0, 0.4),
             0 8px 16px rgba(0, 0, 0, 0.2),
@@ -1907,10 +1953,23 @@
         padding: 16px;
         font-family: 'Inter', sans-serif;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        overflow: visible;
     }
 
     .hovercard-info:last-child {
         border-bottom: none;
+    }
+
+    .hovercard-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .hovercard-text {
+        flex: 1;
+        min-width: 0;
     }
 
     .hovercard-title {
@@ -1931,6 +1990,103 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .partition-dropdown {
+        position: relative;
+        flex-shrink: 0;
+    }
+
+    .partition-button {
+        width: 24px;
+        height: 24px;
+        border: none;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.7);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 0;
+    }
+
+    .partition-dropdown:hover .partition-button {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
+        transform: scale(1.05);
+    }
+
+    .partition-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        margin-top: 4px;
+        background: rgba(8, 8, 8, 0.98);
+        backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        min-width: 140px;
+        box-shadow: 
+            0 8px 24px rgba(0, 0, 0, 0.5),
+            0 2px 8px rgba(0, 0, 0, 0.3);
+        z-index: 10007;
+        overflow: hidden;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-8px) scale(0.95);
+        transition: all 0.15s ease-out;
+    }
+
+    .partition-dropdown:hover .partition-menu {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0) scale(1);
+    }
+
+
+
+    .partition-menu-header {
+        padding: 6px 10px;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .partition-menu-item {
+        padding: 8px 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.8);
+        user-select: none;
+    }
+
+    .partition-menu-item:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .partition-icon {
+        font-size: 12px;
+        flex-shrink: 0;
+        opacity: 0.8;
+    }
+
+    .w-3 {
+        width: 12px;
+    }
+
+    .h-3 {
+        height: 12px;
     }
 
     .hovercard-screenshot {
@@ -2009,6 +2165,7 @@
         top: 7px;
         width: 28px;
         height: 25px;
+        margin-right: 5px;
         background: rgba(0, 0, 0, 0.8);
         border-radius: 6px;
         display: flex;

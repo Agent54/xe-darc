@@ -78,3 +78,38 @@ pins and apps shortcuts
 browser extension/ controlled frame with iframe browser dev mode
 
 background visibility api hide animation
+
+
+cf managed componnets extension api > track my own data > sell to developers?
+
+ai ad block
+
+ai sppedup page, reload with minimal unblocked to run
+
+software will be fundamentally different not just developed fundamentally different
+
+will run on users devices
+
+will be rewritten and remixed and anything annoying will be removed
+
+will be copied in a few days if there is no alignment with users
+
+use window resize observer for switching header
+
+metalayer
+
+e2b container + sidebar
+
+bump tab/tabgroup to top feature.
+
+virtual server
+vscode
+workerd + caontainer api
+
+
+experimental cursors, scrollbars, show cut items next to mousecursor/clipboardmngmt
+
+
+tab click history
+
+feature: clone this app

@@ -16,6 +16,7 @@
     } = $props()
 
 
+    let partition = $state(tab.partition || 'persist:myapp')
     // permission requests
     // "media",
     // "geolocation",
@@ -141,7 +142,7 @@
     }
 
     // WebRequest logger - logs all network requests with full details
-    function setupRequestLogger(frame) {
+    function setupRequestHandler(frame) {
         if (!frame.request) {
             console.log('WebRequest API not available')
             return
@@ -448,7 +449,7 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
         frame.setZoomMode?.('disabled')
         
         // Setup request logging
-        setupRequestLogger(frame)
+        setupRequestHandler(frame)
         
         // Setup message listener
         setupMessageListener(frame)
@@ -464,6 +465,12 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
             tab.tabButton.scrollIntoView({ behavior: 'smooth' })
             tab.shouldFocus = false
         }
+    })
+
+    $effect(() => {
+        initialUrl = ''
+        partition = tab.partition
+        initialUrl = untrack(() => tab.url)
     })
 </script>
 
@@ -486,50 +493,52 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
         {/if}
     </div>
 {:else}
-    <controlledframe
-        transition:fade={{duration: 150}}
-        bind:this={tab.frame}
-        class:window-controls-overlay={isWindowControlsOverlay}
-        class:no-pointer-events={isScrolling}
-        id="tab_{tab.id}"
-        class="frame"
-        src={initialUrl}
-        partition="persist:myapp"
-        onloadcommit={e => handleLoadCommit(tab, e)}
-        onnewwindow={(e) => { handleNewWindow(tab, e)} }
-        onaudiostatechanged={e => handleAudioStateChanged(tab, e)}
-        allowscaling={true}
-        autosize={true}
-        allowtransparency={false}
-        onloadstart={e => { handleLoadStart(tab, e) }}
-        onloadstop={e => { handleLoadStop(tab, e) }}
+    {#key partition}
+        <controlledframe
+            transition:fade={{duration: 150}}
+            bind:this={tab.frame}
+            class:window-controls-overlay={isWindowControlsOverlay}
+            class:no-pointer-events={isScrolling}
+            id="tab_{tab.id}"
+            class="frame"
+            src={initialUrl}
+            partition={partition}
+            onloadcommit={e => handleLoadCommit(tab, e)}
+            onnewwindow={(e) => { handleNewWindow(tab, e)} }
+            onaudiostatechanged={e => handleAudioStateChanged(tab, e)}
+            allowscaling={true}
+            autosize={true}
+            allowtransparency={false}
+            onloadstart={e => { handleLoadStart(tab, e) }}
+            onloadstop={e => { handleLoadStop(tab, e) }}
 
-        oncontentload={e => handleContentLoad(tab, e)}
-        onclose={e => { handleEvent('onclose', tab, e) }}
-        oncontentresize={e => { handleEvent('oncontentresize',tab, e) }}
-        ondialog={e => { handleEvent('ondialog',tab, e) }}
-        onexit={e => { handleEvent('onexit',tab, e) }}
-        onloadabort={e => { handleEvent('onloadabort',tab, e) }}
-        onloadredirect={(e) => { 
-            handleEvent('onloadredirect',tab, e)
-            // Update URL on redirect
-            // if (e.newUrl) {
-            //     tab.url = e.newUrl
-            //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
-            // }
-            return false
-        }}
-        onpermissionrequest={e => { handleEvent('onpermissionrequest',tab, e) }}
-        onresize={e => { handleEvent('onresize',tab, e) }}
-        onresponsive={e => { handleEvent('onresponsive',tab, e) }}
-        onsizechanged={e => { handleEvent('onsizechanged',tab, e) }}
-        onunresponsive={e => { handleEvent(tab, e, 'onunresponsive') }}
-        ></controlledframe>
-        <!--
-        onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
-        onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
-        onzoomchange={e => { handleEvent(tab, e, 'onzoomchange') }}
-        -->
+            oncontentload={e => handleContentLoad(tab, e)}
+            onclose={e => { handleEvent('onclose', tab, e) }}
+            oncontentresize={e => { handleEvent('oncontentresize',tab, e) }}
+            ondialog={e => { handleEvent('ondialog',tab, e) }}
+            onexit={e => { handleEvent('onexit',tab, e) }}
+            onloadabort={e => { handleEvent('onloadabort',tab, e) }}
+            onloadredirect={(e) => { 
+                handleEvent('onloadredirect',tab, e)
+                // Update URL on redirect
+                // if (e.newUrl) {
+                //     tab.url = e.newUrl
+                //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
+                // }
+                return false
+            }}
+            onpermissionrequest={e => { handleEvent('onpermissionrequest',tab, e) }}
+            onresize={e => { handleEvent('onresize',tab, e) }}
+            onresponsive={e => { handleEvent('onresponsive',tab, e) }}
+            onsizechanged={e => { handleEvent('onsizechanged',tab, e) }}
+            onunresponsive={e => { handleEvent(tab, e, 'onunresponsive') }}
+            ></controlledframe>
+            <!--
+            onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
+            onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
+            onzoomchange={e => { handleEvent(tab, e, 'onzoomchange') }}
+            -->
+    {/key}
 {/if}
 
 
