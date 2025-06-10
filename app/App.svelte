@@ -12,6 +12,16 @@
         console.log(rows)
     })
 
+    chrome.runtime?.sendMessage(
+        'fgeflhglmchkilcegppfkgmmabpppcia',
+        {
+            openUrlInEditor: 'url'
+        },
+        (...args) => {
+            console.log(args)
+        }
+    )
+
     for (let space of [{title: 'a', id: 1}, {title: 'b', id: 2}, {title: 'c', id: 3}]) {
         history.pushState({ direction: space.id }, space.title, "#" + space.id)
     }
@@ -122,7 +132,7 @@
     ])
 
     let activeTabIndex = $state(0)
-    window.onpopstate = handleShellNavigation // { capture: true }
+    window.onpopstate = handleShellNavigation
     
     let block = false
     function handleShellNavigation (event) {
@@ -130,17 +140,8 @@
             block = false
             return
         }
-
-        console.log(
-            `location: ${document.location}`, event.state.direction,
-        )
-        // event.preventDefault()
-        // event.stopPropagation()
-        // event.stopImmediatePropagation()
-        // event.cancelBubble = true
         
         block = true
-        console.log(tabs, activeTabIndex)
         if (event.state.direction === 1) {
             tabs[activeTabIndex].frame?.back()
             history.go(1)
@@ -149,10 +150,6 @@
             history.go(-1)
         }
     }
-
-    $effect(() => {
-        console.log(activeTabIndex)
-    })
 
     let closed = $state([])
     let visibilityTimers = new Map()
@@ -190,7 +187,8 @@
             screenshot: null,
             pinned: false,
             muted: false,
-            loading: false
+            loading: false,
+            shouldFocus: true
         }
         tabs.push(newTab)
         // activeTabIndex = tabs.length - 1 // Switch to the new tab
@@ -861,7 +859,9 @@
     <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 200px)' : 'calc(100% - 170px)'};">
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} transition:flip={{duration: 100}}>
             {#each tabs as tab, i (tab.id)}
-                <li class="tab-container" 
+                <li 
+                    bind:this={tab.tabButton}
+                    class="tab-container" 
                     class:active={i===activeTabIndex} 
                     class:hovered={tab.id === hoveredTab?.id}
                     class:pinned={tab.pinned}
@@ -2185,7 +2185,7 @@
         border-top-right-radius: 8px;
         z-index: 1;
         opacity: 0;
-        transition: opacity 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, top 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, box-shadow 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s;
+        transition: opacity 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, top 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, box-shadow 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s;
         overflow: hidden;
         display: flex;
         align-items: center;
@@ -2203,7 +2203,7 @@
         top: 0px;
         z-index: 100;
         opacity: 1;
-        transition: opacity 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, top 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s, box-shadow 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s;
+        transition: opacity 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, top 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, box-shadow 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s;
         box-shadow: 0 6px 35px 5px rgb(0 0 0 / 36%);
     }
 

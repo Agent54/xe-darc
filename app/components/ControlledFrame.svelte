@@ -458,6 +458,12 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
         
         // Setup context menu
         setupContextMenu(frame)
+
+        if (tab.shouldFocus) {
+            tab.frame.scrollIntoView({ behavior: 'smooth' })
+            tab.tabButton.scrollIntoView({ behavior: 'smooth' })
+            tab.shouldFocus = false
+        }
     })
 </script>
 

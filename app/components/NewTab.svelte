@@ -203,7 +203,7 @@
             completions[0] = ''
             let result = ''
             
-            const stream = aiWriter.writeStreaming(`Give the top 5 possible completions separated by newlines. Do not add order numbers, just pure text completions. Include the exact text from this prompt at the start. Do not add any other titles or explanations or other headers. The text to complete is: "${prompt}"`, { signal , context: 'I am a user entering text into the browser search box.'  }) // context
+            const stream = aiWriter.writeStreaming(`Give the top 5 possible completions separated by newlines. Do not add order numbers, just pure text completions. Include the exact text from this prompt at the start. Do not add any other titles or explanations or other headers. Try to complete to a full search phrase not just completing the current word. The text to complete is: "${prompt}"`, { signal , context: 'I am a user entering text into the browser search box.'  }) // context
             
             for await (const chunk of stream) {
                 result += chunk
@@ -513,12 +513,18 @@
         }
     })
 
+    let newTabContainer = null
     $effect(() => {
+        if (tab.shouldFocus) {
+            newTabContainer.scrollIntoView({ behavior: 'smooth' })
+            tab.tabButton.scrollIntoView({ behavior: 'smooth' })
+            tab.shouldFocus = false
+        }
         initializeAI()
     })
 </script>
 
-<div class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
+<div bind:this={newTabContainer} class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
 
     <div class="content-container relative pt-[15vh] w-full">
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
