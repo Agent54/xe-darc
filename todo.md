@@ -5,10 +5,9 @@ lanes_treat_as_stories: lines
 
 - fix window background detection on active content frame
 - fix hibernatino fade glitch
-- use blur instead title ellipsis
 
 - empty tabs title drag missing
-- hibernate image crash clcik
+- hibernate image crash click
 
 - no faviccon new tab
 
@@ -116,3 +115,4 @@ feature: clone this app
 
 custom chrome error pages. (no content scripts in standards, provide valuable help options, provide insights of warnings etc.)
 
+scroll jank?!

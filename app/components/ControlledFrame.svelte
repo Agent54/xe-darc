@@ -460,17 +460,13 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
             tab.shouldFocus = false
         }
     }
-
-    onMount(() => {
-        setups()
-    })
+    // onMount(() => {
+    //     setups()
+    // })
 
     $effect(() => {
-        // still needed with key?
-        // initialUrl = ''
         partition = tab.partition
         setups()
-        // initialUrl = untrack(() => tab.url)
     })
 </script>
 
