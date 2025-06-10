@@ -10,6 +10,7 @@
     "bump-version": "node ./bump_version.js"
   },
   "dependencies": {
+    "@e2b/code-interpreter": "^1.5.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tailwindcss/vite": "^4.1.8",
     "@threlte/core": "^8.0.4",

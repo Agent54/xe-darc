@@ -1,6 +1,7 @@
 <script>
     import { Canvas } from '@threlte/core'
     import Scene from './InteractiveLineScene.svelte'
+    // import { sandbox } from './sandbox.js'
     
     let { tab } = $props()
     
