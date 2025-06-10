@@ -246,6 +246,7 @@
     }
 
     function restoreTab(tab) {
+        tab.shouldFocus = true
         tabs.push(tab)
         closed = closed.filter(t => t !== tab)
         setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update

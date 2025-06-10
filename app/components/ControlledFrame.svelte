@@ -153,7 +153,7 @@
 
         // Log all request events with full details
         frame.request.onBeforeRequest.addListener((details) => {
-            console.group(`🌐 Request: ${details.method} ${details.url}`)
+            console.group(`🌐 onBeforeRequest: ${details.method} ${details.url}`)
             console.log('📋 Request Details:', {
                 requestId: details.requestId,
                 url: details.url,
@@ -443,21 +443,15 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
 
     // TODO: if controledframe api missing, explain how to enable it
 
-    onMount(() => {
+    function setups () {
         const frame = tab.frame
-        // Set zoom mode to disabled for consistent behavior
         frame.setZoomMode?.('disabled')
-        
-        // Setup request logging
         setupRequestHandler(frame)
         
-        // Setup message listener
         setupMessageListener(frame)
         
-        // Setup focus/blur content scripts
         setupFocusBlurContentScript(frame)
         
-        // Setup context menu
         setupContextMenu(frame)
 
         if (tab.shouldFocus) {
@@ -465,12 +459,18 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
             tab.tabButton.scrollIntoView({ behavior: 'smooth' })
             tab.shouldFocus = false
         }
+    }
+
+    onMount(() => {
+        setups()
     })
 
     $effect(() => {
-        initialUrl = ''
+        // still needed with key?
+        // initialUrl = ''
         partition = tab.partition
-        initialUrl = untrack(() => tab.url)
+        setups()
+        // initialUrl = untrack(() => tab.url)
     })
 </script>
 

@@ -113,3 +113,6 @@ experimental cursors, scrollbars, show cut items next to mousecursor/clipboardmn
 tab click history
 
 feature: clone this app
+
+custom chrome error pages. (no content scripts in standards, provide valuable help options, provide insights of warnings etc.)
+
