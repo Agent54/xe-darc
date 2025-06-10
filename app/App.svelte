@@ -189,7 +189,18 @@
 
     const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
     isWindowControlsOverlay = mediaQueryList.matches
-    mediaQueryList.addEventListener('change', e => setTimeout(() => { isWindowControlsOverlay = e.matches }, 0))
+    let lastWindowHeight = window.innerHeight
+    function handleWindowResize() {
+        const currentHeight = window.innerHeight
+        if (currentHeight !== lastWindowHeight) {
+            lastWindowHeight = currentHeight
+            isWindowControlsOverlay = mediaQueryList.matches
+        }
+    }
+    mediaQueryList.addEventListener('change', e => {
+        isWindowControlsOverlay = e.matches
+    })
+    window.addEventListener('resize', handleWindowResize)
 
     function openNewTab() {
         const newTab = { 

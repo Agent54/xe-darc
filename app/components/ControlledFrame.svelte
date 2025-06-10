@@ -2,7 +2,7 @@
 </script>
 
 <script>
-    import { untrack , onMount} from 'svelte'
+    import { untrack } from 'svelte'
     import { fade } from 'svelte/transition'
 
     let {
@@ -153,7 +153,8 @@
 
         // Log all request events with full details
         frame.request.onBeforeRequest.addListener((details) => {
-            console.group(`🌐 onBeforeRequest: ${details.method} ${details.url}`)
+            const url = new URL(details.url)
+            console.group(`🌐 onBeforeRequest: ${details.method}`, url)
             console.log('📋 Request Details:', {
                 requestId: details.requestId,
                 url: details.url,
@@ -169,6 +170,19 @@
                 requestBody: details.requestBody
             })
             console.groupEnd()
+
+
+            if (url.hostname === 'code.xe') {
+                return {
+                    redirectUrl: 'https://google.com',
+                    responseHeaders: [
+                        {
+                            name: 'Content-Type',
+                            value: 'text/html'
+                        }
+                    ]
+                }
+            }
 
             const block = details.url.indexOf("google-analytics.com") != -1
 
@@ -443,8 +457,10 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
 
     // TODO: if controledframe api missing, explain how to enable it
 
-    function setups () {
+    $effect(() => {
+        partition = tab.partition
         const frame = tab.frame
+        
         frame.setZoomMode?.('disabled')
         setupRequestHandler(frame)
         
@@ -455,18 +471,12 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
         setupContextMenu(frame)
 
         if (tab.shouldFocus) {
-            tab.frame.scrollIntoView({ behavior: 'smooth' })
-            tab.tabButton.scrollIntoView({ behavior: 'smooth' })
             tab.shouldFocus = false
+            setTimeout(() => {
+                tab.frame.scrollIntoView({ behavior: 'smooth' })
+                tab.tabButton.scrollIntoView({ behavior: 'smooth' })
+            }, 200)
         }
-    }
-    // onMount(() => {
-    //     setups()
-    // })
-
-    $effect(() => {
-        partition = tab.partition
-        setups()
     })
 </script>
 

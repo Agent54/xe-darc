@@ -3,23 +3,21 @@ lanes_project_id: 2
 lanes_treat_as_stories: lines
 ---
 
-- fix window background detection on active content frame
-- fix hibernatino fade glitch
+google doc chrome team / bug reports most important issues
 
-- empty tabs title drag missing
-- hibernate image crash click
+fix window background detection on active content frame
+fix hibernatino fade glitch
 
-- no faviccon new tab
+empty tabs title drag missing
+hibernate image crash click
+
+no faviccon new tab
 
 mising drag area when tab fade active
 
 white box on threlte start
 
-remove h scroolbar for tab switch
-
 zoom
-
-gestures
 
 bigger monitor or visionpro
 
@@ -28,6 +26,8 @@ max widths and giant monitor/ vr support
 save/readlist
 
 ublock origin core
+
+youtube play on opera neon page bug
 
 fix youtube feed  etc...
 
@@ -51,6 +51,8 @@ back and forward outside frame navigates spaces !!!!!
 
 link url and page previews
 
+youtube / build in public
+
 comands:
 
 reminders/notes
@@ -61,12 +63,7 @@ ad hoc js and css mods as well as page specifc matchers and blockers
 
 high cpu
 
-back forward gestures!
-
 favicon server
-
-reduce delay for framenav
-
 
 setup inter frame ipfs with parent initiation, find alternatives?
 
@@ -76,8 +73,7 @@ pins and apps shortcuts
 
 browser extension/ controlled frame with iframe browser dev mode
 
-background visibility api hide animation
-
+background visibility api hide animations
 
 cf managed componnets extension api > track my own data > sell to developers?
 
@@ -116,3 +112,5 @@ feature: clone this app
 custom chrome error pages. (no content scripts in standards, provide valuable help options, provide insights of warnings etc.)
 
 scroll jank?!
+
+go back to newtab page
