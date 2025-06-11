@@ -251,6 +251,12 @@
     function closeTab(tab, event) {
         if (event) event.stopPropagation()
         if (tab.pinned) return // Don't close pinned tabs
+        
+        // If closing the last tab, open a new tab first
+        if (tabs.length === 1) {
+            openNewTab()
+        }
+        
         closed.push(tab)
         tabs = tabs.filter(t => t !== tab)
         setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
@@ -885,7 +891,7 @@
 />
 
 <header class:window-controls-overlay={isWindowControlsOverlay} class:window-background={isWindowBackground}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 86px;' : 'right: 70px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 86px;' : 'right: 38px;'}"></div>
      
     <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 200px)' : 'calc(100% - 170px)'};">
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} transition:flip={{duration: 100}}>
@@ -1184,7 +1190,10 @@
                                 <div class="partition-menu-header">Data Container</div>
                                 {#each partitions as partition}
                                     <div class="partition-menu-item" 
-                                         onclick={() => selectPartition(partition, hoveredTab)}>
+                                         role="button"
+                                         tabindex="0"
+                                         onclick={() => selectPartition(partition, hoveredTab)}
+                                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPartition(partition, hoveredTab) } }}>
                                         <span class="partition-icon">
                                             {#if partition.startsWith('persist')}
                                                 💾
