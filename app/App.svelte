@@ -871,6 +871,14 @@
         console.log('Selected partition:', partition, 'for tab:', tab.id)
         tab.partition = partition
     }
+
+    // let sidebarRightHovered = $state(false)
+    // function handleSidebarRightMouseEnter() {
+    //     sidebarRightHovered = true
+    // }
+    // function handleSidebarRightMouseLeave() {
+    //     sidebarRightHovered = false
+    // }
 </script>
 
 {#snippet trashIcon()}
@@ -1281,8 +1289,34 @@
     {/each}
 </div>
 
+
+<!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->
+<div class="sidebar-right" role="region" >
+    <div class="sidebar-buttons">
+        <button class="sidebar-button" title="Add" aria-label="Add">
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+        </button>
+        
+        <button class="sidebar-button" title="AI Assistant" aria-label="AI Assistant">
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423L16.5 15.75l.394 1.183a2.25 2.25 0 0 0 1.423 1.423L19.5 18.75l-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+            </svg>
+        </button>
+        
+        <button class="sidebar-button" title="Security" aria-label="Security">
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- class:drag-enabled={isDragEnabled} -->
+</div>
+
 <div class="drag-handle-left" class:drag-enabled={isDragEnabled}></div>
-<div class="drag-handle-right" class:drag-enabled={isDragEnabled}></div>
+
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
 <style>
@@ -1328,20 +1362,103 @@
         z-index: 1;
     }
 
+    .sidebar-right {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 27px;
+        height: 100vh;
+        z-index: 999;
+        pointer-events: auto;
+        transition: transform 0.05s ease 0.45s, opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45s;
+        background-color: rgba(0, 0, 0, 0.802);
+        backdrop-filter: blur(7px);
+        transform: translateX(18px);
+        border-left: 1px solid transparent;
+        opacity: 0;
+    }
+
+    .sidebar-right.sidebar-right-hovered, .sidebar-right:hover {
+        box-shadow: 0 0 13px 7px #0000003c;
+        transform: translateX(0px);
+        transition-delay: 0.1s;
+        opacity: 1;
+    }
+
+
+
+    .sidebar-right::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1px;
+        height: 100%;
+        background: linear-gradient(to bottom, transparent 0%, #ffffff17 12%, #ffffff17 95%, transparent 100%), rgba(0, 0, 0, 0.802);
+        background-size: 1px 100%, 100% 100%;
+        background-position: left center, center;
+        background-repeat: no-repeat, no-repeat;
+        opacity: 0;
+        transition: opacity 0.05s ease 0.45s;
+    }
+
+    .sidebar-right:hover::before, .sidebar-right.sidebar-right-hovered::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -1px;
+        bottom: 0;
+        width: 1px;
+        transition: opacity 0.05s ease 0.1s;
+        opacity: 1;
+    }
+
+    .sidebar-buttons {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sidebar-button {
+        width: 20px;
+        height: 20px;
+        border: none;
+        background: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.6);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 0;
+        backdrop-filter: blur(4px);
+        border: 1px solid transparent;
+    }
+
+    .sidebar-button:hover {
+        background: rgba(255, 255, 255, 0.12);
+        color: rgba(255, 255, 255, 0.9);
+        transform: scale(1.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebar-button:active {
+        transform: scale(0.95);
+        transition: transform 0.1s ease;
+    }
+
     .drag-handle-left {
         position: fixed;
         top: 0;
         left: 0;
-        width: 8px;
-        height: 100vh;
-        z-index: 999;
-        pointer-events: auto;
-    }
-
-    .drag-handle-right {
-        position: fixed;
-        top: 0;
-        right: 0;
         width: 8px;
         height: 100vh;
         z-index: 999;
