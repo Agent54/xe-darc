@@ -3,6 +3,7 @@
     import PouchDB from 'pouchdb-browser'
     import NewTab from './components/NewTab.svelte'
     import ControlledFrame from './components/ControlledFrame.svelte'
+    import Resources from './components/Resources.svelte'
 
     const db = new PouchDB('darc')
 
@@ -186,6 +187,7 @@
     let viewMode = $state('default')
     let lastUsedViewMode = $state('tile') // Default to tile as the alternative
     let showFixedNewTabButton = $state(false)
+    let resourcesSidebarOpen = $state(false)
 
     const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
     isWindowControlsOverlay = mediaQueryList.matches
@@ -872,6 +874,14 @@
         tab.partition = partition
     }
 
+    function toggleResourcesSidebar() {
+        resourcesSidebarOpen = !resourcesSidebarOpen
+    }
+
+    function closeResourcesSidebar() {
+        resourcesSidebarOpen = false
+    }
+
     // let sidebarRightHovered = $state(false)
     // function handleSidebarRightMouseEnter() {
     //     sidebarRightHovered = true
@@ -1226,7 +1236,12 @@
     </div>
 {/if}
 
-<div class="controlled-frame-container browser-frame" class:window-controls-overlay={isWindowControlsOverlay} class:scrolling={isScrolling} onscroll={handleScroll} style="box-sizing: border-box;">
+<div class="controlled-frame-container browser-frame" 
+     class:window-controls-overlay={isWindowControlsOverlay} 
+     class:scrolling={isScrolling} 
+     class:resources-sidebar-open={resourcesSidebarOpen}
+     onscroll={handleScroll} 
+     style="box-sizing: border-box;">
     <div class="frame-title-bar">
         <div class="frame-header-controls">
             <button class="frame-button" title="Back" aria-label="Back" onclick={goBack}>
@@ -1299,13 +1314,17 @@
             </svg>
         </button>
         
-        <button class="sidebar-button" title="AI Assistant" aria-label="AI Assistant">
+        <button class="sidebar-button" title="Agent" aria-label="Agent">
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423L16.5 15.75l.394 1.183a2.25 2.25 0 0 0 1.423 1.423L19.5 18.75l-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
             </svg>
         </button>
         
-        <button class="sidebar-button" title="Security" aria-label="Security">
+        <button class="sidebar-button" 
+                class:active={resourcesSidebarOpen}
+                title="Resources" 
+                aria-label="Resources"
+                onclick={toggleResourcesSidebar}>
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
             </svg>
@@ -1318,6 +1337,12 @@
 <div class="drag-handle-left" class:drag-enabled={isDragEnabled}></div>
 
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
+
+{#if resourcesSidebarOpen}
+    <div class="resources-sidebar-container" class:window-controls-overlay={isWindowControlsOverlay}>
+        <Resources onClose={closeResourcesSidebar} />
+    </div>
+{/if}
 
 <style>
     header {
@@ -2022,9 +2047,20 @@
       user-select: none;
       scroll-snap-align: start;
       scroll-snap-stop: normal;
+      border: 1px solid #ffffff12;
+      transition: width 0.3s ease;
+    }
+
+    .controlled-frame-container.resources-sidebar-open :global(.frame) {
+      width: calc(100vw - 338px);
     }
 
     :global(.frame.window-controls-overlay) {
+        height: calc(100vh - 56px);
+    }
+
+    .controlled-frame-container.resources-sidebar-open.window-controls-overlay :global(.frame) {
+        width: calc(100vw - 338px);
         height: calc(100vh - 56px);
     }
 
@@ -2587,5 +2623,45 @@
 
     .new-tab-button.visible:hover .new-tab-icon {
         color: rgba(255, 255, 255, 1);
+    }
+
+    .controlled-frame-container.resources-sidebar-open {
+        width: calc(100% - 320px);
+        transition: width 0.3s ease;
+    }
+
+    .controlled-frame-container {
+        transition: width 0.3s ease;
+    }
+
+    .resources-sidebar-container {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 320px;
+        height: 100vh;
+        z-index: 999;
+        transform: translateX(100%);
+        animation: slide-in-right 0.3s ease-out forwards;
+    }
+
+    .resources-sidebar-container.window-controls-overlay {
+        top: 38px;
+        height: calc(100vh - 38px);
+    }
+
+    @keyframes slide-in-right {
+        from {
+            transform: translateX(100%);
+        }
+        to {
+            transform: translateX(0);
+        }
+    }
+
+    .sidebar-button.active {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.2);
     }
 </style>

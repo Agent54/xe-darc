@@ -127,12 +127,10 @@ favicons close menu empty state
 
 close hvoermenu on tab close
 
-apple watch voice recorder
 aggregore?
-transparent title
+transparent title?
 shared tldraw for ideas
 redirect subresources?
-partitions > data containers
 
 visual page editor for mods
 
@@ -166,3 +164,9 @@ tab active dot/ hibernated
 select tabs with select rectangle
 
 resurface the most relevant content i missed
+
+community voting for features
+
+make borders thicker and titlebar and sidebar hover thicker
+
+make sidebar edges draggable
