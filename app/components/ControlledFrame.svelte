@@ -28,6 +28,46 @@
 
     let initialUrl = $state('')
 
+    // Proper detection of ControlledFrame API support
+    function isControlledFrameSupported() {
+        // Method 1: Check if the custom element is defined
+        if (typeof customElements !== 'undefined' && customElements.get('controlledframe')) {
+            console.log('✅ ControlledFrame API detected via customElements.get()')
+            return true
+        }
+        
+        // Method 2: Check if the global constructor exists
+        if (typeof window.HTMLControlledFrameElement !== 'undefined') {
+            console.log('✅ ControlledFrame API detected via HTMLControlledFrameElement constructor')
+            return true
+        }
+        
+        // Method 3: Try to create element and check for API methods
+        try {
+            const testElement = document.createElement('controlledframe')
+            const hasApiMethods = typeof testElement.setZoomMode === 'function' || 
+                                 typeof testElement.back === 'function' ||
+                                 typeof testElement.forward === 'function'
+            if (hasApiMethods) {
+                console.log('✅ ControlledFrame API detected via element methods')
+                return true
+            }
+        } catch (error) {
+            console.log('❌ ControlledFrame element creation failed:', error)
+        }
+        
+        console.log('❌ ControlledFrame API not available - falling back to iframe')
+        console.log('💡 To enable ControlledFrame API:')
+        console.log('   1. Ensure you\'re running in an Isolated Web App (IWA)')
+        console.log('   2. Add "controlled-frame" permission to your manifest.json')
+        console.log('   3. Run Chrome with --enable-features=IsolatedWebApps,IsolatedWebAppControlledFrame')
+        console.log('   4. Or enable chrome://flags/#isolated-web-app-controlled-frame')
+        
+        return false
+    }
+
+    let controlledFrameSupported = $state(isControlledFrameSupported())
+
     function handleEvent(eventName, tab, event) {
         console.log(eventName, tab, event)
     }
@@ -461,8 +501,6 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
 
     // user initiated clear data options clearData(options, types)
 
-    // TODO: if controledframe api missing, explain how to enable it
-
     $effect(() => {
         partition = tab.partition
         const frame = tab.frame
@@ -506,7 +544,7 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
     </div>
 {:else}
     {#key partition}
-        {#if window.controlledframe}
+        {#if controlledFrameSupported}
             <controlledframe
                 transition:fade={{duration: 150}}
                 bind:this={tab.frame}
@@ -551,9 +589,9 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
                 onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
                 onzoomchange={e => { handleEvent(tab, e, 'onzoomchange') }}
                 -->
-            {:else}
-
-            <!-- Refused to frame 'http://localhost:5193/' because it violates the following Content Security Policy directive: "frame-src 'self' https: blob: data:". -->
+        {:else}
+            <!-- ControlledFrame API not available, falling back to iframe -->
+            {#if initialUrl}
                 <iframe
                     transition:fade={{duration: 150}}
                     bind:this={tab.frame}
@@ -564,7 +602,34 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
                     class="frame"
                     title="fallback-iframe"
                 ></iframe>
+            {:else}
+                <div 
+                    transition:fade={{duration: 150}}
+                    bind:this={tab.frame}
+                    class:window-controls-overlay={isWindowControlsOverlay}
+                    class:no-pointer-events={isScrolling}
+                    id="tab_{tab.id}"
+                    class="frame iframe-blocked"
+                >
+                    <div class="iframe-blocked-content">
+                        <div class="iframe-blocked-icon">⚠️</div>
+                        <div class="iframe-blocked-title">ControlledFrame API Not Available</div>
+                        <div class="iframe-blocked-message">
+                            This app requires the ControlledFrame API to display web content securely. 
+                            {#if tab.url}
+                                The URL "{tab.url}" cannot be displayed in a standard iframe due to security restrictions.
+                            {/if}
+                        </div>
+                        <div class="iframe-blocked-suggestion">
+                            <strong>To enable ControlledFrame API:</strong><br/>
+                            1. Ensure this is running as an Isolated Web App (IWA)<br/>
+                            2. Enable chrome://flags/#isolated-web-app-controlled-frame<br/>
+                            3. Or run Chrome with --enable-features=IsolatedWebApps,IsolatedWebAppControlledFrame
+                        </div>
+                    </div>
+                </div>
             {/if}
+        {/if}
     {/key}
 {/if}
 
@@ -643,5 +708,68 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
         font-size: 12px;
         z-index: 2;
         pointer-events: none;
+    }
+
+    .iframe-blocked {
+        background: #0a0a0a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+        --webkit-app-region: no-drag;
+    }
+
+    .iframe-blocked-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        text-align: center;
+        padding: 40px;
+        color: rgba(255, 255, 255, 0.8);
+        max-width: 480px;
+    }
+
+    .iframe-blocked-icon {
+        font-size: 48px;
+        opacity: 0.6;
+    }
+
+    .iframe-blocked-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .iframe-blocked-message {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.7);
+        line-height: 1.4;
+    }
+
+    .iframe-blocked-url {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        font-family: 'SF Mono', Consolas, monospace;
+        word-break: break-all;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .iframe-blocked-suggestion {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+        line-height: 1.4;
+        text-align: left;
+        max-width: 100%;
+    }
+
+    .iframe-blocked-suggestion strong {
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 600;
     }
 </style>

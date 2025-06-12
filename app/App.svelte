@@ -245,6 +245,12 @@
     mediaQueryList.addEventListener('change', e => {
         isWindowControlsOverlay = e.matches
     })
+
+    // if running in iframe set isWindowControlsOverlay to true to show tabs
+    if (window.self !== window.top) {
+        isWindowControlsOverlay = true
+    }
+
     window.addEventListener('resize', handleWindowResize)
 
     function openNewTab() {
