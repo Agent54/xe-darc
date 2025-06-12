@@ -891,4 +891,29 @@
         border-radius: 4px;
         background: rgba(255, 255, 255, 0.1);
     }
+
+    /* Shader controls scrolling */
+    .shader-controls {
+        max-height: 35vh;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+
+    .shader-controls::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .shader-controls::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .shader-controls::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+
+    .shader-controls::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
 </style>

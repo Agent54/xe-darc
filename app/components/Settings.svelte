@@ -450,8 +450,10 @@
                 version: '1.0.0'
             }
 
+            // TODO: add cron
+
             // Create export file
-            const fileName = `darc-export-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
+            const fileName = `darc-export.json` // no data to support vsc ${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}
             const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true })
             const writable = await fileHandle.createWritable()
             
@@ -678,7 +680,7 @@ To import this data back into DARC, use the import function in Settings.
                 {/if}
                 
                 <div class="export-note">
-                    <p><strong>Note:</strong> This feature uses the File System Access API and works best in Chrome-based browsers. The exported data will be saved as JSON files that can be imported back into DARC. Your selected export directory will be remembered and automatically accessed for future exports without requiring folder selection.</p>
+                    <p><strong>Note:</strong>The exported data will be saved as JSON files that can be imported back into DARC. Your selected export directory will be remembered and automatically accessed for future exports without requiring folder selection.</p>
                 </div>
             </div>
         </div>
