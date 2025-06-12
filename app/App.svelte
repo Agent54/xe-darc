@@ -1450,7 +1450,9 @@
                          {resourcesSidebarOpen} 
                          {settingsSidebarOpen} 
                          {switchToResources} 
-                         {switchToSettings} />
+                         {switchToSettings}
+                         {tabs}
+                         {closed} />
             </div>
         {/if}
     </div>
@@ -1540,7 +1542,8 @@
         transition: opacity 0.05s ease 0.45s;
     }
 
-    .sidebar-right:hover::before, .sidebar-right.sidebar-right-hovered::before {
+    /* .sidebar-right.sidebar-right-hovered::before */
+    .sidebar-right:hover::before {
         content: '';
         position: absolute;
         top: 0;

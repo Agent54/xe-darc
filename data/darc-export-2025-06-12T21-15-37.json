@@ -1,0 +1,21 @@
+{
+  "timestamp": "2025-06-12T21:15:37.108Z",
+  "settings": {
+    "defaultSearchEngine": "google",
+    "defaultNewTabUrl": "about:newtab",
+    "selectedAiProvider": "writer",
+    "customSearchUrl": "",
+    "customNewTabUrl": ""
+  },
+  "localStorage": {
+    "exportDirectoryName": "data",
+    "defaultSearchEngine": "google",
+    "_pouch_check_localstorage": "1",
+    "selectedAiProvider": "writer",
+    "customNewTabUrl": "",
+    "customSearchUrl": "",
+    "defaultNewTabUrl": "about:newtab"
+  },
+  "version": "1.0.0",
+  "note": "Tab data export requires integration with main app component"
+}

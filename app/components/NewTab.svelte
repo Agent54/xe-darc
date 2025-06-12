@@ -20,12 +20,12 @@
     let generationId = 0
     
     // Shader controls
-    let grainOpacity = $state(0.2) //0.16)
-    let grainAmount = $state(31.7)// 36.57)
-    let grainSize = $state(310.1) //395)
+    let grainOpacity = $state( 0.14) //0.2) //0.16)
+    let grainAmount = $state(15.52)//31.7)// 36.57)
+    let grainSize = $state(14.6)// 310.1) //395)
     let grainFlicker = $state(0)
     let grainSpread = $state(0.02)
-    let animationSpeed = $state(1.7)
+    let animationSpeed = $state(0.7) //1.7)
     let lineThickness = $state(0.025)
     let blur = $state(0)
     let showControls = $state(false)
