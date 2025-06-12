@@ -4,6 +4,7 @@
     import NewTab from './components/NewTab.svelte'
     import ControlledFrame from './components/ControlledFrame.svelte'
     import Resources from './components/Resources.svelte'
+    import Settings from './components/Settings.svelte'
 
     const db = new PouchDB('darc')
 
@@ -119,6 +120,17 @@
             pinned: false,
             muted: false,
             loading: false
+        },
+        {
+            id: '7',
+            url: 'https://figma.com/', 
+            title: 'Figma', 
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://figma.com&size=64',
+            audioPlaying: false,
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
         }
     ])
 
@@ -134,7 +146,22 @@
         
         block = true
         if (event.state.direction === 1) {
-            tabs[activeTabIndex].frame?.back()
+            const activeTab = tabs[activeTabIndex]
+            const frame = activeTab.frame
+            
+            if (frame && typeof frame.back === 'function') {
+                // Check if the frame can go back
+                if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
+                    // No back navigation available, set to start page
+                    activeTab.url = 'about:newtab'
+                    activeTab.title = 'New Tab'
+                    activeTab.favicon = null
+                    // TODO: preserve tab history and allow forward navigation
+                } else {
+                    frame.back()
+                }
+            }
+            
             history.go(1)
         } else {
             tabs[activeTabIndex].frame?.forward()
@@ -188,6 +215,22 @@
     let lastUsedViewMode = $state('tile') // Default to tile as the alternative
     let showFixedNewTabButton = $state(false)
     let resourcesSidebarOpen = $state(false)
+    let settingsSidebarOpen = $state(false)
+
+    // Track previous state to detect newly opened sidebars
+    let prevResourcesSidebarOpen = $state(false)
+    let prevSettingsSidebarOpen = $state(false)
+    let isSwitchingSidebars = $state(false)
+
+    // Determine if sidebars are newly opened (but not when switching)
+    $effect(() => {
+        // Update previous state after a brief delay to allow animation
+        setTimeout(() => {
+            prevResourcesSidebarOpen = resourcesSidebarOpen
+            prevSettingsSidebarOpen = settingsSidebarOpen
+            isSwitchingSidebars = false // Reset switching flag after state update
+        }, 200) // Slightly longer than animation duration
+    })
 
     const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
     isWindowControlsOverlay = mediaQueryList.matches
@@ -326,7 +369,17 @@
         if (activeTab) {
             const frame = document.getElementById(`tab_${activeTab.id}`)
             if (frame && typeof frame.back === 'function') {
-                frame.back()
+                // Check if the frame can go back
+                if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
+                    // No back navigation available, set to start page
+                    activeTab.url = 'about:newtab'
+                } else {
+                    frame.back()
+                }
+            } else if (activeTab.url !== 'about:newtab') {
+                // Frame doesn't support navigation or is not a controlled frame
+                // Set to start page
+                activeTab.url = 'about:newtab'
             }
         }
     }
@@ -882,6 +935,34 @@
         resourcesSidebarOpen = false
     }
 
+    function toggleSettingsSidebar() {
+        settingsSidebarOpen = !settingsSidebarOpen
+    }
+
+    function closeSettingsSidebar() {
+        settingsSidebarOpen = false
+    }
+
+    function switchToResources() {
+        if (!resourcesSidebarOpen) {
+            if (settingsSidebarOpen) {
+                isSwitchingSidebars = true
+            }
+            settingsSidebarOpen = false
+            resourcesSidebarOpen = true
+        }
+    }
+    
+    function switchToSettings() {
+        if (!settingsSidebarOpen) {
+            if (resourcesSidebarOpen) {
+                isSwitchingSidebars = true
+            }
+            resourcesSidebarOpen = false
+            settingsSidebarOpen = true
+        }
+    }
+
     // let sidebarRightHovered = $state(false)
     // function handleSidebarRightMouseEnter() {
     //     sidebarRightHovered = true
@@ -1239,9 +1320,9 @@
 <div class="controlled-frame-container browser-frame" 
      class:window-controls-overlay={isWindowControlsOverlay} 
      class:scrolling={isScrolling} 
-     class:resources-sidebar-open={resourcesSidebarOpen}
+     class:sidebar-open={resourcesSidebarOpen || settingsSidebarOpen}
      onscroll={handleScroll} 
-     style="box-sizing: border-box;">
+     style="box-sizing: border-box; --sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0)};">
     <div class="frame-title-bar">
         <div class="frame-header-controls">
             <button class="frame-button" title="Back" aria-label="Back" onclick={goBack}>
@@ -1324,9 +1405,20 @@
                 class:active={resourcesSidebarOpen}
                 title="Resources" 
                 aria-label="Resources"
-                onclick={toggleResourcesSidebar}>
+                onmousedown={toggleResourcesSidebar}>
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+            </svg>
+        </button>
+        
+        <button class="sidebar-button" 
+                class:active={settingsSidebarOpen}
+                title="Settings" 
+                aria-label="Settings"
+                onmousedown={toggleSettingsSidebar}>
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
             </svg>
         </button>
     </div>
@@ -1338,9 +1430,29 @@
 
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
-{#if resourcesSidebarOpen}
-    <div class="resources-sidebar-container" class:window-controls-overlay={isWindowControlsOverlay}>
-        <Resources onClose={closeResourcesSidebar} />
+{#if resourcesSidebarOpen || settingsSidebarOpen}
+    <div class="sidebar-container" 
+         class:window-controls-overlay={isWindowControlsOverlay}
+         style="--sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0)};">
+        {#if resourcesSidebarOpen}
+            <div class="sidebar-panel" class:new-panel={resourcesSidebarOpen && !prevResourcesSidebarOpen && !isSwitchingSidebars}>
+                <Resources onClose={closeResourcesSidebar} 
+                          {resourcesSidebarOpen} 
+                          {settingsSidebarOpen} 
+                          {switchToResources} 
+                          {switchToSettings} />
+            </div>
+        {/if}
+        
+        {#if settingsSidebarOpen}
+            <div class="sidebar-panel" class:new-panel={settingsSidebarOpen && !prevSettingsSidebarOpen && !isSwitchingSidebars}>
+                <Settings onClose={closeSettingsSidebar} 
+                         {resourcesSidebarOpen} 
+                         {settingsSidebarOpen} 
+                         {switchToResources} 
+                         {switchToSettings} />
+            </div>
+        {/if}
     </div>
 {/if}
 
@@ -1393,7 +1505,7 @@
         right: 0;
         width: 27px;
         height: 100vh;
-        z-index: 999;
+        z-index: 1000;
         pointer-events: auto;
         transition: transform 0.05s ease 0.45s, opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45s;
         background-color: rgba(0, 0, 0, 0.802);
@@ -1403,7 +1515,8 @@
         opacity: 0;
     }
 
-    .sidebar-right.sidebar-right-hovered, .sidebar-right:hover {
+    /* .sidebar-right.sidebar-right-hovered,  */
+    .sidebar-right:hover {
         box-shadow: 0 0 13px 7px #0000003c;
         transform: translateX(0px);
         transition-delay: 0.1s;
@@ -1461,7 +1574,7 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.1s ease;
         padding: 0;
         backdrop-filter: blur(4px);
         border: 1px solid transparent;
@@ -2051,16 +2164,16 @@
       transition: width 0.3s ease;
     }
 
-    .controlled-frame-container.resources-sidebar-open :global(.frame) {
-      width: calc(100vw - 338px);
+    .controlled-frame-container.sidebar-open :global(.frame) {
+        width: calc(100vw - (320px * var(--sidebar-count)) - 18px);
     }
 
     :global(.frame.window-controls-overlay) {
         height: calc(100vh - 56px);
     }
 
-    .controlled-frame-container.resources-sidebar-open.window-controls-overlay :global(.frame) {
-        width: calc(100vw - 338px);
+    .controlled-frame-container.sidebar-open.window-controls-overlay :global(.frame) {
+        width: calc(100vw - (320px * var(--sidebar-count)) - 18px);
         height: calc(100vh - 56px);
     }
 
@@ -2625,8 +2738,8 @@
         color: rgba(255, 255, 255, 1);
     }
 
-    .controlled-frame-container.resources-sidebar-open {
-        width: calc(100% - 320px);
+    .controlled-frame-container.sidebar-open {
+        width: calc(100% - (320px * var(--sidebar-count)));
         transition: width 0.3s ease;
     }
 
@@ -2634,23 +2747,56 @@
         transition: width 0.3s ease;
     }
 
-    .resources-sidebar-container {
+    .sidebar-container {
         position: fixed;
         top: 0;
         right: 0;
-        width: 320px;
+        width: calc(320px * var(--sidebar-count, 1));
         height: 100vh;
         z-index: 999;
-        transform: translateX(100%);
-        animation: slide-in-right 0.3s ease-out forwards;
+        display: flex;
+        flex-direction: row;
     }
 
-    .resources-sidebar-container.window-controls-overlay {
+    .sidebar-container.window-controls-overlay {
         top: 38px;
         height: calc(100vh - 38px);
     }
 
-    @keyframes slide-in-right {
+    .sidebar-panel {
+        width: 320px;
+        height: 100%;
+        flex-shrink: 0;
+        position: relative;
+    }
+
+    /* Only animate new panels sliding in */
+    .sidebar-panel.new-panel {
+        transform: translateX(100%);
+        animation: slide-in-panel 0.15s ease-out forwards;
+    }
+
+    .sidebar-panel::before {
+        content: '';
+        position: absolute;
+        top: -20px;
+        left: -1px;
+        width: 1px;
+        height: calc(100vh + 20px);
+        background: linear-gradient(to bottom, transparent 0%, #ffffff17 12%, #ffffff17 95%, transparent 100%), rgba(0, 0, 0, 0.802);
+        background-size: 1px 100%, 100% 100%;
+        background-position: left center, center;
+        background-repeat: no-repeat, no-repeat;
+        opacity: 1;
+        z-index: 10;
+    }
+
+    .sidebar-container.window-controls-overlay .sidebar-panel::before {
+        top: -58px;
+        height: calc(100vh + 20px);
+    }
+
+    @keyframes slide-in-panel {
         from {
             transform: translateX(100%);
         }
@@ -2664,4 +2810,6 @@
         color: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.2);
     }
+
+
 </style>

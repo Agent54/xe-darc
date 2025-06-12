@@ -1,5 +1,7 @@
 <script>
-    let { onClose } = $props()
+    import RightSidebar from './RightSidebar.svelte'
+    
+    let { onClose, resourcesSidebarOpen, settingsSidebarOpen, switchToResources, switchToSettings } = $props()
 
     const resourceSections = [
         { id: 'used', title: 'Used', color: 'green' },
@@ -60,17 +62,8 @@
     }
 </script>
 
-<div class="resources-sidebar">
-    <div class="resources-header">
-        <h2 class="resources-title">Resources</h2>
-        <button class="close-button" onclick={onClose} title="Close Resources">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-        </button>
-    </div>
-
-    <div class="resources-content">
+<RightSidebar title="Resources" {onClose} {resourcesSidebarOpen} {settingsSidebarOpen} {switchToResources} {switchToSettings}>
+    {#snippet children()}
         {#each resourceSections as section}
             {#if resourceData[section.id].length > 0}
                 <div class="resource-section">
@@ -109,76 +102,10 @@
                 <p class="empty-description">This page hasn't requested access to any system resources yet.</p>
             </div>
         {/if}
-    </div>
-</div>
+    {/snippet}
+</RightSidebar>
 
 <style>
-    .resources-sidebar {
-        height: 100%;
-        background: rgba(0, 0, 0, 0.95);
-        backdrop-filter: blur(20px);
-        border-left: 1px solid rgba(255, 255, 255, 0.1);
-        display: flex;
-        flex-direction: column;
-        font-family: 'Inter', sans-serif;
-        color: #fff;
-    }
-
-    .resources-header {
-        padding: 20px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-shrink: 0;
-    }
-
-    .resources-title {
-        font-size: 18px;
-        font-weight: 600;
-        margin: 0;
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    .close-button {
-        background: none;
-        border: none;
-        color: rgba(255, 255, 255, 0.6);
-        cursor: pointer;
-        padding: 4px;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-    }
-
-    .close-button:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    .resources-content {
-        flex: 1;
-        overflow-y: auto;
-        padding: 20px;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-    }
-
-    .resources-content::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .resources-content::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .resources-content::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 3px;
-    }
-
     .resource-section {
         margin-bottom: 32px;
     }
@@ -187,46 +114,26 @@
         margin-bottom: 0;
     }
 
-    .section-title {
-        font-size: 14px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin: 0 0 16px 0;
-        opacity: 0.9;
-    }
-
     .resource-cards {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 6px;
     }
 
-    .resource-card {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        padding: 16px;
-        transition: all 0.2s ease;
-    }
 
-    .resource-card:hover {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.2);
-        transform: translateY(-1px);
-    }
 
     .resource-header {
         display: flex;
         align-items: flex-start;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: 10px;
+        margin-bottom: 6px;
     }
 
     .resource-icon {
-        font-size: 20px;
+        font-size: 18px;
         flex-shrink: 0;
         line-height: 1;
+        margin-top: 1px;
     }
 
     .resource-info {
@@ -235,57 +142,63 @@
     }
 
     .resource-name {
-        font-size: 14px;
-        font-weight: 600;
-        margin: 0 0 4px 0;
-        color: rgba(255, 255, 255, 0.9);
+        font-size: 13px;
+        font-weight: 500;
+        margin: 0 0 2px 0;
+        color: rgba(255, 255, 255, 0.75);
+        line-height: 1.2;
     }
 
     .resource-description {
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.6);
-        line-height: 1.4;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+        line-height: 1.3;
         margin: 0;
+        font-family: 'Inter', sans-serif;
+        font-weight: 400;
     }
 
     .resource-details {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 5px;
+        margin-top: 6px;
     }
 
     .resource-status {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 5px;
+        font-size: 10px;
     }
 
     .status-indicator {
-        width: 8px;
-        height: 8px;
+        width: 5px;
+        height: 5px;
         border-radius: 50%;
         flex-shrink: 0;
     }
 
     .status-text {
-        font-size: 12px;
-        font-weight: 500;
-        color: rgba(255, 255, 255, 0.8);
+        color: rgba(255, 255, 255, 0.35);
+        font-weight: 400;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
     }
 
     .resource-last-used {
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 11px;
+        gap: 5px;
+        font-size: 10px;
     }
 
     .last-used-label {
-        color: rgba(255, 255, 255, 0.5);
+        color: rgba(255, 255, 255, 0.35);
     }
 
     .last-used-time {
-        color: rgba(255, 255, 255, 0.7);
+        color: rgba(255, 255, 255, 0.55);
     }
 
     .empty-state {
@@ -318,13 +231,5 @@
         line-height: 1.5;
         margin: 0;
         max-width: 240px;
-    }
-
-    .w-4 {
-        width: 16px;
-    }
-
-    .h-4 {
-        height: 16px;
     }
 </style>

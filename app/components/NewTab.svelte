@@ -388,10 +388,44 @@
             let url = new URL(inputValue)
             tab.url = url
         } catch {
-            // Not a valid URL, search with Google
-            let searchUrl = new URL('https://www.google.com/search')
-            searchUrl.searchParams.set('q', inputValue)
-            tab.url = searchUrl
+            // Not a valid URL, check for Kagi prefix or use default search engine
+            if (inputValue.toLowerCase().startsWith('k ')) {
+                // Use Kagi search, remove the "k " prefix
+                let searchUrl = new URL('https://kagi.com/search')
+                searchUrl.searchParams.set('q', inputValue.slice(2))
+                tab.url = searchUrl
+            } else {
+                // Use default search engine from settings
+                const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
+                let searchUrl
+                
+                switch (defaultSearchEngine) {
+                    case 'kagi':
+                        searchUrl = new URL('https://kagi.com/search')
+                        break
+                    case 'custom':
+                        const customUrl = localStorage.getItem('customSearchUrl')
+                        if (customUrl) {
+                            try {
+                                searchUrl = new URL(customUrl + encodeURIComponent(inputValue))
+                                tab.url = searchUrl
+                                return
+                            } catch {
+                                // Fallback to Google if custom URL is invalid
+                                searchUrl = new URL('https://www.google.com/search')
+                            }
+                        } else {
+                            searchUrl = new URL('https://www.google.com/search')
+                        }
+                        break
+                    default: // google
+                        searchUrl = new URL('https://www.google.com/search')
+                        break
+                }
+                
+                searchUrl.searchParams.set('q', inputValue)
+                tab.url = searchUrl
+            }
         }
     }
     

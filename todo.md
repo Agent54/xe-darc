@@ -53,6 +53,8 @@ link url and page previews
 
 youtube / build in public
 
+agregore integration / overlap features
+
 comands:
 
 reminders/notes
@@ -170,3 +172,28 @@ community voting for features
 make borders thicker and titlebar and sidebar hover thicker
 
 make sidebar edges draggable
+
+mocking, compartmentalizion resources
+
+just add new tab which is a note
+
+PR test canvas screen for agent workflows etc
+
+claude, open ai, gemini, local
+
+oauth popup, figame + figma mcp
+
+mkae multi sidebar
+
+setup mcps 
+
+preshot mode where creating pocs live on noting down ideas before even creating stories
+
+export to folder sync with git snapshots and file api
+
+fix nav gesures±!
+
+make self runnable and iframe support
+
+full chrome os release like playbitOS?
+
