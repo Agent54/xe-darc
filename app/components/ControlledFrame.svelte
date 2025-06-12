@@ -400,16 +400,22 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
         }
 
         console.log('trying' , frame.id)
-        frame.addContentScripts([testScript]).then((res) => {
+       
+
+        if (!frame.addContentScripts) {
+            initialUrl = untrack(() => tab.url)
+        } else {
+            frame.addContentScripts([testScript]).then((res) => {
             console.log('✅ Test content script added successfully', res)
 
             initialUrl = untrack(() => tab.url)
             
             // Now add the focus/blur script
             // return frame.addContentScripts([contentScript])
-        }).catch((err) => {
-            console.error('❌ Content script error:', err)
-        })
+            }).catch((err) => {
+                console.error('❌ Content script error:', err)
+            })
+        }
     }
 
     // Listen for messages from content scripts
@@ -500,50 +506,65 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
     </div>
 {:else}
     {#key partition}
-        <controlledframe
-            transition:fade={{duration: 150}}
-            bind:this={tab.frame}
-            class:window-controls-overlay={isWindowControlsOverlay}
-            class:no-pointer-events={isScrolling}
-            id="tab_{tab.id}"
-            class="frame"
-            src={initialUrl}
-            partition={partition}
-            onloadcommit={e => handleLoadCommit(tab, e)}
-            onnewwindow={(e) => { handleNewWindow(tab, e)} }
-            onaudiostatechanged={e => handleAudioStateChanged(tab, e)}
-            allowscaling={true}
-            autosize={true}
-            allowtransparency={false}
-            onloadstart={e => { handleLoadStart(tab, e) }}
-            onloadstop={e => { handleLoadStop(tab, e) }}
+        {#if window.controlledframe}
+            <controlledframe
+                transition:fade={{duration: 150}}
+                bind:this={tab.frame}
+                class:window-controls-overlay={isWindowControlsOverlay}
+                class:no-pointer-events={isScrolling}
+                id="tab_{tab.id}"
+                class="frame"
+                src={initialUrl}
+                partition={partition}
+                onloadcommit={e => handleLoadCommit(tab, e)}
+                onnewwindow={(e) => { handleNewWindow(tab, e)} }
+                onaudiostatechanged={e => handleAudioStateChanged(tab, e)}
+                allowscaling={true}
+                autosize={true}
+                allowtransparency={false}
+                onloadstart={e => { handleLoadStart(tab, e) }}
+                onloadstop={e => { handleLoadStop(tab, e) }}
 
-            oncontentload={e => handleContentLoad(tab, e)}
-            onclose={e => { handleEvent('onclose', tab, e) }}
-            oncontentresize={e => { handleEvent('oncontentresize',tab, e) }}
-            ondialog={e => { handleEvent('ondialog',tab, e) }}
-            onexit={e => { handleEvent('onexit',tab, e) }}
-            onloadabort={e => { handleEvent('onloadabort',tab, e) }}
-            onloadredirect={(e) => { 
-                handleEvent('onloadredirect',tab, e)
-                // Update URL on redirect
-                // if (e.newUrl) {
-                //     tab.url = e.newUrl
-                //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
-                // }
-                return false
-            }}
-            onpermissionrequest={e => { handleEvent('onpermissionrequest',tab, e) }}
-            onresize={e => { handleEvent('onresize',tab, e) }}
-            onresponsive={e => { handleEvent('onresponsive',tab, e) }}
-            onsizechanged={e => { handleEvent('onsizechanged',tab, e) }}
-            onunresponsive={e => { handleEvent(tab, e, 'onunresponsive') }}
-            ></controlledframe>
-            <!--
-            onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
-            onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
-            onzoomchange={e => { handleEvent(tab, e, 'onzoomchange') }}
-            -->
+                oncontentload={e => handleContentLoad(tab, e)}
+                onclose={e => { handleEvent('onclose', tab, e) }}
+                oncontentresize={e => { handleEvent('oncontentresize',tab, e) }}
+                ondialog={e => { handleEvent('ondialog',tab, e) }}
+                onexit={e => { handleEvent('onexit',tab, e) }}
+                onloadabort={e => { handleEvent('onloadabort',tab, e) }}
+                onloadredirect={(e) => { 
+                    handleEvent('onloadredirect',tab, e)
+                    // Update URL on redirect
+                    // if (e.newUrl) {
+                    //     tab.url = e.newUrl
+                    //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
+                    // }
+                    return false
+                }}
+                onpermissionrequest={e => { handleEvent('onpermissionrequest',tab, e) }}
+                onresize={e => { handleEvent('onresize',tab, e) }}
+                onresponsive={e => { handleEvent('onresponsive',tab, e) }}
+                onsizechanged={e => { handleEvent('onsizechanged',tab, e) }}
+                onunresponsive={e => { handleEvent(tab, e, 'onunresponsive') }}
+                ></controlledframe>
+                <!--
+                onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
+                onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
+                onzoomchange={e => { handleEvent(tab, e, 'onzoomchange') }}
+                -->
+            {:else}
+
+            <!-- Refused to frame 'http://localhost:5193/' because it violates the following Content Security Policy directive: "frame-src 'self' https: blob: data:". -->
+                <iframe
+                    transition:fade={{duration: 150}}
+                    bind:this={tab.frame}
+                    src={initialUrl}
+                    class:window-controls-overlay={isWindowControlsOverlay}
+                    class:no-pointer-events={isScrolling}
+                    id="tab_{tab.id}"
+                    class="frame"
+                    title="fallback-iframe"
+                ></iframe>
+            {/if}
     {/key}
 {/if}
 

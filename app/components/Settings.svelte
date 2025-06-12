@@ -12,6 +12,7 @@
     let exportDirectory = $state(null)
     let isExporting = $state(false)
     let exportStatus = $state('')
+    let isLoadingDirectory = $state(true)
 
     const searchEngines = [
         { id: 'google', name: 'Google', url: 'https://www.google.com/search?q=', icon: '🔍' },
@@ -91,6 +92,248 @@
         localStorage.setItem('selectedAiProvider', providerId)
     }
 
+    // Centralized IndexedDB setup to avoid race conditions
+    async function openDarcDatabase() {
+        return new Promise((resolve, reject) => {
+            // First, check what version the database is and what stores it has
+            const checkRequest = indexedDB.open('darc-settings')
+            
+            checkRequest.onsuccess = (event) => {
+                const checkDb = event.target.result
+                const hasDirectoriesStore = checkDb.objectStoreNames.contains('directories')
+                const currentVersion = checkDb.version
+                checkDb.close()
+                
+                console.log('Current database version:', currentVersion, 'Has directories store:', hasDirectoriesStore)
+                
+                // Determine what version we need
+                let targetVersion = currentVersion
+                if (!hasDirectoriesStore) {
+                    targetVersion = Math.max(currentVersion + 1, 2)
+                    console.log('Need to upgrade database to version:', targetVersion)
+                }
+                
+                // Now open with the correct version
+                const request = indexedDB.open('darc-settings', targetVersion)
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result
+                    console.log('Upgrading IndexedDB from version', event.oldVersion, 'to', event.newVersion)
+                    
+                    // Create directories object store if it doesn't exist
+                    if (!db.objectStoreNames.contains('directories')) {
+                        db.createObjectStore('directories')
+                        console.log('Created directories object store')
+                    }
+                }
+                
+                request.onsuccess = (event) => {
+                    const db = event.target.result
+                    console.log('IndexedDB opened successfully, version:', db.version)
+                    
+                    // Double-check that the object store exists
+                    if (!db.objectStoreNames.contains('directories')) {
+                        console.error('Object store still missing after upgrade!')
+                        db.close()
+                        reject(new Error('Failed to create directories object store'))
+                        return
+                    }
+                    
+                    resolve(db)
+                }
+                
+                request.onerror = (event) => {
+                    console.error('Failed to open IndexedDB:', event.target.error)
+                    reject(event.target.error)
+                }
+            }
+            
+            checkRequest.onerror = (event) => {
+                console.log('No existing database, creating new one...')
+                // Database doesn't exist, create it fresh
+                const request = indexedDB.open('darc-settings', 2)
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result
+                    console.log('Creating new IndexedDB with version:', db.version)
+                    
+                    if (!db.objectStoreNames.contains('directories')) {
+                        db.createObjectStore('directories')
+                        console.log('Created directories object store')
+                    }
+                }
+                
+                request.onsuccess = (event) => {
+                    const db = event.target.result
+                    console.log('New IndexedDB created successfully, version:', db.version)
+                    resolve(db)
+                }
+                
+                request.onerror = (event) => {
+                    console.error('Failed to create new IndexedDB:', event.target.error)
+                    reject(event.target.error)
+                }
+            }
+        })
+    }
+
+    // Store directory handle in IndexedDB (browsers support this natively)
+    async function storeDirectoryHandle(handle) {
+        try {
+            const db = await openDarcDatabase()
+            
+            return new Promise((resolve, reject) => {
+                try {
+                    const transaction = db.transaction(['directories'], 'readwrite')
+                    const store = transaction.objectStore('directories')
+                    
+                    // Store both handle and metadata
+                    const data = {
+                        handle: handle,
+                        name: handle.name,
+                        timestamp: Date.now()
+                    }
+                    
+                    const putRequest = store.put(data, 'exportDirectory')
+                    
+                    putRequest.onsuccess = () => {
+                        console.log('Stored directory handle and metadata:', data.name)
+                        db.close()
+                        resolve()
+                    }
+                    
+                    putRequest.onerror = () => {
+                        console.error('Failed to store directory handle:', putRequest.error)
+                        db.close()
+                        reject(putRequest.error)
+                    }
+                    
+                    transaction.onerror = () => {
+                        console.error('Transaction failed:', transaction.error)
+                        db.close()
+                        reject(transaction.error)
+                    }
+                } catch (error) {
+                    console.error('Error creating transaction:', error)
+                    db.close()
+                    reject(error)
+                }
+            })
+        } catch (error) {
+            console.warn('Could not store directory handle:', error)
+            throw error
+        }
+    }
+
+    async function getStoredDirectoryHandle() {
+        try {
+            const db = await openDarcDatabase()
+            
+            return new Promise((resolve, reject) => {
+                try {
+                    // Double-check that the object store exists
+                    if (!db.objectStoreNames.contains('directories')) {
+                        console.log('Directories object store does not exist yet')
+                        db.close()
+                        resolve(null)
+                        return
+                    }
+                    
+                    const transaction = db.transaction(['directories'], 'readonly')
+                    const store = transaction.objectStore('directories')
+                    const getRequest = store.get('exportDirectory')
+                    
+                    getRequest.onsuccess = () => {
+                        const result = getRequest.result
+                        console.log('Retrieved stored directory data:', result ? result.name : 'none')
+                        db.close()
+                        resolve(result)
+                    }
+                    
+                    getRequest.onerror = () => {
+                        console.error('Failed to retrieve directory handle:', getRequest.error)
+                        db.close()
+                        resolve(null)
+                    }
+                    
+                    transaction.onerror = () => {
+                        console.error('Transaction failed:', transaction.error)
+                        db.close()
+                        resolve(null)
+                    }
+                } catch (error) {
+                    console.error('Error creating transaction:', error)
+                    db.close()
+                    resolve(null)
+                }
+            })
+        } catch (error) {
+            console.warn('Could not retrieve directory handle:', error)
+            return null
+        }
+    }
+
+    async function checkDirectoryAccess(handle) {
+        try {
+            // Check if we still have permission to access the directory
+            const permission = await handle.queryPermission({ mode: 'readwrite' })
+            console.log('Directory permission status:', permission)
+            
+            if (permission === 'granted') {
+                return true
+            } else if (permission === 'prompt') {
+                // Request permission without showing picker
+                const newPermission = await handle.requestPermission({ mode: 'readwrite' })
+                console.log('Requested permission result:', newPermission)
+                return newPermission === 'granted'
+            }
+            return false
+        } catch (error) {
+            console.warn('Could not check directory access:', error)
+            return false
+        }
+    }
+
+    async function loadLastUsedDirectory() {
+        isLoadingDirectory = true
+        
+        if (!('showDirectoryPicker' in window)) {
+            exportStatus = 'File System Access API not supported in this browser'
+            isLoadingDirectory = false
+            return
+        }
+
+        try {
+            const storedData = await getStoredDirectoryHandle()
+            
+            if (storedData && storedData.handle) {
+                console.log('Checking access to stored directory:', storedData.name)
+                
+                const hasAccess = await checkDirectoryAccess(storedData.handle)
+                
+                if (hasAccess) {
+                    exportDirectory = storedData.handle
+                    const timeAgo = Math.round((Date.now() - storedData.timestamp) / (1000 * 60))
+                    const timeDesc = timeAgo < 60 ? `${timeAgo}m ago` : `${Math.round(timeAgo / 60)}h ago`
+                    exportStatus = `Ready to export to: ${storedData.name} (last used ${timeDesc})`
+                    console.log('Successfully restored directory access:', storedData.name)
+                } else {
+                    const timeAgo = Math.round((Date.now() - storedData.timestamp) / (1000 * 60))
+                    const timeDesc = timeAgo < 60 ? `${timeAgo}m ago` : `${Math.round(timeAgo / 60)}h ago`
+                    exportStatus = `Last directory: ${storedData.name} (${timeDesc}) - permission needed, will prompt on export`
+                    console.log('Directory access denied, will need to request permission:', storedData.name)
+                }
+            } else {
+                exportStatus = 'No export directory configured'
+            }
+        } catch (error) {
+            console.warn('Error loading directory:', error)
+            exportStatus = 'No export directory configured'
+        } finally {
+            isLoadingDirectory = false
+        }
+    }
+
     async function selectExportDirectory() {
         if (!('showDirectoryPicker' in window)) {
             exportStatus = 'File System Access API not supported in this browser'
@@ -100,14 +343,15 @@
         try {
             const directoryHandle = await window.showDirectoryPicker({
                 mode: 'readwrite',
-                id: 'darc-export'
+                id: 'darc-export',
+                startIn: 'downloads'
             })
             
             exportDirectory = directoryHandle
             exportStatus = `Selected directory: ${directoryHandle.name}`
             
-            // Store directory handle for future use (note: permissions may need to be re-requested)
-            localStorage.setItem('exportDirectoryName', directoryHandle.name)
+            // Store directory handle and metadata for future reference
+            await storeDirectoryHandle(directoryHandle)
         } catch (error) {
             if (error.name === 'AbortError') {
                 exportStatus = 'Directory selection cancelled'
@@ -119,22 +363,55 @@
     }
 
     async function exportUserData() {
-        if (!exportDirectory) {
-            exportStatus = 'Please select an export directory first'
-            return
-        }
-
         isExporting = true
-        exportStatus = 'Exporting user data...'
+        exportStatus = 'Preparing export...'
 
         try {
-            // Request permission for the directory
-            const permission = await exportDirectory.requestPermission({ mode: 'readwrite' })
-            if (permission !== 'granted') {
-                exportStatus = 'Directory access permission denied'
-                isExporting = false
-                return
+            let directoryHandle = exportDirectory
+
+            // If we don't have a directory handle, try to get the stored one
+            if (!directoryHandle) {
+                const storedData = await getStoredDirectoryHandle()
+                if (storedData && storedData.handle) {
+                    exportStatus = 'Accessing stored directory...'
+                    
+                    // Check if we still have access
+                    const hasAccess = await checkDirectoryAccess(storedData.handle)
+                    
+                    if (hasAccess) {
+                        directoryHandle = storedData.handle
+                        exportDirectory = directoryHandle
+                        exportStatus = `Using directory: ${directoryHandle.name}`
+                    } else {
+                        // Permission was denied, need to ask user to select directory again
+                        exportStatus = 'Directory access permission denied. Please select the export directory again.'
+                        isExporting = false
+                        return
+                    }
+                } else {
+                    exportStatus = 'Please select an export directory first'
+                    isExporting = false
+                    return
+                }
             }
+
+            // Double-check permission (should already be granted if we got here)
+            const permission = await directoryHandle.queryPermission({ mode: 'readwrite' })
+            if (permission !== 'granted') {
+                // Try to request permission one more time
+                const newPermission = await directoryHandle.requestPermission({ mode: 'readwrite' })
+                if (newPermission !== 'granted') {
+                    exportStatus = 'Directory access permission denied. Please select a new directory.'
+                    isExporting = false
+                    return
+                }
+            }
+
+            // Update status to show we have permission now
+            exportStatus = `Exporting to: ${directoryHandle.name}...`
+            
+            // Update the stored handle since we successfully accessed the directory
+            await storeDirectoryHandle(directoryHandle)
 
             // Collect user data
             const userData = {
@@ -175,16 +452,16 @@
 
             // Create export file
             const fileName = `darc-export-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
-            const fileHandle = await exportDirectory.getFileHandle(fileName, { create: true })
+            const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true })
             const writable = await fileHandle.createWritable()
             
             await writable.write(JSON.stringify(userData, null, 2))
             await writable.close()
 
-            exportStatus = `Successfully exported ${tabs.length} open tabs, ${closed.length} closed tabs, and all settings to ${fileName}`
+            exportStatus = `Successfully exported ${tabs.length} open tabs, ${closed.length} closed tabs, and all settings to ${fileName}. This directory will be used for future exports.`
             
             // Also create a readme file
-            const readmeHandle = await exportDirectory.getFileHandle('README.txt', { create: true })
+            const readmeHandle = await directoryHandle.getFileHandle('README.txt', { create: true })
             const readmeWritable = await readmeHandle.createWritable()
             const readmeContent = `DARC Browser Export
 ===================
@@ -234,20 +511,25 @@ To import this data back into DARC, use the import function in Settings.
     }
 
     // Load settings from localStorage on component mount
-    function loadSettings() {
+    async function loadSettings() {
         const savedSearchEngine = localStorage.getItem('defaultSearchEngine')
         const savedNewTabUrl = localStorage.getItem('defaultNewTabUrl')
         const savedAiProvider = localStorage.getItem('selectedAiProvider')
         const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
         const savedCustomNewTabUrl = localStorage.getItem('customNewTabUrl')
-        const savedDirectoryName = localStorage.getItem('exportDirectoryName')
 
         if (savedSearchEngine) defaultSearchEngine = savedSearchEngine
         if (savedNewTabUrl) defaultNewTabUrl = savedNewTabUrl
         if (savedAiProvider) selectedAiProvider = savedAiProvider
         if (savedCustomSearchUrl) customSearchUrl = savedCustomSearchUrl
         if (savedCustomNewTabUrl) customNewTabUrl = savedCustomNewTabUrl
-        if (savedDirectoryName) exportStatus = `Last used directory: ${savedDirectoryName}`
+        
+        // Clean up old localStorage storage formats
+        localStorage.removeItem('exportDirectoryName')
+        localStorage.removeItem('exportDirectoryMetadata')
+        
+        // Load last used export directory
+        await loadLastUsedDirectory()
     }
 
     // Load settings when component mounts
@@ -368,31 +650,35 @@ To import this data back into DARC, use the import function in Settings.
                 </div>
                 
                 <div class="export-controls">
-                    <button class="export-button" onclick={selectExportDirectory}>
+                    <button class="export-button" 
+                            onclick={selectExportDirectory}
+                            disabled={isLoadingDirectory}>
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
                         </svg>
-                        Select Export Folder
+                        {exportDirectory ? 'Change Export Folder' : 'Select Export Folder'}
                     </button>
                     
                     <button class="export-button primary" 
                             onclick={exportUserData} 
-                            disabled={!exportDirectory || isExporting}>
+                            disabled={isExporting || isLoadingDirectory}>
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                         </svg>
-                        {isExporting ? 'Exporting...' : 'Export Data'}
+                        {isExporting ? 'Exporting...' : isLoadingDirectory ? 'Loading...' : 'Export Data'}
                     </button>
                 </div>
                 
                 {#if exportStatus}
-                    <div class="export-status" class:error={exportStatus.includes('Error') || exportStatus.includes('failed')}>
+                    <div class="export-status" 
+                         class:error={exportStatus.includes('Error') || exportStatus.includes('failed') || exportStatus.includes('denied')}
+                         class:loading={isLoadingDirectory}>
                         {exportStatus}
                     </div>
                 {/if}
                 
                 <div class="export-note">
-                    <p><strong>Note:</strong> This feature uses the File System Access API and works best in Chrome-based browsers. The exported data will be saved as JSON files that can be imported back into DARC.</p>
+                    <p><strong>Note:</strong> This feature uses the File System Access API and works best in Chrome-based browsers. The exported data will be saved as JSON files that can be imported back into DARC. Your selected export directory will be remembered and automatically accessed for future exports without requiring folder selection.</p>
                 </div>
             </div>
         </div>
@@ -630,6 +916,12 @@ To import this data back into DARC, use the import function in Settings.
         background: rgba(239, 68, 68, 0.08);
         border-color: rgba(239, 68, 68, 0.2);
         color: rgba(239, 68, 68, 0.9);
+    }
+
+    .export-status.loading {
+        background: rgba(59, 130, 246, 0.08);
+        border-color: rgba(59, 130, 246, 0.2);
+        color: rgba(59, 130, 246, 0.9);
     }
 
     .export-note {
