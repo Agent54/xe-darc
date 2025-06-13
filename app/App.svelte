@@ -1033,6 +1033,24 @@
         // Update tab partition logic would go here
         console.log('Selected partition:', partition, 'for tab:', tab.id)
         tab.partition = partition
+        hideContextMenu()
+    }
+
+    async function copyTabUrl(tab) {
+        try {
+            await navigator.clipboard.writeText(tab.url)
+            console.log('URL copied to clipboard:', tab.url)
+        } catch (error) {
+            console.error('Failed to copy URL:', error)
+            // Fallback for browsers that don't support clipboard API
+            const textArea = document.createElement('textarea')
+            textArea.value = tab.url
+            document.body.appendChild(textArea)
+            textArea.select()
+            document.execCommand('copy')
+            document.body.removeChild(textArea)
+        }
+        hideContextMenu()
     }
 
     function toggleResourcesSidebar() {
@@ -1313,13 +1331,43 @@
             <span>{contextMenu.tab.hibernated ? 'Wake Up' : 'Hibernate'}</span>
         </div>
 
-        <div class="context-menu-item"  
+                <div class="context-menu-item has-submenu" 
+             role="menuitem"
+             tabindex="0">
+            <span class="context-menu-icon">📦</span>
+            <span>Change Container</span>
+            <span class="submenu-arrow">▶</span>
+            <div class="context-submenu">
+                {#each partitions as partition}
+                    <div class="context-submenu-item" 
+                         class:active={contextMenu.tab?.partition === partition}
+                         role="menuitem"
+                         tabindex="0"
+                         onmouseup={() => selectPartition(partition, contextMenu.tab)}
+                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPartition(partition, contextMenu.tab) } }}>
+                        <span class="partition-icon">
+                            {#if partition.startsWith('persist')}
+                                💾
+                            {:else}
+                                ⚡
+                            {/if}
+                        </span>
+                        <span>{partition}</span>
+                        {#if contextMenu.tab?.partition === partition}
+                            <span class="checkmark">•</span>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+        </div>
+
+        <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
-             onmouseup={() => {}}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
-            <span class="context-menu-icon">🔄</span>
-            <span>Move Tab</span>
+             onmouseup={() => copyTabUrl(contextMenu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyTabUrl(contextMenu.tab) } }}>
+            <span class="context-menu-icon">📋</span>
+            <span>Copy URL</span>
         </div>
 
         <div class="context-menu-item" 
@@ -2665,7 +2713,7 @@
             0 20px 40px rgba(0, 0, 0, 0.4),
             0 8px 16px rgba(0, 0, 0, 0.2),
             inset 0 1px 0 rgba(255, 255, 255, 0.1);
-        overflow: hidden;
+        overflow: visible;
         font-family: 'Inter', sans-serif;
         animation: context-menu-appear 0.15s ease-out;
         -webkit-app-region: no-drag;
@@ -2717,6 +2765,106 @@
         height: 1px;
         background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
         margin: 4px 0;
+    }
+
+    .context-menu-item.has-submenu {
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .submenu-arrow {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-left: auto;
+    }
+
+    .context-menu-item.has-submenu:hover .submenu-arrow {
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .context-submenu {
+        position: absolute;
+        left: calc(100% + 4px);
+        top: -1px;
+        min-width: 160px;
+        background: rgba(0, 0, 0, 0.98);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        box-shadow: 
+            0 20px 40px rgba(0, 0, 0, 0.4),
+            0 8px 16px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateX(-4px);
+        transition: all 0.12s ease-out;
+        z-index: 10003;
+        pointer-events: none;
+    }
+
+    .context-menu-item.has-submenu:hover .context-submenu,
+    .context-submenu:hover {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(0);
+        pointer-events: auto;
+    }
+
+    /* Extend hover area to prevent submenu from disappearing */
+    .context-menu-item.has-submenu::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: -4px;
+        width: 8px;
+        height: 100%;
+        background: transparent;
+        z-index: 10002;
+    }
+
+    .context-submenu-item {
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        user-select: none;
+        position: relative;
+    }
+
+    .context-submenu-item:hover {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .context-submenu-item.active {
+        background: rgba(59, 130, 246, 0.1);
+        color: rgba(59, 130, 246, 0.9);
+    }
+
+    .context-submenu-item.active:hover {
+        background: rgba(59, 130, 246, 0.15);
+        color: rgba(59, 130, 246, 1);
+    }
+
+    .partition-icon {
+        font-size: 12px;
+        flex-shrink: 0;
+        opacity: 0.8;
+    }
+
+    .context-submenu-item .checkmark {
+        margin-left: auto;
+        color: rgba(59, 130, 246, 0.8);
+        font-weight: bold;
+        font-size: 14px;
     }
 
     .context-menu-scrim {

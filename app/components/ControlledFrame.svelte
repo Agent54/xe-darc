@@ -28,6 +28,9 @@
 
     let initialUrl = $state('')
 
+    // OAuth popup state
+    let oauthPopup = $state(null) // { url, width, height, parentTab, event }
+
     // Proper detection of ControlledFrame API support
     function isControlledFrameSupported() {
         // Method 1: Check if the custom element is defined
@@ -218,216 +221,184 @@
     function handleOAuthPopup(parentTab, e) {
         console.log('Creating OAuth popup for:', e.targetUrl)
         
-                 // Create popup controlledframe element
-        const popup = document.createElement('controlledframe')
-        popup.id = `oauth-popup-${Date.now()}`
-        popup.className = 'oauth-popup-frame'
-        popup.src = e.targetUrl
-        popup.partition = parentTab.partition || 'persist:myapp'
-        
-        // Apply OAuth-appropriate security settings (less restrictive than main frame for OAuth flows)
-        popup.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin allow-popups')
-        popup.setAttribute('allow', 'camera \'none\'; microphone \'none\'; geolocation \'none\'; payment \'none\'; usb \'none\'')
-        popup.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin')
-        popup.allowscaling = false
-        popup.autosize = true
-        popup.allowtransparency = false
-        
-        // Set popup dimensions
-        const width = e.initialWidth || 500
-        const height = e.initialHeight || 600
-        popup.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            width: ${width}px;
-            height: ${height}px;
-            transform: translate(-50%, -50%);
-            z-index: 10000;
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 8px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-            background: #000;
-        `
-        
-        // Create popup backdrop
-        const backdrop = document.createElement('div')
-        backdrop.className = 'oauth-popup-backdrop'
-        backdrop.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0,0,0,0.7);
-            z-index: 9999;
-            backdrop-filter: blur(4px);
-        `
-        
-                 // Add close functionality
-        backdrop.onclick = () => closePopup()
-        
-        // Add keyboard support to close popup with Escape
-        const handleKeyDown = (event) => {
-            if (event.key === 'Escape') {
-                closePopup()
-            }
+        // Set reactive state to show popup
+        oauthPopup = {
+            url: e.targetUrl,
+            width: e.initialWidth || 500,
+            height: e.initialHeight || 600,
+            parentTab,
+            event: e
         }
-        document.addEventListener('keydown', handleKeyDown)
+    }
+
+    // Close OAuth popup
+    function closeOAuthPopup() {
+        console.log('OAuth popup closed')
+        oauthPopup = null
+    }
+
+    // Handle OAuth popup events
+    function handleOAuthPopupEvent(eventType, popupFrame, event) {
+        if (!oauthPopup) return
+
+        const { parentTab } = oauthPopup
         
-                 // Store popup reference
-        let isPopupClosed = false
-        let popupTimeout
-        
-        function closePopup() {
-            if (isPopupClosed) return
-            isPopupClosed = true
-            
-            // Clean up event listener and timeout
-            document.removeEventListener('keydown', handleKeyDown)
-            if (popupTimeout) {
-                clearTimeout(popupTimeout)
-            }
-            
-            backdrop.remove()
-            popup.remove()
-            console.log('OAuth popup closed')
-        }
-        
-        // Set timeout to auto-close popup after 10 minutes
-        popupTimeout = setTimeout(() => {
-            console.log('[OAuth] Popup timeout - closing after 10 minutes')
-            closePopup()
-        }, 10 * 60 * 1000)
-        
-        // Listen for popup close from content
-        popup.addEventListener('close', closePopup)
-        
-        // Set up window.opener patching via content script
-        const openerPatchScript = {
-            name: `oauth-opener-patch-${Date.now()}`,
-            matches: ['<all_urls>'],
-            js: {
-                code: `
-                    console.log('[OAuth Popup] Patching window.opener for ${parentTab.id}');
-                    
-                    // Store original opener reference
-                    if (typeof window.originalOpener === 'undefined') {
-                        window.originalOpener = window.opener;
+        switch (eventType) {
+            case 'consolemessage':
+                const message = event.message
+                
+                if (message.startsWith(`oauth:message:${parentTab.id}:`)) {
+                    try {
+                        const data = JSON.parse(message.split(`oauth:message:${parentTab.id}:`)[1])
+                        console.log('[OAuth] Received message from popup:', data)
                         
-                        // Create patched opener that forwards messages to parent
-                        window.opener = {
-                            postMessage: (message, targetOrigin) => {
-                                console.log('[OAuth Popup] Forwarding postMessage to parent:', message);
-                                
-                                // Send message via console to parent frame
-                                console.log('oauth:message:${parentTab.id}:' + JSON.stringify({
-                                    message: message,
-                                    targetOrigin: targetOrigin,
-                                    timestamp: Date.now()
-                                }));
-                            },
-                            
-                            close: () => {
-                                console.log('[OAuth Popup] Close requested by content');
-                                console.log('oauth:close:${parentTab.id}');
-                            },
-                            
-                            focus: () => {
-                                console.log('[OAuth Popup] Focus requested');
-                            }
-                        };
-                        
-                        // Also patch window.close to notify parent
-                        const originalClose = window.close;
-                        window.close = () => {
-                            console.log('oauth:close:${parentTab.id}');
-                            originalClose.call(window);
-                        };
-                        
-                        console.log('[OAuth Popup] window.opener patched successfully');
-                    }
-                `
-            },
-            runAt: 'document_start',
-            allFrames: true
-        }
-        
-        // Listen for messages from the popup
-        popup.addEventListener('consolemessage', (event) => {
-            const message = event.message
-            
-            if (message.startsWith(`oauth:message:${parentTab.id}:`)) {
-                try {
-                    const data = JSON.parse(message.split(`oauth:message:${parentTab.id}:`)[1])
-                    console.log('[OAuth] Received message from popup:', data)
-                    
-                    // Forward the message to the parent frame's content window
-                    if (parentTab.frame && parentTab.frame.contentWindow) {
-                        parentTab.frame.contentWindow.postMessage(data.message, data.targetOrigin || '*')
-                    }
-                    
-                    // Also dispatch as a custom event that the parent page can listen for
-                    window.dispatchEvent(new CustomEvent('oauth-popup-message', {
-                        detail: {
-                            tabId: parentTab.id,
-                            message: data.message,
-                            targetOrigin: data.targetOrigin
+                        // Forward the message to the parent frame's content window
+                        if (parentTab.frame && parentTab.frame.contentWindow) {
+                            parentTab.frame.contentWindow.postMessage(data.message, data.targetOrigin || '*')
                         }
-                    }))
-                    
-                } catch (error) {
-                    console.error('[OAuth] Error parsing popup message:', error)
+                        
+                        // Also dispatch as a custom event that the parent page can listen for
+                        window.dispatchEvent(new CustomEvent('oauth-popup-message', {
+                            detail: {
+                                tabId: parentTab.id,
+                                message: data.message,
+                                targetOrigin: data.targetOrigin
+                            }
+                        }))
+                        
+                    } catch (error) {
+                        console.error('[OAuth] Error parsing popup message:', error)
+                    }
+                } else if (message === `oauth:close:${parentTab.id}`) {
+                    console.log('[OAuth] Popup requested close')
+                    closeOAuthPopup()
                 }
-            } else if (message === `oauth:close:${parentTab.id}`) {
-                console.log('[OAuth] Popup requested close')
-                closePopup()
-            }
-        })
-        
-                 // Set up the popup after DOM updates
-        popup.addEventListener('loadstart', () => {
-            console.log('[OAuth] Popup loading started for:', e.targetUrl)
-            
-            // Add content script to patch window.opener
-            if (popup.addContentScripts) {
-                popup.addContentScripts([openerPatchScript]).then(() => {
-                    console.log('[OAuth] Opener patch script added successfully')
-                }).catch((error) => {
-                    console.error('[OAuth] Failed to add opener patch script:', error)
-                })
-            } else {
-                console.warn('[OAuth] addContentScripts not available - window.opener patching may not work')
-            }
-        })
-        
-        popup.addEventListener('loadstop', () => {
-            console.log('[OAuth] Popup loading completed')
-        })
-        
-        popup.addEventListener('loadabort', (event) => {
-            console.warn('[OAuth] Popup load aborted:', event)
-        })
-        
-        popup.addEventListener('exit', (event) => {
-            console.log('[OAuth] Popup process exited:', event)
-            closePopup()
-        })
-        
-        // Add popup to DOM
-        document.body.appendChild(backdrop)
-        document.body.appendChild(popup)
-        
-        // Attach the window object to enable proper communication
+                break
+
+            case 'loadstart':
+                console.log('[OAuth] Popup loading started for:', oauthPopup.url)
+                
+                // Set up window.opener patching via content script
+                const openerPatchScript = {
+                    name: `oauth-opener-patch-${Date.now()}`,
+                    matches: ['<all_urls>'],
+                    js: {
+                        code: `
+                            console.log('[OAuth Popup] Patching window.opener for ${parentTab.id}');
+                            
+                            // Store original opener reference
+                            if (typeof window.originalOpener === 'undefined') {
+                                window.originalOpener = window.opener;
+                                
+                                // Create patched opener that forwards messages to parent
+                                window.opener = {
+                                    postMessage: (message, targetOrigin) => {
+                                        console.log('[OAuth Popup] Forwarding postMessage to parent:', message);
+                                        
+                                        // Send message via console to parent frame
+                                        console.log('oauth:message:${parentTab.id}:' + JSON.stringify({
+                                            message: message,
+                                            targetOrigin: targetOrigin,
+                                            timestamp: Date.now()
+                                        }));
+                                    },
+                                    
+                                    close: () => {
+                                        console.log('[OAuth Popup] Close requested by content');
+                                        console.log('oauth:close:${parentTab.id}');
+                                    },
+                                    
+                                    focus: () => {
+                                        console.log('[OAuth Popup] Focus requested');
+                                    }
+                                };
+                                
+                                // Also patch window.close to notify parent
+                                const originalClose = window.close;
+                                window.close = () => {
+                                    console.log('oauth:close:${parentTab.id}');
+                                    originalClose.call(window);
+                                };
+                                
+                                console.log('[OAuth Popup] window.opener patched successfully');
+                            }
+                        `
+                    },
+                    runAt: 'document_start',
+                    allFrames: true
+                }
+                
+                // Add content script to patch window.opener
+                if (popupFrame.addContentScripts) {
+                    popupFrame.addContentScripts([openerPatchScript]).then(() => {
+                        console.log('[OAuth] Opener patch script added successfully')
+                    }).catch((error) => {
+                        console.error('[OAuth] Failed to add opener patch script:', error)
+                    })
+                } else {
+                    console.warn('[OAuth] addContentScripts not available - window.opener patching may not work')
+                }
+                break
+
+            case 'loadstop':
+                console.log('[OAuth] Popup loading completed')
+                break
+
+            case 'loadabort':
+                console.warn('[OAuth] Popup load aborted:', event)
+                break
+
+            case 'exit':
+                console.log('[OAuth] Popup process exited:', event)
+                closeOAuthPopup()
+                break
+
+            case 'close':
+                closeOAuthPopup()
+                break
+        }
+    }
+
+    // Handle OAuth popup window attachment
+    function handleOAuthPopupAttachment(popupFrame) {
+        if (!oauthPopup) return
+
         try {
-            e.window.attach(popup)
+            oauthPopup.event.window.attach(popupFrame)
             console.log('[OAuth] Window attached to popup frame')
         } catch (error) {
             console.error('[OAuth] Failed to attach window to popup:', error)
         }
-        
-        console.log('[OAuth] Popup created and configured')
     }
+
+    // Handle keyboard events for OAuth popup
+    function handleOAuthKeydown(event) {
+        if (oauthPopup && event.key === 'Escape') {
+            closeOAuthPopup()
+        }
+    }
+
+    // Auto-close timeout for OAuth popup
+    let oauthTimeout
+    $effect(() => {
+        if (oauthPopup) {
+            // Set timeout to auto-close popup after 10 minutes
+            oauthTimeout = setTimeout(() => {
+                console.log('[OAuth] Popup timeout - closing after 10 minutes')
+                closeOAuthPopup()
+            }, 10 * 60 * 1000)
+        } else if (oauthTimeout) {
+            clearTimeout(oauthTimeout)
+            oauthTimeout = null
+        }
+
+        // Cleanup on component unmount
+        return () => {
+            if (oauthTimeout) {
+                clearTimeout(oauthTimeout)
+            }
+        }
+    })
 
     // WebRequest logger - logs all network requests with full details
     function setupRequestHandler(frame) {
@@ -1014,6 +985,47 @@ document.addEventListener('keydown', function(event) {
     {/key}
 {/if}
 
+<!-- OAuth Popup Modal -->
+{#if oauthPopup}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div 
+        class="oauth-popup-backdrop" 
+        onclick={closeOAuthPopup}
+        transition:fade={{duration: 200}}
+    ></div>
+    
+    <controlledframe
+        bind:this={oauthPopup.frame}
+        class="oauth-popup-frame"
+        style="width: {oauthPopup.width}px; height: {oauthPopup.height}px;"
+        src={oauthPopup.url}
+        partition={oauthPopup.parentTab.partition || 'persist:myapp'}
+        
+        sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+        allow="camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; usb 'none'"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allowscaling={false}
+        autosize={true}
+        allowtransparency={false}
+        
+        onconsolemessage={e => handleOAuthPopupEvent('consolemessage', oauthPopup.frame, e)}
+        onloadstart={e => { 
+            handleOAuthPopupEvent('loadstart', oauthPopup.frame, e)
+            handleOAuthPopupAttachment(oauthPopup.frame)
+        }}
+        onloadstop={e => handleOAuthPopupEvent('loadstop', oauthPopup.frame, e)}
+        onloadabort={e => handleOAuthPopupEvent('loadabort', oauthPopup.frame, e)}
+        onexit={e => handleOAuthPopupEvent('exit', oauthPopup.frame, e)}
+        onclose={e => handleOAuthPopupEvent('close', oauthPopup.frame, e)}
+        
+        transition:fade={{duration: 300, delay: 100}}
+    ></controlledframe>
+{/if}
+
+<!-- Global keyboard event handler for OAuth popup -->
+<svelte:window onkeydown={handleOAuthKeydown} />
+
 
 <style>
      .hibernated-frame {
@@ -1155,7 +1167,24 @@ document.addEventListener('keydown', function(event) {
     }
 
     /* OAuth popup styles */
-    :global(.oauth-popup-frame) {
+    .oauth-popup-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 9999;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+    }
+
+    .oauth-popup-frame {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 10000;
         border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 12px;
         overflow: hidden;
@@ -1163,35 +1192,5 @@ document.addEventListener('keydown', function(event) {
             0 25px 50px rgba(0, 0, 0, 0.6),
             0 0 0 1px rgba(255, 255, 255, 0.1);
         background: #0a0a0a;
-    }
-
-    :global(.oauth-popup-backdrop) {
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        animation: fadeIn 0.2s ease-out;
-    }
-
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-        }
-        to {
-            opacity: 1;
-        }
-    }
-
-    :global(.oauth-popup-frame) {
-        animation: popupSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
-    @keyframes popupSlideIn {
-        from {
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(0.8);
-        }
-        to {
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1);
-        }
     }
 </style>
