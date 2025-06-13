@@ -166,19 +166,267 @@
     }
 
     function handleNewWindow(tab, e) {
-        console.log('New window:', e)
-        tabs.push({ 
-            id: crypto.randomUUID(),
-            url: e.targetUrl, 
-            title: e.title, 
-            favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.targetUrl}&size=64`,
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
+        console.log('New window request:', e)
+        
+        // Check if this looks like an OAuth popup based on URL patterns or window features
+        const isOAuthPopup = e.targetUrl && (
+            // Generic OAuth patterns
+            e.targetUrl.includes('oauth') || 
+            e.targetUrl.includes('auth') || 
+            e.targetUrl.includes('login') ||
+            e.targetUrl.includes('sso') ||
+            e.targetUrl.includes('authorize') ||
+            e.targetUrl.includes('connect') ||
+            // Specific OAuth providers
+            e.targetUrl.includes('accounts.google.com') ||
+            e.targetUrl.includes('github.com/login') ||
+            e.targetUrl.includes('api.twitter.com/oauth') ||
+            e.targetUrl.includes('facebook.com/dialog/oauth') ||
+            e.targetUrl.includes('api.linkedin.com/oauth') ||
+            e.targetUrl.includes('discord.com/api/oauth2') ||
+            e.targetUrl.includes('slack.com/oauth') ||
+            e.targetUrl.includes('login.microsoftonline.com') ||
+            e.targetUrl.includes('appleid.apple.com/auth') ||
+            e.targetUrl.includes('auth0.com') ||
+            e.targetUrl.includes('okta.com') ||
+            // Small popup window dimensions are typically OAuth
+            (e.initialWidth && e.initialHeight && e.initialWidth < 800 && e.initialHeight < 700) ||
+            // Named popup windows for OAuth
+            (e.name && (e.name.includes('oauth') || e.name.includes('auth') || e.name.includes('login')))
+        )
+
+        if (isOAuthPopup && controlledFrameSupported) {
+            handleOAuthPopup(tab, e)
+        } else {
+            // Regular new window - create a new tab
+            tabs.push({ 
+                id: crypto.randomUUID(),
+                url: e.targetUrl, 
+                title: e.title, 
+                favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.targetUrl}&size=64`,
+                audioPlaying: false,
+                screenshot: null,
+                pinned: false,
+                muted: false,
+                loading: false
+            })
+            
+        }
+    }
+
+    // Handle OAuth popup windows with proper window.opener support
+    function handleOAuthPopup(parentTab, e) {
+        console.log('Creating OAuth popup for:', e.targetUrl)
+        
+                 // Create popup controlledframe element
+        const popup = document.createElement('controlledframe')
+        popup.id = `oauth-popup-${Date.now()}`
+        popup.className = 'oauth-popup-frame'
+        popup.src = e.targetUrl
+        popup.partition = parentTab.partition || 'persist:myapp'
+        
+        // Apply OAuth-appropriate security settings (less restrictive than main frame for OAuth flows)
+        popup.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin allow-popups')
+        popup.setAttribute('allow', 'camera \'none\'; microphone \'none\'; geolocation \'none\'; payment \'none\'; usb \'none\'')
+        popup.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin')
+        popup.allowscaling = false
+        popup.autosize = true
+        popup.allowtransparency = false
+        
+        // Set popup dimensions
+        const width = e.initialWidth || 500
+        const height = e.initialHeight || 600
+        popup.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: ${width}px;
+            height: ${height}px;
+            transform: translate(-50%, -50%);
+            z-index: 10000;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            background: #000;
+        `
+        
+        // Create popup backdrop
+        const backdrop = document.createElement('div')
+        backdrop.className = 'oauth-popup-backdrop'
+        backdrop.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.7);
+            z-index: 9999;
+            backdrop-filter: blur(4px);
+        `
+        
+                 // Add close functionality
+        backdrop.onclick = () => closePopup()
+        
+        // Add keyboard support to close popup with Escape
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                closePopup()
+            }
+        }
+        document.addEventListener('keydown', handleKeyDown)
+        
+                 // Store popup reference
+        let isPopupClosed = false
+        let popupTimeout
+        
+        function closePopup() {
+            if (isPopupClosed) return
+            isPopupClosed = true
+            
+            // Clean up event listener and timeout
+            document.removeEventListener('keydown', handleKeyDown)
+            if (popupTimeout) {
+                clearTimeout(popupTimeout)
+            }
+            
+            backdrop.remove()
+            popup.remove()
+            console.log('OAuth popup closed')
+        }
+        
+        // Set timeout to auto-close popup after 10 minutes
+        popupTimeout = setTimeout(() => {
+            console.log('[OAuth] Popup timeout - closing after 10 minutes')
+            closePopup()
+        }, 10 * 60 * 1000)
+        
+        // Listen for popup close from content
+        popup.addEventListener('close', closePopup)
+        
+        // Set up window.opener patching via content script
+        const openerPatchScript = {
+            name: `oauth-opener-patch-${Date.now()}`,
+            matches: ['<all_urls>'],
+            js: {
+                code: `
+                    console.log('[OAuth Popup] Patching window.opener for ${parentTab.id}');
+                    
+                    // Store original opener reference
+                    if (typeof window.originalOpener === 'undefined') {
+                        window.originalOpener = window.opener;
+                        
+                        // Create patched opener that forwards messages to parent
+                        window.opener = {
+                            postMessage: (message, targetOrigin) => {
+                                console.log('[OAuth Popup] Forwarding postMessage to parent:', message);
+                                
+                                // Send message via console to parent frame
+                                console.log('oauth:message:${parentTab.id}:' + JSON.stringify({
+                                    message: message,
+                                    targetOrigin: targetOrigin,
+                                    timestamp: Date.now()
+                                }));
+                            },
+                            
+                            close: () => {
+                                console.log('[OAuth Popup] Close requested by content');
+                                console.log('oauth:close:${parentTab.id}');
+                            },
+                            
+                            focus: () => {
+                                console.log('[OAuth Popup] Focus requested');
+                            }
+                        };
+                        
+                        // Also patch window.close to notify parent
+                        const originalClose = window.close;
+                        window.close = () => {
+                            console.log('oauth:close:${parentTab.id}');
+                            originalClose.call(window);
+                        };
+                        
+                        console.log('[OAuth Popup] window.opener patched successfully');
+                    }
+                `
+            },
+            runAt: 'document_start',
+            allFrames: true
+        }
+        
+        // Listen for messages from the popup
+        popup.addEventListener('consolemessage', (event) => {
+            const message = event.message
+            
+            if (message.startsWith(`oauth:message:${parentTab.id}:`)) {
+                try {
+                    const data = JSON.parse(message.split(`oauth:message:${parentTab.id}:`)[1])
+                    console.log('[OAuth] Received message from popup:', data)
+                    
+                    // Forward the message to the parent frame's content window
+                    if (parentTab.frame && parentTab.frame.contentWindow) {
+                        parentTab.frame.contentWindow.postMessage(data.message, data.targetOrigin || '*')
+                    }
+                    
+                    // Also dispatch as a custom event that the parent page can listen for
+                    window.dispatchEvent(new CustomEvent('oauth-popup-message', {
+                        detail: {
+                            tabId: parentTab.id,
+                            message: data.message,
+                            targetOrigin: data.targetOrigin
+                        }
+                    }))
+                    
+                } catch (error) {
+                    console.error('[OAuth] Error parsing popup message:', error)
+                }
+            } else if (message === `oauth:close:${parentTab.id}`) {
+                console.log('[OAuth] Popup requested close')
+                closePopup()
+            }
         })
-        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
+        
+                 // Set up the popup after DOM updates
+        popup.addEventListener('loadstart', () => {
+            console.log('[OAuth] Popup loading started for:', e.targetUrl)
+            
+            // Add content script to patch window.opener
+            if (popup.addContentScripts) {
+                popup.addContentScripts([openerPatchScript]).then(() => {
+                    console.log('[OAuth] Opener patch script added successfully')
+                }).catch((error) => {
+                    console.error('[OAuth] Failed to add opener patch script:', error)
+                })
+            } else {
+                console.warn('[OAuth] addContentScripts not available - window.opener patching may not work')
+            }
+        })
+        
+        popup.addEventListener('loadstop', () => {
+            console.log('[OAuth] Popup loading completed')
+        })
+        
+        popup.addEventListener('loadabort', (event) => {
+            console.warn('[OAuth] Popup load aborted:', event)
+        })
+        
+        popup.addEventListener('exit', (event) => {
+            console.log('[OAuth] Popup process exited:', event)
+            closePopup()
+        })
+        
+        // Add popup to DOM
+        document.body.appendChild(backdrop)
+        document.body.appendChild(popup)
+        
+        // Attach the window object to enable proper communication
+        try {
+            e.window.attach(popup)
+            console.log('[OAuth] Window attached to popup frame')
+        } catch (error) {
+            console.error('[OAuth] Failed to attach window to popup:', error)
+        }
+        
+        console.log('[OAuth] Popup created and configured')
     }
 
     // WebRequest logger - logs all network requests with full details
@@ -569,6 +817,8 @@ document.addEventListener('keydown', function(event) {
             }, 200)
         }
     })
+
+    //TODo clear daata support
 </script>
 
 {#if tab.hibernated}
@@ -592,6 +842,76 @@ document.addEventListener('keydown', function(event) {
 {:else}
     {#key partition}
         {#if controlledFrameSupported}
+            <!-- 
+            ControlledFrame API provides secure iframe-like functionality for Isolated Web Apps
+            
+            Key isolation and display parameters:
+            - partition: Controls process isolation and session data separation
+              Different partitions = separate cookie stores, localStorage, processes  
+              Format: "persist:name" (persistent) or "ephemeral:name" (session-only)
+              Enables multi-account browsing and security isolation
+              
+            - allowscaling: Controls whether users can zoom/scale content with touch gestures
+              true = users can pinch-to-zoom, false = fixed scale
+              Important for mobile/touch interfaces and content layout control
+              
+            - autosize: Controls automatic frame dimension adjustment  
+              true = frame auto-resizes based on content size
+              false = frame maintains fixed dimensions set by CSS
+              Useful for responsive layouts and dynamic content
+              
+            - allowtransparency: Controls background transparency support
+              true = frame background can be transparent, allowing parent styling to show through
+              false = frame has opaque background (better performance)
+              Set to false to prevent visual glitches and improve rendering performance
+
+            SECURITY & POLICY ATTRIBUTES (available for standard iframes, some may apply to ControlledFrame):
+            
+            - sandbox: Restricts frame capabilities for security isolation
+              Examples: "allow-scripts allow-same-origin" (most permissive)
+                       "allow-scripts" (scripts but no same-origin access)
+                       "" or true (maximum restrictions - no scripts, forms, etc.)
+              Values: allow-downloads, allow-forms, allow-modals, allow-orientation-lock,
+                     allow-pointer-lock, allow-popups, allow-presentation, allow-same-origin,
+                     allow-scripts, allow-top-navigation, allow-top-navigation-by-user-activation
+                     
+            - csp: Content Security Policy for the embedded content
+              Format: "default-src 'self'; script-src 'unsafe-inline'"
+              Overrides the frame's CSP headers, useful for additional restrictions
+              
+            - allow: Feature Policy / Permissions Policy controls
+              Examples: "camera; microphone; geolocation"
+                       "camera 'none'; microphone 'self'"
+              Controls: accelerometer, ambient-light-sensor, autoplay, battery, camera,
+                       cross-origin-isolated, display-capture, document-domain, encrypted-media,
+                       execution-while-not-rendered, fullscreen, geolocation, gyroscope,
+                       magnetometer, microphone, midi, navigation-override, payment, picture-in-picture,
+                       publickey-credentials-get, screen-wake-lock, sync-xhr, usb, web-share,
+                       xr-spatial-tracking
+                       
+            - credentialless: Controls credential access (experimental)
+              true = frame loads without credentials (cookies, auth headers)
+              false = normal credential behavior
+              Useful for loading untrusted cross-origin content
+              
+            - referrerpolicy: Controls referrer information sent to the frame
+              Values: no-referrer, no-referrer-when-downgrade, origin, origin-when-cross-origin,
+                     same-origin, strict-origin, strict-origin-when-cross-origin, unsafe-url
+                     
+            - loading: Controls when the frame loads
+              Values: "lazy" (load when near viewport), "eager" (load immediately)
+              
+            Note: ControlledFrame in IWAs may have additional security controls beyond standard iframe attributes
+            Check the ControlledFrame specification for IWA-specific security features
+            
+            EXAMPLE SECURITY ATTRIBUTE USAGE:
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            csp="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+            allow="camera 'none'; microphone 'none'; geolocation 'self'; autoplay 'self'"
+            credentialless={false}
+            referrerpolicy="strict-origin-when-cross-origin"
+            loading="eager"
+            -->
             <controlledframe
                 transition:fade={{duration: 150}}
                 bind:this={tab.frame}
@@ -604,7 +924,7 @@ document.addEventListener('keydown', function(event) {
                 onloadcommit={e => handleLoadCommit(tab, e)}
                 onnewwindow={(e) => { handleNewWindow(tab, e)} }
                 onaudiostatechanged={e => handleAudioStateChanged(tab, e)}
-                allowscaling={true}
+                allowscaling={false}
                 autosize={true}
                 allowtransparency={false}
                 onloadstart={e => { handleLoadStart(tab, e) }}
@@ -630,6 +950,13 @@ document.addEventListener('keydown', function(event) {
                 onresponsive={e => { handleEvent('onresponsive',tab, e) }}
                 onsizechanged={e => { handleEvent('onsizechanged',tab, e) }}
                 onunresponsive={e => { handleEvent(tab, e, 'onunresponsive') }}
+
+                sandbox="allow-scripts allow-forms"
+                csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
+                allow="accelerometer 'none'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'none'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-get 'none'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'"
+                credentialless={true}
+                referrerpolicy="strict-origin-when-cross-origin"
+                loading="lazy"
                 ></controlledframe>
                 <!--
                 onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
@@ -648,6 +975,13 @@ document.addEventListener('keydown', function(event) {
                     id="tab_{tab.id}"
                     class="frame"
                     title="fallback-iframe"
+
+                    sandbox="allow-scripts allow-forms"
+                    csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
+                    allow="accelerometer 'none'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'none'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-get 'none'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'"
+                    credentialless={true}
+                    referrerpolicy="strict-origin-when-cross-origin"
+                    loading="lazy"
                 ></iframe>
             {:else}
                 <div 
@@ -818,5 +1152,46 @@ document.addEventListener('keydown', function(event) {
     .iframe-blocked-suggestion strong {
         color: rgba(255, 255, 255, 0.8);
         font-weight: 600;
+    }
+
+    /* OAuth popup styles */
+    :global(.oauth-popup-frame) {
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 
+            0 25px 50px rgba(0, 0, 0, 0.6),
+            0 0 0 1px rgba(255, 255, 255, 0.1);
+        background: #0a0a0a;
+    }
+
+    :global(.oauth-popup-backdrop) {
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    :global(.oauth-popup-frame) {
+        animation: popupSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes popupSlideIn {
+        from {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+        to {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
     }
 </style>
