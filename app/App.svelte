@@ -157,7 +157,7 @@
         },
         {
             id: '7',
-            url: 'https://figma.com/', 
+            url: 'https://www.figma.com/design/HP40QZCsYVBnYahP4oUa2q/Darc-browser?node-id=0-1&p=f&t=mEPREy5GwjSdFBX9-0', 
             title: 'Figma', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://figma.com&size=64',
             audioPlaying: false,
@@ -261,6 +261,10 @@
     let showFixedNewTabButton = $state(false)
     let resourcesSidebarOpen = $state(false)
     let settingsSidebarOpen = $state(false)
+    
+    // Window resize state for performance optimization
+    let isWindowResizing = $state(false)
+    let resizeTimeout = null
 
     // Track previous state to detect newly opened sidebars
     let prevResourcesSidebarOpen = $state(false)
@@ -283,11 +287,30 @@
 
     headerPartOfMain = controlsOverlayQuery.matches || borderlessQuery.matches
     let lastWindowHeight = window.innerHeight
+    let lastWindowWidth = window.innerWidth
     function handleWindowResize() {
         const currentHeight = window.innerHeight
-        if (currentHeight !== lastWindowHeight) {
+        const currentWidth = window.innerWidth
+        
+        // Detect any window size change (width or height)
+        if (currentHeight !== lastWindowHeight || currentWidth !== lastWindowWidth) {
             lastWindowHeight = currentHeight
+            lastWindowWidth = currentWidth
             headerPartOfMain = controlsOverlayQuery.matches || borderlessQuery.matches
+            
+            // Set resizing state immediately for fast response
+            isWindowResizing = true
+            
+            // Clear previous timeout and set new one
+            if (resizeTimeout) {
+                clearTimeout(resizeTimeout)
+            }
+            
+            // Clear resizing state after resize stops (debounced)
+            resizeTimeout = setTimeout(() => {
+                isWindowResizing = false
+                resizeTimeout = null
+            }, 100) // 100ms delay after last resize event for faster response
         }
     }
     controlsOverlayQuery.addEventListener('change', e => {
@@ -393,7 +416,10 @@
         activeTabIndex = index
         const frame = document.getElementById(`tab_${tab.id}`)
         if (frame) {
-            frame.scrollIntoView({ behavior: 'smooth' })
+            // Use smooth scrolling unless window is resizing
+            frame.scrollIntoView({ 
+                behavior: isWindowResizing ? 'auto' : 'smooth' 
+            })
         }
     }
 
@@ -594,6 +620,9 @@
             }
             if (hovercardResetTimer) {
                 clearTimeout(hovercardResetTimer)
+            }
+            if (resizeTimeout) {
+                clearTimeout(resizeTimeout)
             }
             // Clean up global event listeners
             window.removeEventListener('darc-close-tab', handleGlobalTabClose)
@@ -1477,6 +1506,7 @@
      class:window-controls-overlay={headerPartOfMain} 
      class:scrolling={isScrolling} 
      class:sidebar-open={resourcesSidebarOpen || settingsSidebarOpen}
+     class:no-transitions={isWindowResizing}
      onscroll={handleScroll} 
      style="box-sizing: border-box; --sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0)};">
     <div class="frame-title-bar">
@@ -1589,6 +1619,7 @@
 {#if resourcesSidebarOpen || settingsSidebarOpen}
     <div class="sidebar-container" 
          class:window-controls-overlay={headerPartOfMain}
+         class:no-transitions={isWindowResizing}
          style="--sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0)};">
         {#if resourcesSidebarOpen}
             <div class="sidebar-panel" class:new-panel={resourcesSidebarOpen && !prevResourcesSidebarOpen && !isSwitchingSidebars}>
@@ -3069,6 +3100,25 @@
         background: rgba(255, 255, 255, 0.15);
         color: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* Disable transitions during window resize for performance */
+    .controlled-frame-container.no-transitions {
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+
+    .controlled-frame-container.no-transitions :global(.frame) {
+        transition: none !important;
+    }
+
+    .sidebar-container.no-transitions {
+        transition: none !important;
+    }
+
+    .sidebar-container.no-transitions .sidebar-panel {
+        transition: none !important;
+        animation: none !important;
     }
 
 
