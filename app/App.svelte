@@ -8,6 +8,18 @@
 
     const db = new PouchDB('darc')
 
+
+   window.getScreenDetails().then(screen => {
+    console.log(screen)
+   })
+
+   // handle permission change
+    // navigator.permissions.query({name:'window-management'})
+    // .then((status) => {
+    //     // Do what you need with the permission state.
+    //     console.log(status.state)
+    // })
+
     db.allDocs({
         include_docs: true
     }).then(({rows}) => {
@@ -111,7 +123,29 @@
             loading: false
         },
         {
-            id: '6',
+            id: '16',
+            url: 'https://agregore.org', 
+            title: 'Agregore', 
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://agregore.org&size=64',
+            audioPlaying: false,
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
+        {
+            id: '26',
+            url: 'https://users-and-agents.com', 
+            title: 'Agents & Agents', 
+            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://github.com&size=64',
+            audioPlaying: false,
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
+        {
+            id: '36',
             url: 'https://badssl.com/', 
             title: 'Bad SSL', 
             favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://badssl.com&size=64',
@@ -192,6 +226,17 @@
             muted: false,
             loading: false
         },
+        {
+            id: '5',
+            url: 'data:text/html,<html><bod style="color: white;"y><h1>Hello, World!</h1></body></html>', 
+            title: 'New Tab',
+            audioPlaying: false,
+            // favicon: 'file://photon_logo.png',
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        }
     ])
     let visibilityTimers = new Map()
     let hoveredTab = $state(null)
@@ -203,7 +248,7 @@
     let isDragEnabled = $state(true)
     let hovercardRecentlyActive = $state(false)
     let hovercardResetTimer = null
-    let isWindowControlsOverlay = $state(false)
+    let headerPartOfMain = $state(false)
     let isScrolling = $state(false)
     let scrollTimeout = null
     let hovercardShowTime = null
@@ -232,26 +277,70 @@
         }, 200) // Slightly longer than animation duration
     })
 
-    const mediaQueryList = window.matchMedia('(display-mode: window-controls-overlay)')
-    isWindowControlsOverlay = mediaQueryList.matches
+
+    const borderlessQuery = window.matchMedia('(display-mode: borderless)')
+    const controlsOverlayQuery = window.matchMedia('(display-mode: window-controls-overlay)')
+
+    headerPartOfMain = controlsOverlayQuery.matches || borderlessQuery.matches
     let lastWindowHeight = window.innerHeight
     function handleWindowResize() {
         const currentHeight = window.innerHeight
         if (currentHeight !== lastWindowHeight) {
             lastWindowHeight = currentHeight
-            isWindowControlsOverlay = mediaQueryList.matches
+            headerPartOfMain = controlsOverlayQuery.matches || borderlessQuery.matches
         }
     }
-    mediaQueryList.addEventListener('change', e => {
-        isWindowControlsOverlay = e.matches
+    controlsOverlayQuery.addEventListener('change', e => {
+        headerPartOfMain = e.matches
     })
 
-    // if running in iframe set isWindowControlsOverlay to true to show tabs
+    borderlessQuery.addEventListener('change', e => {
+        headerPartOfMain = e.matches
+    })
+
+    // if running in iframe set headerPartOfMain to true to show tabs
     if (window.self !== window.top) {
-        isWindowControlsOverlay = true
+        headerPartOfMain = true
     }
 
     window.addEventListener('resize', handleWindowResize)
+
+    // Listen for the global Cmd+W/Ctrl+W custom event from main.js
+    function handleGlobalTabClose(event) {
+        console.log('Received global tab close event')
+        handleTabClose(event.detail?.originalEvent || event)
+    }
+
+    // Listen for keyboard events from controlled frames
+    function handleFrameTabClose(event) {
+        const { tabId, sourceFrame } = event.detail
+        console.log(`Received tab close request from controlled frame: ${tabId}`)
+        
+        // Find the tab with matching ID
+        const tabIndex = tabs.findIndex(t => t.id === tabId)
+        if (tabIndex !== -1) {
+            console.log(`Closing tab at index ${tabIndex}: ${tabs[tabIndex].title}`)
+            const tabToClose = tabs[tabIndex]
+            closeTab(tabToClose, event)
+            
+            // Update active tab index if necessary
+            if (activeTabIndex >= tabs.length) {
+                activeTabIndex = tabs.length - 1
+            }
+        } else {
+            console.warn(`Tab with ID ${tabId} not found`)
+        }
+    }
+
+    function handleFrameNewTab(event) {
+        const { tabId, sourceFrame } = event.detail
+        console.log(`Received new tab request from controlled frame: ${tabId}`)
+        openNewTab()
+    }
+
+    window.addEventListener('darc-close-tab', handleGlobalTabClose)
+    window.addEventListener('darc-close-tab-from-frame', handleFrameTabClose)
+    window.addEventListener('darc-new-tab-from-frame', handleFrameNewTab)
 
     function openNewTab() {
         const newTab = { 
@@ -280,13 +369,22 @@
         }
         if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
             event.preventDefault()
-            if (tabs.length > 0) {
-                const tabToClose = tabs[activeTabIndex]
-                closeTab(tabToClose, event)
-                if (activeTabIndex >= tabs.length) {
-                    activeTabIndex = tabs.length - 1
-                }
+            event.stopPropagation()
+            event.stopImmediatePropagation()
+            handleTabClose(event)
+        }
+    }
+
+    function handleTabClose(event) {
+        console.log('Handling tab close request')
+        if (tabs.length > 0) {
+            const tabToClose = tabs[activeTabIndex]
+            closeTab(tabToClose, event)
+            if (activeTabIndex >= tabs.length) {
+                activeTabIndex = tabs.length - 1
             }
+        } else {
+            console.log('No tabs to close')
         }
     }
 
@@ -497,6 +595,10 @@
             if (hovercardResetTimer) {
                 clearTimeout(hovercardResetTimer)
             }
+            // Clean up global event listeners
+            window.removeEventListener('darc-close-tab', handleGlobalTabClose)
+            window.removeEventListener('darc-close-tab-from-frame', handleFrameTabClose)
+            window.removeEventListener('darc-new-tab-from-frame', handleFrameNewTab)
         }
     })
 
@@ -979,7 +1081,7 @@
 </script>
 
 {#snippet trashIcon()}
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
         <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
     </svg>
 {/snippet}
@@ -995,10 +1097,10 @@
     onvisibilitychange={() => { console.log('visibilitychange', document.visibilityState) }}
 />
 
-<header class:window-controls-overlay={isWindowControlsOverlay} class:window-background={isWindowBackground}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 86px;' : 'right: 38px;'}"></div>
+<header class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground}>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 16px;' : 'right: -32px;'}"></div>
      
-    <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 200px)' : 'calc(100% - 170px)'};">
+    <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 270px)' : 'calc(100% - 240px)'};">
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} transition:flip={{duration: 100}}>
             {#each tabs as tab, i (tab.id)}
                 <li 
@@ -1120,7 +1222,7 @@
          onclick={openNewTab}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
          title="New Tab (⌘T)"
-         style="{closed.length > 0 ? 'right: 165px;' : 'right: 124px;'}"
+         style="{closed.length > 0 ? 'right: 95px;' : 'right: 54px;'}"
          class:visible={showFixedNewTabButton}>
         <span class="new-tab-icon">+</span>
     </div>
@@ -1324,7 +1426,7 @@
 {/if}
 
 <div class="controlled-frame-container browser-frame" 
-     class:window-controls-overlay={isWindowControlsOverlay} 
+     class:window-controls-overlay={headerPartOfMain} 
      class:scrolling={isScrolling} 
      class:sidebar-open={resourcesSidebarOpen || settingsSidebarOpen}
      onscroll={handleScroll} 
@@ -1382,11 +1484,11 @@
 
     {#each tabs as tab (tab.id)}
         {#if tab.url === 'about:newtab'}
-            <div class="frame {isWindowControlsOverlay ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
+            <div class="frame {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
                 <NewTab {tab} />
             </div>
         {:else}
-            <ControlledFrame {tab} {tabs} {isWindowControlsOverlay} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} />
+            <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} />
         {/if}
     {/each}
 </div>
@@ -1438,7 +1540,7 @@
 
 {#if resourcesSidebarOpen || settingsSidebarOpen}
     <div class="sidebar-container" 
-         class:window-controls-overlay={isWindowControlsOverlay}
+         class:window-controls-overlay={headerPartOfMain}
          style="--sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0)};">
         {#if resourcesSidebarOpen}
             <div class="sidebar-panel" class:new-panel={resourcesSidebarOpen && !prevResourcesSidebarOpen && !isSwitchingSidebars}>
@@ -1494,7 +1596,7 @@
     }
 
     header.window-background {
-        opacity: 0.46;
+        opacity: 0.43;
     }
 
     .header-drag-handle {
@@ -1509,10 +1611,10 @@
 
     .sidebar-right {
         position: fixed;
-        top: 0;
+        top: 35px;
         right: 0;
         width: 27px;
-        height: 100vh;
+        height: calc(100vh - 35px);
         z-index: 1000;
         pointer-events: auto;
         transition: transform 0.05s ease 0.45s, opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45s;
@@ -1792,7 +1894,7 @@
     .trash-icon {
         position: fixed;
         top: 8px;
-        right: 125px;
+        right: 55px;
         width: 32px;
         height: 30px;
         padding-bottom: 8px;
@@ -1803,7 +1905,7 @@
         justify-content: center;
         cursor: pointer;
         font-size: 12px;
-        opacity: 0.7;
+        opacity: 0.4;
         transition: all 0.3s ease;
         backdrop-filter: blur(10px);
         z-index: 10000;
@@ -1978,7 +2080,7 @@
     .view-mode-icon {
         position: fixed;
         top: 8px;
-        right: 81px;
+        right: 11px;
         width: 32px;
         height: 30px;
         padding-bottom: 8px;
@@ -1989,7 +2091,7 @@
         justify-content: center;
         cursor: pointer;
         font-size: 12px;
-        opacity: 0.7;
+        opacity: 0.4;
         transition: all 0.3s ease;
         backdrop-filter: blur(10px);
         z-index: 10000;
@@ -2397,6 +2499,7 @@
         align-items: center;
         justify-content: center;
         position: relative;
+        border-radius: 0 0 12px 12px;
     }
 
     .hovercard-screenshot img {
@@ -2480,7 +2583,7 @@
     }
 
     .new-tab-button.visible {
-        opacity: 0.7;
+        opacity: 0.5;
         visibility: visible;
         transform: translateX(0);
     }

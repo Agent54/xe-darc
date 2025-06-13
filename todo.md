@@ -197,3 +197,11 @@ make self runnable and iframe support
 
 full chrome os release like playbitOS?
 
+
+colab with presentation api
+
+
+http://localhost:5193
+
+find expenses that could be optimized in my account statements
+

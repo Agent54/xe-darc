@@ -8,7 +8,7 @@
     let {
         tab, 
         tabs,
-        isWindowControlsOverlay,
+        headerPartOfMain,
         isScrolling,
         captureTabScreenshot,
         onFrameFocus = () => {},
@@ -433,6 +433,27 @@
                 code: `
 window.addEventListener('focus', () => { console.log('iwa:focus') }, false);
 window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
+
+// Global keyboard event listener for controlled frame
+document.addEventListener('keydown', function(event) {
+    // Check for Cmd+W (Mac) or Ctrl+W (Windows/Linux)
+    if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
+        console.log('iwa:close-tab:${tab.id}');
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return false;
+    }
+    
+    // Check for Cmd+T (Mac) or Ctrl+T (Windows/Linux) 
+    if ((event.metaKey || event.ctrlKey) && event.key === 't') {
+        console.log('iwa:new-tab:${tab.id}');
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return false;
+    }
+}, { capture: true, passive: false });
 `,
             },
             runAt: 'document-end',
@@ -491,10 +512,36 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
 
         frame.addEventListener('consolemessage', (event) => {
             console.log('consolemessage', event)
-            if (event.message === 'iwa:focus') {
+            const message = event.message
+            
+            if (message === 'iwa:focus') {
                 onFrameFocus()
-            } else if (event.message === 'iwa:blur') {
+            } else if (message === 'iwa:blur') {
                 onFrameBlur()
+            } else if (message.startsWith('iwa:close-tab:')) {
+                // Extract tab ID from message
+                const tabId = message.split(':')[2]
+                console.log(`Controlled frame ${tabId} requested tab close`)
+                
+                // Dispatch custom event to app shell to close this tab
+                window.dispatchEvent(new CustomEvent('darc-close-tab-from-frame', {
+                    detail: { 
+                        tabId: tabId,
+                        sourceFrame: frame.id || `tab_${tab.id}`
+                    }
+                }))
+            } else if (message.startsWith('iwa:new-tab:')) {
+                // Extract tab ID from message  
+                const tabId = message.split(':')[2]
+                console.log(`Controlled frame ${tabId} requested new tab`)
+                
+                // Dispatch custom event to app shell to open new tab
+                window.dispatchEvent(new CustomEvent('darc-new-tab-from-frame', {
+                    detail: { 
+                        tabId: tabId,
+                        sourceFrame: frame.id || `tab_${tab.id}`
+                    }
+                }))
             }
         })
     }
@@ -527,7 +574,7 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
 {#if tab.hibernated}
     <div 
         class="frame hibernated-frame"
-        class:window-controls-overlay={isWindowControlsOverlay}
+        class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
         id="tab_{tab.id}"
         transition:fade={{duration: 150}}
@@ -548,7 +595,7 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
             <controlledframe
                 transition:fade={{duration: 150}}
                 bind:this={tab.frame}
-                class:window-controls-overlay={isWindowControlsOverlay}
+                class:window-controls-overlay={headerPartOfMain}
                 class:no-pointer-events={isScrolling}
                 id="tab_{tab.id}"
                 class="frame"
@@ -596,7 +643,7 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
                     transition:fade={{duration: 150}}
                     bind:this={tab.frame}
                     src={initialUrl}
-                    class:window-controls-overlay={isWindowControlsOverlay}
+                    class:window-controls-overlay={headerPartOfMain}
                     class:no-pointer-events={isScrolling}
                     id="tab_{tab.id}"
                     class="frame"
@@ -606,7 +653,7 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
                 <div 
                     transition:fade={{duration: 150}}
                     bind:this={tab.frame}
-                    class:window-controls-overlay={isWindowControlsOverlay}
+                    class:window-controls-overlay={headerPartOfMain}
                     class:no-pointer-events={isScrolling}
                     id="tab_{tab.id}"
                     class="frame iframe-blocked"
