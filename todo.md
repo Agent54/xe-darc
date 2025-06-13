@@ -205,3 +205,15 @@ http://localhost:5193
 
 find expenses that could be optimized in my account statements
 
+agent onsiede shared space + planning
+
+user profile handling in iwa or in launcher?
+
+soft profiles with prefix for partition and separate encryption key
+
+sync server with authn key encryption serverless
+
+horizontal card layout with tilt angle setting and 1 -5 columns in hovercard
+
+picture in picture
+

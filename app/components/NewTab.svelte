@@ -307,6 +307,18 @@
     }
 
     function handleKeyDown(event) {
+        // Handle Cmd+W / Ctrl+W for tab closing - let it bubble up to the global handler
+        if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
+            // Don't prevent default here, let the global handler in App.svelte handle it
+            return
+        }
+
+        // Handle Cmd+T / Ctrl+T for new tab - let it bubble up to the global handler  
+        if ((event.metaKey || event.ctrlKey) && event.key === 't') {
+            // Don't prevent default here, let the global handler in App.svelte handle it
+            return
+        }
+
         const filteredCompletions = completions.filter(c => c.trim().length > 0)
         if (filteredCompletions.length === 0) {
             return
