@@ -217,3 +217,62 @@ horizontal card layout with tilt angle setting and 1 -5 columns in hovercard
 
 picture in picture
 
+usercss userjs sidebar
+
+ai scan userscripts and other agents behaviour (other provider)
+
+
+ai explain content script (other provider)
+
+add /remove headers
+
+mcp settings
+
+local mcps? athropic api?
+
+add all resources: geo, game, vr, ....
+
+agent resources vs all resources? naming/ location to show?
+add resource availability eg not allowed to app or api not available
+
+activate input box on new tab/ new tab page aktivation
+
+blur missing in partition submenu
+
+hovercard top margin
+
+tab without favicon left margin
+
+https://marketplace.visualstudio.com/items?itemName=sketchbuch.vsc-workspace-sidebar
+
+disable horizontal overscorll effect?
+
+cloudflare docs cant open dark mode menu:
+https://developers.cloudflare.com/agents/model-context-protocol/mcp-agent-api/
+
+
+show tab title while chaning
+
+subscription for frontier models with fraction pooling and distributino to your liked content. like bumping possible.
+
+meet & maps features!!!!
+
+window resize animation off in sidebars
+
+service worker interception
+
+locked and unlocked apps concept
+
+shared spaces
+
+excalidraw fork
+
+dns v https  > own apps and rewrite official apps! in daemon + ssl self certs
+
+how to get cert infos?
+
+tosdl and remote data tabs
+
+
+remember button
+

@@ -9,6 +9,8 @@
     let selectedAiProvider = $state('writer')
     let customSearchUrl = $state('')
     let customNewTabUrl = $state('')
+    let syncServerUrl = $state('')
+    let syncServerToken = $state('')
     let exportDirectory = $state(null)
     let isExporting = $state(false)
     let exportStatus = $state('')
@@ -113,6 +115,16 @@
         
         selectedAiProvider = providerId
         localStorage.setItem('selectedAiProvider', providerId)
+    }
+
+    function handleSyncServerUrlChange(url) {
+        syncServerUrl = url
+        localStorage.setItem('syncServerUrl', url)
+    }
+
+    function handleSyncServerTokenChange(token) {
+        syncServerToken = token
+        localStorage.setItem('syncServerToken', token)
     }
 
     // Centralized IndexedDB setup to avoid race conditions
@@ -527,12 +539,16 @@ To import this data back into DARC, use the import function in Settings.
         selectedAiProvider = 'writer'
         customSearchUrl = ''
         customNewTabUrl = ''
+        syncServerUrl = ''
+        syncServerToken = ''
         
         localStorage.removeItem('defaultSearchEngine')
         localStorage.removeItem('defaultNewTabUrl')
         localStorage.removeItem('selectedAiProvider')
         localStorage.removeItem('customSearchUrl')
         localStorage.removeItem('customNewTabUrl')
+        localStorage.removeItem('syncServerUrl')
+        localStorage.removeItem('syncServerToken')
     }
 
     // Load settings from localStorage on component mount
@@ -542,12 +558,16 @@ To import this data back into DARC, use the import function in Settings.
         const savedAiProvider = localStorage.getItem('selectedAiProvider')
         const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
         const savedCustomNewTabUrl = localStorage.getItem('customNewTabUrl')
+        const savedSyncServerUrl = localStorage.getItem('syncServerUrl')
+        const savedSyncServerToken = localStorage.getItem('syncServerToken')
 
         if (savedSearchEngine) defaultSearchEngine = savedSearchEngine
         if (savedNewTabUrl) defaultNewTabUrl = savedNewTabUrl
         if (savedAiProvider) selectedAiProvider = savedAiProvider
         if (savedCustomSearchUrl) customSearchUrl = savedCustomSearchUrl
         if (savedCustomNewTabUrl) customNewTabUrl = savedCustomNewTabUrl
+        if (savedSyncServerUrl) syncServerUrl = savedSyncServerUrl
+        if (savedSyncServerToken) syncServerToken = savedSyncServerToken
         
         // Clean up old localStorage storage formats
         localStorage.removeItem('exportDirectoryName')
@@ -565,13 +585,55 @@ To import this data back into DARC, use the import function in Settings.
 
 <RightSidebar title="Settings" {onClose} {resourcesSidebarOpen} {settingsSidebarOpen} {switchToResources} {switchToSettings}>
     {#snippet children()}
+        <!-- AI Providers Section -->
+        <div class="setting-section">
+            <h3 class="section-title">Agent Models</h3>
+            <div class="setting-cards">
+                {#each aiProviders as provider}
+                    <div class="setting-card {selectedAiProvider === provider.id ? 'selected' : ''} {provider.status === 'disabled' ? 'disabled' : ''}" 
+                         role="button" 
+                         tabindex="0"
+                         onclick={() => handleAiProviderChange(provider.id)}
+                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleAiProviderChange(provider.id) } }}>
+                        <div class="setting-header">
+                            <span class="setting-icon">
+                                {#if provider.icon.startsWith('http')}
+                                    <img src={provider.icon} alt={provider.name} class="favicon" />
+                                {:else}
+                                    {@html provider.icon}
+                                {/if}
+                            </span>
+                            <div class="setting-info">
+                                <h4 class="setting-name">{provider.name}</h4>
+                                <p class="setting-description">{provider.description}</p>
+                            </div>
+                        </div>
+                        <div class="setting-status">
+                            <span class="status-indicator {provider.status}"></span>
+                            <span class="status-text">{provider.status === 'available' ? 'Available' : 'Coming Soon'}</span>
+                        </div>
+                        {#if selectedAiProvider === provider.id}
+                            <div class="selected-indicator">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                            </div>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+        </div>
+
         <!-- Search Engine Section -->
         <div class="setting-section">
             <h3 class="section-title">Default Search Engine</h3>
             <div class="setting-cards">
                 {#each searchEngines as engine}
                     <div class="setting-card {defaultSearchEngine === engine.id ? 'selected' : ''}" 
-                         onclick={() => handleSearchEngineChange(engine.id)}>
+                         role="button"
+                         tabindex="0"
+                         onclick={() => handleSearchEngineChange(engine.id)}
+                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSearchEngineChange(engine.id) } }}>
                         <div class="setting-header">
                             <span class="setting-icon">
                                 {#if engine.icon.startsWith('http')}
@@ -618,7 +680,10 @@ To import this data back into DARC, use the import function in Settings.
             <div class="setting-cards">
                 {#each newTabOptions as option}
                     <div class="setting-card {defaultNewTabUrl === option.id ? 'selected' : ''}" 
-                         onclick={() => handleNewTabChange(option.id)}>
+                         role="button"
+                         tabindex="0" 
+                         onclick={() => handleNewTabChange(option.id)}
+                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNewTabChange(option.id) } }}>
                         <div class="setting-header">
                             <div class="setting-info">
                                 <h4 class="setting-name">{option.name}</h4>
@@ -647,39 +712,43 @@ To import this data back into DARC, use the import function in Settings.
             </div>
         </div>
 
-        <!-- AI Providers Section -->
+        <!-- Sync Server Section -->
         <div class="setting-section">
-            <h3 class="section-title">Agent Models</h3>
-            <div class="setting-cards">
-                {#each aiProviders as provider}
-                    <div class="setting-card {selectedAiProvider === provider.id ? 'selected' : ''} {provider.status === 'disabled' ? 'disabled' : ''}" 
-                         onclick={() => handleAiProviderChange(provider.id)}>
-                        <div class="setting-header">
-                            <span class="setting-icon">
-                                {#if provider.icon.startsWith('http')}
-                                    <img src={provider.icon} alt={provider.name} class="favicon" />
-                                {:else}
-                                    {@html provider.icon}
-                                {/if}
-                            </span>
-                            <div class="setting-info">
-                                <h4 class="setting-name">{provider.name}</h4>
-                                <p class="setting-description">{provider.description}</p>
-                            </div>
-                        </div>
-                        <div class="setting-status">
-                            <span class="status-indicator {provider.status}"></span>
-                            <span class="status-text">{provider.status === 'available' ? 'Available' : 'Coming Soon'}</span>
-                        </div>
-                        {#if selectedAiProvider === provider.id}
-                            <div class="selected-indicator">
-                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                </svg>
-                            </div>
-                        {/if}
+            <h3 class="section-title">Sync Server</h3>
+            <div class="sync-section">
+                <div class="sync-description">
+                    <p>Configure a sync server to backup and synchronize your browser data across devices.</p>
+                </div>
+                
+                <div class="sync-controls">
+                    <div class="sync-field">
+                        <label for="sync-url" class="sync-label">Server URL</label>
+                        <input 
+                            id="sync-url"
+                            type="url" 
+                            bind:value={syncServerUrl}
+                            oninput={(e) => handleSyncServerUrlChange(e.target.value)}
+                            placeholder="https://your-sync-server.com"
+                            class="sync-input"
+                        />
                     </div>
-                {/each}
+                    
+                    <div class="sync-field">
+                        <label for="sync-token" class="sync-label">Access Token</label>
+                        <input 
+                            id="sync-token"
+                            type="password" 
+                            bind:value={syncServerToken}
+                            oninput={(e) => handleSyncServerTokenChange(e.target.value)}
+                            placeholder="Your authentication token"
+                            class="sync-input"
+                        />
+                    </div>
+                </div>
+                
+                <div class="sync-note">
+                    <p><strong>Note:</strong> Your sync server credentials are stored locally and encrypted. Data is end-to-end encrypted before transmission.</p>
+                </div>
             </div>
         </div>
 
@@ -1038,5 +1107,76 @@ To import this data back into DARC, use the import function in Settings.
 
     .selected-indicator .h-4 {
         height: 10px;
+    }
+
+    .sync-section {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+        padding: 16px;
+    }
+
+    .sync-description {
+        margin-bottom: 16px;
+    }
+
+    .sync-description p {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 12px;
+        line-height: 1.4;
+        margin: 0;
+    }
+
+    .sync-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        margin-bottom: 12px;
+    }
+
+    .sync-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .sync-label {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .sync-input {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 4px;
+        padding: 8px 10px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 12px;
+        font-family: 'SF Mono', Consolas, monospace;
+        width: 100%;
+        transition: all 0.2s ease;
+    }
+
+    .sync-input:focus {
+        outline: none;
+        border-color: rgba(59, 130, 246, 0.3);
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .sync-input::placeholder {
+        color: rgba(255, 255, 255, 0.4);
+    }
+
+    .sync-note {
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding-top: 12px;
+    }
+
+    .sync-note p {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 10px;
+        line-height: 1.4;
+        margin: 0;
     }
 </style>

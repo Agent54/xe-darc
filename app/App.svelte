@@ -5,6 +5,7 @@
     import ControlledFrame from './components/ControlledFrame.svelte'
     import Resources from './components/Resources.svelte'
     import Settings from './components/Settings.svelte'
+    import UserMods from './components/UserMods.svelte'
 
     const db = new PouchDB('darc')
 
@@ -261,6 +262,7 @@
     let showFixedNewTabButton = $state(false)
     let resourcesSidebarOpen = $state(false)
     let settingsSidebarOpen = $state(false)
+    let userModsSidebarOpen = $state(false)
     let focusModeEnabled = $state(false)
     
     // Window resize state for performance optimization
@@ -270,7 +272,64 @@
     // Track previous state to detect newly opened sidebars
     let prevResourcesSidebarOpen = $state(false)
     let prevSettingsSidebarOpen = $state(false)
+    let prevUserModsSidebarOpen = $state(false)
     let isSwitchingSidebars = $state(false)
+
+    // User Mods state
+    let userMods = $state([])
+
+    // User Mods functions
+    function matchesPattern(pattern, url) {
+        if (pattern === '*') return true
+        if (!pattern || !url) return false
+        
+        try {
+            const urlObj = new URL(url)
+            const hostname = urlObj.hostname
+            
+            // Support wildcards
+            const regexPattern = pattern
+                .replace(/\./g, '\\.')
+                .replace(/\*/g, '.*')
+            
+            const regex = new RegExp(`^${regexPattern}$`, 'i')
+            return regex.test(hostname) || regex.test(url)
+        } catch {
+            return false
+        }
+    }
+
+    function getApplicableUserMods(tab) {
+        if (!tab?.url) return { css: [], js: [] }
+        
+        const applicableMods = userMods.filter(mod => 
+            mod.enabled && matchesPattern(mod.pattern, tab.url)
+        )
+        
+        return {
+            css: applicableMods.filter(mod => mod.type.includes('css')),
+            js: applicableMods.filter(mod => mod.type.includes('js'))
+        }
+    }
+
+    function updateUserMods(newUserMods) {
+        userMods = newUserMods
+        // Save to localStorage
+        localStorage.setItem('userMods', JSON.stringify(newUserMods))
+    }
+
+    // Load user mods from localStorage
+    function loadUserMods() {
+        try {
+            const savedMods = localStorage.getItem('userMods')
+            if (savedMods) {
+                userMods = JSON.parse(savedMods)
+            }
+        } catch (error) {
+            console.error('Error loading user mods:', error)
+            userMods = []
+        }
+    }
 
     // Determine if sidebars are newly opened (but not when switching)
     $effect(() => {
@@ -278,6 +337,7 @@
         setTimeout(() => {
             prevResourcesSidebarOpen = resourcesSidebarOpen
             prevSettingsSidebarOpen = settingsSidebarOpen
+            prevUserModsSidebarOpen = userModsSidebarOpen
             isSwitchingSidebars = false // Reset switching flag after state update
         }, 200) // Slightly longer than animation duration
     })
@@ -1099,29 +1159,55 @@
         settingsSidebarOpen = false
     }
 
+    function toggleUserModsSidebar() {
+        userModsSidebarOpen = !userModsSidebarOpen
+    }
+
+    function closeUserModsSidebar() {
+        userModsSidebarOpen = false
+    }
+
     function switchToResources() {
         if (!resourcesSidebarOpen) {
-            if (settingsSidebarOpen) {
+            if (settingsSidebarOpen || userModsSidebarOpen) {
                 isSwitchingSidebars = true
             }
             settingsSidebarOpen = false
+            userModsSidebarOpen = false
             resourcesSidebarOpen = true
         }
     }
     
     function switchToSettings() {
         if (!settingsSidebarOpen) {
-            if (resourcesSidebarOpen) {
+            if (resourcesSidebarOpen || userModsSidebarOpen) {
                 isSwitchingSidebars = true
             }
             resourcesSidebarOpen = false
+            userModsSidebarOpen = false
             settingsSidebarOpen = true
+        }
+    }
+
+    function switchToUserMods() {
+        if (!userModsSidebarOpen) {
+            if (resourcesSidebarOpen || settingsSidebarOpen) {
+                isSwitchingSidebars = true
+            }
+            resourcesSidebarOpen = false
+            settingsSidebarOpen = false
+            userModsSidebarOpen = true
         }
     }
 
     function toggleFocusMode() {
         focusModeEnabled = !focusModeEnabled
     }
+
+    // Load settings when component mounts
+    $effect(() => {
+        loadUserMods()
+    })
 
     // let sidebarRightHovered = $state(false)
     // function handleSidebarRightMouseEnter() {
@@ -1606,10 +1692,10 @@
 <div class="controlled-frame-container browser-frame" 
      class:window-controls-overlay={headerPartOfMain} 
      class:scrolling={isScrolling} 
-     class:sidebar-open={resourcesSidebarOpen || settingsSidebarOpen}
+     class:sidebar-open={resourcesSidebarOpen || settingsSidebarOpen || userModsSidebarOpen}
      class:no-transitions={isWindowResizing}
      onscroll={handleScroll} 
-     style="box-sizing: border-box; --sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0)};">
+     style="box-sizing: border-box; --sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0) + (userModsSidebarOpen ? 1 : 0)};">
     <div class="frame-title-bar">
         <div class="frame-header-controls">
             <button class="frame-button" title="Back" aria-label="Back" onclick={goBack}>
@@ -1667,7 +1753,7 @@
                 <NewTab {tab} />
             </div>
         {:else}
-            <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} />
+            <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getApplicableUserMods(tab)} />
         {/if}
     {/each}
 </div>
@@ -1699,6 +1785,16 @@
         </button>
         
         <button class="sidebar-button" 
+                class:active={userModsSidebarOpen}
+                title="User Mods" 
+                aria-label="User Mods"
+                onmousedown={toggleUserModsSidebar}>
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+            </svg>
+        </button>
+        
+        <button class="sidebar-button" 
                 class:active={settingsSidebarOpen}
                 title="Settings" 
                 aria-label="Settings"
@@ -1717,18 +1813,35 @@
 
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
-{#if resourcesSidebarOpen || settingsSidebarOpen}
+{#if resourcesSidebarOpen || settingsSidebarOpen || userModsSidebarOpen}
     <div class="sidebar-container" 
          class:window-controls-overlay={headerPartOfMain}
          class:no-transitions={isWindowResizing}
-         style="--sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0)};">
+         style="--sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0) + (userModsSidebarOpen ? 1 : 0)};">
         {#if resourcesSidebarOpen}
             <div class="sidebar-panel" class:new-panel={resourcesSidebarOpen && !prevResourcesSidebarOpen && !isSwitchingSidebars}>
                 <Resources onClose={closeResourcesSidebar} 
                           {resourcesSidebarOpen} 
-                          {settingsSidebarOpen} 
+                          {settingsSidebarOpen}
+                          {userModsSidebarOpen}
                           {switchToResources} 
-                          {switchToSettings} />
+                          {switchToSettings}
+                          {switchToUserMods} />
+            </div>
+        {/if}
+        
+        {#if userModsSidebarOpen}
+            <div class="sidebar-panel" class:new-panel={userModsSidebarOpen && !prevUserModsSidebarOpen && !isSwitchingSidebars}>
+                <UserMods onClose={closeUserModsSidebar} 
+                         {resourcesSidebarOpen} 
+                         {settingsSidebarOpen}
+                         {userModsSidebarOpen}
+                         {switchToResources} 
+                         {switchToSettings}
+                         {switchToUserMods}
+                         {userMods}
+                         onUpdateUserMods={updateUserMods}
+                         currentTab={tabs[activeTabIndex]} />
             </div>
         {/if}
         
@@ -1736,9 +1849,11 @@
             <div class="sidebar-panel" class:new-panel={settingsSidebarOpen && !prevSettingsSidebarOpen && !isSwitchingSidebars}>
                 <Settings onClose={closeSettingsSidebar} 
                          {resourcesSidebarOpen} 
-                         {settingsSidebarOpen} 
+                         {settingsSidebarOpen}
+                         {userModsSidebarOpen}
                          {switchToResources} 
                          {switchToSettings}
+                         {switchToUserMods}
                          {tabs}
                          {closed} />
             </div>
@@ -2077,6 +2192,12 @@
         white-space: nowrap;
         mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
         -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
+        margin-left: 4px;
+    }
+
+    /* Remove extra margin when favicon-wrapper is present (since gap already provides spacing) */
+    .favicon-wrapper + .tab-title {
+        margin-left: 0;
     }
 
     .close-btn {
