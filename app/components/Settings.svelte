@@ -23,10 +23,11 @@
     let hasStoredCredential = $state(false)
 
     // Check WebAuthn support
-    const webAuthnSupported = typeof window !== 'undefined' && 
-                              'credentials' in navigator && 
-                              'create' in navigator.credentials &&
-                              'get' in navigator.credentials
+    const webAuthnSupported = false
+    //  typeof window !== 'undefined' && 
+    //                           'credentials' in navigator && 
+    //                           'create' in navigator.credentials &&
+    //                        'get' in navigator.credentials
 
     const searchEngines = [
         { 
@@ -1078,6 +1079,7 @@ To import this data back into DARC, use the import function in Settings.
                                     class="clear-token-button"
                                     onclick={clearBiometricAuth}
                                     title="Clear encrypted token"
+                                    aria-label="Clear encrypted token"
                                     type="button"
                                 >
                                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">

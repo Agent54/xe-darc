@@ -1288,6 +1288,14 @@
     // function handleSidebarRightMouseLeave() {
     //     sidebarRightHovered = false
     // }
+
+    function origin(url) {
+        try {
+            return new URL(url).origin
+        } catch (error) {
+            return url
+        }
+    }
 </script>
 
 {#snippet trashIcon()}
@@ -1822,11 +1830,25 @@
     {#each tabs as tab (tab.id)}
         {#if tab.url === 'about:newtab'}
             <div class="frame {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
+                {#key origin(tab.url)}
+                    <div class="url-display visible">
+                        {tab.url}
+                    </div>
+                {/key}
+                
                 <NewTab {tab} />
             </div>
         {:else}
             {#key userModsHash}
-                <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                <div>
+                    {#key origin(tab.url)}
+                        <div class="url-display visible">
+                            {tab.url}
+                        </div>
+                    {/key}
+                    
+                    <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                </div>
             {/key}
         {/if}
     {/each}
@@ -2752,7 +2774,6 @@
         opacity: 0;
         animation: hovercard-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
-        padding-top: 12px;
         user-select: none;
     }
 
@@ -2791,8 +2812,7 @@
         overflow: visible;
         box-shadow: 
             0 20px 40px rgba(0, 0, 0, 0.4),
-            0 8px 16px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            0 8px 16px rgba(0, 0, 0, 0.2);
         width: 320px;
         max-width: 90vw;
     }
@@ -3103,8 +3123,7 @@
     .context-menu {
         position: fixed;
         z-index: 10002;
-        background: rgba(0, 0, 0, 0.802);
-        backdrop-filter: blur(7px);
+        background: rgba(0, 0, 0, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 8px;
         min-width: 180px;
@@ -3191,8 +3210,7 @@
         left: calc(100% + 4px);
         top: -1px;
         min-width: 160px;
-        background: rgba(0, 0, 0, 0.802);
-        backdrop-filter: blur(7px);
+        background: rgba(0, 0, 0, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 8px;
         box-shadow: 
@@ -3520,16 +3538,57 @@
         width: calc(320px * var(--sidebar-count, 1)) !important;
     }
 
-    /* Force immediate positioning for all sidebar elements during resize */
+    /* Ensure panels stay in correct position when transitioning out of resize mode */
+    .sidebar-panel {
+        transform: translateX(0);
+    }
+
     .no-transitions .sidebar,
     .no-transitions .sidebar * {
         transition: none !important;
         animation: none !important;
     }
 
-    /* Ensure panels stay in correct position when transitioning out of resize mode */
-    .sidebar-panel {
-        transform: translateX(0);
+    .url-display {
+        position: absolute;
+        background: rgba(0, 0, 0, 0.85);
+        color: white;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        font-size: 11px;
+        font-weight: 400;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(12px);
+        z-index: 10;
+        opacity: 0;
+        transform: translateY(0);
+        max-width: calc(100% - 24px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        user-select: none;
+        pointer-events: none;
+        margin-top: -8px;
     }
 
+    .url-display.visible {
+        animation: url-display-fade-in-out 1.8s ease-out forwards;
+    }
+
+    @keyframes url-display-fade-in-out {
+        0% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        80% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        100% {
+            opacity: 0;
+            transform: translateY(-4px);
+        }
+    }
 </style>

@@ -11,8 +11,6 @@ fix hibernatino fade glitch
 empty tabs title drag missing
 hibernate image crash click
 
-no faviccon new tab
-
 mising drag area when tab fade active
 
 white box on threlte start
@@ -181,15 +179,11 @@ PR test canvas screen for agent workflows etc
 
 claude, open ai, gemini, local
 
-oauth popup, figame + figma mcp
-
-mkae multi sidebar
+figma mcp
 
 setup mcps 
 
 preshot mode where creating pocs live on noting down ideas before even creating stories
-
-export to folder sync with git snapshots and file api
 
 fix nav gesures±!
 
@@ -197,11 +191,7 @@ make self runnable and iframe support
 
 full chrome os release like playbitOS?
 
-
-colab with presentation api
-
-
-http://localhost:5193
+colab with presentation api/ remote window mod freature from chrome
 
 find expenses that could be optimized in my account statements
 
@@ -211,55 +201,34 @@ user profile handling in iwa or in launcher?
 
 soft profiles with prefix for partition and separate encryption key
 
-sync server with authn key encryption serverless
+sync server with authn key encryption serverless, origin fix
 
 horizontal card layout with tilt angle setting and 1 -5 columns in hovercard
 
 picture in picture
 
-usercss userjs sidebar
-
 ai scan userscripts and other agents behaviour (other provider)
-
 
 ai explain content script (other provider)
 
-add /remove headers
+usermod add /remove headers
 
 mcp settings
 
 local mcps? athropic api?
 
-add all resources: geo, game, vr, ....
-
 agent resources vs all resources? naming/ location to show?
 add resource availability eg not allowed to app or api not available
 
-activate input box on new tab/ new tab page aktivation
-
-blur missing in partition submenu
-
-hovercard top margin
-
-tab without favicon left margin
-
 https://marketplace.visualstudio.com/items?itemName=sketchbuch.vsc-workspace-sidebar
-
-disable horizontal overscorll effect?
 
 cloudflare docs cant open dark mode menu:
 https://developers.cloudflare.com/agents/model-context-protocol/mcp-agent-api/
 
 
-show tab title while chaning
-
 subscription for frontier models with fraction pooling and distributino to your liked content. like bumping possible.
 
 meet & maps features!!!!
-
-window resize animation off in sidebars
-
-service worker interception
 
 locked and unlocked apps concept
 
@@ -273,5 +242,4 @@ how to get cert infos?
 
 tosdl and remote data tabs
 
-
-remember button
+http://localhost:5193

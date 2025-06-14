@@ -1,6 +1,6 @@
 {
   "name": "Darc",
-  "version": "1.0.21",
+  "version": "1.0.23",
   "short_name": "Darc",
   "description": "U&A modified Isolated Web App to test the Controlled Frame API.",
   "categories": ["productivity"],
@@ -31,7 +31,17 @@
     "camera": ["self"],
     "window-management": ["self"],
     "publickey-credentials-create": ["self"],
-    "publickey-credentials-get": ["self"]
+    "publickey-credentials-get": ["self"],
+    "geolocation": ["self"],
+    "clipboard-read": ["self"],
+    "clipboard-write": ["self"],
+    "payment": ["self"],
+    "usb": ["self"],
+    "serial": ["self"],
+    "hid": ["self"],
+    "midi": ["self"],
+    "xr-spatial-tracking": ["self"],
+    "xr-device-access": ["self"]
   },
   "scope_extensions": [
     { "type": "origin", "origin": "https://example.local" }

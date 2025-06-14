@@ -19,6 +19,9 @@
     let completionTimeout = null
     let generationId = 0
     
+    // Input element reference
+    let inputElement = null
+    
     // Shader controls
     let grainOpacity = $state( 0.14) //0.2) //0.16)
     let grainAmount = $state(15.52)//31.7)// 36.57)
@@ -565,6 +568,10 @@
         if (tab.shouldFocus) {
             newTabContainer.scrollIntoView({ behavior: 'smooth' })
             tab.tabButton.scrollIntoView({ behavior: 'smooth' })
+            // Focus the input element
+            if (inputElement) {
+                inputElement.focus()
+            }
             tab.shouldFocus = false
         }
         initializeAI()
@@ -572,7 +579,6 @@
 </script>
 
 <div bind:this={newTabContainer} class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
-
     <div class="content-container relative pt-[15vh] w-full">
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
             
@@ -586,6 +592,7 @@
             <form onsubmit={handleSubmit} class="relative">
                 <div class="input-wrapper relative" onclick={(e) => e.stopPropagation()}>
                     <input
+                        bind:this={inputElement}
                         type="text"
                         bind:value={inputValue}
                         oninput={handleInputChange}

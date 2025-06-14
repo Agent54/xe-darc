@@ -416,6 +416,17 @@
         // Filter to capture all URLs
         const allUrlsFilter = { urls: ['<all_urls>'] }
 
+        // Headers to strip from responses for security isolation
+        const headersToHandle = [
+            'cross-origin-embedder-policy',
+            'cross-origin-opener-policy',
+            'cross-origin-embedder-policy-report-only',
+            'cross-origin-opener-policy-report-only',
+        ]
+
+        // Get the app's own origin for CSP injection
+        const appOrigin = window.location.origin
+
         // Log all request events with full details
         frame.request.onBeforeRequest.addListener((details) => {
             const url = new URL(details.url)
@@ -455,31 +466,100 @@
             return { cancel: block }
         }, allUrlsFilter, ['blocking', 'requestBody'])
 
-        // frame.request.onBeforeSendHeaders.addListener((details) => {
-        //     console.log('📤 Request Headers:', {
-        //         requestId: details.requestId,
-        //         url: details.url,
-        //         headers: details.requestHeaders
-        //     })
-        // }, allUrlsFilter, ['requestHeaders'])
+        // Helper function to parse and modify CSP directives
+        function enhanceCSPWithOrigin(cspValue, appOrigin) {
+            if (!cspValue || !appOrigin) return cspValue
 
-        // frame.request.onSendHeaders.addListener((details) => {
-        //     console.log('✈️ Headers Sent:', {
-        //         requestId: details.requestId,
-        //         url: details.url,
-        //         headers: details.requestHeaders
-        //     })
-        // }, allUrlsFilter, ['requestHeaders'])
+            // Parse CSP directives
+            const directives = cspValue.split(';').map(dir => dir.trim()).filter(dir => dir)
+            const enhancedDirectives = []
 
-        // frame.request.onHeadersReceived.addListener((details) => {
-        //     console.log('📥 Response Headers:', {
-        //         requestId: details.requestId,
-        //         url: details.url,
-        //         statusCode: details.statusCode,
-        //         statusLine: details.statusLine,
-        //         headers: details.responseHeaders
-        //     })
-        // }, allUrlsFilter, ['responseHeaders'])
+            // Directives that should include the app origin
+            const directivesToEnhance = [
+                'default-src', 'script-src', 'style-src', 'img-src', 
+                'font-src', 'connect-src', 'media-src', 'child-src', 
+                'worker-src', 'frame-src'
+            ]
+
+            for (const directive of directives) {
+                const [name, ...sources] = directive.split(/\s+/)
+                const directiveName = name.toLowerCase()
+
+                if (directivesToEnhance.includes(directiveName)) {
+                    // Check if app origin is already present
+                    const sourcesStr = sources.join(' ')
+                    if (!sourcesStr.includes(appOrigin)) {
+                        // Add app origin to this directive
+                        enhancedDirectives.push(`${name} ${sources.join(' ')} ${appOrigin}`.trim())
+                    } else {
+                        // Already contains app origin, keep as is
+                        enhancedDirectives.push(directive)
+                    }
+                } else {
+                    // Keep directive as is
+                    enhancedDirectives.push(directive)
+                }
+            }
+
+            return enhancedDirectives.join('; ')
+        }
+
+        // Handle response headers - strip some security headers and enhance CSP with app origin
+        frame.request.onHeadersReceived.addListener((details) => {
+            if (!details.responseHeaders) return
+
+            const modifiedHeaders = []
+
+            // Process each header
+            for (const header of details.responseHeaders) {
+                const headerName = header.name.toLowerCase()
+                
+                if (headerName === 'content-security-policy') {
+                    // Enhance existing CSP with app origin
+                    const enhancedCSP = enhanceCSPWithOrigin(header.value, appOrigin)
+                    modifiedHeaders.push({
+                        name: header.name,
+                        value: enhancedCSP
+                    })
+                    console.log('🔒 Enhanced CSP:', { original: header.value, enhanced: enhancedCSP })
+                } else if (headerName === 'content-security-policy-report-only') {
+                    // Enhance existing CSP report-only with app origin
+                    const enhancedCSP = enhanceCSPWithOrigin(header.value, appOrigin)
+                    modifiedHeaders.push({
+                        name: header.name,
+                        value: enhancedCSP
+                    })
+                    console.log('🔒 Enhanced CSP Report-Only:', { original: header.value, enhanced: enhancedCSP })
+                                 } else if (headersToHandle.includes(headerName)) {
+                     // Strip these headers but don't add them to modifiedHeaders
+                     console.log('🚫 Stripped header:', headerName)
+                 } else {
+                     // Keep other headers as is
+                     modifiedHeaders.push(header)
+                 }
+             }
+
+            // Add Cross-Origin policies that allow communication with app
+            modifiedHeaders.push({
+                name: 'Cross-Origin-Embedder-Policy',
+                value: 'unsafe-none'
+            })
+
+            modifiedHeaders.push({
+                name: 'Cross-Origin-Opener-Policy',
+                value: 'same-origin-allow-popups'
+            })
+
+            console.log('🔒 Modified response headers for:', details.url, {
+                originalCount: details.responseHeaders.length,
+                modifiedCount: modifiedHeaders.length,
+                injectedOrigin: appOrigin
+            })
+
+            return { 
+                responseHeaders: modifiedHeaders 
+            }
+        }, allUrlsFilter, ['blocking', 'responseHeaders'])
 
         frame.request.onAuthRequired.addListener((details) => {
             console.log('🔐 Auth Required:', {
@@ -896,7 +976,7 @@ document.addEventListener('keydown', function(event) {
 
                 sandbox="allow-scripts allow-forms"
                 csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
-                allow="accelerometer 'none'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'none'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-create 'self'; publickey-credentials-get 'self'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'"
+                allow="accelerometer 'self'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'self'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'self'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-create 'self'; publickey-credentials-get 'self'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'"
                 credentialless={true}
                 referrerpolicy="strict-origin-when-cross-origin"
                 loading="lazy"
