@@ -1,7 +1,7 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
     
-    let { onClose, resourcesSidebarOpen, settingsSidebarOpen, switchToResources, switchToSettings } = $props()
+    let { onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods } = $props()
 
     const resourceSections = [
         { id: 'used', title: 'Used', color: 'green' },
@@ -72,7 +72,7 @@
     }
 </script>
 
-<RightSidebar title="Resources" {onClose} {resourcesSidebarOpen} {settingsSidebarOpen} {switchToResources} {switchToSettings}>
+<RightSidebar title="Resources" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods}>
     {#snippet children()}
         {#each resourceSections as section}
             {#if resourceData[section.id].length > 0}

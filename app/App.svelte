@@ -260,9 +260,7 @@
     let viewMode = $state('default')
     let lastUsedViewMode = $state('tile') // Default to tile as the alternative
     let showFixedNewTabButton = $state(false)
-    let resourcesSidebarOpen = $state(false)
-    let settingsSidebarOpen = $state(false)
-    let userModsSidebarOpen = $state(false)
+    let openSidebars = $state(new Set())
     let focusModeEnabled = $state(false)
     
     // Window resize state for performance optimization
@@ -270,9 +268,7 @@
     let resizeTimeout = null
 
     // Track previous state to detect newly opened sidebars
-    let prevResourcesSidebarOpen = $state(false)
-    let prevSettingsSidebarOpen = $state(false)
-    let prevUserModsSidebarOpen = $state(false)
+    let prevOpenSidebars = $state(new Set())
     let isSwitchingSidebars = $state(false)
 
     // User Mods state
@@ -327,12 +323,18 @@
 
     // Determine if sidebars are newly opened (but not when switching)
     $effect(() => {
+        // Don't update previous state during window resize to prevent false "new panel" detection
+        if (isWindowResizing) {
+            return
+        }
+        
         // Update previous state after a brief delay to allow animation
         setTimeout(() => {
-            prevResourcesSidebarOpen = resourcesSidebarOpen
-            prevSettingsSidebarOpen = settingsSidebarOpen
-            prevUserModsSidebarOpen = userModsSidebarOpen
-            isSwitchingSidebars = false // Reset switching flag after state update
+            // Double-check that we're still not resizing when the timeout fires
+            if (!isWindowResizing) {
+                prevOpenSidebars = new Set(openSidebars)
+                isSwitchingSidebars = false // Reset switching flag after state update
+            }
         }, 200) // Slightly longer than animation duration
     })
 
@@ -361,11 +363,13 @@
                 clearTimeout(resizeTimeout)
             }
             
-            // Clear resizing state after resize stops (debounced)
-            resizeTimeout = setTimeout(() => {
-                isWindowResizing = false
-                resizeTimeout = null
-            }, 100) // 100ms delay after last resize event for faster response
+                    // Clear resizing state after resize stops (debounced)
+        resizeTimeout = setTimeout(() => {
+            isWindowResizing = false
+            resizeTimeout = null
+            // Immediately sync previous state to prevent false "new panel" detection
+            prevOpenSidebars = new Set(openSidebars)
+        }, 150) // Shorter delay to reduce flash time while still ensuring smooth transitions
         }
     }
     controlsOverlayQuery.addEventListener('change', e => {
@@ -1138,59 +1142,77 @@
     }
 
     function toggleResourcesSidebar() {
-        resourcesSidebarOpen = !resourcesSidebarOpen
+        if (openSidebars.has('resources')) {
+            openSidebars.delete('resources')
+        } else {
+            openSidebars.add('resources')
+        }
+        openSidebars = new Set(openSidebars) // trigger reactivity
     }
 
     function closeResourcesSidebar() {
-        resourcesSidebarOpen = false
+        openSidebars.delete('resources')
+        openSidebars = new Set(openSidebars)
     }
 
     function toggleSettingsSidebar() {
-        settingsSidebarOpen = !settingsSidebarOpen
+        if (openSidebars.has('settings')) {
+            openSidebars.delete('settings')
+        } else {
+            openSidebars.add('settings')
+        }
+        openSidebars = new Set(openSidebars) // trigger reactivity
     }
 
     function closeSettingsSidebar() {
-        settingsSidebarOpen = false
+        openSidebars.delete('settings')
+        openSidebars = new Set(openSidebars)
     }
 
     function toggleUserModsSidebar() {
-        userModsSidebarOpen = !userModsSidebarOpen
+        if (openSidebars.has('userMods')) {
+            openSidebars.delete('userMods')
+        } else {
+            openSidebars.add('userMods')
+        }
+        openSidebars = new Set(openSidebars) // trigger reactivity
     }
 
     function closeUserModsSidebar() {
-        userModsSidebarOpen = false
+        openSidebars.delete('userMods')
+        openSidebars = new Set(openSidebars)
     }
 
     function switchToResources() {
-        if (!resourcesSidebarOpen) {
-            if (settingsSidebarOpen || userModsSidebarOpen) {
+        if (!openSidebars.has('resources')) {
+            if (openSidebars.has('settings') || openSidebars.has('userMods')) {
                 isSwitchingSidebars = true
             }
-            settingsSidebarOpen = false
-            userModsSidebarOpen = false
-            resourcesSidebarOpen = true
+            openSidebars.clear()
+            openSidebars.add('resources')
+            openSidebars = new Set(openSidebars)
         }
     }
     
     function switchToSettings() {
-        if (!settingsSidebarOpen) {
-            if (resourcesSidebarOpen || userModsSidebarOpen) {
+        if (!openSidebars.has('settings')) {
+            if (openSidebars.has('resources') || openSidebars.has('userMods')) {
                 isSwitchingSidebars = true
             }
-            resourcesSidebarOpen = false
-            userModsSidebarOpen = false
-            settingsSidebarOpen = true
+            openSidebars.clear()
+            openSidebars.add('settings')
+            openSidebars = new Set(openSidebars)
         }
     }
 
     function switchToUserMods() {
-        if (!userModsSidebarOpen) {
-            if (resourcesSidebarOpen || settingsSidebarOpen) {
+        if (!openSidebars.has('userMods')) {
+            if (openSidebars.has('resources') || openSidebars.has('settings')) {
                 isSwitchingSidebars = true
             }
-            resourcesSidebarOpen = false
-            settingsSidebarOpen = false
-            userModsSidebarOpen = true
+            openSidebars.clear()
+            openSidebars.add('userMods')
+            openSidebars = new Set(openSidebars)
         }
     }
 
@@ -1688,10 +1710,10 @@
 <div class="controlled-frame-container browser-frame" 
      class:window-controls-overlay={headerPartOfMain} 
      class:scrolling={isScrolling} 
-     class:sidebar-open={resourcesSidebarOpen || settingsSidebarOpen || userModsSidebarOpen}
+     class:sidebar-open={openSidebars.size > 0}
      class:no-transitions={isWindowResizing}
      onscroll={handleScroll} 
-     style="box-sizing: border-box; --sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0) + (userModsSidebarOpen ? 1 : 0)};">
+     style="box-sizing: border-box; --sidebar-count: {openSidebars.size};">
     <div class="frame-title-bar">
         <div class="frame-header-controls">
             <button class="frame-button" title="Back" aria-label="Back" onclick={goBack}>
@@ -1773,7 +1795,7 @@
         </button>
         
         <button class="sidebar-button" 
-                class:active={resourcesSidebarOpen}
+                class:active={openSidebars.has('resources')}
                 title="Resources" 
                 aria-label="Resources"
                 onmousedown={toggleResourcesSidebar}>
@@ -1783,7 +1805,7 @@
         </button>
         
         <button class="sidebar-button" 
-                class:active={userModsSidebarOpen}
+                class:active={openSidebars.has('userMods')}
                 title="User Mods" 
                 aria-label="User Mods"
                 onmousedown={toggleUserModsSidebar}>
@@ -1793,7 +1815,7 @@
         </button>
         
         <button class="sidebar-button" 
-                class:active={settingsSidebarOpen}
+                class:active={openSidebars.has('settings')}
                 title="Settings" 
                 aria-label="Settings"
                 onmousedown={toggleSettingsSidebar}>
@@ -1811,29 +1833,25 @@
 
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
-{#if resourcesSidebarOpen || settingsSidebarOpen || userModsSidebarOpen}
+{#if openSidebars.size > 0}
     <div class="sidebar-container" 
          class:window-controls-overlay={headerPartOfMain}
          class:no-transitions={isWindowResizing}
-         style="--sidebar-count: {(resourcesSidebarOpen ? 1 : 0) + (settingsSidebarOpen ? 1 : 0) + (userModsSidebarOpen ? 1 : 0)};">
-        {#if resourcesSidebarOpen}
-            <div class="sidebar-panel" class:new-panel={resourcesSidebarOpen && !prevResourcesSidebarOpen && !isSwitchingSidebars}>
+         style="--sidebar-count: {openSidebars.size};">
+        {#if openSidebars.has('resources')}
+            <div class="sidebar-panel" class:new-panel={openSidebars.has('resources') && !prevOpenSidebars.has('resources') && !isSwitchingSidebars && !isWindowResizing}>
                 <Resources onClose={closeResourcesSidebar} 
-                          {resourcesSidebarOpen} 
-                          {settingsSidebarOpen}
-                          {userModsSidebarOpen}
+                          {openSidebars}
                           {switchToResources} 
                           {switchToSettings}
                           {switchToUserMods} />
             </div>
         {/if}
         
-        {#if userModsSidebarOpen}
-            <div class="sidebar-panel" class:new-panel={userModsSidebarOpen && !prevUserModsSidebarOpen && !isSwitchingSidebars}>
+        {#if openSidebars.has('userMods')}
+            <div class="sidebar-panel" class:new-panel={openSidebars.has('userMods') && !prevOpenSidebars.has('userMods') && !isSwitchingSidebars && !isWindowResizing}>
                 <UserMods onClose={closeUserModsSidebar} 
-                         {resourcesSidebarOpen} 
-                         {settingsSidebarOpen}
-                         {userModsSidebarOpen}
+                         {openSidebars}
                          {switchToResources} 
                          {switchToSettings}
                          {switchToUserMods}
@@ -1843,12 +1861,10 @@
             </div>
         {/if}
         
-        {#if settingsSidebarOpen}
-            <div class="sidebar-panel" class:new-panel={settingsSidebarOpen && !prevSettingsSidebarOpen && !isSwitchingSidebars}>
+        {#if openSidebars.has('settings')}
+            <div class="sidebar-panel" class:new-panel={openSidebars.has('settings') && !prevOpenSidebars.has('settings') && !isSwitchingSidebars && !isWindowResizing}>
                 <Settings onClose={closeSettingsSidebar} 
-                         {resourcesSidebarOpen} 
-                         {settingsSidebarOpen}
-                         {userModsSidebarOpen}
+                         {openSidebars}
                          {switchToResources} 
                          {switchToSettings}
                          {switchToUserMods}
@@ -3428,6 +3444,38 @@
     .sidebar-container.no-transitions .sidebar-panel {
         transition: none !important;
         animation: none !important;
+    }
+
+    /* Disable all sidebar-related animations during window resize */
+    .no-transitions .sidebar-panel.new-panel {
+        animation: none !important;
+        transform: translateX(0) !important;
+    }
+
+    .no-transitions .sidebar-panel::before {
+        transition: none !important;
+    }
+
+    /* Disable all sidebar and panel transforms during resize */
+    .no-transitions .sidebar-panel {
+        transform: translateX(0) !important;
+    }
+
+    /* Disable any width-related transitions on sidebar containers */
+    .sidebar-container.no-transitions {
+        width: calc(320px * var(--sidebar-count, 1)) !important;
+    }
+
+    /* Force immediate positioning for all sidebar elements during resize */
+    .no-transitions .sidebar,
+    .no-transitions .sidebar * {
+        transition: none !important;
+        animation: none !important;
+    }
+
+    /* Ensure panels stay in correct position when transitioning out of resize mode */
+    .sidebar-panel {
+        transform: translateX(0);
     }
 
 </style>

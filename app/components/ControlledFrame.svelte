@@ -630,7 +630,7 @@ document.addEventListener('keydown', function(event) {
             ...userMods.css.map(mod => {
                 return {
                     name: mod.name,
-                    matches: [mod.pattern],
+                    matches: [mod.pattern.replace(/^\*/g, '<all_urls>')],
                     css: {
                         code: mod.content
                     }
@@ -639,7 +639,7 @@ document.addEventListener('keydown', function(event) {
             ...userMods.js.map(mod => {
                 return {
                     name: mod.name,
-                    matches: [mod.pattern],
+                    matches: [mod.pattern.replace(/^\*/g, '<all_urls>')],
                     js: {
                         code: mod.content
                     }

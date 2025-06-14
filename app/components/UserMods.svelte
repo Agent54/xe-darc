@@ -3,9 +3,7 @@
     
     let { 
         onClose, 
-        resourcesSidebarOpen, 
-        settingsSidebarOpen, 
-        userModsSidebarOpen,
+        openSidebars,
         switchToResources, 
         switchToSettings, 
         switchToUserMods,
@@ -210,7 +208,7 @@
     })
 </script>
 
-<RightSidebar title="User Mods" {onClose} {resourcesSidebarOpen} {settingsSidebarOpen} userModsSidebarOpen={userModsSidebarOpen} {switchToResources} {switchToSettings} {switchToUserMods}>
+<RightSidebar title="User Mods" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods}>
     {#snippet children()}
         <!-- Add/Edit Form -->
         {#if showAddForm}

@@ -1,5 +1,5 @@
 <script>
-    let { title, onClose, children, resourcesSidebarOpen, settingsSidebarOpen, userModsSidebarOpen = false, switchToResources, switchToSettings, switchToUserMods } = $props()
+    let { title, onClose, children, openSidebars = new Set(), switchToResources, switchToSettings, switchToUserMods } = $props()
 </script>
 
 <div class="sidebar">
@@ -20,7 +20,7 @@
                 </button>
                 
                 <button class="sidebar-nav-button" 
-                        class:active={resourcesSidebarOpen}
+                        class:active={openSidebars.has('resources')}
                         title="Resources" 
                         aria-label="Resources"
                         onmousedown={switchToResources}>
@@ -30,7 +30,7 @@
                 </button>
 
                 <button class="sidebar-nav-button" 
-                        class:active={userModsSidebarOpen}
+                        class:active={openSidebars.has('userMods')}
                         title="User Mods" 
                         aria-label="User Mods"
                         onmousedown={switchToUserMods}>
@@ -40,7 +40,7 @@
                 </button>
                 
                 <button class="sidebar-nav-button" 
-                        class:active={settingsSidebarOpen}
+                        class:active={openSidebars.has('settings')}
                         title="Settings" 
                         aria-label="Settings"
                         onmousedown={switchToSettings}>
@@ -106,7 +106,6 @@
         align-items: center;
         gap: 8px;
         opacity: 0;
-        transition: opacity 0.1s ease;
     }
 
     .sidebar:hover .sidebar-nav-buttons {
