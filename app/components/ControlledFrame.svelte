@@ -8,6 +8,7 @@
     import { fade } from 'svelte/transition'
 
     let {
+        style = '',
         tab, 
         tabs,
         headerPartOfMain,
@@ -846,6 +847,7 @@ document.addEventListener('keydown', function(event) {
 
 {#if tab.hibernated}
     <div 
+        style={style}
         class="frame hibernated-frame"
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
@@ -936,6 +938,7 @@ document.addEventListener('keydown', function(event) {
             loading="eager"
             -->
             <controlledframe
+                style={style}
                 transition:fade={{duration: 150}}
                 bind:this={tab.frame}
                 class:window-controls-overlay={headerPartOfMain}
@@ -990,6 +993,7 @@ document.addEventListener('keydown', function(event) {
             <!-- ControlledFrame API not available, falling back to iframe -->
             {#if initialUrl}
                 <iframe
+                    style={style}
                     transition:fade={{duration: 150}}
                     bind:this={tab.frame}
                     src={initialUrl}

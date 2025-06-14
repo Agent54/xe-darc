@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@e2b/code-interpreter": "^1.5.1",
+    "@excalidraw/excalidraw": "^0.18.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tailwindcss/vite": "^4.1.8",
     "@threlte/core": "^8.0.4",
@@ -19,8 +20,8 @@
     "events": "^3.3.0",
     "lit": "^3.2.1",
     "pouchdb-browser": "^9.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "svelte": "^5.33.11",
     "tailwindcss": "^4.1.8",
     "three": "^0.177.0",

@@ -6,6 +6,7 @@
     import Resources from './components/Resources.svelte'
     import Settings from './components/Settings.svelte'
     import UserMods from './components/UserMods.svelte'
+    import Excalidraw from './components/Excalidraw.svelte'
 
     const db = new PouchDB('darc')
 
@@ -1827,31 +1828,37 @@
         </div>
     </div>
 
-    {#each tabs as tab (tab.id)}
-        {#if tab.url === 'about:newtab'}
-            <div class="frame {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
-                {#key origin(tab.url)}
-                    <div class="url-display visible">
-                        {tab.url}
-                    </div>
-                {/key}
-                
-                <NewTab {tab} />
-            </div>
-        {:else}
-            {#key userModsHash}
-                <div>
+    {#if viewMode === 'canvas'}
+        <Excalidraw theme="dark" tabs={tabs} />
+    {:else}
+        {#each tabs as tab (tab.id)}
+            {#if tab.url === 'about:newtab'}
+                <div class="frame {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
                     {#key origin(tab.url)}
                         <div class="url-display visible">
                             {tab.url}
                         </div>
                     {/key}
                     
-                    <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                    <NewTab {tab} />
                 </div>
-            {/key}
-        {/if}
-    {/each}
+            {:else}
+                {#key userModsHash}
+                    <div>
+                        {#key origin(tab.url)}
+                            <div class="url-display visible">
+                                {tab.url}
+                            </div>
+                        {/key}
+                        
+                        <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                    </div>
+                {/key}
+            {/if}
+        {/each}
+    {/if}
+
+    
 </div>
 
 

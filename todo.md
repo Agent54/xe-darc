@@ -201,6 +201,8 @@ user profile handling in iwa or in launcher?
 
 soft profiles with prefix for partition and separate encryption key
 
+popupblocker for cookiebanners
+
 sync server with authn key encryption serverless, origin fix
 
 horizontal card layout with tilt angle setting and 1 -5 columns in hovercard
