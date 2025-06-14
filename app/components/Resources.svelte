@@ -265,12 +265,20 @@
             description: 'Internet connectivity and data usage'
         },
         {
-            id: 'storage',
-            name: 'Storage',
+            id: 'local-storage',
+            name: 'Local Storage',
             icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
             </svg>`,
             description: 'File system and local storage access'
+        },
+        {
+            id: 'server-storage',
+            name: 'Server Storage',
+            icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+            </svg>`,
+            description: 'Your data stored on servers of the sites'
         }
     ]
 
@@ -281,7 +289,8 @@
             { ...resourceTypes.find(t => t.id === 'javascript'), lastUsed: '5 minutes ago', status: 'Active' },
             { ...resourceTypes.find(t => t.id === 'images'), lastUsed: '1 minute ago', status: 'Active' },
             { ...resourceTypes.find(t => t.id === 'sound'), lastUsed: '3 minutes ago', status: 'Active' },
-            { ...resourceTypes.find(t => t.id === 'storage'), lastUsed: '10 minutes ago', status: 'Active' }
+            { ...resourceTypes.find(t => t.id === 'local-storage'), lastUsed: '10 minutes ago', status: 'Active' },
+            { ...resourceTypes.find(t => t.id === 'server-storage'), lastUsed: '10 minutes ago', status: 'Active' }
         ],
         unused: [
             { ...resourceTypes.find(t => t.id === 'location'), lastUsed: 'Never', status: 'Available' },
