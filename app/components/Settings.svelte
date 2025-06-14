@@ -9,12 +9,24 @@
     let selectedAiProvider = $state('writer')
     let customSearchUrl = $state('')
     let customNewTabUrl = $state('')
-    let syncServerUrl = $state('')
+    let syncServerUrl = $state('https://darc.cloudless.one')
     let syncServerToken = $state('')
     let exportDirectory = $state(null)
     let isExporting = $state(false)
     let exportStatus = $state('')
     let isLoadingDirectory = $state(true)
+
+    // Biometric authentication state
+    let isAuthenticating = $state(false)
+    let authError = $state('')
+    let isTokenEncrypted = $state(false)
+    let hasStoredCredential = $state(false)
+
+    // Check WebAuthn support
+    const webAuthnSupported = typeof window !== 'undefined' && 
+                              'credentials' in navigator && 
+                              'create' in navigator.credentials &&
+                              'get' in navigator.credentials
 
     const searchEngines = [
         { 
@@ -88,6 +100,290 @@
         }
     ]
 
+    // WebAuthn credential options
+    const credentialOptions = {
+        publicKey: {
+            challenge: new Uint8Array(32),
+            rp: {
+                name: "DARC Browser",
+                id: window.location.hostname
+            },
+            user: {
+                id: new Uint8Array(16),
+                name: "darc-user",
+                displayName: "DARC User"
+            },
+            pubKeyCredParams: [{
+                type: "public-key",
+                alg: -7 // ES256
+            }],
+            authenticatorSelection: {
+                authenticatorAttachment: "platform",
+                userVerification: "required"
+            },
+            timeout: 60000,
+            attestation: "none"
+        }
+    }
+
+    // Encryption utilities using Web Crypto API
+    async function deriveKey(password) {
+        const encoder = new TextEncoder()
+        const keyMaterial = await window.crypto.subtle.importKey(
+            "raw",
+            encoder.encode(password),
+            { name: "PBKDF2" },
+            false,
+            ["deriveBits", "deriveKey"]
+        )
+        
+        const salt = new Uint8Array(16)
+        window.crypto.getRandomValues(salt)
+        
+        const key = await window.crypto.subtle.deriveKey(
+            {
+                name: "PBKDF2",
+                salt: salt,
+                iterations: 100000,
+                hash: "SHA-256"
+            },
+            keyMaterial,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["encrypt", "decrypt"]
+        )
+        
+        return { key, salt }
+    }
+
+    async function encryptToken(token, credentialId) {
+        try {
+            const { key, salt } = await deriveKey(credentialId)
+            const encoder = new TextEncoder()
+            const iv = new Uint8Array(12)
+            window.crypto.getRandomValues(iv)
+            
+            const encrypted = await window.crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: iv },
+                key,
+                encoder.encode(token)
+            )
+            
+            return {
+                encrypted: Array.from(new Uint8Array(encrypted)),
+                iv: Array.from(iv),
+                salt: Array.from(salt)
+            }
+        } catch (error) {
+            console.error('Encryption error:', error)
+            throw error
+        }
+    }
+
+    async function decryptToken(encryptedData, credentialId) {
+        try {
+            const encoder = new TextEncoder()
+            const keyMaterial = await window.crypto.subtle.importKey(
+                "raw",
+                encoder.encode(credentialId),
+                { name: "PBKDF2" },
+                false,
+                ["deriveBits", "deriveKey"]
+            )
+            
+            const key = await window.crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: new Uint8Array(encryptedData.salt),
+                    iterations: 100000,
+                    hash: "SHA-256"
+                },
+                keyMaterial,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["encrypt", "decrypt"]
+            )
+            
+            const decrypted = await window.crypto.subtle.decrypt(
+                { name: "AES-GCM", iv: new Uint8Array(encryptedData.iv) },
+                key,
+                new Uint8Array(encryptedData.encrypted)
+            )
+            
+            return new TextDecoder().decode(decrypted)
+        } catch (error) {
+            console.error('Decryption error:', error)
+            throw error
+        }
+    }
+
+    // Create biometric credential
+    async function createBiometricCredential() {
+        if (!webAuthnSupported) {
+            throw new Error('WebAuthn not supported in this browser')
+        }
+
+        isAuthenticating = true
+        authError = ''
+
+        try {
+            // Generate random challenge and user ID
+            window.crypto.getRandomValues(credentialOptions.publicKey.challenge)
+            window.crypto.getRandomValues(credentialOptions.publicKey.user.id)
+
+            const credential = await navigator.credentials.create(credentialOptions)
+            
+            if (!credential) {
+                throw new Error('Failed to create credential')
+            }
+
+            // Store credential ID for future authentication
+            const credentialId = Array.from(new Uint8Array(credential.rawId))
+            localStorage.setItem('darc-credential-id', JSON.stringify(credentialId))
+            hasStoredCredential = true
+
+            return credentialId
+        } catch (error) {
+            console.error('Biometric credential creation failed:', error)
+            authError = error.message
+            throw error
+        } finally {
+            isAuthenticating = false
+        }
+    }
+
+    // Authenticate with existing credential
+    async function authenticateWithBiometrics() {
+        if (!webAuthnSupported) {
+            throw new Error('WebAuthn not supported in this browser')
+        }
+
+        isAuthenticating = true
+        authError = ''
+
+        try {
+            const storedCredentialId = localStorage.getItem('darc-credential-id')
+            if (!storedCredentialId) {
+                throw new Error('No stored credential found')
+            }
+
+            const credentialId = new Uint8Array(JSON.parse(storedCredentialId))
+            
+            // Generate random challenge
+            const challenge = new Uint8Array(32)
+            window.crypto.getRandomValues(challenge)
+
+            const credential = await navigator.credentials.get({
+                publicKey: {
+                    challenge: challenge,
+                    allowCredentials: [{
+                        type: "public-key",
+                        id: credentialId
+                    }],
+                    userVerification: "required",
+                    timeout: 60000
+                }
+            })
+
+            if (!credential) {
+                throw new Error('Authentication failed')
+            }
+
+            return Array.from(new Uint8Array(credential.rawId))
+        } catch (error) {
+            console.error('Biometric authentication failed:', error)
+            authError = error.message
+            throw error
+        } finally {
+            isAuthenticating = false
+        }
+    }
+
+    // Handle token input blur/enter
+    async function handleTokenSecure() {
+        if (!syncServerToken.trim()) {
+            return
+        }
+
+        if (!webAuthnSupported) {
+            // If WebAuthn not supported, store token in plain text with warning
+            localStorage.setItem('syncServerToken', syncServerToken)
+            authError = 'Biometric authentication not supported - token stored without encryption'
+            return
+        }
+
+        try {
+            let credentialId
+            
+            if (!hasStoredCredential) {
+                // Create new credential
+                credentialId = await createBiometricCredential()
+            } else {
+                // Authenticate with existing credential
+                credentialId = await authenticateWithBiometrics()
+            }
+
+            // Encrypt and store token
+            const encryptedData = await encryptToken(syncServerToken, credentialId.join(','))
+            localStorage.setItem('darc-encrypted-token', JSON.stringify(encryptedData))
+            localStorage.removeItem('syncServerToken') // Remove any plain text token
+            
+            isTokenEncrypted = true
+            syncServerToken = '••••••••••••••••' // Show encrypted state
+            authError = ''
+            
+        } catch (error) {
+            authError = `Authentication failed: ${error.message}`
+        }
+    }
+
+    // Handle token input key press
+    function handleTokenKeydown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault()
+            handleTokenSecure()
+        }
+    }
+
+    // Load and decrypt token on app start
+    async function loadEncryptedToken() {
+        const encryptedTokenData = localStorage.getItem('darc-encrypted-token')
+        const storedCredentialId = localStorage.getItem('darc-credential-id')
+        
+        if (encryptedTokenData && storedCredentialId && webAuthnSupported) {
+            isTokenEncrypted = true
+            hasStoredCredential = true
+            syncServerToken = '••••••••••••••••' // Show encrypted state
+            
+            // Attempt to authenticate and decrypt on demand
+            try {
+                const credentialId = await authenticateWithBiometrics()
+                const decryptedToken = await decryptToken(JSON.parse(encryptedTokenData), credentialId.join(','))
+                // Don't show the decrypted token in UI, but it's available for sync operations
+                authError = 'Token successfully decrypted'
+            } catch (error) {
+                authError = `Failed to decrypt token: ${error.message}`
+            }
+        } else {
+            // Check for plain text token (legacy)
+            const plainToken = localStorage.getItem('syncServerToken')
+            if (plainToken) {
+                syncServerToken = plainToken
+                isTokenEncrypted = false
+            }
+        }
+    }
+
+    // Clear biometric authentication
+    function clearBiometricAuth() {
+        localStorage.removeItem('darc-credential-id')
+        localStorage.removeItem('darc-encrypted-token')
+        hasStoredCredential = false
+        isTokenEncrypted = false
+        syncServerToken = ''
+        authError = ''
+    }
+
     function handleSearchEngineChange(engineId) {
         defaultSearchEngine = engineId
         // Save to localStorage or sync with app settings
@@ -123,8 +419,11 @@
     }
 
     function handleSyncServerTokenChange(token) {
+        if (isTokenEncrypted) {
+            // If user starts typing while token is encrypted, clear the encryption
+            clearBiometricAuth()
+        }
         syncServerToken = token
-        localStorage.setItem('syncServerToken', token)
     }
 
     // Centralized IndexedDB setup to avoid race conditions
@@ -539,7 +838,7 @@ To import this data back into DARC, use the import function in Settings.
         selectedAiProvider = 'writer'
         customSearchUrl = ''
         customNewTabUrl = ''
-        syncServerUrl = ''
+        syncServerUrl = 'https://darc.cloudless.one'
         syncServerToken = ''
         
         localStorage.removeItem('defaultSearchEngine')
@@ -549,6 +848,9 @@ To import this data back into DARC, use the import function in Settings.
         localStorage.removeItem('customNewTabUrl')
         localStorage.removeItem('syncServerUrl')
         localStorage.removeItem('syncServerToken')
+        
+        // Clear biometric authentication
+        clearBiometricAuth()
     }
 
     // Load settings from localStorage on component mount
@@ -559,7 +861,6 @@ To import this data back into DARC, use the import function in Settings.
         const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
         const savedCustomNewTabUrl = localStorage.getItem('customNewTabUrl')
         const savedSyncServerUrl = localStorage.getItem('syncServerUrl')
-        const savedSyncServerToken = localStorage.getItem('syncServerToken')
 
         if (savedSearchEngine) defaultSearchEngine = savedSearchEngine
         if (savedNewTabUrl) defaultNewTabUrl = savedNewTabUrl
@@ -567,7 +868,12 @@ To import this data back into DARC, use the import function in Settings.
         if (savedCustomSearchUrl) customSearchUrl = savedCustomSearchUrl
         if (savedCustomNewTabUrl) customNewTabUrl = savedCustomNewTabUrl
         if (savedSyncServerUrl) syncServerUrl = savedSyncServerUrl
-        if (savedSyncServerToken) syncServerToken = savedSyncServerToken
+        
+        // Check for stored credential
+        hasStoredCredential = !!localStorage.getItem('darc-credential-id')
+        
+        // Load encrypted token
+        await loadEncryptedToken()
         
         // Clean up old localStorage storage formats
         localStorage.removeItem('exportDirectoryName')
@@ -734,15 +1040,65 @@ To import this data back into DARC, use the import function in Settings.
                     </div>
                     
                     <div class="sync-field">
-                        <label for="sync-token" class="sync-label">Access Token</label>
-                        <input 
-                            id="sync-token"
-                            type="password" 
-                            bind:value={syncServerToken}
-                            oninput={(e) => handleSyncServerTokenChange(e.target.value)}
-                            placeholder="Your authentication token"
-                            class="sync-input"
-                        />
+                        <label for="sync-token" class="sync-label">
+                            Access Token
+                            {#if isTokenEncrypted}
+                                <span class="encryption-badge">
+                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                    </svg>
+                                    Encrypted
+                                </span>
+                            {/if}
+                        </label>
+                        <div class="token-input-container">
+                            <input 
+                                id="sync-token"
+                                type={isTokenEncrypted ? "text" : "password"}
+                                bind:value={syncServerToken}
+                                oninput={(e) => handleSyncServerTokenChange(e.target.value)}
+                                onblur={handleTokenSecure}
+                                onkeydown={handleTokenKeydown}
+                                placeholder={isTokenEncrypted ? "Token encrypted with biometrics" : "Your authentication token"}
+                                class="sync-input"
+                                class:encrypted={isTokenEncrypted}
+                                disabled={isAuthenticating}
+                                readonly={isTokenEncrypted}
+                            />
+                            {#if isAuthenticating}
+                                <div class="auth-spinner">
+                                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </div>
+                            {/if}
+                            {#if isTokenEncrypted}
+                                <button 
+                                    class="clear-token-button"
+                                    onclick={clearBiometricAuth}
+                                    title="Clear encrypted token"
+                                    type="button"
+                                >
+                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            {/if}
+                        </div>
+                        {#if authError}
+                            <div class="auth-status" class:error={authError.includes('failed') || authError.includes('Failed')}>
+                                {authError}
+                            </div>
+                        {/if}
+                        {#if !webAuthnSupported}
+                            <div class="auth-warning">
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                </svg>
+                                Biometric authentication not supported - token will be stored without encryption
+                            </div>
+                        {/if}
                     </div>
                 </div>
                 
@@ -1178,5 +1534,103 @@ To import this data back into DARC, use the import function in Settings.
         font-size: 10px;
         line-height: 1.4;
         margin: 0;
+    }
+
+    /* Biometric authentication styles */
+    .encryption-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(16, 185, 129, 0.08);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        color: rgba(16, 185, 129, 0.9);
+        border-radius: 3px;
+        padding: 2px 6px;
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-left: 8px;
+    }
+
+    .token-input-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .sync-input.encrypted {
+        background: rgba(16, 185, 129, 0.04);
+        border-color: rgba(16, 185, 129, 0.2);
+        color: rgba(16, 185, 129, 0.8);
+        cursor: default;
+    }
+
+    .auth-spinner {
+        position: absolute;
+        right: 8px;
+        color: rgba(59, 130, 246, 0.8);
+    }
+
+    .clear-token-button {
+        position: absolute;
+        right: 8px;
+        background: rgba(239, 68, 68, 0.08);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: rgba(239, 68, 68, 0.7);
+        border-radius: 3px;
+        padding: 4px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .clear-token-button:hover {
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.3);
+        color: rgba(239, 68, 68, 0.9);
+    }
+
+    .auth-status {
+        background: rgba(16, 185, 129, 0.08);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        color: rgba(16, 185, 129, 0.9);
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 10px;
+        margin-top: 6px;
+        line-height: 1.4;
+    }
+
+    .auth-status.error {
+        background: rgba(239, 68, 68, 0.08);
+        border-color: rgba(239, 68, 68, 0.2);
+        color: rgba(239, 68, 68, 0.9);
+    }
+
+    .auth-warning {
+        background: rgba(245, 158, 11, 0.08);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        color: rgba(245, 158, 11, 0.9);
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 10px;
+        margin-top: 6px;
+        line-height: 1.4;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* Animation for spinner */
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .animate-spin {
+        animation: spin 1s linear infinite;
     }
 </style>

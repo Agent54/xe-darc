@@ -5,7 +5,7 @@ if (typeof window !== 'undefined' && window.trustedTypes && window.trustedTypes.
     window.trustedTypes.createPolicy('default', {
       createHTML: (input) => input,
       createScript: (input) => input,
-      createScriptURL: (input) => input
+      createScriptURL: (input) => input,
     })
     console.log('Default trusted types policy created')
   } catch (e) {

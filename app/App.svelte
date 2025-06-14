@@ -11,7 +11,7 @@
 
 
    window.getScreenDetails().then(screen => {
-    console.log(screen)
+        console.log('screen control error', screen)
    })
 
    // handle permission change
@@ -1220,11 +1220,65 @@
         focusModeEnabled = !focusModeEnabled
     }
 
+    // Check for encrypted sync token on app startup
+    async function checkSyncTokenAuth() {
+        const encryptedTokenData = localStorage.getItem('darc-encrypted-token')
+        const storedCredentialId = localStorage.getItem('darc-credential-id')
+        
+        if (encryptedTokenData && storedCredentialId) {
+            // Show biometric prompt for sync authentication
+            try {
+                console.log('🔐 Encrypted sync token found - requesting biometric authentication...')
+                
+                // Check WebAuthn support
+                if (!('credentials' in navigator && 'get' in navigator.credentials)) {
+                    console.warn('WebAuthn not supported - cannot decrypt sync token')
+                    return
+                }
+
+                const credentialId = new Uint8Array(JSON.parse(storedCredentialId))
+                
+                // Generate random challenge
+                const challenge = new Uint8Array(32)
+                window.crypto.getRandomValues(challenge)
+
+                const credential = await navigator.credentials.get({
+                    publicKey: {
+                        challenge: challenge,
+                        allowCredentials: [{
+                            type: "public-key",
+                            id: credentialId
+                        }],
+                        userVerification: "required",
+                        timeout: 60000
+                    }
+                })
+
+                if (credential) {
+                    console.log('✅ Biometric authentication successful - sync token available')
+                    // Token is now available for sync operations
+                } else {
+                    console.log('❌ Biometric authentication failed')
+                }
+            } catch (error) {
+                console.log('🔐 Biometric authentication cancelled or failed:', error.message)
+                // Don't show error to user - they can authenticate later in settings
+            }
+        }
+    }
+
     // Load settings when component mounts
     $effect(() => {
         loadUserMods().catch(error => {
             console.error('Failed to load user mods:', error)
         })
+        
+        // Check for encrypted sync token authentication
+        setTimeout(() => {
+            checkSyncTokenAuth().catch(error => {
+                console.error('Failed to check sync token auth:', error)
+            })
+        }, 1000) // Delay to allow app to fully load
     })
 
     // let sidebarRightHovered = $state(false)

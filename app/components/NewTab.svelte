@@ -646,6 +646,9 @@
                 <button class="action-btn do-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
                     do
                 </button>
+                <button class="action-btn remember-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
+                    remember
+                </button>
                 <button onclick={toggleListen} class="action-btn listen-btn px-4 py-2 text-sm {isListening ? 'bg-white/20' : 'bg-black/80'} text-white/80 rounded-lg border {isListening ? 'border-white/30' : 'border-white/10'} hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200 relative overflow-hidden">
                     {#if isListening}
                         <div class="absolute inset-0 bg-white/20 origin-left transition-transform duration-100" style="transform: scaleX({audioLevel})"></div>

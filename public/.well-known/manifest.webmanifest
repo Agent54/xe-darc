@@ -1,6 +1,6 @@
 {
   "name": "Darc",
-  "version": "1.0.13",
+  "version": "1.0.21",
   "short_name": "Darc",
   "description": "U&A modified Isolated Web App to test the Controlled Frame API.",
   "categories": ["productivity"],
@@ -18,18 +18,20 @@
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
-  "theme_color": "transparent",
-  "dark_theme_color": "transparent",
-  "background_color": "transparent",
-  "dark_background_color": "transparent",
-  "permissions": ["audioCapture", "window-management", "presentation-api"],
+  "theme_color": "black",
+  "dark_theme_color": "black",
+  "background_color": "black",
+  "dark_background_color": "black",
+  "permissions": ["audioCapture", "window-management", "presentation-api","publickey-credentials-create","publickey-credentials-get"],
   "permissions_policy": {
     "controlled-frame": ["self"],
     "cross-origin-isolated": ["self"],
     "fullscreen": ["self", "*"],
     "microphone": ["self"],
     "camera": ["self"],
-    "window-management": ["self"]
+    "window-management": ["self"],
+    "publickey-credentials-create": ["self"],
+    "publickey-credentials-get": ["self"]
   },
   "scope_extensions": [
     { "type": "origin", "origin": "https://example.local" }
