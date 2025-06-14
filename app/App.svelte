@@ -278,32 +278,11 @@
     // User Mods state
     let userMods = $state([])
 
-    // User Mods functions
-    function matchesPattern(pattern, url) {
-        if (pattern === '*') return true
-        if (!pattern || !url) return false
-        
-        try {
-            const urlObj = new URL(url)
-            const hostname = urlObj.hostname
-            
-            // Support wildcards
-            const regexPattern = pattern
-                .replace(/\./g, '\\.')
-                .replace(/\*/g, '.*')
-            
-            const regex = new RegExp(`^${regexPattern}$`, 'i')
-            return regex.test(hostname) || regex.test(url)
-        } catch {
-            return false
-        }
-    }
-
-    function getApplicableUserMods(tab) {
+    function getEnabledUserMods(tab) {
         if (!tab?.url) return { css: [], js: [] }
         
         const applicableMods = userMods.filter(mod => 
-            mod.enabled && matchesPattern(mod.pattern, tab.url)
+            mod.enabled
         )
         
         return {
@@ -312,17 +291,32 @@
         }
     }
 
-    function updateUserMods(newUserMods) {
+    let userModsHash = $state(null)
+
+    // Helper function to create SHA-256 hash using Web Crypto API
+    async function createSHA256Hash(data) {
+        const encoder = new TextEncoder()
+        const dataBuffer = encoder.encode(data)
+        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer)
+        const hashArray = Array.from(new Uint8Array(hashBuffer))
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    }
+
+    async function updateUserMods(newUserMods) {
         userMods = newUserMods
+        const json = JSON.stringify(newUserMods)
+        userModsHash = await createSHA256Hash(json)
         // Save to localStorage
-        localStorage.setItem('userMods', JSON.stringify(newUserMods))
+        localStorage.setItem('userMods', json)
     }
 
     // Load user mods from localStorage
-    function loadUserMods() {
+    async function loadUserMods() {
         try {
             const savedMods = localStorage.getItem('userMods')
             if (savedMods) {
+                // dont slow done app start 
+                userModsHash = 'initial' // await createSHA256Hash(savedMods)
                 userMods = JSON.parse(savedMods)
             }
         } catch (error) {
@@ -1206,7 +1200,9 @@
 
     // Load settings when component mounts
     $effect(() => {
-        loadUserMods()
+        loadUserMods().catch(error => {
+            console.error('Failed to load user mods:', error)
+        })
     })
 
     // let sidebarRightHovered = $state(false)
@@ -1753,7 +1749,9 @@
                 <NewTab {tab} />
             </div>
         {:else}
-            <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getApplicableUserMods(tab)} />
+            {#key userModsHash}
+                <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+            {/key}
         {/if}
     {/each}
 </div>

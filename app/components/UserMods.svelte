@@ -33,7 +33,7 @@
         return modTypes.find(t => t.id === type) || modTypes[0]
     }
 
-    function addMod() {
+    async function addMod() {
         if (!newModContent.trim()) {
             return
         }
@@ -53,11 +53,15 @@
             modified: Date.now()
         }
 
-        onUpdateUserMods([...userMods, newMod])
-        resetForm()
+        try {
+            await onUpdateUserMods([...userMods, newMod])
+            resetForm()
+        } catch (error) {
+            console.error('Failed to add user mod:', error)
+        }
     }
 
-    function updateMod() {
+    async function updateMod() {
         if (!editingMod || !newModContent.trim()) {
             return
         }
@@ -79,25 +83,37 @@
                 : mod
         )
 
-        onUpdateUserMods(updatedMods)
-        cancelEdit()
-    }
-
-
-
-    function deleteMod(modId) {
-        if (confirm('Are you sure you want to delete this user modification?')) {
-            onUpdateUserMods(userMods.filter(mod => mod.id !== modId))
+        try {
+            await onUpdateUserMods(updatedMods)
+            cancelEdit()
+        } catch (error) {
+            console.error('Failed to update user mod:', error)
         }
     }
 
-    function toggleMod(modId) {
+
+
+    async function deleteMod(modId) {
+        if (confirm('Are you sure you want to delete this user modification?')) {
+            try {
+                await onUpdateUserMods(userMods.filter(mod => mod.id !== modId))
+            } catch (error) {
+                console.error('Failed to delete user mod:', error)
+            }
+        }
+    }
+
+    async function toggleMod(modId) {
         const updatedMods = userMods.map(mod => 
             mod.id === modId 
                 ? { ...mod, enabled: !mod.enabled }
                 : mod
         )
-        onUpdateUserMods(updatedMods)
+        try {
+            await onUpdateUserMods(updatedMods)
+        } catch (error) {
+            console.error('Failed to toggle user mod:', error)
+        }
     }
 
     function editMod(mod) {

@@ -12,7 +12,8 @@
         isScrolling,
         captureTabScreenshot,
         onFrameFocus = () => {},
-        onFrameBlur = () => {}
+        onFrameBlur = () => {},
+        userMods = { css: [], js: [] }
     } = $props()
 
 
@@ -578,75 +579,21 @@
     }
 
     // Content script for window focus/blur handling
-    function setupFocusBlurContentScript(frame) {
-        //         const contentScript = {
-        //     name: 'focus-blur-handler' + i++,
-
-        //     matches: ['<all_urls>', 'http://*/*', 'https://*/*'],
-
-        //     js: {
-        //         code: `
-        //             console.log('🔧 Focus/blur content script loading for tab ${tab.id}');
-                    
-        //             // Focus/blur handlers for controlled frame
-        //             let lastFocusState = document.hasFocus();
-                    
-        //             function handleFocusChange() {
-        //                 const currentFocusState = document.hasFocus();
-        //                 if (currentFocusState !== lastFocusState) {
-        //                     lastFocusState = currentFocusState;
-                            
-        //                     // Send message to parent frame
-        //                     if (currentFocusState) {
-        //                         console.log('🎯 Frame gained focus - sending message');
-        //                         const focusMessage = {
-        //                             type: 'controlled-frame-focus',
-        //                             tabId: '${tab.id}',
-        //                             focused: true,
-        //                             timestamp: Date.now()
-        //                         };
-        //                         // Try multiple messaging approaches
-        //                         window.postMessage(focusMessage, '*');
-        //                         try { parent.postMessage(focusMessage, '*'); } catch(e) { console.log('parent.postMessage failed:', e); }
-        //                         try { top.postMessage(focusMessage, '*'); } catch(e) { console.log('top.postMessage failed:', e); }
-        //                     } else {
-        //                         console.log('😴 Frame lost focus - sending message');
-        //                         const blurMessage = {
-        //                             type: 'controlled-frame-blur', 
-        //                             tabId: '${tab.id}',
-        //                             focused: false,
-        //                             timestamp: Date.now()
-        //                         };
-        //                         // Try multiple messaging approaches
-        //                         window.postMessage(blurMessage, '*');
-        //                         try { parent.postMessage(blurMessage, '*'); } catch(e) { console.log('parent.postMessage failed:', e); }
-        //                         try { top.postMessage(blurMessage, '*'); } catch(e) { console.log('top.postMessage failed:', e); }
-        //                     }
-        //                 }
-        //             }
-                    
-        //             // Listen for focus and blur events
-        //             window.addEventListener('focus', handleFocusChange, true);
-        //             window.addEventListener('blur', handleFocusChange, true);
-        //             document.addEventListener('visibilitychange', handleFocusChange);
-                    
-        //             // Check initial state
-        //             setTimeout(handleFocusChange, 100);
-                    
-        //             // Periodic check for focus state changes
-        //             setInterval(handleFocusChange, 1000);
-                    
-        //             console.log('✅ Focus/blur content script initialized for tab ${tab.id}');
-        //         `,
-                
-        //     },
-        //     runAt: 'document-end',
-        //     allFrames: true
-        // }
-
+    function setupContentScripts(frame) {
         // First try a simple test script to verify content script injection works
-        const testScript = {
-            name: 'test-script',
+        const systemInjections = [
+            {
+                name: 'system-css',
+                matches: ['<all_urls>', 'http://*/*', 'https://*/*'],
+                css: {
+                    // fix scroll bug in PWA/IWA that makes scroll janky on child element scrolling
+                    code: `* {
+            overscroll-behavior-x: none;
+        }`
+                }
+            },    
+        {
+            name: 'system-script',
             matches: ['<all_urls>', 'http://*/*', 'https://*/*'],
             js: {
                 code: `
@@ -677,23 +624,43 @@ document.addEventListener('keydown', function(event) {
             },
             runAt: 'document-end',
             allFrames: true
-        }
+        }]
+
+        const userInjections = [
+            ...userMods.css.map(mod => {
+                return {
+                    name: mod.name,
+                    matches: [mod.pattern],
+                    css: {
+                        code: mod.content
+                    }
+                }
+            }),
+            ...userMods.js.map(mod => {
+                return {
+                    name: mod.name,
+                    matches: [mod.pattern],
+                    js: {
+                        code: mod.content
+                    }
+                }
+            })
+        ]
 
         console.log('trying' , frame.id)
-       
 
         if (!frame.addContentScripts) {
             initialUrl = untrack(() => tab.url)
         } else {
-            frame.addContentScripts([testScript]).then((res) => {
-            console.log('✅ Test content script added successfully', res)
+            frame.addContentScripts([...systemInjections, ...userInjections]).then((res) => {
+            console.log('✅ Injections added successfully', res)
 
             initialUrl = untrack(() => tab.url)
             
             // Now add the focus/blur script
             // return frame.addContentScripts([contentScript])
             }).catch((err) => {
-                console.error('❌ Content script error:', err)
+                console.error('❌ inject error:', err)
             })
         }
     }
@@ -776,7 +743,7 @@ document.addEventListener('keydown', function(event) {
         
         setupMessageListener(frame)
         
-        setupFocusBlurContentScript(frame)
+        setupContentScripts(frame)
         
         setupContextMenu(frame)
 
