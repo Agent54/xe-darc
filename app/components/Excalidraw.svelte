@@ -1,5 +1,5 @@
 <script>
-  import { onMount, mount } from 'svelte'
+  import { onMount, mount, unmount } from 'svelte'
   import React from 'react'
   import ReactDOM from 'react-dom/client'
   import { Excalidraw as ExcalidrawReact } from '@excalidraw/excalidraw'
@@ -26,9 +26,9 @@
                   headerPartOfMain: false,
                   isScrolling: false,
                   captureTabScreenshot: () => {},
-                  onFrameFocus: () => {},
-                  onFrameBlur: () => {},
-                  userMods: { css: [], js: [] }
+                  onFrameFocus: this.props.onFrameFocus || (() => {}),
+                  onFrameBlur: this.props.onFrameBlur || (() => {}),
+                  userMods: this.props.getEnabledUserMods(this.props.tabs[0])
                 }
               })
             }
@@ -36,8 +36,7 @@
           
           componentWillUnmount() {
             if (this.frameInstance) {
-              // In Svelte 5, mount returns an object with unmount method
-              this.frameInstance.unmount()
+              unmount(this.frameInstance)
             }
           }
           
@@ -60,36 +59,36 @@
         "version": 2,
         "source": "isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac",
         "elements": [
-            {
-            "id": "BIU3Ng9qVuSrm_gBelQ4v",
-            "type": "rectangle",
-            "x": 191.38671875,
-            "y": 157.23046875,
-            "width": 175.98828125,
-            "height": 156.90234375,
-            "angle": 0,
-            "strokeColor": "#1e1e1e",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 2,
-            "strokeStyle": "solid",
-            "roughness": 0,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "index": "a0",
-            "roundness": {
-                "type": 3
-            },
-            "seed": 1943070669,
-            "version": 188,
-            "versionNonce": 657353517,
-            "isDeleted": false,
-            "boundElements": null,
-            "updated": 1749946352449,
-            "link": null,
-            "locked": false
-            },
+            // {
+            // "id": "BIU3Ng9qVuSrm_gBelQ4v",
+            // "type": "rectangle",
+            // "x": 191.38671875,
+            // "y": 157.23046875,
+            // "width": 175.98828125,
+            // "height": 156.90234375,
+            // "angle": 0,
+            // "strokeColor": "#1e1e1e",
+            // "backgroundColor": "transparent",
+            // "fillStyle": "solid",
+            // "strokeWidth": 2,
+            // "strokeStyle": "solid",
+            // "roughness": 0,
+            // "opacity": 100,
+            // "groupIds": [],
+            // "frameId": null,
+            // "index": "a0",
+            // "roundness": {
+            //     "type": 3
+            // },
+            // "seed": 1943070669,
+            // "version": 188,
+            // "versionNonce": 657353517,
+            // "isDeleted": false,
+            // "boundElements": null,
+            // "updated": 1749946352449,
+            // "link": null,
+            // "locked": false
+            // },
             {
             "id": "EefmwdZogXqh0CdV-jjMy",
             "type": "embeddable",
@@ -153,6 +152,9 @@
     handleKeyboardGlobally = false,
     width = '100%',
     height = '100%',
+    onFrameFocus = () => {},
+    onFrameBlur = () => {},
+    getEnabledUserMods = () => { return { css: [], js: [] } },
     ...restProps
   } = $props()
   
@@ -195,8 +197,11 @@
         if (!link) {return null}
         
         return React.createElement(ControlledFrameWrapper, {
-          tabs: tabs,
-          url: link
+          tabs,
+          url: link,
+          onFrameFocus,
+          onFrameBlur,
+          getEnabledUserMods
         })
       },
       ...restProps
@@ -246,6 +251,11 @@
 ></div>
 
 <style>
+
+    :global(.excalidraw-container .scroll-back-to-content) {
+        bottom: 76px !important;
+    }
+
     :global(.excalidraw-container section.shapes-section) {
         position: fixed;
         bottom: 21px;

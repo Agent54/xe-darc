@@ -16,7 +16,7 @@
         captureTabScreenshot,
         onFrameFocus = () => {},
         onFrameBlur = () => {},
-        userMods = { css: [], js: [] }
+        userMods = { css: [], js: [] },
     } = $props()
 
     // see https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/controlled_frame/controlled_frame_permissions_unittest.cc;l=53 for supported permissions 
@@ -1129,7 +1129,7 @@ document.addEventListener('input', function(event) {
                 const tabId = parts[2]
                 try {
                     const inputData = JSON.parse(parts.slice(3).join(':'))
-                    console.log(`[Tab ${tabId}] Input text:`, inputData)
+                    // console.log(`[Tab ${tabId}] Input text:`, inputData)
                     
                     // Show input diff if it's for this tab and has meaningful text
                     if (tabId === tab.id && inputData.text && inputData.text.length > 3) {
@@ -1147,20 +1147,26 @@ document.addEventListener('input', function(event) {
         partition = tab.partition
         const frame = tab.frame
         
-        frame.setZoomMode?.('disabled')
-        setupRequestHandler(frame)
-        
-        setupMessageListener(frame)
-        
-        setupContentScripts(frame)
-        
-        setupContextMenu(frame)
+        if (frame) {
+            frame.setZoomMode?.('disabled')
+            setupRequestHandler(frame)
+            
+            setupMessageListener(frame)
+            
+            setupContentScripts(frame)
+            
+            setupContextMenu(frame)
+        }
 
         if (tab.shouldFocus) {
             tab.shouldFocus = false
             setTimeout(() => {
-                tab.frame.scrollIntoView({ behavior: 'smooth' })
-                tab.tabButton.scrollIntoView({ behavior: 'smooth' })
+                if (tab.frame) {
+                    tab.frame.scrollIntoView({ behavior: 'smooth' })
+                }
+                if (tab.tabButton) {
+                    tab.tabButton.scrollIntoView({ behavior: 'smooth' })
+                }
             }, 200)
         }
     })
@@ -1307,7 +1313,6 @@ document.addEventListener('input', function(event) {
                 referrerpolicy="strict-origin-when-cross-origin"
                 loading="lazy"
                 ></controlledframe>
-                
 
                 {#if linkPreviewVisible && hoveredLink}
                     <div class="link-preview" transition:fade={{duration: 150}}>
@@ -1319,7 +1324,7 @@ document.addEventListener('input', function(event) {
                 {#if inputDiffVisible && inputDiffData}
                     <div class="input-diff-preview" transition:fade={{duration: 200}}>
                         <div class="input-diff-header">
-                            <span class="input-diff-element">completion</span>
+                            <span class="input-diff-element">Press tab to complete / double Esc to disable</span>
                         </div>
                         <div class="input-diff-content">
                             {#each inputDiffData.diff as diffItem}

@@ -57,7 +57,7 @@ comands:
 
 reminders/notes
 
-cross check: sigmaos/horse/arc/zen/stacked browrser/canvas browser/vivaldi
+cross check: sigmaos/horse/arc/zen/stacked browrser/canvas browser/vivaldi/ edge ai features
 
 ad hoc js and css mods as well as page specifc matchers and blockers
 
@@ -257,9 +257,6 @@ https://mitmproxy.org features
 
 notificatino central/ messaging/ rooms/ channels/ squats integrated concept?
 
-hover link previews + input field content
-
-tab complete for typos and bad grammer in all input fields
 
 iwa iframe context for securely adding ui to pages and running context in frames
 
@@ -267,3 +264,8 @@ radical screenshot and downloads rethink integrated into tab groups ui
 
 logs/ reqs sidebar
 
+custom error pages everywhere
+
+move tab completions to onpage iframe
+
+global dark mode toggle
