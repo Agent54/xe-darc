@@ -21,7 +21,7 @@
                 target: this.containerRef.current,
                 props: {
                   style: 'width: 100%; height: 100%;',
-                  tab: this.props.tabs[0],
+                  tab: this.props.tabs.find(tab => tab.id === this.props.element.id),
                   tabs: this.props.tabs,
                   headerPartOfMain: false,
                   isScrolling: false,
@@ -58,7 +58,8 @@
         "type": "excalidraw",
         "version": 2,
         "source": "isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac",
-        "elements": [
+        "elements": tabs.map(tab => {
+            //[
             // {
             // "id": "BIU3Ng9qVuSrm_gBelQ4v",
             // "type": "rectangle",
@@ -89,37 +90,39 @@
             // "link": null,
             // "locked": false
             // },
-            {
-            "id": "EefmwdZogXqh0CdV-jjMy",
-            "type": "embeddable",
-            "x": 398.19140625,
-            "y": 147.66796875,
-            "width": 494.48046875,
-            "height": 390.4140625,
-            "angle": 0,
-            "strokeColor": "#2222",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 2,
-            "strokeStyle": "solid",
-            "roughness": 0,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "index": "a2",
-            "roundness": {
-                "type": 3
-            },
-            "seed": 1218149059,
-            "version": 103,
-            "versionNonce": 1873698765,
-            "isDeleted": false,
-            "boundElements": null,
-            "updated": 1749946396932,
-            "link": "https://wikipedia.org",
-            "locked": false
+            return {
+                "id": tab.id,
+                "type": "embeddable",
+                
+                "x": tab.x || 398.19140625,
+                "y": tab.y || 147.66796875,
+                "width": tab.width || 494.48046875,
+                "height": tab.height || 390.4140625,
+                "angle": tab.angle || 0,
+                
+                "strokeColor": "none",
+                "backgroundColor": "none",
+                "fillStyle": "solid",
+                "strokeWidth": 2,
+                "strokeStyle": "solid",
+                "roughness": 0,
+                "opacity": 100,
+                "groupIds": [],
+                "frameId": null,
+                "index": "a2",
+                "roundness": {
+                    "type": 4
+                },
+                "seed": 1218149059,
+                "version": 104,
+                "versionNonce": 1873698765,
+                "isDeleted": tab.closed,
+                "boundElements": null,
+                "updated": 1749946396932,
+                "link": tab.url,
+                "locked": false
             }
-        ],
+        }),
         "appState": {
             "gridSize": 20,
             "gridStep": 5,
@@ -145,7 +148,7 @@
     viewModeEnabled = false,
     zenModeEnabled = true,
     gridModeEnabled = false,
-    theme = 'dark',
+    theme = 'light',
     langCode = 'en',
     autoFocus = true,
     detectScroll = true,
@@ -170,6 +173,7 @@
       ...initialData,
       appState: {
         currentItemRoughness: 0, // 0 = precise/architect style
+        currentItemStrokeColor: "#6c757d", // Default line color to mid gray
         viewBackgroundColor: "#0000",
         ...initialData.appState
       }
@@ -194,11 +198,14 @@
       renderEmbeddable: (element, appState) => {
         // Custom render using React wrapper for Svelte ControlledFrame
         const link = element.link
-        if (!link) {return null}
+        if (!link) {
+            console.log('no link', element)
+            return null
+        }
         
         return React.createElement(ControlledFrameWrapper, {
           tabs,
-          url: link,
+          element,
           onFrameFocus,
           onFrameBlur,
           getEnabledUserMods
@@ -251,6 +258,13 @@
 ></div>
 
 <style>
+    :global(.excalidraw-container .undo-redo-buttons) {
+        position: fixed !important;
+        top: calc(100vh - 153px) !important;
+        left: 162px !important;
+        display: none !important;
+        /* fixme: when to show this? */
+    }
 
     :global(.excalidraw-container .scroll-back-to-content) {
         bottom: 76px !important;
@@ -268,20 +282,20 @@
         visibility: hidden !important;
     }
 
-  .excalidraw-container {
-    position: relative;
-    border-radius: 10px;
-    background-color: #000000;
-  }
-  
-  :global(.excalidraw-container .excalidraw) {
-    width: 100%;
-    height: 100%;
-    border-radius: 10px;
-  }
+    .excalidraw-container {
+        position: relative;
+        border-radius: 10px;
+        background-color: #000000;
+    }
+    
+    :global(.excalidraw-container .excalidraw) {
+        width: 100%;
+        height: 100%;
+        border-radius: 10px;
+    }
   
   /* Override light theme to use neutral colors */
-  :global(.excalidraw-container .excalidraw:not(.theme--dark)) {
+  /* :global(.excalidraw-container .excalidraw:not(.theme--dark)) {
     --color-primary: #495057;
     --color-primary-darker: #343a40;
     --color-primary-darkest: #212529;
@@ -291,15 +305,20 @@
     --focus-highlight-color: #495057;
     --link-color: #495057;
     --select-highlight-color: #495057;
+  } */
+
+  :global(.excalidraw .App-toolbar__extra-tools-dropdown) {
+    top: unset !important;
+    bottom: 55px !important;
   }
   
   /* Override dark theme to be less bright and remove purple tint */
-  :global(.excalidraw-container .excalidraw.theme--dark) {
+  :global(.excalidraw-container .excalidraw) {
     --icon-fill-color: #e2e6e985 !important;
     --color-on-surface: #e2e6e985 !important;
 
-    /* Reduce brightness and remove hue rotation for neutral colors */
-    --theme-filter: invert(88%) hue-rotate(0deg) saturate(0.7);
+    /* Remove color inversion to prevent red showing as cyan */
+    /* --theme-filter: none; */
     
     /* Neutral gray primary colors instead of purple */
     --color-primary: #868e96;
@@ -316,7 +335,7 @@
     --focus-highlight-color: #6c757d;
     --link-color: #868e96;
     --select-highlight-color: #6c757d;
-    --color-selection: #343a40;
+    --color-selection: #1f1f1f;
     
     /* Text and logo colors */
     --color-logo-text: #e9ecef;

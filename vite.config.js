@@ -15,9 +15,9 @@
  */
 
 import { defineConfig } from 'vite';
-import fs from 'fs';
+// import fs from 'fs';
+import path from 'path';
 import injectHTML from 'vite-plugin-html-inject';
-// import react from '@vitejs/plugin-react';
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 // import wbn from 'rollup-plugin-webbundle';
@@ -28,13 +28,52 @@ import tailwindcss from '@tailwindcss/vite'
 dotenv.config();
 
 const plugins = [
-  // globals window setting
+  {
+    name: 'patch-link-color',
+    transform(code, id) {      
+      // Try broader matching first to see if we can catch the files
+      if (id.includes('chunk-FX7ZIABN.js') || id.includes('chunk-3KPV5WBD.js') ||  id.includes('chunk-WQ3BBEXT.js')) { 
+        // console.log("MATCHED FILE ID:", id)
+        return {
+          code: code.replace(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1971c2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>',
+
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="black" stroke="#0f3460" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link" style="background-color: black;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>'),
+          map: null
+        }
+      }
+
+      // Also try matching any file that contains the target string
+      // if (code.includes('stroke="#1971c2"')) {
+      //   console.log("FOUND TARGET STRING in:", id)
+      //   return {
+      //     code: code.replace(/stroke="#1971c2"/g, 'stroke="red"'),
+      //     map: null
+      //   }
+      // }
+    },
+    
+    // Alternative: use generateBundle hook for post-processing chunks
+    generateBundle(options, bundle) {
+      Object.keys(bundle).forEach(fileName => {
+        const chunk = bundle[fileName]
+        if (chunk.type === 'chunk' && chunk.code) {
+          console.log("Bundle chunk:", fileName)
+          if (fileName.includes('FX7ZIABN') || fileName.includes('3KPV5WBD') || 
+            chunk.code.includes('stroke="#1971c2"')) {
+            console.log("PROCESSING CHUNK:", fileName)
+            chunk.code = chunk.code.replace(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1971c2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>`,
+             
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="black" stroke="#0f3460" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link" style="background-color: black;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>')
+          }
+        }
+      })
+    }
+  },
   injectHTML(),
-  // react({refresh: false, fastRefresh: false}),
   svelte(),
   tailwindcss()
 ];
-
   // // something
   // const viteClientRegex = /node_modules\/vite\/dist\/client\/client\.mjs$/gi;
 
@@ -128,6 +167,11 @@ export default defineConfig({
       host: 'localhost',
       clientPort: 5193,
     },
+  },
+  resolve:{
+    alias: {
+      '@excalidraw/excalidraw/components/hyperlink/helpers': path.resolve(__dirname, './app/lib/excalidraw-helpers.ts')
+    }
   },
   build: {
     rollupOptions: {

@@ -1841,7 +1841,7 @@
     </div>
 
     {#if viewMode === 'canvas'}
-        <Excalidraw theme="dark" tabs={tabs} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} {getEnabledUserMods} />
+        <Excalidraw tabs={tabs} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} {getEnabledUserMods} />
     {:else}
         {#each tabs as tab (tab.id)}
             {#if tab.url === 'about:newtab'}
