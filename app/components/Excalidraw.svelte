@@ -58,46 +58,34 @@
         "type": "excalidraw",
         "version": 2,
         "source": "isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac",
-        "elements": tabs.map(tab => {
-            //[
-            // {
-            // "id": "BIU3Ng9qVuSrm_gBelQ4v",
-            // "type": "rectangle",
-            // "x": 191.38671875,
-            // "y": 157.23046875,
-            // "width": 175.98828125,
-            // "height": 156.90234375,
-            // "angle": 0,
-            // "strokeColor": "#1e1e1e",
-            // "backgroundColor": "transparent",
-            // "fillStyle": "solid",
-            // "strokeWidth": 2,
-            // "strokeStyle": "solid",
-            // "roughness": 0,
-            // "opacity": 100,
-            // "groupIds": [],
-            // "frameId": null,
-            // "index": "a0",
-            // "roundness": {
-            //     "type": 3
-            // },
-            // "seed": 1943070669,
-            // "version": 188,
-            // "versionNonce": 657353517,
-            // "isDeleted": false,
-            // "boundElements": null,
-            // "updated": 1749946352449,
-            // "link": null,
-            // "locked": false
-            // },
+        "elements": tabs.map((tab, index) => {
+            // Arrange tabs in 5-column grid layout, centered on canvas
+            const tabWidth = 600
+            const tabHeight = 400  
+            const columnSpacing = 80
+            const rowSpacing = 160
+            
+            const columnsPerRow = 5
+            const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
+            
+            const row = Math.floor(index / columnsPerRow)
+            const col = index % columnsPerRow
+            
+            // Position tabs starting from top-left with positive coordinates
+            const startX = 200
+            const startY = 200
+            
+            const x = startX + (col * (tabWidth + columnSpacing))  
+            const y = startY + (row * (tabHeight + rowSpacing))
+            
             return {
                 "id": tab.id,
                 "type": "embeddable",
                 
-                "x": tab.x || 398.19140625,
-                "y": tab.y || 147.66796875,
-                "width": tab.width || 494.48046875,
-                "height": tab.height || 390.4140625,
+                "x": x,
+                "y": y,
+                "width": tabWidth,
+                "height": tabHeight,
                 "angle": tab.angle || 0,
                 
                 "strokeColor": "none",
@@ -127,7 +115,10 @@
             "gridSize": 20,
             "gridStep": 5,
             "gridModeEnabled": false,
-            "viewBackgroundColor": "#0000"
+            "viewBackgroundColor": "#0000",
+            "zoom": { "value": 0.35 },
+            "scrollX": -100,
+            "scrollY": 0
         },
         "files": {}
         },
@@ -167,6 +158,38 @@
   
   function renderExcalidraw () {
     if (!container || !root) return
+
+      // For shapes:
+      // {
+      // "id": "BIU3Ng9qVuSrm_gBelQ4v",
+      // "type": "rectangle",
+      // "x": 191.38671875,
+      // "y": 157.23046875,
+      // "width": 175.98828125,
+      // "height": 156.90234375,
+      // "angle": 0,
+      // "strokeColor": "#1e1e1e",
+      // "backgroundColor": "transparent",
+      // "fillStyle": "solid",
+      // "strokeWidth": 2,
+      // "strokeStyle": "solid",
+      // "roughness": 0,
+      // "opacity": 100,
+      // "groupIds": [],
+      // "frameId": null,
+      // "index": "a0",
+      // "roundness": {
+      //     "type": 3
+      // },
+      // "seed": 1943070669,
+      // "version": 188,
+      // "versionNonce": 657353517,
+      // "isDeleted": false,
+      // "boundElements": null,
+      // "updated": 1749946352449,
+      // "link": null,
+      // "locked": false
+      // },
     
     // Merge default app state for precise drawing with user's initialData
     const mergedInitialData = {
@@ -175,6 +198,9 @@
         currentItemRoughness: 0, // 0 = precise/architect style
         currentItemStrokeColor: "#6c757d", // Default line color to mid gray
         viewBackgroundColor: "#0000",
+        zoom: { value: 0.35 }, // Set zoom to 35% for double-sized tiles
+        scrollX: -300, // Center horizontally for larger tiles  
+        scrollY: 0, // Position tabs properly on screen
         ...initialData.appState
       }
     }
@@ -249,11 +275,17 @@
   export function getExcalidrawAPI () {
     return excalidrawAPI
   }
+
+  let loaded = $state(false)
+  setTimeout(() => {
+    loaded = true
+  }, 100)
 </script>
 
 <div 
   bind:this={container} 
   class="excalidraw-container"
+  class:loaded={loaded}
   style="width: {width}; height: {height};"
 ></div>
 
@@ -286,6 +318,13 @@
         position: relative;
         border-radius: 10px;
         background-color: #000000;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out 0.1s;
+    }
+
+    .excalidraw-container.loaded {
+        opacity: 1;
+        transition: opacity 0.2s ease-in-out 0.1s;
     }
     
     :global(.excalidraw-container .excalidraw) {

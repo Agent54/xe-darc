@@ -269,3 +269,25 @@ custom error pages everywhere
 move tab completions to onpage iframe
 
 global dark mode toggle
+
+ask about external mail links!
+
+frame header flashing on hovering window controls
+
+context menu excalidraw and reactivity
+
+default toggle canvas
+
+url parsing/ friendly display lib
+
+website get optimal width for canvas default per site?
+
+show error page on failing to inject
+
+permission to override navigation
+permission to open window
+permission to navigate off domain?
+
+floorp?
+
+integrated inbox

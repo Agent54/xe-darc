@@ -167,6 +167,9 @@ export default defineConfig({
       host: 'localhost',
       clientPort: 5193,
     },
+    watch: {
+      ignored: ['**/todo.md']
+    }
   },
   resolve:{
     alias: {

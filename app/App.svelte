@@ -271,7 +271,7 @@
     let isTabListAtStart = $state(true)
 
     let viewMode = $state('default')
-    let lastUsedViewMode = $state('tile') // Default to tile as the alternative
+    let lastUsedViewMode = $state('canvas')
     let showFixedNewTabButton = $state(false)
     let openSidebars = $state(new Set())
     let focusModeEnabled = $state(false)
@@ -1417,6 +1417,18 @@
                 {#if viewMode === 'default'}<span class="checkmark">•</span>{/if}
             </div>
             <div class="view-mode-menu-item" 
+                    class:active={viewMode === 'canvas'}
+                    role="button"
+                    tabindex="0"
+                    onclick={(e) => { e.stopPropagation(); selectViewMode('canvas') }}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('canvas') } }}>
+                <span class="view-mode-icon-item">
+                    {@html getViewModeIcon('canvas')}
+                </span>
+                <span>Canvas</span>
+                {#if viewMode === 'canvas'}<span class="checkmark">•</span>{/if}
+            </div>
+            <!-- <div class="view-mode-menu-item" 
                  class:active={viewMode === 'tile'}
                  role="button"
                  tabindex="0"
@@ -1427,7 +1439,7 @@
                 </span>
                 <span>Tiles</span>
                 {#if viewMode === 'tile'}<span class="checkmark">•</span>{/if}
-            </div>
+            </div> -->
             <div class="view-mode-menu-item" 
                  class:active={viewMode === 'squat'}
                  role="button"
@@ -1440,19 +1452,7 @@
                 <span>Squat</span>
                 {#if viewMode === 'squat'}<span class="checkmark">•</span>{/if}
             </div>
-            <div class="view-mode-menu-item" 
-                 class:active={viewMode === 'canvas'}
-                 role="button"
-                 tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); selectViewMode('canvas') }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('canvas') } }}>
-                <span class="view-mode-icon-item">
-                    {@html getViewModeIcon('canvas')}
-                </span>
-                <span>Canvas</span>
-                {#if viewMode === 'canvas'}<span class="checkmark">•</span>{/if}
-            </div>
-            <div class="view-mode-menu-item" 
+            <!-- <div class="view-mode-menu-item" 
                 class:active={viewMode === 'notebook'}
                 role="button"
                 tabindex="0"
@@ -1463,7 +1463,7 @@
             </span>
             <span>Notebook</span>
             {#if viewMode === 'notebook'}<span class="checkmark">•</span>{/if}
-        </div>
+            </div> -->
         </div>
     </div>
 
