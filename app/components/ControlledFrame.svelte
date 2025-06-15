@@ -37,6 +37,149 @@
 
     // OAuth popup state
     let oauthPopup = $state(null) // { url, width, height, parentTab, event }
+    
+    // Link preview state
+    let hoveredLink = $state(null) // { href, target, rel, title }
+    let linkPreviewVisible = $state(false)
+    let linkPreviewTimeout = null
+    
+    // Input text diff state
+    let currentInputText = $state('')
+    let previousInputText = $state('')
+    let inputDiffVisible = $state(false)
+    let inputDiffTimeout = null
+    let inputDiffData = $state(null)
+
+    // Generate random text changes for diff simulation
+    function simulateTextChanges(text) {
+        if (!text || text.length === 0) return text
+        
+        let result = text
+        const changeCount = Math.floor(Math.random() * 3) + 1 // 1-3 changes
+        
+        for (let i = 0; i < changeCount; i++) {
+            const changeType = Math.random()
+            
+            if (changeType < 0.4 && result.length > 0) {
+                // Delete a character (40% chance)
+                const pos = Math.floor(Math.random() * result.length)
+                result = result.slice(0, pos) + result.slice(pos + 1)
+            } else if (changeType < 0.7) {
+                // Add a character (30% chance)
+                const chars = 'abcdefghijklmnopqrstuvwxyz0123456789 '
+                const randomChar = chars[Math.floor(Math.random() * chars.length)]
+                const pos = Math.floor(Math.random() * (result.length + 1))
+                result = result.slice(0, pos) + randomChar + result.slice(pos)
+            } else {
+                // Replace a character (30% chance)
+                if (result.length > 0) {
+                    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789 '
+                    const randomChar = chars[Math.floor(Math.random() * chars.length)]
+                    const pos = Math.floor(Math.random() * result.length)
+                    result = result.slice(0, pos) + randomChar + result.slice(pos + 1)
+                }
+            }
+        }
+        
+        return result
+    }
+
+    // Simple diff algorithm to generate additions/deletions
+    function generateDiff(oldText, newText) {
+        const diff = []
+        let i = 0, j = 0
+        
+        while (i < oldText.length || j < newText.length) {
+            if (i >= oldText.length) {
+                // Remaining characters are additions
+                diff.push({ type: 'add', char: newText[j] })
+                j++
+            } else if (j >= newText.length) {
+                // Remaining characters are deletions
+                diff.push({ type: 'delete', char: oldText[i] })
+                i++
+            } else if (oldText[i] === newText[j]) {
+                // Characters match
+                diff.push({ type: 'same', char: oldText[i] })
+                i++
+                j++
+            } else {
+                // Characters differ - look ahead to see if it's insert/delete/replace
+                let foundMatch = false
+                
+                // Check if next few chars in new text match current old char (insertion)
+                for (let k = j + 1; k < Math.min(j + 5, newText.length); k++) {
+                    if (newText[k] === oldText[i]) {
+                        // Found match - insert the characters before it
+                        for (let l = j; l < k; l++) {
+                            diff.push({ type: 'add', char: newText[l] })
+                        }
+                        diff.push({ type: 'same', char: oldText[i] })
+                        i++
+                        j = k + 1
+                        foundMatch = true
+                        break
+                    }
+                }
+                
+                if (!foundMatch) {
+                    // Check if next few chars in old text match current new char (deletion)
+                    for (let k = i + 1; k < Math.min(i + 5, oldText.length); k++) {
+                        if (oldText[k] === newText[j]) {
+                            // Found match - delete the characters before it
+                            for (let l = i; l < k; l++) {
+                                diff.push({ type: 'delete', char: oldText[l] })
+                            }
+                            diff.push({ type: 'same', char: newText[j] })
+                            i = k + 1
+                            j++
+                            foundMatch = true
+                            break
+                        }
+                    }
+                }
+                
+                if (!foundMatch) {
+                    // Treat as replacement
+                    diff.push({ type: 'delete', char: oldText[i] })
+                    diff.push({ type: 'add', char: newText[j] })
+                    i++
+                    j++
+                }
+            }
+        }
+        
+        return diff
+    }
+
+    // Show input diff preview
+    function showInputDiff(inputData) {
+        const newText = inputData.text
+        const simulatedOldText = simulateTextChanges(newText)
+        
+        previousInputText = simulatedOldText
+        currentInputText = newText
+        
+        inputDiffData = {
+            element: inputData.element,
+            diff: generateDiff(simulatedOldText, newText),
+            timestamp: inputData.timestamp
+        }
+        
+        inputDiffVisible = true
+        
+        // Clear any existing timeout
+        if (inputDiffTimeout) {
+            clearTimeout(inputDiffTimeout)
+        }
+        
+        // Auto-hide after 3 seconds
+        inputDiffTimeout = setTimeout(() => {
+            inputDiffVisible = false
+            inputDiffData = null
+            inputDiffTimeout = null
+        }, 3000)
+    }
 
     // Proper detection of ControlledFrame API support
     function isControlledFrameSupported() {
@@ -404,6 +547,12 @@
             if (oauthTimeout) {
                 clearTimeout(oauthTimeout)
             }
+            if (linkPreviewTimeout) {
+                clearTimeout(linkPreviewTimeout)
+            }
+            if (inputDiffTimeout) {
+                clearTimeout(inputDiffTimeout)
+            }
         }
     })
 
@@ -706,6 +855,115 @@ document.addEventListener('keydown', function(event) {
         return false;
     }
 }, { capture: true, passive: false });
+
+// Track hovered anchor elements
+let currentHoveredAnchor = null;
+
+document.addEventListener('mouseover', function(event) {
+    // Find the closest anchor element in the event path
+    const anchor = event.target.closest('a');
+    
+    // Only log if we're hovering a new anchor (different from the last one)
+    if (anchor && anchor !== currentHoveredAnchor) {
+        currentHoveredAnchor = anchor;
+        
+        // Log anchor enter with details
+        console.log('iwa:link-enter:${tab.id}:' + JSON.stringify({
+            href: anchor.href || anchor.getAttribute('href') || '',
+            target: anchor.target || anchor.getAttribute('target') || '',
+            rel: anchor.rel || anchor.getAttribute('rel') || '',
+            title: anchor.title || anchor.getAttribute('title') || ''
+        }));
+    } else if (!anchor && currentHoveredAnchor) {
+        // Left the anchor element
+        console.log('iwa:link-leave:${tab.id}:' + JSON.stringify({
+            href: currentHoveredAnchor.href || currentHoveredAnchor.getAttribute('href') || ''
+        }));
+        currentHoveredAnchor = null;
+    }
+}, { capture: true, passive: true });
+
+// Track text input changes with debouncing
+let inputDebounceTimeouts = new Map();
+const INPUT_DEBOUNCE_DELAY = 750; // 0.75 seconds
+
+function isTextInputElement(element) {
+    if (!element) return false;
+    
+    // Check for input elements with text-like types (excluding password)
+    if (element.tagName === 'INPUT') {
+        const type = (element.type || 'text').toLowerCase();
+        const textTypes = ['text', 'email', 'search', 'tel', 'url', 'number'];
+        return textTypes.includes(type);
+    }
+    
+    // Check for textarea elements
+    if (element.tagName === 'TEXTAREA') {
+        return true;
+    }
+    
+    // Check for contenteditable elements
+    if (element.contentEditable === 'true') {
+        return true;
+    }
+    
+    return false;
+}
+
+function getElementIdentifier(element) {
+    // Create a unique identifier for the element
+    const id = element.id || '';
+    const name = element.name || '';
+    const placeholder = element.placeholder || '';
+    const className = element.className || '';
+    const tagName = element.tagName.toLowerCase();
+    
+    return \`\${tagName}[\${id ? 'id="' + id + '"' : ''}]\${name ? '[name="' + name + '"]' : ''}\${className ? '[class="' + className + '"]' : ''}\${placeholder ? '[placeholder="' + placeholder + '"]' : ''}\`;
+}
+
+function getElementText(element) {
+    if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+        return element.value || '';
+    } else if (element.contentEditable === 'true') {
+        return element.textContent || element.innerText || '';
+    }
+    return '';
+}
+
+document.addEventListener('input', function(event) {
+    const element = event.target;
+    
+    if (!isTextInputElement(element)) {
+        return;
+    }
+    
+    const elementId = getElementIdentifier(element);
+    
+    // Clear existing timeout for this element
+    if (inputDebounceTimeouts.has(elementId)) {
+        clearTimeout(inputDebounceTimeouts.get(elementId));
+    }
+    
+    // Set new timeout
+    const timeoutId = setTimeout(() => {
+        const currentText = getElementText(element);
+        
+        // Only log if there's actual text content
+        if (currentText.trim().length > 0) {
+            console.log('iwa:input-text:${tab.id}:' + JSON.stringify({
+                element: elementId,
+                text: currentText,
+                length: currentText.length,
+                timestamp: Date.now()
+            }));
+        }
+        
+        // Clean up the timeout
+        inputDebounceTimeouts.delete(elementId);
+    }, INPUT_DEBOUNCE_DELAY);
+    
+    inputDebounceTimeouts.set(elementId, timeoutId);
+}, { capture: true, passive: true });
 `,
             },
             runAt: 'document-end',
@@ -814,12 +1072,77 @@ document.addEventListener('keydown', function(event) {
                         sourceFrame: frame.id || `tab_${tab.id}`
                     }
                 }))
+            } else if (message.startsWith('iwa:link-enter:')) {
+                // Parse link enter event
+                const parts = message.split(':')
+                const tabId = parts[2]
+                try {
+                    const linkData = JSON.parse(parts.slice(3).join(':'))
+                    console.log(`[Tab ${tabId}] Link enter:`, linkData)
+                    
+                    // Show link preview if it's for this tab
+                    if (tabId === tab.id && linkData.href) {
+                        hoveredLink = linkData
+                        linkPreviewVisible = true
+                        
+                        // Clear any existing timeout
+                        if (linkPreviewTimeout) {
+                            clearTimeout(linkPreviewTimeout)
+                            linkPreviewTimeout = null
+                        }
+                        
+                        // Set timeout to auto-hide after 1.5 seconds (similar to origin preview)
+                        linkPreviewTimeout = setTimeout(() => {
+                            linkPreviewVisible = false
+                            hoveredLink = null
+                            linkPreviewTimeout = null
+                        }, 1500)
+                    }
+                } catch (error) {
+                    console.error('Failed to parse link enter data:', error)
+                }
+            } else if (message.startsWith('iwa:link-leave:')) {
+                // Parse link leave event
+                const parts = message.split(':')
+                const tabId = parts[2]
+                try {
+                    const linkData = JSON.parse(parts.slice(3).join(':'))
+                    console.log(`[Tab ${tabId}] Link leave:`, linkData)
+                    
+                    // Hide link preview immediately if it's for this tab
+                    if (tabId === tab.id) {
+                        linkPreviewVisible = false
+                        hoveredLink = null
+                        
+                        // Clear any existing timeout
+                        if (linkPreviewTimeout) {
+                            clearTimeout(linkPreviewTimeout)
+                            linkPreviewTimeout = null
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to parse link leave data:', error)
+                }
+            } else if (message.startsWith('iwa:input-text:')) {
+                // Parse input text event
+                const parts = message.split(':')
+                const tabId = parts[2]
+                try {
+                    const inputData = JSON.parse(parts.slice(3).join(':'))
+                    console.log(`[Tab ${tabId}] Input text:`, inputData)
+                    
+                    // Show input diff if it's for this tab and has meaningful text
+                    if (tabId === tab.id && inputData.text && inputData.text.length > 3) {
+                        showInputDiff(inputData)
+                    }
+                } catch (error) {
+                    console.error('Failed to parse input text data:', error)
+                }
             }
         })
     }
 
     // user initiated clear data options clearData(options, types)
-
     $effect(() => {
         partition = tab.partition
         const frame = tab.frame
@@ -984,6 +1307,33 @@ document.addEventListener('keydown', function(event) {
                 referrerpolicy="strict-origin-when-cross-origin"
                 loading="lazy"
                 ></controlledframe>
+                
+
+                {#if linkPreviewVisible && hoveredLink}
+                    <div class="link-preview" transition:fade={{duration: 150}}>
+                        {hoveredLink.href}
+                    </div>
+                {/if}
+                
+                <!-- Input diff preview for controlledframe -->
+                {#if inputDiffVisible && inputDiffData}
+                    <div class="input-diff-preview" transition:fade={{duration: 200}}>
+                        <div class="input-diff-header">
+                            <span class="input-diff-element">completion</span>
+                        </div>
+                        <div class="input-diff-content">
+                            {#each inputDiffData.diff as diffItem}
+                                {#if diffItem.type === 'add'}
+                                    <span class="diff-add">{diffItem.char}</span>
+                                {:else if diffItem.type === 'delete'}
+                                    <span class="diff-delete">{diffItem.char}</span>
+                                {:else}
+                                    <span class="diff-same">{diffItem.char}</span>
+                                {/if}
+                            {/each}
+                        </div>
+                    </div>
+                {/if}
                 <!--
                 onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
                 onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
@@ -1010,6 +1360,33 @@ document.addEventListener('keydown', function(event) {
                     referrerpolicy="strict-origin-when-cross-origin"
                     loading="lazy"
                 ></iframe>
+                
+                <!-- Link preview for iframe fallback -->
+                {#if linkPreviewVisible && hoveredLink}
+                    <div class="link-preview" transition:fade={{duration: 150}}>
+                        {hoveredLink.href}
+                    </div>
+                {/if}
+                
+                <!-- Input diff preview for iframe fallback -->
+                {#if inputDiffVisible && inputDiffData}
+                    <div class="input-diff-preview" transition:fade={{duration: 200}}>
+                        <div class="input-diff-header">
+                            <span class="input-diff-element">completion</span>
+                        </div>
+                        <div class="input-diff-content">
+                            {#each inputDiffData.diff as diffItem}
+                                {#if diffItem.type === 'add'}
+                                    <span class="diff-add">{diffItem.char}</span>
+                                {:else if diffItem.type === 'delete'}
+                                    <span class="diff-delete">{diffItem.char}</span>
+                                {:else}
+                                    <span class="diff-same">{diffItem.char}</span>
+                                {/if}
+                            {/each}
+                        </div>
+                    </div>
+                {/if}
             {:else}
                 <div 
                     transition:fade={{duration: 150}}
@@ -1248,5 +1625,109 @@ document.addEventListener('keydown', function(event) {
             0 25px 50px rgba(0, 0, 0, 0.6),
             0 0 0 1px rgba(255, 255, 255, 0.1);
         background: #0a0a0a;
+    }
+
+    .link-preview {
+        position: absolute;
+        top: 1px;
+        left: 7px;
+        background: rgba(25, 25, 25, 0.98);
+        color: rgba(255, 255, 255, 0.95);
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        font-size: 11px;
+        font-weight: 400;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.103);
+        backdrop-filter: blur(12px);
+        z-index: 10010;
+        max-width: calc(100% - 24px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        user-select: none;
+        pointer-events: none;
+    }
+
+    .input-diff-preview {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.95);
+        color: rgba(255, 255, 255, 0.9);
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        font-size: 12px;
+        font-weight: 400;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(16px);
+        z-index: 10015;
+        max-width: 480px;
+        min-width: 300px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+        user-select: none;
+        pointer-events: none;
+        overflow: hidden;
+    }
+
+    .input-diff-header {
+        padding: 8px 12px;
+        background: rgba(0, 0, 0, 0.8);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.4);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .input-diff-content {
+        padding: 10px 12px;
+        line-height: 1.4;
+        overflow-wrap: break-word;
+        word-break: break-all;
+        max-height: 120px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+    }
+
+    .input-diff-content::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    .input-diff-content::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .input-diff-content::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 2px;
+    }
+
+    .diff-add {
+        background: rgba(34, 197, 94, 0.3);
+        color: rgba(34, 197, 94, 1);
+        padding: 1px 2px;
+        border-radius: 2px;
+        font-weight: 500;
+    }
+
+    .diff-delete {
+        background: rgba(239, 68, 68, 0.3);
+        color: rgba(239, 68, 68, 1);
+        padding: 1px 2px;
+        border-radius: 2px;
+        text-decoration: line-through;
+        font-weight: 500;
+    }
+
+    .diff-same {
+        color: rgba(255, 255, 255, 0.8);
     }
 </style>

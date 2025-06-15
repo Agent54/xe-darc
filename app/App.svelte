@@ -228,9 +228,14 @@
             muted: false,
             loading: false
         },
+
         {
             id: '5',
-            url: 'data:text/html,<html><bod style="color: white;"y><h1>Hello, World!</h1></body></html>', 
+             url: `data:text/html,<html><bod style="color: white;"y><h1>Hello, World!</h1>            <a href="https://
+            www.google.com" target="_blank">
+                <img src="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png" 
+                alt="Google" class="w-10 h-10">
+            </a></body></html>`, 
             title: 'New Tab',
             audioPlaying: false,
             // favicon: 'file://photon_logo.png',
@@ -239,6 +244,17 @@
             muted: false,
             loading: false
         }
+        // {
+        //     id: '5',
+        //     url: '/test-links.html', 
+        //     title: 'Link Tracking Test',
+        //     audioPlaying: false,
+        //     // favicon: 'file://photon_logo.png',
+        //     screenshot: null,
+        //     pinned: false,
+        //     muted: false,
+        //     loading: false
+        // }
     ])
     let visibilityTimers = new Map()
     let hoveredTab = $state(null)

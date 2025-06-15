@@ -245,3 +245,25 @@ how to get cert infos?
 tosdl and remote data tabs
 
 http://localhost:5193
+
+
+disable delete key back navigation!
+
+https://developer.chrome.com/docs/extensions/reference/api/sidePanel
+
+chrome.tabGroups
+
+https://mitmproxy.org features
+
+notificatino central/ messaging/ rooms/ channels/ squats integrated concept?
+
+hover link previews + input field content
+
+tab complete for typos and bad grammer in all input fields
+
+iwa iframe context for securely adding ui to pages and running context in frames
+
+radical screenshot and downloads rethink integrated into tab groups ui
+
+logs/ reqs sidebar
+
