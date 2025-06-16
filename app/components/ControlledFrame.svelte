@@ -856,6 +856,24 @@ document.addEventListener('keydown', function(event) {
     }
 }, { capture: true, passive: false });
 
+// Global wheel event listener for controlled frame zoom control
+document.addEventListener('wheel', function(event) {
+    // Check for Ctrl key (Windows/Linux) or Cmd key (Mac) - same as zoom prevention in main app
+    if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        
+        // Determine zoom direction based on deltaY
+        const zoomDirection = event.deltaY < 0 ? 'in' : 'out';
+        
+        // Log zoom direction to console IPC system
+        console.log('iwa:zoom:${tab.id}:' + zoomDirection);
+        
+        return false;
+    }
+}, { capture: true, passive: false });
+
 // Track hovered anchor elements
 let currentHoveredAnchor = null;
 
@@ -1137,6 +1155,51 @@ document.addEventListener('input', function(event) {
                     }
                 } catch (error) {
                     console.error('Failed to parse input text data:', error)
+                }
+            } else if (message.startsWith('iwa:zoom:')) {
+                // Parse zoom event
+                const parts = message.split(':')
+                const tabId = parts[2]
+                const zoomDirection = parts[3]
+                
+                console.log(`[Tab ${tabId}] Zoom direction:`, zoomDirection)
+                
+                // Handle zoom if it's for this tab
+                if (tabId === tab.id && frame.setZoom) {
+                    // Get current zoom level or default to 1.0
+                    frame.getZoom?.().then((currentZoom) => {
+                        let newZoom = currentZoom || 1.0
+                        
+                                                 // Adjust zoom level based on direction (5% increments for smoother control)
+                         if (zoomDirection === 'in') {
+                             newZoom = Math.min(newZoom + 0.05, 3.0) // Max zoom 300%
+                         } else if (zoomDirection === 'out') {
+                             newZoom = Math.max(newZoom - 0.05, 0.3) // Min zoom 30%
+                         }
+                        
+                        // Set the new zoom level
+                        frame.setZoom(newZoom).then(() => {
+                            console.log(`[Tab ${tabId}] Zoom set to:`, Math.round(newZoom * 100) + '%')
+                        }).catch((error) => {
+                            console.error(`[Tab ${tabId}] Failed to set zoom:`, error)
+                        })
+                                         }).catch(() => {
+                         // Fallback if getZoom fails - assume current zoom is 1.0
+                         let newZoom = 1.0
+                         if (zoomDirection === 'in') {
+                             newZoom = 1.05
+                         } else if (zoomDirection === 'out') {
+                             newZoom = 0.95
+                         }
+                        
+                        frame.setZoom(newZoom).then(() => {
+                            console.log(`[Tab ${tabId}] Zoom set to:`, Math.round(newZoom * 100) + '%')
+                        }).catch((error) => {
+                            console.error(`[Tab ${tabId}] Failed to set zoom:`, error)
+                        })
+                    })
+                } else if (tabId === tab.id && !frame.setZoom) {
+                    console.warn(`[Tab ${tabId}] setZoom API not available on this frame`)
                 }
             }
         })

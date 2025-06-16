@@ -155,6 +155,7 @@
   let container
   let root
   let excalidrawAPI = $state(null)
+  let currentZoom = $state(initialData?.appState?.zoom?.value || 0.35)
   
   function renderExcalidraw () {
     if (!container || !root) return
@@ -208,6 +209,10 @@
     const props = {
       initialData: mergedInitialData,
       onChange: (elements, appState, files) => {
+        // Update zoom level for CSS custom property
+        if (appState?.zoom?.value !== undefined) {
+          currentZoom = appState.zoom.value
+        }
         onChange(elements, appState, files)
       },
       onPointerUpdate,
@@ -286,7 +291,7 @@
   bind:this={container} 
   class="excalidraw-container"
   class:loaded={loaded}
-  style="width: {width}; height: {height};"
+  style="width: {width}; height: {height}; --excalidraw-zoom: {currentZoom};"
 ></div>
 
 <style>
@@ -320,6 +325,26 @@
         background-color: #000000;
         opacity: 0;
         transition: opacity 0.2s ease-in-out 0.1s;
+    }
+
+
+    :global(.excalidraw__embeddable-container.is-hovered::after) {
+        content: '↗︎';
+        color: rgba(255, 255, 255, 0.7);
+        position: absolute;
+        top: -16px;
+        right: -17px;
+        width: 20px;
+        height: 20px;
+        /* background-color: red; */
+        border-radius: 10px;
+        /* border: 1px solid green; */
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transform: scale(calc(1 / var(--excalidraw-zoom, 0.35)));
+        transform-origin: center;
     }
 
     .excalidraw-container.loaded {

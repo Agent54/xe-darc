@@ -468,6 +468,33 @@
             event.stopImmediatePropagation()
             handleTabClose(event)
         }
+        if ((event.metaKey || event.ctrlKey) && event.key === '0') {
+            event.preventDefault()
+            event.stopPropagation()
+            event.stopImmediatePropagation()
+            handleZoomReset()
+        }
+    }
+
+    function handleZoomReset() {
+        if (tabs.length > 0 && activeTabIndex >= 0 && activeTabIndex < tabs.length) {
+            const activeTab = tabs[activeTabIndex]
+            const frame = activeTab.frame
+            
+            if (frame && frame.setZoom) {
+                frame.setZoom(1.0).then(() => {
+                    console.log(`[Tab ${activeTab.id}] Zoom reset to 100%`)
+                }).catch((error) => {
+                    console.error(`[Tab ${activeTab.id}] Failed to reset zoom:`, error)
+                })
+            } else if (frame && !frame.setZoom) {
+                console.warn(`[Tab ${activeTab.id}] setZoom API not available on this frame`)
+            } else {
+                console.warn('No active frame available for zoom reset')
+            }
+        } else {
+            console.warn('No active tab available for zoom reset')
+        }
     }
 
     function handleTabClose(event) {
@@ -1046,6 +1073,7 @@
             case 'tile': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>`
             case 'squat': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" /></svg>`
             case 'canvas': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 0 1-1.125-1.125v-3.75ZM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-8.25ZM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-2.25Z" /></svg>`
+            case 'reading': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>`
             default: return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>`
         }
     }
@@ -1331,7 +1359,7 @@
 <header class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 16px;' : 'right: -32px;'}"></div>
      
-    <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="top: 7px; left: 7px; width: {closed.length > 0 ? 'calc(100% - 270px)' : 'calc(100% - 240px)'};" class:hidden={focusModeEnabled}>
+    <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {closed.length > 0 ? 'calc(100% - 370px)' : 'calc(100% - 340px)'};" class:hidden={focusModeEnabled}>
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} transition:flip={{duration: 100}}>
             {#each tabs as tab, i (tab.id)}
                 <li 
@@ -1427,6 +1455,18 @@
                 </span>
                 <span>Canvas</span>
                 {#if viewMode === 'canvas'}<span class="checkmark">•</span>{/if}
+            </div>
+            <div class="view-mode-menu-item" 
+                    class:active={viewMode === 'reading'}
+                    role="button"
+                    tabindex="0"
+                    onclick={(e) => { e.stopPropagation(); selectViewMode('reading') }}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('reading') } }}>
+                <span class="view-mode-icon-item">
+                    {@html getViewModeIcon('reading')}
+                </span>
+                <span>Reading</span>
+                {#if viewMode === 'reading'}<span class="checkmark">•</span>{/if}
             </div>
             <!-- <div class="view-mode-menu-item" 
                  class:active={viewMode === 'tile'}
@@ -1842,6 +1882,32 @@
 
     {#if viewMode === 'canvas'}
         <Excalidraw tabs={tabs} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} {getEnabledUserMods} />
+    {:else if viewMode === 'reading'}
+        {#each tabs as tab (tab.id)}
+            {#if tab.url === 'about:newtab'}
+                <div class="frame reading-mode {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
+                    {#key origin(tab.url)}
+                        <div class="url-display visible">
+                            {tab.url}
+                        </div>
+                    {/key}
+                    
+                    <NewTab {tab} />
+                </div>
+            {:else}
+                {#key userModsHash}
+                    <div class="reading-mode">
+                        {#key origin(tab.url)}
+                            <div class="url-display visible">
+                                {tab.url}
+                            </div>
+                        {/key}
+                        
+                        <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                    </div>
+                {/key}
+            {/if}
+        {/each}
     {:else}
         {#each tabs as tab (tab.id)}
             {#if tab.url === 'about:newtab'}
@@ -1973,7 +2039,7 @@
 <style>
     header {
         position: fixed;
-        left: env(titlebar-area-x, 80px);
+        left: env(titlebar-area-x, 0);
         top: env(titlebar-area-y, 0);
         width: env(titlebar-area-width, 100%);
         height: env(titlebar-area-height, 33px);
@@ -2140,6 +2206,8 @@
         position: relative;
         -webkit-app-region: no-drag;
         z-index: 1;
+        top: 7px;
+        left: 110px;
     }
 
     .tab-wrapper.overflowing-right::after {
@@ -2236,7 +2304,7 @@
         padding: 4px;
         list-style: none;
         transition: border-color 0.3s ease;
-        border-radius: 8px;
+        border-radius: 10px;
         background-color: hsl(0 0% 6% / 1);
         min-width: 130px;
         max-width: 200px;
@@ -2325,6 +2393,7 @@
         opacity: 0;
         transition: opacity 0.2s ease, background-color 0.2s ease;
         margin-top: -2px;
+        margin-right: -3px;
         flex-shrink: 0;
         overflow: hidden;
     }
@@ -3609,5 +3678,45 @@
             opacity: 0;
             transform: translateY(-4px);
         }
+    }
+
+    /* Reading mode styles */
+    .reading-mode {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #fafafa;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+        position: relative;
+        min-height: calc(100vh - 40px);
+    }
+
+    .reading-mode .url-display {
+        background: rgba(0, 0, 0, 0.7);
+        color: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        position: absolute;
+        top: 10px;
+        left: 20px;
+        z-index: 20;
+    }
+
+    .frame.reading-mode {
+        background: #fafafa;
+        border-radius: 8px;
+        padding: 20px;
+        max-width: 800px;
+        margin: 0 auto;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .controlled-frame-container :global(.frame.reading-mode) {
+        background: #fafafa;
+        border-radius: 8px;
+        padding: 20px;
+        max-width: 800px;
+        margin: 0 auto;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     }
 </style>
