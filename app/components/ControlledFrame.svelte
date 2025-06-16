@@ -928,6 +928,113 @@ function isTextInputElement(element) {
     return false;
 }
 
+// Global drag and drop event listeners for controlled frame content
+function setupDragDropListeners() {
+    let dragEventCounter = 0;
+    
+    function logDragDropEvent(eventType, event) {
+        const eventData = {
+            type: eventType,
+            timestamp: new Date().toISOString(),
+            frameId: '${tab.id}',
+            target: {
+                tagName: event.target?.tagName,
+                id: event.target?.id,
+                className: event.target?.className,
+                textContent: event.target?.textContent?.slice(0, 50),
+            },
+            coordinates: {
+                clientX: event.clientX,
+                clientY: event.clientY,
+                screenX: event.screenX,
+                screenY: event.screenY,
+            },
+            dataTransfer: {
+                dropEffect: event.dataTransfer?.dropEffect,
+                effectAllowed: event.dataTransfer?.effectAllowed,
+                types: event.dataTransfer?.types ? Array.from(event.dataTransfer.types) : [],
+                filesCount: event.dataTransfer?.files ? event.dataTransfer.files.length : 0,
+            },
+            modifierKeys: {
+                altKey: event.altKey,
+                ctrlKey: event.ctrlKey,
+                metaKey: event.metaKey,
+                shiftKey: event.shiftKey,
+            }
+        };
+        
+        // Send drag/drop event data to parent via console
+        console.log('iwa:dragdrop:${tab.id}:' + JSON.stringify(eventData));
+    }
+    
+    // Dragstart - when user starts dragging an element
+    document.addEventListener('dragstart', (event) => {
+        logDragDropEvent('dragstart', event);
+    }, { capture: true });
+    
+    // Drag - during the drag operation (throttled)
+    document.addEventListener('drag', (event) => {
+        dragEventCounter++;
+        if (dragEventCounter % 10 === 0) {
+            logDragDropEvent('drag', event);
+        }
+    }, { capture: true });
+    
+    // Dragenter - when dragged item enters a drop target
+    document.addEventListener('dragenter', (event) => {
+        logDragDropEvent('dragenter', event);
+    }, { capture: true });
+    
+    // Dragover - when dragged item is over a drop target
+    document.addEventListener('dragover', (event) => {
+        logDragDropEvent('dragover', event);
+    }, { capture: true });
+    
+    // Dragleave - when dragged item leaves a drop target  
+    document.addEventListener('dragleave', (event) => {
+        logDragDropEvent('dragleave', event);
+    }, { capture: true });
+    
+    // Drop - when dragged item is dropped
+    document.addEventListener('drop', (event) => {
+        logDragDropEvent('drop', event);
+        
+        // Try to get additional data for drops
+        if (event.dataTransfer) {
+            const additionalData = {
+                files: Array.from(event.dataTransfer.files).map(f => ({
+                    name: f.name,
+                    size: f.size,
+                    type: f.type
+                })),
+                textData: {},
+            };
+            
+            // Try to get text data
+            try {
+                additionalData.textData['text/plain'] = event.dataTransfer.getData('text/plain');
+                additionalData.textData['text/uri-list'] = event.dataTransfer.getData('text/uri-list');
+                additionalData.textData['text/html'] = event.dataTransfer.getData('text/html');
+            } catch (e) {
+                console.log('Could not read dataTransfer text data:', e);
+            }
+            
+            console.log('iwa:dragdrop-data:${tab.id}:' + JSON.stringify(additionalData));
+        }
+    }, { capture: true });
+    
+    // Dragend - when drag operation ends
+    document.addEventListener('dragend', (event) => {
+        logDragDropEvent('dragend', event);
+        dragEventCounter = 0; // Reset counter
+    }, { capture: true });
+    
+    console.log('🎯 Drag&Drop listeners installed in controlled frame ${tab.id}');
+}
+
+// Initialize drag and drop listeners
+setupDragDropListeners();
+
 function getElementIdentifier(element) {
     // Create a unique identifier for the element
     const id = element.id || '';
@@ -1200,6 +1307,32 @@ document.addEventListener('input', function(event) {
                     })
                 } else if (tabId === tab.id && !frame.setZoom) {
                     console.warn(`[Tab ${tabId}] setZoom API not available on this frame`)
+                }
+            } else if (message.startsWith('iwa:dragdrop:')) {
+                // Parse drag and drop event from controlled frame
+                const parts = message.split(':')
+                const tabId = parts[2]
+                try {
+                    const eventData = JSON.parse(parts.slice(3).join(':'))
+                    console.group(`🎯 [CONTROLLED-FRAME] ${eventData.type.toUpperCase()} in tab ${tabId}`)
+                    console.log('📍 Frame Event Details:', eventData)
+                    console.log('🖼️ Frame ID:', tabId)
+                    console.groupEnd()
+                } catch (error) {
+                    console.error('Failed to parse drag/drop event data:', error)
+                }
+            } else if (message.startsWith('iwa:dragdrop-data:')) {
+                // Parse additional drag and drop data from controlled frame
+                const parts = message.split(':')
+                const tabId = parts[2]
+                try {
+                    const additionalData = JSON.parse(parts.slice(3).join(':'))
+                    console.group(`📋 [CONTROLLED-FRAME] Additional Drop Data in tab ${tabId}`)
+                    console.log('📁 Files:', additionalData.files)
+                    console.log('📝 Text Data:', additionalData.textData)
+                    console.groupEnd()
+                } catch (error) {
+                    console.error('Failed to parse additional drag/drop data:', error)
                 }
             }
         })

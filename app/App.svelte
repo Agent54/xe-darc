@@ -275,6 +275,9 @@
     let showFixedNewTabButton = $state(false)
     let openSidebars = $state(new Set())
     let focusModeEnabled = $state(false)
+    let darkMode = $state(true)
+    let dataSaver = $state(false)
+    let batterySaver = $state(false)
     
     // Window resize state for performance optimization
     let isWindowResizing = $state(false)
@@ -1148,9 +1151,17 @@
         isWindowBackground = !shouldBeActive
     }
     
-    function handleControlledFrameFocus() {
+    function handleControlledFrameFocus(focusedTab) {
         controlledFrameHasFocus = true
         updateWindowFocusState()
+        
+        // Make the focused tab active
+        if (focusedTab) {
+            const tabIndex = tabs.findIndex(tab => tab.id === focusedTab.id)
+            if (tabIndex !== -1 && tabIndex !== activeTabIndex) {
+                activeTabIndex = tabIndex
+            }
+        }
     }
     
     function handleControlledFrameBlur() {
@@ -1260,6 +1271,19 @@
     function toggleFocusMode() {
         focusModeEnabled = !focusModeEnabled
     }
+    
+    function toggleDarkMode() {
+        darkMode = !darkMode
+        document.documentElement.classList.toggle('dark-mode', darkMode)
+    }
+    
+    function toggleDataSaver() {
+        dataSaver = !dataSaver
+    }
+    
+    function toggleBatterySaver() {
+        batterySaver = !batterySaver
+    }
 
     // Check for encrypted sync token on app startup
     async function checkSyncTokenAuth() {
@@ -1337,6 +1361,165 @@
             return url
         }
     }
+
+    // Global drag and drop event listeners for debugging and logging
+    function setupGlobalDragDropListeners() {
+        // Log detailed information about drag and drop events
+        function logDragDropEvent(eventType, event) {
+            const eventData = {
+                type: eventType,
+                timestamp: new Date().toISOString(),
+                target: {
+                    tagName: event.target?.tagName,
+                    id: event.target?.id,
+                    className: event.target?.className,
+                    textContent: event.target?.textContent?.slice(0, 50),
+                },
+                relatedTarget: {
+                    tagName: event.relatedTarget?.tagName,
+                    id: event.relatedTarget?.id,
+                    className: event.relatedTarget?.className,
+                },
+                coordinates: {
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    screenX: event.screenX,
+                    screenY: event.screenY,
+                },
+                dataTransfer: {
+                    dropEffect: event.dataTransfer?.dropEffect,
+                    effectAllowed: event.dataTransfer?.effectAllowed,
+                    types: event.dataTransfer?.types ? Array.from(event.dataTransfer.types) : [],
+                    files: event.dataTransfer?.files ? Array.from(event.dataTransfer.files).map(f => ({
+                        name: f.name,
+                        size: f.size,
+                        type: f.type,
+                        lastModified: f.lastModified
+                    })) : [],
+                },
+                modifierKeys: {
+                    altKey: event.altKey,
+                    ctrlKey: event.ctrlKey,
+                    metaKey: event.metaKey,
+                    shiftKey: event.shiftKey,
+                },
+                bubbles: event.bubbles,
+                cancelable: event.cancelable,
+                defaultPrevented: event.defaultPrevented,
+            }
+
+            // Try to get additional data from dataTransfer
+            if (event.dataTransfer) {
+                eventData.dataTransfer.items = []
+                try {
+                    for (let i = 0; i < event.dataTransfer.items.length; i++) {
+                        const item = event.dataTransfer.items[i]
+                        eventData.dataTransfer.items.push({
+                            kind: item.kind,
+                            type: item.type,
+                        })
+                        
+                        // Try to get string data for text items
+                        if (item.kind === 'string' && eventType === 'drop') {
+                            item.getAsString((data) => {
+                                console.log(`📋 [${eventType}] String data for type "${item.type}":`, data.slice(0, 100))
+                            })
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`⚠️ [${eventType}] Error reading dataTransfer items:`, error)
+                }
+            }
+
+            console.group(`🎯 [DRAG&DROP] ${eventType.toUpperCase()}`)
+            console.log('📍 Event Details:', eventData)
+            console.log('🎯 Target Element:', event.target)
+            if (event.relatedTarget) {
+                console.log('🔗 Related Target:', event.relatedTarget)
+            }
+            console.groupEnd()
+        }
+
+        // Dragenter - when dragged item enters a valid drop target
+        window.addEventListener('dragenter', (event) => {
+            logDragDropEvent('dragenter', event)
+        }, { capture: true })
+
+        // Dragover - when dragged item is over a valid drop target (fires repeatedly)
+        window.addEventListener('dragover', (event) => {
+            logDragDropEvent('dragover', event)
+            
+            // Prevent default to allow dropping on the app shell
+            // Check if we're over the app shell (not inside a controlled frame)
+            const isOverControlledFrame = event.target.closest('controlledframe, iframe')
+            const isOverAppShell = !isOverControlledFrame
+            
+            if (isOverAppShell) {
+                event.preventDefault() // This allows dropping
+                event.dataTransfer.dropEffect = 'copy' // Show copy cursor
+                console.log('🎯 [DRAGOVER] Prevented default for app shell - drop allowed')
+            }
+        }, { capture: true })
+
+        // Dragleave - when dragged item leaves a valid drop target
+        window.addEventListener('dragleave', (event) => {
+            logDragDropEvent('dragleave', event)
+        }, { capture: true })
+
+        // Drop - when dragged item is dropped on a valid drop target
+        window.addEventListener('drop', (event) => {
+            logDragDropEvent('drop', event)
+            
+            // Handle drops on the app shell
+            const isOverControlledFrame = event.target.closest('controlledframe, iframe')
+            const isOverAppShell = !isOverControlledFrame
+            
+            if (isOverAppShell) {
+                event.preventDefault() // Prevent browser default handling
+                console.log('🎯 [DROP] Handling drop on app shell')
+                
+                // Process dropped files or content
+                if (event.dataTransfer.files.length > 0) {
+                    console.log('📁 [DROP] Files dropped on app shell:', Array.from(event.dataTransfer.files))
+                    // Here you could handle file drops (e.g., open URLs, create new tabs, etc.)
+                }
+                
+                // Process dropped text/URLs
+                const text = event.dataTransfer.getData('text/plain')
+                const url = event.dataTransfer.getData('text/uri-list')
+                if (text || url) {
+                    console.log('📝 [DROP] Text/URL dropped on app shell:', { text, url })
+                    // Here you could handle text/URL drops (e.g., create new tab with URL)
+                }
+            }
+        }, { capture: true })
+
+        // Dragstart - when user starts dragging an element
+        window.addEventListener('dragstart', (event) => {
+            logDragDropEvent('dragstart', event)
+        }, { capture: true })
+
+        // Drag - during the drag operation (fires repeatedly)
+        window.addEventListener('drag', (event) => {
+            // Only log every 10th drag event to avoid spam
+            if (!window.dragEventCounter) window.dragEventCounter = 0
+            window.dragEventCounter++
+            if (window.dragEventCounter % 10 === 0) {
+                logDragDropEvent('drag', event)
+            }
+        }, { capture: true })
+
+        // Dragend - when drag operation ends
+        window.addEventListener('dragend', (event) => {
+            logDragDropEvent('dragend', event)
+            window.dragEventCounter = 0 // Reset counter
+        }, { capture: true })
+
+        console.log('🎯 Global drag and drop event listeners installed')
+    }
+
+    // Initialize drag and drop listeners
+    setupGlobalDragDropListeners()
 </script>
 
 {#snippet trashIcon()}
@@ -1357,9 +1540,9 @@
 />
 
 <header class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 16px;' : 'right: -32px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 178px;' : 'right: 137px;'}"></div>
      
-    <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {closed.length > 0 ? 'calc(100% - 370px)' : 'calc(100% - 340px)'};" class:hidden={focusModeEnabled}>
+            <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {closed.length > 0 ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled}>
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} transition:flip={{duration: 100}}>
             {#each tabs as tab, i (tab.id)}
                 <li 
@@ -1513,7 +1696,7 @@
          onclick={openNewTab}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
          title="New Tab (⌘T)"
-         style="{closed.length > 0 ? 'right: 131px;' : 'right: 90px;'}"
+         style="{closed.length > 0 ? 'right: 174px;' : 'right: 133px;'}"
          class:visible={showFixedNewTabButton && !focusModeEnabled}>
         <span class="new-tab-icon">+</span>
     </div>
@@ -1571,6 +1754,61 @@
                 <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6 1.41 1.41z"/>
             </svg>
         {/if}
+    </div>
+
+    <div class="settings-menu-icon" 
+        role="button"
+        tabindex="0"
+        title="Settings"
+        class:hidden={focusModeEnabled}>
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+        </svg>
+        <div class="settings-menu">
+            <div class="settings-menu-header">Settings</div>
+            <div class="settings-menu-item" 
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleDarkMode() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDarkMode() } }}>
+                                 <span class="settings-menu-icon-item">
+                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                         <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+                     </svg>
+                 </span>
+                                 <span>Dark Mode</span>
+                 {#if darkMode}<span class="checkmark">•</span>{/if}
+            </div>
+            <div class="settings-menu-item" 
+                 class:active={dataSaver}
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleDataSaver() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDataSaver() } }}>
+                <span class="settings-menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                </span>
+                <span>Data Saver</span>
+                {#if dataSaver}<span class="checkmark">•</span>{/if}
+            </div>
+            <div class="settings-menu-item" 
+                 class:active={batterySaver}
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleBatterySaver() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleBatterySaver() } }}>
+                <span class="settings-menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 10.5h.375c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125H21M4.5 10.5H18V15H4.5v-4.5ZM3.75 18h16.5v1.5H3.75V18Z" />
+                    </svg>
+                </span>
+                <span>Battery Saver</span>
+                {#if batterySaver}<span class="checkmark">•</span>{/if}
+            </div>
+        </div>
     </div>
 </header>
 
@@ -1903,7 +2141,7 @@
                             </div>
                         {/key}
                         
-                        <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
             {/if}
@@ -1929,7 +2167,7 @@
                             </div>
                         {/key}
                         
-                        <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
             {/if}
@@ -2413,7 +2651,7 @@
     .trash-icon {
         position: fixed;
         top: 8px;
-        right: 91px;
+        right: 134px;
         width: 32px;
         height: 30px;
         padding-bottom: 8px;
@@ -2599,7 +2837,7 @@
     .view-mode-icon {
         position: fixed;
         top: 8px;
-        right: 47px;
+        right: 90px;
         width: 32px;
         height: 30px;
         padding-bottom: 8px;
@@ -2653,10 +2891,146 @@
         transform: scale(1.05);
     }
 
+    .settings-menu-icon {
+        position: fixed;
+        top: 8px;
+        right: 47px;
+        width: 32px;
+        height: 30px;
+        padding-bottom: 8px;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 12px;
+        opacity: 0.4;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+        z-index: 10000;
+        user-select: none;
+        -webkit-app-region: no-drag;
+        color: white;
+    }
+
+    .settings-menu-icon:hover {
+        opacity: 1;
+        background: rgba(0, 0, 0, 0.9);
+        transform: scale(1.05);
+    }
+
+    .settings-menu {
+        z-index: 10010;
+        font-family: 'Inter', sans-serif;
+        position: absolute;
+        top: 0;
+        right: 0;
+        margin-top: 17px;
+        background: rgba(8, 8, 8, 0.98);
+        backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+        min-width: 180px;
+        max-width: 200px;
+        box-shadow: 
+            0 12px 32px rgba(0, 0, 0, 0.6),
+            0 4px 12px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-8px) scale(0.96);
+        transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 10000;
+        pointer-events: none;
+        overflow: hidden;
+    }
+
+    .settings-menu-icon:hover .settings-menu, .settings-menu:hover {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+    }
+
+    .settings-menu-header {
+        padding: 8px 12px;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    .settings-menu-item {
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .settings-menu-item:last-of-type {
+        border-bottom: none;
+        border-radius: 0 0 8px 8px;
+    }
+
+    .settings-menu-item:hover {
+        background: rgb(255 255 255 / 8%);
+    }
+
+    .settings-menu-item.active {
+        background: rgb(255 255 255 / 5%);
+    }
+
+    .settings-menu-item.active:hover {
+        background: rgb(255 255 255 / 10%);
+    }
+
+    .settings-menu-item span {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        font-weight: 400;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        line-height: 1.3;
+    }
+
+    .settings-menu-item span:nth-child(2) {
+        flex: 1;
+    }
+
+    .settings-menu-icon-item {
+        width: 16px;
+        height: 16px;
+        opacity: 0.9;
+        flex-shrink: 0;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: 0;
+    }
+
+    .toggle-indicator {
+        margin-left: auto;
+        color: rgba(255, 255, 255, 0.6);
+        font-weight: 400;
+        font-size: 10px;
+    }
+
     .view-mode-icon.hidden,
     .new-tab-button.hidden,
     .trash-icon.hidden,
-    .tab-wrapper.hidden {
+    .tab-wrapper.hidden,
+    .settings-menu-icon.hidden {
         opacity: 0;
         visibility: hidden;
         pointer-events: none;

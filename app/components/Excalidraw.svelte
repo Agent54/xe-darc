@@ -17,16 +17,17 @@
           componentDidMount() {
             if (this.containerRef.current) {  
               // Mount the Svelte ControlledFrame component using Svelte 5 syntax
+              const currentTab = this.props.tabs.find(tab => tab.id === this.props.element.id)
               this.frameInstance = mount(ControlledFrame, {
                 target: this.containerRef.current,
                 props: {
                   style: 'width: 100%; height: 100%;',
-                  tab: this.props.tabs.find(tab => tab.id === this.props.element.id),
+                  tab: currentTab,
                   tabs: this.props.tabs,
                   headerPartOfMain: false,
                   isScrolling: false,
                   captureTabScreenshot: () => {},
-                  onFrameFocus: this.props.onFrameFocus || (() => {}),
+                  onFrameFocus: () => this.props.onFrameFocus(currentTab),
                   onFrameBlur: this.props.onFrameBlur || (() => {}),
                   userMods: this.props.getEnabledUserMods(this.props.tabs[0])
                 }
@@ -198,6 +199,7 @@
       appState: {
         currentItemRoughness: 0, // 0 = precise/architect style
         currentItemStrokeColor: "#6c757d", // Default line color to mid gray
+        currentItemFontSize: 40, // Double the standard font size (20px -> 40px)
         viewBackgroundColor: "#0000",
         zoom: { value: 0.35 }, // Set zoom to 35% for double-sized tiles
         scrollX: -300, // Center horizontally for larger tiles  

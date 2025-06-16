@@ -290,4 +290,18 @@ permission to navigate off domain?
 
 floorp?
 
-integrated inbox
+integrated inbox/rss/email
+
+canvas controlled frame integration
+
+auto dark mode
+
+tldraw computer
+
+masonry
+
+dragent event not reaching IWA from inside controlled frame
+
+copy paste canvas support
+
+swirch tabs and spaces / tab groups from sidebar to header?
