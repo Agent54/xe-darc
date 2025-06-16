@@ -191,7 +191,7 @@ make self runnable and iframe support
 
 full chrome os release like playbitOS?
 
-colab with presentation api/ remote window mod freature from chrome
+colab pr XR / second screen with presentation api/ remote window mod freature from chrome
 
 find expenses that could be optimized in my account statements
 
@@ -305,3 +305,66 @@ dragent event not reaching IWA from inside controlled frame
 copy paste canvas support
 
 swirch tabs and spaces / tab groups from sidebar to header?
+
+zoom gesture support to trigger overview/ assistant mode
+
+os window manager for littel desktp aps that can be ad hoc created (> peek overlap?)
+
+arc easle
+
+fullscreen support / app/window level
+
+show open tab counts
+
+webauth, cam, mice, geo, webusb, webbluetooth, webxr!!!!!!
+
+ar glasses support for prototyping: stretch, daydream controller, https://mrdoob.github.io/daydream-controller.js, StreoDOM project, https://www.stretch.site
+
+web version of https://symless.com/synergy with input capture
+
+every tab as menu
+
+important flag /star for tab
+
+overlay ui mode instead of new tab page
+
+alow html pasting to data url
+
+chromium bug capture mouse crashes
+
+presentation controller for vr glasses and second screen devices
+
+optimize input boxes with path id per href
+
+space for topic and activity. eg all current important and by work private
+
+space name in window title
+
+move dom node for canvas mode!
+
+transfrom 3d postion with req animation callback 120hz/60hz
+
+daydream controler for webbluetooth support
+
+force drak mode for any ste
+
+notes sidebar/ obsidian side dock
+
+black + glowing rainbow opal style
+
+overview tabs gesture
+
+editor workspace manager
+
+show already opened tabs in url preview
+
+
+mcp hosting setup
+
+holistic cost control
+
+architecutre diagram in darc excalidraw
+
+color icons context menus
+
+bg black bug https://climate-conflict.org

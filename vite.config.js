@@ -160,11 +160,12 @@ export default defineConfig({
   plugins,
   define: { globals: 'window' },
   server: {
+    host: '0.0.0.0',
     port: 5193,
     strictPort: true,
     hmr: {
       protocol: 'ws',
-      host: 'localhost',
+      host: '0.0.0.0',
       clientPort: 5193,
     },
     watch: {

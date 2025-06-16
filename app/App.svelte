@@ -8,6 +8,7 @@
     import UserMods from './components/UserMods.svelte'
     import Excalidraw from './components/Excalidraw.svelte'
 
+    // TODO: add user and session management
     const db = new PouchDB('darc')
 
 
@@ -57,6 +58,17 @@
         // },
 
         // https://testpages.eviltester.com/styled/index.html#:~:text=Index,-About%20Related%20Sites
+        // http://localhost:5173
+        {
+            id: '11',
+            url: 'http://localhost:5173',
+            title: 'XR',
+            audioPlaying: false,
+            screenshot: null,
+            pinned: false,
+            muted: false,
+            loading: false
+        },
         {
             id: '10',
             url: 'https://wicg.github.io/controlled-frame',
