@@ -1,10 +1,115 @@
-<!-- @namespace url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
+<script>
+    // Tab sidebar component with Firefox-like hover behavior
+    let { isDragEnabled = true } = $props()
+    
+    let isHovered = $state(false)
+    
+    function handleMouseEnter() {
+        isHovered = true
+    }
+    
+    function handleMouseLeave() {
+        isHovered = false
+    }
+</script>
 
-/* TODO: show number of tabs */
+<div class="sidebar-box" 
+     class:hovered={isHovered}
+     onmouseenter={handleMouseEnter} 
+     onmouseleave={handleMouseLeave}
+     role="complementary"
+     aria-label="Tab Sidebar">
+    <div class="sidebar">
+        <div class="sidebar-content">
 
-#browser {
-    background: #131313 !important;
-}
+        </div>
+    </div>
+</div>
+
+<style>
+    .sidebar-box {
+        background: transparent;
+        position: fixed;
+        /* height: 100vh; */
+        z-index: 100000;
+        border-radius: 8px;
+        bottom: 9px;
+        top: 43px;
+        left: 0px;
+        overflow: hidden;
+        transition: transform 190ms 340ms cubic-bezier(.78,-0.01,.34,1.04);
+        padding-right: 15px;
+        transform: translateX(-248px);
+        backface-visibility: hidden;
+        padding-left: 9px;
+        width: 263px;
+        pointer-events: auto;
+    }
+
+    .sidebar-box.hovered, .sidebar-box:hover {
+        transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04);
+        transform: translateX(0px);
+    }
+
+    .sidebar {
+        flex: 1;
+        border-radius: 8px;
+        box-shadow: 0 0 2px 0 #000;
+        border: 1px solid hsl(0 0% 12% / 1);
+        overflow: hidden;
+        height: 100%;
+        backdrop-filter: blur(24px);
+        background: rgba(0, 0, 0, 0.7);
+    }
+
+    .sidebar-content {
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+        background: transparent;
+    }
+
+    /* .sidebar-placeholder {
+        padding: 20px;
+        color: rgba(255, 255, 255, 0.8);
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        text-align: center;
+        margin-top: 40px;
+    }
+
+    .sidebar-placeholder p {
+        margin: 0 0 8px 0;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .sidebar-hint {
+        font-size: 12px;
+        opacity: 0.6;
+        font-weight: 400;
+    } */
+
+    /* .sidebar-content::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .sidebar-content::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .sidebar-content::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+
+    .sidebar-content::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    } */
+</style>
+
+<!-- <div class="drag-handle-left" class:drag-enabled={isDragEnabled}></div> -->
+
+<!-- 
 
 .deck-previewed {
   visibility: visible;
@@ -126,6 +231,8 @@
     box-shadow: 0 0 2px 0 #000;
     border: 1px solid rgb(41, 41, 43);
     overflow: hidden;
+    height: 100%;
+    background: transparent;
   }
 
 #sidebar-box {

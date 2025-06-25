@@ -4,54 +4,54 @@
   import ReactDOM from 'react-dom/client'
   import { Excalidraw as ExcalidrawReact } from '@excalidraw/excalidraw'
   import '@excalidraw/excalidraw/index.css'
-  import ControlledFrame from './ControlledFrame.svelte'
+  import Frame from './Frame.svelte'
 
   // Create a React component that mounts the Svelte ControlledFrame
-  class ControlledFrameWrapper extends React.Component {
-          constructor(props) {
-            super(props)
-            this.containerRef = React.createRef()
-            this.frameInstance = null
+  class FrameWrapper extends React.Component {
+    constructor(props) {
+      super(props)
+      this.containerRef = React.createRef()
+      this.frameInstance = null
+    }
+    
+    componentDidMount() {
+      if (this.containerRef.current) {  
+        // Mount the Svelte ControlledFrame component using Svelte 5 syntax
+        const currentTab = this.props.tabs.find(tab => tab.id === this.props.element.id)
+        this.frameInstance = mount(Frame, {
+          target: this.containerRef.current,
+          props: {
+            style: 'width: 100%; height: 100%;',
+            tab: currentTab,
+            tabs: this.props.tabs,
+            headerPartOfMain: false,
+            isScrolling: false,
+            captureTabScreenshot: () => {},
+            onFrameFocus: () => this.props.onFrameFocus(currentTab),
+            onFrameBlur: this.props.onFrameBlur || (() => {}),
+            userMods: this.props.getEnabledUserMods(this.props.tabs[0])
           }
-          
-          componentDidMount() {
-            if (this.containerRef.current) {  
-              // Mount the Svelte ControlledFrame component using Svelte 5 syntax
-              const currentTab = this.props.tabs.find(tab => tab.id === this.props.element.id)
-              this.frameInstance = mount(ControlledFrame, {
-                target: this.containerRef.current,
-                props: {
-                  style: 'width: 100%; height: 100%;',
-                  tab: currentTab,
-                  tabs: this.props.tabs,
-                  headerPartOfMain: false,
-                  isScrolling: false,
-                  captureTabScreenshot: () => {},
-                  onFrameFocus: () => this.props.onFrameFocus(currentTab),
-                  onFrameBlur: this.props.onFrameBlur || (() => {}),
-                  userMods: this.props.getEnabledUserMods(this.props.tabs[0])
-                }
-              })
-            }
-          }
-          
-          componentWillUnmount() {
-            if (this.frameInstance) {
-              unmount(this.frameInstance)
-            }
-          }
-          
-          render() {
-            return React.createElement('div', {
-              ref: this.containerRef,
-              style: {
-                width: '100%',
-                height: '100%',
-                position: 'relative'
-              }
-            })
-          }
+        })
+      }
+    }
+    
+    async componentWillUnmount() {
+      if (this.frameInstance) {
+        await unmount(this.frameInstance, { outro: true })
+      }
+    }
+    
+    render() {
+      return React.createElement('div', {
+        ref: this.containerRef,
+        style: {
+          width: '100%',
+          height: '100%',
+          position: 'relative'
         }
+      })
+    }
+  }
   
   let {
     tabs = [],
@@ -236,7 +236,7 @@
             return null
         }
         
-        return React.createElement(ControlledFrameWrapper, {
+        return React.createElement(FrameWrapper, {
           tabs,
           element,
           onFrameFocus,
@@ -271,12 +271,6 @@
   onMount(() => {
     root = ReactDOM.createRoot(container)
     renderExcalidraw()
-    
-    return () => {
-      if (root) {
-        root.unmount()
-      }
-    }
   })
   
   export function getExcalidrawAPI () {
@@ -287,9 +281,20 @@
   setTimeout(() => {
     loaded = true
   }, 100)
+
+  function detach () {
+    if (root) {
+        root.unmount()
+    }
+
+		return {
+			duration: 0
+		}
+	}
 </script>
 
 <div 
+  out:detach|global
   bind:this={container} 
   class="excalidraw-container"
   class:loaded={loaded}

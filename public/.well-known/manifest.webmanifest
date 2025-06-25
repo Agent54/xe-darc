@@ -1,12 +1,15 @@
 {
   "name": "Darc",
-  "version": "1.0.23",
+  "version": "1.0.37",
   "short_name": "Darc",
   "description": "U&A modified Isolated Web App to test the Controlled Frame API.",
   "categories": ["productivity"],
   "lang": ["en"],
   "dir": "ltr",
   "orientation": "landscape",
+  "note_taking": {
+    "new_note_url": "/new_note.html"
+  },
   "prefer_related_applications": false,
   "icons": [
     {
@@ -14,7 +17,58 @@
       "sizes": "any"
     }
   ],
-  "display_override": [ "borderless" ],
+  "shortcuts": [
+    {
+      "name": "New Window",
+      "short_name": "New Window",
+      "description": "Create new darc window",
+      "url": "/#new",
+      "icons": [
+        {
+          "src": "/photon_logo.png",
+          "sizes": "192x192"
+          }
+      ]
+    },
+    {
+      "name": "Pause",
+      "short_name": "Pause",
+      "description": "Pause all media playback",
+      "url": "/#new",
+      "icons": [
+        {
+          "src": "/photon_logo.png",
+          "sizes": "192x192"
+          }
+      ]
+    },
+    {
+      "name": "Next",
+      "short_name": "Next",
+      "description": "Create new darc window",
+      "url": "/#new",
+      "icons": [
+        {
+          "src": "/photon_logo.png",
+          "sizes": "192x192"
+          }
+      ]
+    },
+    {
+      "name": "Previous",
+      "short_name": "Previous",
+      "description": "Create new darc window",
+      "url": "/#new",
+      "icons": [
+        {
+          "src": "/photon_logo.png",
+          "sizes": "192x192"
+          }
+      ]
+    }
+  ],
+  "display_override": [ "borderless",  "window-controls-overlay" ],
+  "forground_color": "white",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
@@ -22,26 +76,27 @@
   "dark_theme_color": "black",
   "background_color": "black",
   "dark_background_color": "black",
-  "permissions": ["audioCapture", "window-management", "presentation-api","publickey-credentials-create","publickey-credentials-get"],
+  "permissions": ["audioCapture", "window-management", "presentation-api","publickey-credentials-create","publickey-credentials-get", "display-capture"],
   "permissions_policy": {
     "controlled-frame": ["self"],
+    "display-capture": ["self", "*"],  
     "cross-origin-isolated": ["self"],
     "fullscreen": ["self", "*"],
-    "microphone": ["self"],
-    "camera": ["self"],
-    "window-management": ["self"],
-    "publickey-credentials-create": ["self"],
-    "publickey-credentials-get": ["self"],
-    "geolocation": ["self"],
-    "clipboard-read": ["self"],
-    "clipboard-write": ["self"],
-    "payment": ["self"],
-    "usb": ["self"],
-    "serial": ["self"],
-    "hid": ["self"],
-    "midi": ["self"],
-    "xr-spatial-tracking": ["self"],
-    "xr-device-access": ["self"]
+    "microphone": ["self", "*"],
+    "camera": ["self", "*"],
+    "window-management": ["self", "*"],
+    "publickey-credentials-create": ["self", "*"],
+    "publickey-credentials-get": ["self", "*"],
+    "geolocation": ["self", "*"],
+    "clipboard-read": ["self", "*"],
+    "clipboard-write": ["self", "*"],
+    "payment": ["self", "*"],
+    "usb": ["self", "*"],
+    "serial": ["self", "*"],
+    "hid": ["self", "*"],
+    "midi": ["self", "*"],
+    "xr-spatial-tracking": ["self", "*"],
+    "xr-device-access": ["self", "*"]
   },
   "scope_extensions": [
     { "type": "origin", "origin": "https://example.local" }

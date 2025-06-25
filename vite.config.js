@@ -22,17 +22,22 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 // import wbn from 'rollup-plugin-webbundle';
 // import * as wbnSign from 'wbn-sign';
-import dotenv from 'dotenv';
+// import dotenv from 'dotenv';
 import tailwindcss from '@tailwindcss/vite'
 
-dotenv.config();
+// dotenv.config();
 
 const plugins = [
   {
     name: 'patch-link-color',
     transform(code, id) {      
       // Try broader matching first to see if we can catch the files
-      if (id.includes('chunk-FX7ZIABN.js') || id.includes('chunk-3KPV5WBD.js') ||  id.includes('chunk-WQ3BBEXT.js')) { 
+
+      // if (code.includes('stroke="#1971c2"')) {
+      //   console.log("ID:", id)
+      // }
+      
+      if (id.includes('chunk-FX7ZIABN.js') || id.includes('chunk-3KPV5WBD.js') ||  id.includes('chunk-WQ3BBEXT.js') || id.includes('chunk-KTVO3SBJ.js')) { 
         // console.log("MATCHED FILE ID:", id)
         return {
           code: code.replace(
@@ -59,8 +64,9 @@ const plugins = [
         const chunk = bundle[fileName]
         if (chunk.type === 'chunk' && chunk.code) {
           console.log("Bundle chunk:", fileName)
-          if (fileName.includes('FX7ZIABN') || fileName.includes('3KPV5WBD') || 
-            chunk.code.includes('stroke="#1971c2"')) {
+          if (fileName.includes('FX7ZIABN') || fileName.includes('3KPV5WBD') || fileName.includes('KTVO3SBJ')
+            ) {
+              //chunk.code.includes('stroke="#1971c2"')
             console.log("PROCESSING CHUNK:", fileName)
             chunk.code = chunk.code.replace(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1971c2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>`,
              
@@ -153,7 +159,6 @@ if (process.env.NODE_ENV === 'production') {
 //       .replace(regexLink, replacementLink);
 //   },
 // })
-
 // }
 
 export default defineConfig({
@@ -165,7 +170,7 @@ export default defineConfig({
     strictPort: true,
     hmr: {
       protocol: 'ws',
-      host: '0.0.0.0',
+      host: 'localhost',
       clientPort: 5193,
     },
     watch: {
@@ -183,7 +188,7 @@ export default defineConfig({
         main: './index.html',
         // web_request_test: './web_request_test.html',
         // tldraw_webview: './tldraw_webview.html'
-      },
-    },
-  },
-});
+      }
+    }
+  }
+})

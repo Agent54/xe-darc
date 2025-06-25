@@ -1,11 +1,18 @@
 <script module>
+    window.instances = new Map()
+
+    console.log('starting garbage collector')
+    // garbage collect instances that are not in the tabs array every 15 minutes
+    setInterval(() => {
+        window.instances.forEach(instance => {
+            console.log('inspecting for gb instance', instance)
+        })
+    }, 900000)
 </script>
-
-
 
 <script>
     import { untrack } from 'svelte'
-    import { fade } from 'svelte/transition'
+    // import { fade } from 'svelte/transition'
 
     let {
         style = '',
@@ -16,261 +23,63 @@
         captureTabScreenshot,
         onFrameFocus = () => {},
         onFrameBlur = () => {},
-        userMods = { css: [], js: [] },
+        userMods,
+        requestedResources,
+
+        hoveredLink = $bindable(),
+        linkPreviewVisible = $bindable(),
+        linkPreviewTimeout = $bindable(),
+        inputDiffVisible = $bindable(),
+        inputDiffTimeout = $bindable(),
+        inputDiffData = $bindable(),
     } = $props()
 
-    // see https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/controlled_frame/controlled_frame_permissions_unittest.cc;l=53 for supported permissions 
-
-    // not solved yet: notifications
-    
-    let partition = $state(tab.partition || 'persist:myapp')
-    // permission requests
-    // "media",
-    // "geolocation",
-    // "pointerLock",
-    // "download",
-    // "filesystem",
-    // "fullscreen",
-    // "hid",
+    let wrapper = $state(null)
+    let anchor = $state(null)
 
     let initialUrl = $state('')
 
-    // OAuth popup state
-    let oauthPopup = $state(null) // { url, width, height, parentTab, event }
-    
-    // Link preview state
-    let hoveredLink = $state(null) // { href, target, rel, title }
-    let linkPreviewVisible = $state(false)
-    let linkPreviewTimeout = null
-    
-    // Input text diff state
-    let currentInputText = $state('')
-    let previousInputText = $state('')
-    let inputDiffVisible = $state(false)
-    let inputDiffTimeout = null
-    let inputDiffData = $state(null)
+    function handlePermissionRequest(eventName, tab, event) {
+        requestedResources.push({
+            permission: event.permission,
+            url: event.url || tab.url,
+            tabId: tab.id,
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent,
+            id: 'camera',
+            name: 'Camera',
+            icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+            </svg>`,
+            description: 'Camera access for photos and video capture',
+            lastUsed: 'now', status: 'Request'
+        })
 
-    // Generate random text changes for diff simulation
-    function simulateTextChanges(text) {
-        if (!text || text.length === 0) return text
+        console.log(`🔒 [Permission Request] Tab ${tab.id}: ${event.permission}`)
+        console.log('📋 Permission request details:', {
+            permission: event.permission,
+            url: event.url || tab.url,
+            tabId: tab.id,
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent
+        })
         
-        let result = text
-        const changeCount = Math.floor(Math.random() * 3) + 1 // 1-3 changes
-        
-        for (let i = 0; i < changeCount; i++) {
-            const changeType = Math.random()
-            
-            if (changeType < 0.4 && result.length > 0) {
-                // Delete a character (40% chance)
-                const pos = Math.floor(Math.random() * result.length)
-                result = result.slice(0, pos) + result.slice(pos + 1)
-            } else if (changeType < 0.7) {
-                // Add a character (30% chance)
-                const chars = 'abcdefghijklmnopqrstuvwxyz0123456789 '
-                const randomChar = chars[Math.floor(Math.random() * chars.length)]
-                const pos = Math.floor(Math.random() * (result.length + 1))
-                result = result.slice(0, pos) + randomChar + result.slice(pos)
-            } else {
-                // Replace a character (30% chance)
-                if (result.length > 0) {
-                    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789 '
-                    const randomChar = chars[Math.floor(Math.random() * chars.length)]
-                    const pos = Math.floor(Math.random() * result.length)
-                    result = result.slice(0, pos) + randomChar + result.slice(pos + 1)
-                }
-            }
-        }
-        
-        return result
-    }
-
-    // Simple diff algorithm to generate additions/deletions
-    function generateDiff(oldText, newText) {
-        const diff = []
-        let i = 0, j = 0
-        
-        while (i < oldText.length || j < newText.length) {
-            if (i >= oldText.length) {
-                // Remaining characters are additions
-                diff.push({ type: 'add', char: newText[j] })
-                j++
-            } else if (j >= newText.length) {
-                // Remaining characters are deletions
-                diff.push({ type: 'delete', char: oldText[i] })
-                i++
-            } else if (oldText[i] === newText[j]) {
-                // Characters match
-                diff.push({ type: 'same', char: oldText[i] })
-                i++
-                j++
-            } else {
-                // Characters differ - look ahead to see if it's insert/delete/replace
-                let foundMatch = false
-                
-                // Check if next few chars in new text match current old char (insertion)
-                for (let k = j + 1; k < Math.min(j + 5, newText.length); k++) {
-                    if (newText[k] === oldText[i]) {
-                        // Found match - insert the characters before it
-                        for (let l = j; l < k; l++) {
-                            diff.push({ type: 'add', char: newText[l] })
-                        }
-                        diff.push({ type: 'same', char: oldText[i] })
-                        i++
-                        j = k + 1
-                        foundMatch = true
-                        break
-                    }
-                }
-                
-                if (!foundMatch) {
-                    // Check if next few chars in old text match current new char (deletion)
-                    for (let k = i + 1; k < Math.min(i + 5, oldText.length); k++) {
-                        if (oldText[k] === newText[j]) {
-                            // Found match - delete the characters before it
-                            for (let l = i; l < k; l++) {
-                                diff.push({ type: 'delete', char: oldText[l] })
-                            }
-                            diff.push({ type: 'same', char: newText[j] })
-                            i = k + 1
-                            j++
-                            foundMatch = true
-                            break
-                        }
-                    }
-                }
-                
-                if (!foundMatch) {
-                    // Treat as replacement
-                    diff.push({ type: 'delete', char: oldText[i] })
-                    diff.push({ type: 'add', char: newText[j] })
-                    i++
-                    j++
-                }
-            }
-        }
-        
-        return diff
-    }
-
-    // Show input diff preview
-    function showInputDiff(inputData) {
-        const newText = inputData.text
-        const simulatedOldText = simulateTextChanges(newText)
-        
-        previousInputText = simulatedOldText
-        currentInputText = newText
-        
-        inputDiffData = {
-            element: inputData.element,
-            diff: generateDiff(simulatedOldText, newText),
-            timestamp: inputData.timestamp
-        }
-        
-        inputDiffVisible = true
-        
-        // Clear any existing timeout
-        if (inputDiffTimeout) {
-            clearTimeout(inputDiffTimeout)
-        }
-        
-        // Auto-hide after 3 seconds
-        inputDiffTimeout = setTimeout(() => {
-            inputDiffVisible = false
-            inputDiffData = null
-            inputDiffTimeout = null
-        }, 3000)
-    }
-
-    // Proper detection of ControlledFrame API support
-    function isControlledFrameSupported() {
-        // Method 1: Check if the custom element is defined
-        if (typeof customElements !== 'undefined' && customElements.get('controlledframe')) {
-            console.log('✅ ControlledFrame API detected via customElements.get()')
-            return true
-        }
-        
-        // Method 2: Check if the global constructor exists
-        if (typeof window.HTMLControlledFrameElement !== 'undefined') {
-            console.log('✅ ControlledFrame API detected via HTMLControlledFrameElement constructor')
-            return true
-        }
-        
-        // Method 3: Try to create element and check for API methods
+        // Grant all permissions but log them for monitoring
         try {
-            const testElement = document.createElement('controlledframe')
-            const hasApiMethods = typeof testElement.setZoomMode === 'function' || 
-                                 typeof testElement.back === 'function' ||
-                                 typeof testElement.forward === 'function'
-            if (hasApiMethods) {
-                console.log('✅ ControlledFrame API detected via element methods')
-                return true
-            }
+            event.request.allow()
+            console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url || tab.url}`)
         } catch (error) {
-            console.log('❌ ControlledFrame element creation failed:', error)
+            console.error(`❌ [Permission Error] Failed to grant ${event.permission}:`, error)
         }
-        
-        console.log('❌ ControlledFrame API not available - falling back to iframe')
-        console.log('💡 To enable ControlledFrame API:')
-        console.log('   1. Ensure you\'re running in an Isolated Web App (IWA)')
-        console.log('   2. Add "controlled-frame" permission to your manifest.json')
-        console.log('   3. Run Chrome with --enable-features=IsolatedWebApps,IsolatedWebAppControlledFrame')
-        console.log('   4. Or enable chrome://flags/#isolated-web-app-controlled-frame')
-        
-        return false
     }
-
-    let controlledFrameSupported = $state(isControlledFrameSupported())
 
     function handleEvent(eventName, tab, event) {
-        console.log(eventName, tab, event)
+        // console.log(eventName, tab, event)
     }
 
     function handleContentLoad(tab, event) {
         setTimeout(() => updateTabMeta(tab), 100)
-    }
-
-    async function updateTabMeta(tab, frame = null) {
-        if (!frame) {
-            frame = document.getElementById(`tab_${tab.id}`)
-        }
-        if (!frame) return
-
-        tab.url = frame.src
-        tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
-
-        try {
-            let title = null
-
-            try {
-                const result = await frame.executeScript({
-                    code: 'document.title'
-                })
-                if (result && result[0] && result[0].trim()) {
-                    title = result[0].trim()
-                }
-            } catch (scriptErr) {
-                console.log('executeScript failed for title:', scriptErr)
-            }
-
-            // Update the tab title directly
-            if (title && title !== 'about:blank') {
-                tab.title = title
-            } else {
-                // Fallback to URL if no title is available
-                const url = tab.url
-                if (url && url !== 'about:blank') {
-                    try {
-                        const urlObj = new URL(url)
-                        tab.title = urlObj.hostname || url
-                    } catch {
-                        tab.title = url
-                    }
-                }
-            }
-
-        } catch (err) {
-            console.log('Error updating tab title:', err)
-        }
     }
 
     // todo cycle every 5 seconds to non hibernated tabs to check audiostate 
@@ -289,7 +98,7 @@
     // }
 
     function handleLoadCommit(tab, event) {
-        console.log('Page loaded:', event.url)
+        // console.log('Page loaded:', event.url)
         
         // Update the URL immediately
         // tab.url = event.url
@@ -381,440 +190,52 @@
         }
     }
 
-    // Close OAuth popup
-    function closeOAuthPopup() {
-        console.log('OAuth popup closed')
-        oauthPopup = null
-    }
-
-    // Handle OAuth popup events
-    function handleOAuthPopupEvent(eventType, popupFrame, event) {
-        if (!oauthPopup) return
-
-        const { parentTab } = oauthPopup
-        
-        switch (eventType) {
-            case 'consolemessage':
-                const message = event.message
-                
-                if (message.startsWith(`oauth:message:${parentTab.id}:`)) {
-                    try {
-                        const data = JSON.parse(message.split(`oauth:message:${parentTab.id}:`)[1])
-                        console.log('[OAuth] Received message from popup:', data)
-                        
-                        // Forward the message to the parent frame's content window
-                        if (parentTab.frame && parentTab.frame.contentWindow) {
-                            parentTab.frame.contentWindow.postMessage(data.message, data.targetOrigin || '*')
-                        }
-                        
-                        // Also dispatch as a custom event that the parent page can listen for
-                        window.dispatchEvent(new CustomEvent('oauth-popup-message', {
-                            detail: {
-                                tabId: parentTab.id,
-                                message: data.message,
-                                targetOrigin: data.targetOrigin
-                            }
-                        }))
-                        
-                    } catch (error) {
-                        console.error('[OAuth] Error parsing popup message:', error)
-                    }
-                } else if (message === `oauth:close:${parentTab.id}`) {
-                    console.log('[OAuth] Popup requested close')
-                    closeOAuthPopup()
-                }
-                break
-
-            case 'loadstart':
-                console.log('[OAuth] Popup loading started for:', oauthPopup.url)
-                
-                // Set up window.opener patching via content script
-                const openerPatchScript = {
-                    name: `oauth-opener-patch-${Date.now()}`,
-                    matches: ['<all_urls>'],
-                    js: {
-                        code: `
-                            console.log('[OAuth Popup] Patching window.opener for ${parentTab.id}');
-                            
-                            // Store original opener reference
-                            if (typeof window.originalOpener === 'undefined') {
-                                window.originalOpener = window.opener;
-                                
-                                // Create patched opener that forwards messages to parent
-                                window.opener = {
-                                    postMessage: (message, targetOrigin) => {
-                                        console.log('[OAuth Popup] Forwarding postMessage to parent:', message);
-                                        
-                                        // Send message via console to parent frame
-                                        console.log('oauth:message:${parentTab.id}:' + JSON.stringify({
-                                            message: message,
-                                            targetOrigin: targetOrigin,
-                                            timestamp: Date.now()
-                                        }));
-                                    },
-                                    
-                                    close: () => {
-                                        console.log('[OAuth Popup] Close requested by content');
-                                        console.log('oauth:close:${parentTab.id}');
-                                    },
-                                    
-                                    focus: () => {
-                                        console.log('[OAuth Popup] Focus requested');
-                                    }
-                                };
-                                
-                                // Also patch window.close to notify parent
-                                const originalClose = window.close;
-                                window.close = () => {
-                                    console.log('oauth:close:${parentTab.id}');
-                                    originalClose.call(window);
-                                };
-                                
-                                console.log('[OAuth Popup] window.opener patched successfully');
-                            }
-                        `
-                    },
-                    runAt: 'document_start',
-                    allFrames: true
-                }
-                
-                // Add content script to patch window.opener
-                if (popupFrame.addContentScripts) {
-                    popupFrame.addContentScripts([openerPatchScript]).then(() => {
-                        console.log('[OAuth] Opener patch script added successfully')
-                    }).catch((error) => {
-                        console.error('[OAuth] Failed to add opener patch script:', error)
-                    })
-                } else {
-                    console.warn('[OAuth] addContentScripts not available - window.opener patching may not work')
-                }
-                break
-
-            case 'loadstop':
-                console.log('[OAuth] Popup loading completed')
-                break
-
-            case 'loadabort':
-                console.warn('[OAuth] Popup load aborted:', event)
-                break
-
-            case 'exit':
-                console.log('[OAuth] Popup process exited:', event)
-                closeOAuthPopup()
-                break
-
-            case 'close':
-                closeOAuthPopup()
-                break
+    async function updateTabMeta(tab, frame = null) {
+        if (!frame) {
+            frame = tab.frame //  document.getElementById(`tab_${tab.id}`)
         }
-    }
+        if (!frame) return
 
-    // Handle OAuth popup window attachment
-    function handleOAuthPopupAttachment(popupFrame) {
-        if (!oauthPopup) return
+        tab.url = frame.src
+        tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
         try {
-            oauthPopup.event.window.attach(popupFrame)
-            console.log('[OAuth] Window attached to popup frame')
-        } catch (error) {
-            console.error('[OAuth] Failed to attach window to popup:', error)
-        }
-    }
+            let title = null
 
-    // Handle keyboard events for OAuth popup
-    function handleOAuthKeydown(event) {
-        if (oauthPopup && event.key === 'Escape') {
-            closeOAuthPopup()
-        }
-    }
-
-    // Auto-close timeout for OAuth popup
-    let oauthTimeout
-    $effect(() => {
-        if (oauthPopup) {
-            // Set timeout to auto-close popup after 10 minutes
-            oauthTimeout = setTimeout(() => {
-                console.log('[OAuth] Popup timeout - closing after 10 minutes')
-                closeOAuthPopup()
-            }, 10 * 60 * 1000)
-        } else if (oauthTimeout) {
-            clearTimeout(oauthTimeout)
-            oauthTimeout = null
-        }
-
-        // Cleanup on component unmount
-        return () => {
-            if (oauthTimeout) {
-                clearTimeout(oauthTimeout)
-            }
-            if (linkPreviewTimeout) {
-                clearTimeout(linkPreviewTimeout)
-            }
-            if (inputDiffTimeout) {
-                clearTimeout(inputDiffTimeout)
-            }
-        }
-    })
-
-    // WebRequest logger - logs all network requests with full details
-    function setupRequestHandler(frame) {
-        if (!frame.request) {
-            console.log('WebRequest API not available')
-            return
-        }
-
-        // Filter to capture all URLs
-        const allUrlsFilter = { urls: ['<all_urls>'] }
-
-        // Headers to strip from responses for security isolation
-        const headersToHandle = [
-            'cross-origin-embedder-policy',
-            'cross-origin-opener-policy',
-            'cross-origin-embedder-policy-report-only',
-            'cross-origin-opener-policy-report-only',
-        ]
-
-        // Get the app's own origin for CSP injection
-        const appOrigin = window.location.origin
-
-        // Log all request events with full details
-        frame.request.onBeforeRequest.addListener((details) => {
-            const url = new URL(details.url)
-            console.group(`🌐 onBeforeRequest: ${details.method}`, url)
-            console.log('📋 Request Details:', {
-                requestId: details.requestId,
-                url: details.url,
-                method: details.method,
-                type: details.type,
-                frameId: details.frameId,
-                parentFrameId: details.parentFrameId,
-                timeStamp: details.timeStamp,
-                documentId: details.documentId,
-                documentLifecycle: details.documentLifecycle,
-                frameType: details.frameType,
-                initiator: details.initiator,
-                requestBody: details.requestBody
-            })
-            console.groupEnd()
-
-
-            if (url.hostname === 'code.xe') {
-                return {
-                    redirectUrl: 'https://google.com',
-                    responseHeaders: [
-                        {
-                            name: 'Content-Type',
-                            value: 'text/html'
-                        }
-                    ]
-                }
-            }
-
-            const block = details.url.indexOf("google-analytics.com") != -1
-
-            block && console.log('blocking', details.url)
-            return { cancel: block }
-        }, allUrlsFilter, ['blocking', 'requestBody'])
-
-        // Helper function to parse and modify CSP directives
-        function enhanceCSPWithOrigin(cspValue, appOrigin) {
-            if (!cspValue || !appOrigin) return cspValue
-
-            // Parse CSP directives
-            const directives = cspValue.split(';').map(dir => dir.trim()).filter(dir => dir)
-            const enhancedDirectives = []
-
-            // Directives that should include the app origin
-            const directivesToEnhance = [
-                'default-src', 'script-src', 'style-src', 'img-src', 
-                'font-src', 'connect-src', 'media-src', 'child-src', 
-                'worker-src', 'frame-src'
-            ]
-
-            for (const directive of directives) {
-                const [name, ...sources] = directive.split(/\s+/)
-                const directiveName = name.toLowerCase()
-
-                if (directivesToEnhance.includes(directiveName)) {
-                    // Check if app origin is already present
-                    const sourcesStr = sources.join(' ')
-                    if (!sourcesStr.includes(appOrigin)) {
-                        // Add app origin to this directive
-                        enhancedDirectives.push(`${name} ${sources.join(' ')} ${appOrigin}`.trim())
-                    } else {
-                        // Already contains app origin, keep as is
-                        enhancedDirectives.push(directive)
-                    }
-                } else {
-                    // Keep directive as is
-                    enhancedDirectives.push(directive)
-                }
-            }
-
-            return enhancedDirectives.join('; ')
-        }
-
-        // Handle response headers - strip some security headers and enhance CSP with app origin
-        frame.request.onHeadersReceived.addListener((details) => {
-            if (!details.responseHeaders) return
-
-            const modifiedHeaders = []
-
-            // Process each header
-            for (const header of details.responseHeaders) {
-                const headerName = header.name.toLowerCase()
-                
-                if (headerName === 'content-security-policy') {
-                    // Enhance existing CSP with app origin
-                    const enhancedCSP = enhanceCSPWithOrigin(header.value, appOrigin)
-                    modifiedHeaders.push({
-                        name: header.name,
-                        value: enhancedCSP
-                    })
-                    console.log('🔒 Enhanced CSP:', { original: header.value, enhanced: enhancedCSP })
-                } else if (headerName === 'content-security-policy-report-only') {
-                    // Enhance existing CSP report-only with app origin
-                    const enhancedCSP = enhanceCSPWithOrigin(header.value, appOrigin)
-                    modifiedHeaders.push({
-                        name: header.name,
-                        value: enhancedCSP
-                    })
-                    console.log('🔒 Enhanced CSP Report-Only:', { original: header.value, enhanced: enhancedCSP })
-                                 } else if (headersToHandle.includes(headerName)) {
-                     // Strip these headers but don't add them to modifiedHeaders
-                     console.log('🚫 Stripped header:', headerName)
-                 } else {
-                     // Keep other headers as is
-                     modifiedHeaders.push(header)
-                 }
-             }
-
-            // Add Cross-Origin policies that allow communication with app
-            modifiedHeaders.push({
-                name: 'Cross-Origin-Embedder-Policy',
-                value: 'unsafe-none'
-            })
-
-            modifiedHeaders.push({
-                name: 'Cross-Origin-Opener-Policy',
-                value: 'same-origin-allow-popups'
-            })
-
-            console.log('🔒 Modified response headers for:', details.url, {
-                originalCount: details.responseHeaders.length,
-                modifiedCount: modifiedHeaders.length,
-                injectedOrigin: appOrigin
-            })
-
-            return { 
-                responseHeaders: modifiedHeaders 
-            }
-        }, allUrlsFilter, ['blocking', 'responseHeaders'])
-
-        frame.request.onAuthRequired.addListener((details) => {
-            console.log('🔐 Auth Required:', {
-                requestId: details.requestId,
-                url: details.url,
-                challenger: details.challenger,
-                scheme: details.scheme,
-                realm: details.realm,
-                isProxy: details.isProxy
-            })
-        }, allUrlsFilter)
-
-        frame.request.onBeforeRedirect.addListener((details) => {
-            console.log('🔄 Redirect:', {
-                requestId: details.requestId,
-                url: details.url,
-                redirectUrl: details.redirectUrl,
-                statusCode: details.statusCode,
-                fromCache: details.fromCache,
-                ip: details.ip
-            })
-        }, allUrlsFilter)
-
-        // frame.request.onResponseStarted.addListener((details) => {
-        //     console.log('📡 Response Started:', {
-        //         requestId: details.requestId,
-        //         url: details.url,
-        //         statusCode: details.statusCode,
-        //         fromCache: details.fromCache,
-        //         ip: details.ip
-        //     })
-        // }, allUrlsFilter)
-
-        frame.request.onCompleted.addListener((details) => {
-            console.log('✅ Request Completed:', {
-                requestId: details.requestId,
-                url: details.url,
-                statusCode: details.statusCode,
-                fromCache: details.fromCache,
-                ip: details.ip
-            })
-        }, allUrlsFilter)
-
-        frame.request.onErrorOccurred.addListener((details) => {
-            console.error('❌ Request Error:', {
-                requestId: details.requestId,
-                url: details.url,
-                error: details.error,
-                fromCache: details.fromCache,
-                ip: details.ip
-            })
-        }, allUrlsFilter)
-    }
-
-    // Context menu setup - adds a context menu entry and logs all data
-    function setupContextMenu(frame) {
-        if (!frame.contextMenus) {
-            console.log('Context Menus API not available')
-            return
-        }
-
-        // Create a context menu item called "Here"
-        frame.contextMenus.create({
-            id: 'here',
-            title: 'Here',
-            contexts: ['all'], // Show on all types of content
-            onclick: (info) => {
-                console.group('🎯 Context Menu "Here" clicked!')
-                console.log('📋 OnClickData:', {
-                    checked: info.checked,
-                    editable: info.editable,
-                    frameId: info.frameId,
-                    frameUrl: info.frameUrl,
-                    linkUrl: info.linkUrl,
-                    mediaType: info.mediaType,
-                    menuItemId: info.menuItemId,
-                    pageUrl: info.pageUrl,
-                    parentMenuId: info.parentMenuId,
-                    selectionText: info.selectionText,
-                    srcUrl: info.srcUrl,
-                    wasChecked: info.wasChecked
+            try {
+                const result = await frame.executeScript({
+                    code: 'document.title'
                 })
-                console.log('📋 Raw info object:', info)
-                console.log('📋 Tab data:', tab)
-                console.groupEnd()
+                if (result && result[0] && result[0].trim()) {
+                    title = result[0].trim()
+                }
+            } catch (scriptErr) {
+                console.log('executeScript failed for title:', scriptErr)
             }
-        }).then(() => {
-            console.log('✅ Context menu "Here" created successfully')
-        }).catch((err) => {
-            console.error('❌ Failed to create context menu:', err)
-        })
 
-        // Also listen to onClicked event for additional logging
-        frame.contextMenus.onClicked.addListener((info) => {
-            console.log('🎯 Context menu onClicked event:', info)
-        })
+            // Update the tab title directly
+            if (title && title !== 'about:blank') {
+                tab.title = title
+            } else {
+                // Fallback to URL if no title is available
+                const url = tab.url
+                if (url && url !== 'about:blank') {
+                    try {
+                        const urlObj = new URL(url)
+                        tab.title = urlObj.hostname || url
+                    } catch {
+                        tab.title = url
+                    }
+                }
+            }
 
-        // Listen to onShow event
-        frame.contextMenus.onShow.addListener((info) => {
-            console.log('👁️ Context menu onShow event:', info)
-        })
+        } catch (err) {
+            console.log('Error updating tab title:', err)
+        }
     }
 
-    // Content script for window focus/blur handling
-    function setupContentScripts(frame) {
+// Content script for window focus/blur handling
+function setupContentScripts(frame) {
         // First try a simple test script to verify content script injection works
         const systemInjections = [
             {
@@ -1116,7 +537,7 @@ document.addEventListener('input', function(event) {
             })
         ]
 
-        console.log('trying' , frame.id)
+        console.log('trying' , tab.id)
 
         if (!frame.addContentScripts) {
             initialUrl = untrack(() => tab.url)
@@ -1134,39 +555,301 @@ document.addEventListener('input', function(event) {
         }
     }
 
+
+    // WebRequest logger - logs all network requests with full details
+    function setupRequestHandler(frame) {
+        if (!frame.request) {
+            console.log('WebRequest API not available')
+            return
+        }
+
+        // Filter to capture all URLs
+        const allUrlsFilter = { urls: ['<all_urls>'] }
+
+        // Headers to strip from responses for security isolation
+        const headersToHandle = [
+            'cross-origin-embedder-policy',
+            'cross-origin-opener-policy',
+            'cross-origin-embedder-policy-report-only',
+            'cross-origin-opener-policy-report-only',
+        ]
+
+        // Get the app's own origin for CSP injection
+        const appOrigin = window.location.origin
+
+        // Log all request events with full details
+        frame.request.onBeforeRequest.addListener((details) => {
+            const url = new URL(details.url)
+            // console.group(`🌐 onBeforeRequest: ${details.method}`, url)
+            // console.log('📋 Request Details:', {
+            //     requestId: details.requestId,
+            //     url: details.url,
+            //     method: details.method,
+            //     type: details.type,
+            //     frameId: details.frameId,
+            //     parentFrameId: details.parentFrameId,
+            //     timeStamp: details.timeStamp,
+            //     documentId: details.documentId,
+            //     documentLifecycle: details.documentLifecycle,
+            //     frameType: details.frameType,
+            //     initiator: details.initiator,
+            //     requestBody: details.requestBody
+            // })
+            // console.groupEnd()
+
+
+            if (url.hostname === 'code.xe') {
+                return {
+                    redirectUrl: 'https://google.com',
+                    responseHeaders: [
+                        {
+                            name: 'Content-Type',
+                            value: 'text/html'
+                        }
+                    ]
+                }
+            }
+
+            const block = details.url.indexOf("google-analytics.com") != -1
+
+            // block && console.log('blocking', details.url)
+            return { cancel: block }
+        }, allUrlsFilter, ['blocking', 'requestBody'])
+
+        // Helper function to parse and modify CSP directives
+        function enhanceCSPWithOrigin(cspValue, appOrigin) {
+            if (!cspValue || !appOrigin) return cspValue
+
+            // Parse CSP directives
+            const directives = cspValue.split(';').map(dir => dir.trim()).filter(dir => dir)
+            const enhancedDirectives = []
+
+            // Directives that should include the app origin
+            const directivesToEnhance = [
+                'default-src', 'script-src', 'style-src', 'img-src', 
+                'font-src', 'connect-src', 'media-src', 'child-src', 
+                'worker-src', 'frame-src'
+            ]
+
+            for (const directive of directives) {
+                const [name, ...sources] = directive.split(/\s+/)
+                const directiveName = name.toLowerCase()
+
+                if (directivesToEnhance.includes(directiveName)) {
+                    // Check if app origin is already present
+                    const sourcesStr = sources.join(' ')
+                    if (!sourcesStr.includes(appOrigin)) {
+                        // Add app origin to this directive
+                        enhancedDirectives.push(`${name} ${sources.join(' ')} ${appOrigin}`.trim())
+                    } else {
+                        // Already contains app origin, keep as is
+                        enhancedDirectives.push(directive)
+                    }
+                } else {
+                    // Keep directive as is
+                    enhancedDirectives.push(directive)
+                }
+            }
+
+            return enhancedDirectives.join('; ')
+        }
+
+        // Handle response headers - strip some security headers and enhance CSP with app origin
+        frame.request.onHeadersReceived.addListener((details) => {
+            if (!details.responseHeaders) return
+
+            const modifiedHeaders = []
+
+            // Process each header
+            for (const header of details.responseHeaders) {
+                const headerName = header.name.toLowerCase()
+                
+                if (headerName === 'content-security-policy') {
+                    // Enhance existing CSP with app origin
+                    const enhancedCSP = enhanceCSPWithOrigin(header.value, appOrigin)
+                    modifiedHeaders.push({
+                        name: header.name,
+                        value: enhancedCSP
+                    })
+                    // console.log('🔒 Enhanced CSP:', { original: header.value, enhanced: enhancedCSP })
+                } else if (headerName === 'content-security-policy-report-only') {
+                    // Enhance existing CSP report-only with app origin
+                    const enhancedCSP = enhanceCSPWithOrigin(header.value, appOrigin)
+                    modifiedHeaders.push({
+                        name: header.name,
+                        value: enhancedCSP
+                    })
+                    //console.log('🔒 Enhanced CSP Report-Only:', { original: header.value, enhanced: enhancedCSP })
+                } else if (headersToHandle.includes(headerName)) {
+                     // Strip these headers but don't add them to modifiedHeaders
+                     //console.log('🚫 Stripped header:', headerName)
+                 } else {
+                     // Keep other headers as is
+                     modifiedHeaders.push(header)
+                 }
+             }
+
+            // Add Cross-Origin policies that allow communication with app
+            modifiedHeaders.push({
+                name: 'Cross-Origin-Embedder-Policy',
+                value: 'unsafe-none'
+            })
+
+            modifiedHeaders.push({
+                name: 'Cross-Origin-Opener-Policy',
+                value: 'same-origin-allow-popups'
+            })
+
+            // console.log('🔒 Modified response headers for:', details.url, {
+            //     originalCount: details.responseHeaders.length,
+            //     modifiedCount: modifiedHeaders.length,
+            //     injectedOrigin: appOrigin
+            // })
+
+            return { 
+                responseHeaders: modifiedHeaders 
+            }
+        }, allUrlsFilter, ['blocking', 'responseHeaders'])
+
+        frame.request.onAuthRequired.addListener((details) => {
+            console.log('🔐 Auth Required:', {
+                requestId: details.requestId,
+                url: details.url,
+                challenger: details.challenger,
+                scheme: details.scheme,
+                realm: details.realm,
+                isProxy: details.isProxy
+            })
+        }, allUrlsFilter)
+
+        frame.request.onBeforeRedirect.addListener((details) => {
+            console.log('🔄 Redirect:', {
+                requestId: details.requestId,
+                url: details.url,
+                redirectUrl: details.redirectUrl,
+                statusCode: details.statusCode,
+                fromCache: details.fromCache,
+                ip: details.ip
+            })
+        }, allUrlsFilter)
+
+        // frame.request.onResponseStarted.addListener((details) => {
+        //     console.log('📡 Response Started:', {
+        //         requestId: details.requestId,
+        //         url: details.url,
+        //         statusCode: details.statusCode,
+        //         fromCache: details.fromCache,
+        //         ip: details.ip
+        //     })
+        // }, allUrlsFilter)
+
+        frame.request.onCompleted.addListener((details) => {
+            // console.log('✅ Request Completed:', {
+            //     requestId: details.requestId,
+            //     url: details.url,
+            //     statusCode: details.statusCode,
+            //     fromCache: details.fromCache,
+            //     ip: details.ip
+            // })
+        }, allUrlsFilter)
+
+        frame.request.onErrorOccurred.addListener((details) => {
+            // console.error('❌ Request Error:', {
+            //     requestId: details.requestId,
+            //     url: details.url,
+            //     error: details.error,
+            //     fromCache: details.fromCache,
+            //     ip: details.ip
+            // })
+        }, allUrlsFilter)
+    }
+
+    // Context menu setup - adds a context menu entry and logs all data
+    function setupContextMenu(frame) {
+        if (!frame.contextMenus) {
+            console.log('Context Menus API not available')
+            return
+        }
+
+        // Create a context menu item called "Here"
+        frame.contextMenus.create({
+            id: 'here',
+            title: 'Here',
+            contexts: ['all'], // Show on all types of content
+            onclick: (info) => {
+                // console.group('🎯 Context Menu "Here" clicked!')
+                // console.log('📋 OnClickData:', {
+                //     checked: info.checked,
+                //     editable: info.editable,
+                //     frameId: info.frameId,
+                //     frameUrl: info.frameUrl,
+                //     linkUrl: info.linkUrl,
+                //     mediaType: info.mediaType,
+                //     menuItemId: info.menuItemId,
+                //     pageUrl: info.pageUrl,
+                //     parentMenuId: info.parentMenuId,
+                //     selectionText: info.selectionText,
+                //     srcUrl: info.srcUrl,
+                //     wasChecked: info.wasChecked
+                // })
+                // console.log('📋 Raw info object:', info)
+                // console.log('📋 Tab data:', tab)
+                // console.groupEnd()
+            }
+        }).then(() => {
+            console.log('✅ Context menu "Here" created successfully')
+        }).catch((err) => {
+            console.error('❌ Failed to create context menu:', err)
+        })
+
+        // Also listen to onClicked event for additional logging
+        frame.contextMenus.onClicked.addListener((info) => {
+            console.log('🎯 Context menu onClicked event:', info)
+        })
+
+        // Listen to onShow event
+        frame.contextMenus.onShow.addListener((info) => {
+            console.log('👁️ Context menu onShow event:', info)
+        })
+    }
+
+    // Input text diff state
+    let currentInputText = $state('')
+    let previousInputText = $state('')
+
     // Listen for messages from content scripts
     function setupMessageListener(frame) {
         // Listen for messages from the controlled frame's content window
-        if (frame.contentWindow) {
-            frame.contentWindow.addEventListener('message', (event) => {
-                console.log('message', event)
-                if (event.data?.type === 'controlled-frame-focus' && event.data?.tabId === tab.id) {
-                    console.log(`🎯 Tab ${tab.id} gained focus`)
-                    onFrameFocus()
-                } else if (event.data?.type === 'controlled-frame-blur' && event.data?.tabId === tab.id) {
-                    console.log(`😴 Tab ${tab.id} lost focus`)
-                    onFrameBlur()
-                }
-            })
-        }
+        // if (frame.contentWindow) {
+        //     frame.contentWindow.addEventListener('message', (event) => {
+        //         console.log('message', event)
+        //         if (event.data?.type === 'controlled-frame-focus' && event.data?.tabId === tab.id) {
+        //             console.log(`🎯 Tab ${tab.id} gained focus`)
+        //             onFrameFocus()
+        //         } else if (event.data?.type === 'controlled-frame-blur' && event.data?.tabId === tab.id) {
+        //             console.log(`😴 Tab ${tab.id} lost focus`)
+        //             onFrameBlur()
+        //         }
+        //     })
+        // }
         
         // Also listen on main window as fallback for cross-origin messages
-        window.addEventListener('message', (event) => {
-            console.log('message', event)
-            // Check if message is from the controlled frame
-            if (event.source === frame.contentWindow && event.data?.tabId === tab.id) {
-                if (event.data?.type === 'controlled-frame-focus') {
-                    console.log(`🎯 Tab ${tab.id} gained focus (cross-origin)`)
-                    onFrameFocus()
-                } else if (event.data?.type === 'controlled-frame-blur') {
-                    console.log(`😴 Tab ${tab.id} lost focus (cross-origin)`)
-                    onFrameBlur()
-                }
-            }
-        })
+        // window.addEventListener('message', (event) => {
+        //     console.log('message', event)
+        //     // Check if message is from the controlled frame
+        //     if (event.source === frame.contentWindow && event.data?.tabId === tab.id) {
+        //         if (event.data?.type === 'controlled-frame-focus') {
+        //             console.log(`🎯 Tab ${tab.id} gained focus (cross-origin)`)
+        //             onFrameFocus()
+        //         } else if (event.data?.type === 'controlled-frame-blur') {
+        //             console.log(`😴 Tab ${tab.id} lost focus (cross-origin)`)
+        //             onFrameBlur()
+        //         }
+        //     }
+        // })
 
         frame.addEventListener('consolemessage', (event) => {
-            console.log('consolemessage', event)
+            // console.log('consolemessage', event)
             const message = event.message
             
             if (message === 'iwa:focus') {
@@ -1182,7 +865,7 @@ document.addEventListener('input', function(event) {
                 window.dispatchEvent(new CustomEvent('darc-close-tab-from-frame', {
                     detail: { 
                         tabId: tabId,
-                        sourceFrame: frame.id || `tab_${tab.id}`
+                        sourceFrame: `tab_${tab.id}`
                     }
                 }))
             } else if (message.startsWith('iwa:new-tab:')) {
@@ -1194,7 +877,7 @@ document.addEventListener('input', function(event) {
                 window.dispatchEvent(new CustomEvent('darc-new-tab-from-frame', {
                     detail: { 
                         tabId: tabId,
-                        sourceFrame: frame.id || `tab_${tab.id}`
+                        sourceFrame: `tab_${tab.id}`
                     }
                 }))
             } else if (message.startsWith('iwa:link-enter:')) {
@@ -1338,597 +1021,325 @@ document.addEventListener('input', function(event) {
         })
     }
 
-    // user initiated clear data options clearData(options, types)
-    $effect(() => {
-        partition = tab.partition
-        const frame = tab.frame
+
+    // Simple diff algorithm to generate additions/deletions
+    function generateDiff(oldText, newText) {
+        const diff = []
+        let i = 0, j = 0
         
-        if (frame) {
-            frame.setZoomMode?.('disabled')
-            setupRequestHandler(frame)
+        while (i < oldText.length || j < newText.length) {
+            if (i >= oldText.length) {
+                // Remaining characters are additions
+                diff.push({ type: 'add', char: newText[j] })
+                j++
+            } else if (j >= newText.length) {
+                // Remaining characters are deletions
+                diff.push({ type: 'delete', char: oldText[i] })
+                i++
+            } else if (oldText[i] === newText[j]) {
+                // Characters match
+                diff.push({ type: 'same', char: oldText[i] })
+                i++
+                j++
+            } else {
+                // Characters differ - look ahead to see if it's insert/delete/replace
+                let foundMatch = false
+                
+                // Check if next few chars in new text match current old char (insertion)
+                for (let k = j + 1; k < Math.min(j + 5, newText.length); k++) {
+                    if (newText[k] === oldText[i]) {
+                        // Found match - insert the characters before it
+                        for (let l = j; l < k; l++) {
+                            diff.push({ type: 'add', char: newText[l] })
+                        }
+                        diff.push({ type: 'same', char: oldText[i] })
+                        i++
+                        j = k + 1
+                        foundMatch = true
+                        break
+                    }
+                }
+                
+                if (!foundMatch) {
+                    // Check if next few chars in old text match current new char (deletion)
+                    for (let k = i + 1; k < Math.min(i + 5, oldText.length); k++) {
+                        if (oldText[k] === newText[j]) {
+                            // Found match - delete the characters before it
+                            for (let l = i; l < k; l++) {
+                                diff.push({ type: 'delete', char: oldText[l] })
+                            }
+                            diff.push({ type: 'same', char: newText[j] })
+                            i = k + 1
+                            j++
+                            foundMatch = true
+                            break
+                        }
+                    }
+                }
+                
+                if (!foundMatch) {
+                    // Treat as replacement
+                    diff.push({ type: 'delete', char: oldText[i] })
+                    diff.push({ type: 'add', char: newText[j] })
+                    i++
+                    j++
+                }
+            }
+        }
+        
+        return diff
+    }
+
+    // Generate random text changes for diff simulation
+    function simulateTextChanges(text) {
+        if (!text || text.length === 0) return text
+        
+        let result = text
+        const changeCount = Math.floor(Math.random() * 3) + 1 // 1-3 changes
+        
+        for (let i = 0; i < changeCount; i++) {
+            const changeType = Math.random()
             
-            setupMessageListener(frame)
-            
-            setupContentScripts(frame)
-            
-            setupContextMenu(frame)
+            if (changeType < 0.4 && result.length > 0) {
+                // Delete a character (40% chance)
+                const pos = Math.floor(Math.random() * result.length)
+                result = result.slice(0, pos) + result.slice(pos + 1)
+            } else if (changeType < 0.7) {
+                // Add a character (30% chance)
+                const chars = 'abcdefghijklmnopqrstuvwxyz0123456789 '
+                const randomChar = chars[Math.floor(Math.random() * chars.length)]
+                const pos = Math.floor(Math.random() * (result.length + 1))
+                result = result.slice(0, pos) + randomChar + result.slice(pos)
+            } else {
+                // Replace a character (30% chance)
+                if (result.length > 0) {
+                    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789 '
+                    const randomChar = chars[Math.floor(Math.random() * chars.length)]
+                    const pos = Math.floor(Math.random() * result.length)
+                    result = result.slice(0, pos) + randomChar + result.slice(pos + 1)
+                }
+            }
+        }
+        
+        return result
+    }
+
+    // Show input diff preview
+    function showInputDiff(inputData) {
+        const newText = inputData.text
+        const simulatedOldText = simulateTextChanges(newText)
+        
+        previousInputText = simulatedOldText
+        currentInputText = newText
+        
+        inputDiffData = {
+            element: inputData.element,
+            diff: generateDiff(simulatedOldText, newText),
+            timestamp: inputData.timestamp
+        }
+        
+        inputDiffVisible = true
+        
+        // Clear any existing timeout
+        if (inputDiffTimeout) {
+            clearTimeout(inputDiffTimeout)
+        }
+        
+        // Auto-hide after 3 seconds
+        inputDiffTimeout = setTimeout(() => {
+            inputDiffVisible = false
+            inputDiffData = null
+            inputDiffTimeout = null
+        }, 3000)
+    }
+
+     // user initiated clear data options clearData(options, types)
+
+    let attached = false
+    $effect(() => {
+        if (!anchor || !wrapper) { 
+            return
+        }
+        
+        let controlledFrame = instances.get(tab.id)
+
+        let addNode = false
+        if (!controlledFrame) {
+            controlledFrame = document.createElement('controlledframe')
+            tab.frame = controlledFrame
+            instances.set(tab.id, controlledFrame)
+            addNode = true
+
+            controlledFrame.classList.add('frame-instance')
+
+            controlledFrame.partition = tab.partition || 'persist:myapp'
+            controlledFrame.onloadcommit = e => handleLoadCommit(tab, e)
+            controlledFrame.onnewwindow = e => handleNewWindow(tab, e)
+            controlledFrame.onaudiostatechanged = e => handleAudioStateChanged(tab, e)
+            controlledFrame.onloadstart = e => handleLoadStart(tab, e)
+            controlledFrame.onloadstop = e => handleLoadStop(tab, e)
+            controlledFrame.oncontentload = e => handleContentLoad(tab, e)
+            controlledFrame.onclose = e => handleEvent('onclose', tab, e)
+            controlledFrame.oncontentresize = e => handleEvent('oncontentresize',tab, e)
+            controlledFrame.ondialog = e => handleEvent('ondialog',tab, e)
+            controlledFrame.onexit = e => handleEvent('onexit',tab, e)
+            controlledFrame.onloadabort = e => handleEvent('onloadabort',tab, e)
+            controlledFrame.onloadredirect = e => handleEvent('onloadredirect',tab, e)
+            //     onloadredirect={(e) => { 
+            //         handleEvent('onloadredirect',tab, e)
+            //         // Update URL on redirect
+            //         // if (e.newUrl) {
+            //         //     tab.url = e.newUrl
+            //         //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
+            //         // }
+            //         return false
+            //     }}
+            controlledFrame.onpermissionrequest = e => handlePermissionRequest('onpermissionrequest',tab, e)
+            controlledFrame.onresize = e => handleEvent('onresize',tab, e)
+            controlledFrame.onresponsive = e => handleEvent('onresponsive',tab, e)  
+            controlledFrame.onsizechanged = e => handleEvent('onsizechanged',tab, e)
+            controlledFrame.onunresponsive = e => handleEvent(tab, e, 'onunresponsive')
+            controlledFrame.allowscaling = true
+            controlledFrame.autosize = true
+            controlledFrame.allowtransparency = false
+
+            console.log('setting up frame', controlledFrame)
+            controlledFrame.setZoomMode?.('disabled')
+            setupRequestHandler(controlledFrame)
+            setupMessageListener(controlledFrame)
+            setupContentScripts(controlledFrame)
+            setupContextMenu(controlledFrame)
         }
 
-        if (tab.shouldFocus) {
-            tab.shouldFocus = false
-            setTimeout(() => {
-                if (tab.frame) {
-                    tab.frame.scrollIntoView({ behavior: 'smooth' })
-                }
-                if (tab.tabButton) {
-                    tab.tabButton.scrollIntoView({ behavior: 'smooth' })
-                }
-            }, 200)
+        if (controlledFrame.src !== initialUrl) {
+            controlledFrame.src = initialUrl
+        }
+        
+
+        console.log('controlledFrame', controlledFrame, {initialUrl, addNode})
+       
+        if (addNode) {
+            wrapper.insertBefore(controlledFrame, anchor)
+            attached = true
+        }
+
+        if (!attached) {
+            wrapper.moveBefore(controlledFrame, anchor)
+            attached = true
         }
     })
 
-    //TODo clear daata support
+    function detach () {
+        let controlledFrame = instances.get(tab.id)
+
+        if (controlledFrame) {
+            const backgroundFrames = document.getElementById('backgroundFrames')
+            const anchorFrame = document.getElementById('anchorFrame')
+            backgroundFrames.moveBefore(controlledFrame, anchorFrame)
+        }
+
+		return {
+			duration: 0
+		}
+	}
 </script>
 
-{#if tab.hibernated}
-    <div 
+ {#key tab.partition}
+    <div
+        out:detach|global
         style={style}
-        class="frame hibernated-frame"
+        bind:this={wrapper} 
+        
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
         id="tab_{tab.id}"
-        transition:fade={{duration: 150}}
-    >
-        {#if tab.screenshot}
-            <img src={tab.screenshot} alt="Hibernated tab preview" class="hibernated-screenshot" />
-        {:else}
-            <div class="hibernated-placeholder">
-                <div class="hibernated-icon">💤</div>
-                <div class="hibernated-text">Tab is hibernated</div>
-                <div class="hibernated-url">{tab.url}</div>
-            </div>
-        {/if}
+        class="frame">
+
+        <div class="hidden" bind:this={anchor}></div>
     </div>
-{:else}
-    {#key partition}
-        {#if controlledFrameSupported}
-            <!-- 
-            ControlledFrame API provides secure iframe-like functionality for Isolated Web Apps
-            
-            Key isolation and display parameters:
-            - partition: Controls process isolation and session data separation
-              Different partitions = separate cookie stores, localStorage, processes  
-              Format: "persist:name" (persistent) or "ephemeral:name" (session-only)
-              Enables multi-account browsing and security isolation
-              
-            - allowscaling: Controls whether users can zoom/scale content with touch gestures
-              true = users can pinch-to-zoom, false = fixed scale
-              Important for mobile/touch interfaces and content layout control
-              
-            - autosize: Controls automatic frame dimension adjustment  
-              true = frame auto-resizes based on content size
-              false = frame maintains fixed dimensions set by CSS
-              Useful for responsive layouts and dynamic content
-              
-            - allowtransparency: Controls background transparency support
-              true = frame background can be transparent, allowing parent styling to show through
-              false = frame has opaque background (better performance)
-              Set to false to prevent visual glitches and improve rendering performance
+{/key}
 
-            SECURITY & POLICY ATTRIBUTES (available for standard iframes, some may apply to ControlledFrame):
-            
-            - sandbox: Restricts frame capabilities for security isolation
-              Examples: "allow-scripts allow-same-origin" (most permissive)
-                       "allow-scripts" (scripts but no same-origin access)
-                       "" or true (maximum restrictions - no scripts, forms, etc.)
-              Values: allow-downloads, allow-forms, allow-modals, allow-orientation-lock,
-                     allow-pointer-lock, allow-popups, allow-presentation, allow-same-origin,
-                     allow-scripts, allow-top-navigation, allow-top-navigation-by-user-activation
-                     
-            - csp: Content Security Policy for the embedded content
-              Format: "default-src 'self'; script-src 'unsafe-inline'"
-              Overrides the frame's CSP headers, useful for additional restrictions
-              
-            - allow: Feature Policy / Permissions Policy controls
-              Examples: "camera; microphone; geolocation"
-                       "camera 'none'; microphone 'self'"
-              Controls: accelerometer, ambient-light-sensor, autoplay, battery, camera,
-                       cross-origin-isolated, display-capture, document-domain, encrypted-media,
-                       execution-while-not-rendered, fullscreen, geolocation, gyroscope,
-                       magnetometer, microphone, midi, navigation-override, payment, picture-in-picture,
-                       publickey-credentials-get, screen-wake-lock, sync-xhr, usb, web-share,
-                       xr-spatial-tracking
-                       
-            - credentialless: Controls credential access (experimental)
-              true = frame loads without credentials (cookies, auth headers)
-              false = normal credential behavior
-              Useful for loading untrusted cross-origin content
-              
-            - referrerpolicy: Controls referrer information sent to the frame
-              Values: no-referrer, no-referrer-when-downgrade, origin, origin-when-cross-origin,
-                     same-origin, strict-origin, strict-origin-when-cross-origin, unsafe-url
-                     
-            - loading: Controls when the frame loads
-              Values: "lazy" (load when near viewport), "eager" (load immediately)
-              
-            Note: ControlledFrame in IWAs may have additional security controls beyond standard iframe attributes
-            Check the ControlledFrame specification for IWA-specific security features
-            
-            EXAMPLE SECURITY ATTRIBUTE USAGE:
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-            csp="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
-            allow="camera 'none'; microphone 'none'; geolocation 'self'; autoplay 'self'"
-            credentialless={false}
-            referrerpolicy="strict-origin-when-cross-origin"
-            loading="eager"
-            -->
-            <controlledframe
-                style={style}
-                transition:fade={{duration: 150}}
-                bind:this={tab.frame}
-                class:window-controls-overlay={headerPartOfMain}
-                class:no-pointer-events={isScrolling}
-                id="tab_{tab.id}"
-                class="frame"
-                src={initialUrl}
-                partition={partition}
-                onloadcommit={e => handleLoadCommit(tab, e)}
-                onnewwindow={(e) => { handleNewWindow(tab, e)} }
-                onaudiostatechanged={e => handleAudioStateChanged(tab, e)}
-                allowscaling={false}
-                autosize={true}
-                allowtransparency={false}
-                onloadstart={e => { handleLoadStart(tab, e) }}
-                onloadstop={e => { handleLoadStop(tab, e) }}
+<!-- transition:fade={{duration: 150}} -->
 
-                oncontentload={e => handleContentLoad(tab, e)}
-                onclose={e => { handleEvent('onclose', tab, e) }}
-                oncontentresize={e => { handleEvent('oncontentresize',tab, e) }}
-                ondialog={e => { handleEvent('ondialog',tab, e) }}
-                onexit={e => { handleEvent('onexit',tab, e) }}
-                onloadabort={e => { handleEvent('onloadabort',tab, e) }}
-                onloadredirect={(e) => { 
-                    handleEvent('onloadredirect',tab, e)
-                    // Update URL on redirect
-                    // if (e.newUrl) {
-                    //     tab.url = e.newUrl
-                    //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
-                    // }
-                    return false
-                }}
-                onpermissionrequest={e => { handleEvent('onpermissionrequest',tab, e) }}
-                onresize={e => { handleEvent('onresize',tab, e) }}
-                onresponsive={e => { handleEvent('onresponsive',tab, e) }}
-                onsizechanged={e => { handleEvent('onsizechanged',tab, e) }}
-                onunresponsive={e => { handleEvent(tab, e, 'onunresponsive') }}
+<!-- 
+ControlledFrame API provides secure iframe-like functionality for Isolated Web Apps
 
-                sandbox="allow-scripts allow-forms"
-                csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
-                allow="accelerometer 'self'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'self'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'self'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-create 'self'; publickey-credentials-get 'self'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'"
-                credentialless={true}
-                referrerpolicy="strict-origin-when-cross-origin"
-                loading="lazy"
-                ></controlledframe>
-
-                {#if linkPreviewVisible && hoveredLink}
-                    <div class="link-preview" transition:fade={{duration: 150}}>
-                        {hoveredLink.href}
-                    </div>
-                {/if}
-                
-                <!-- Input diff preview for controlledframe -->
-                {#if inputDiffVisible && inputDiffData}
-                    <div class="input-diff-preview" transition:fade={{duration: 200}}>
-                        <div class="input-diff-header">
-                            <span class="input-diff-element">Press tab to complete / double Esc to disable</span>
-                        </div>
-                        <div class="input-diff-content">
-                            {#each inputDiffData.diff as diffItem}
-                                {#if diffItem.type === 'add'}
-                                    <span class="diff-add">{diffItem.char}</span>
-                                {:else if diffItem.type === 'delete'}
-                                    <span class="diff-delete">{diffItem.char}</span>
-                                {:else}
-                                    <span class="diff-same">{diffItem.char}</span>
-                                {/if}
-                            {/each}
-                        </div>
-                    </div>
-                {/if}
-                <!--
-                onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
-                onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
-                onzoomchange={e => { handleEvent(tab, e, 'onzoomchange') }}
-                -->
-        {:else}
-            <!-- ControlledFrame API not available, falling back to iframe -->
-            {#if initialUrl}
-                <iframe
-                    style={style}
-                    transition:fade={{duration: 150}}
-                    bind:this={tab.frame}
-                    src={initialUrl}
-                    class:window-controls-overlay={headerPartOfMain}
-                    class:no-pointer-events={isScrolling}
-                    id="tab_{tab.id}"
-                    class="frame"
-                    title="fallback-iframe"
-
-                    sandbox="allow-scripts allow-forms"
-                    csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
-                    allow="accelerometer 'none'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'none'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-create 'self'; publickey-credentials-get 'self'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'"
-                    credentialless={true}
-                    referrerpolicy="strict-origin-when-cross-origin"
-                    loading="lazy"
-                ></iframe>
-                
-                <!-- Link preview for iframe fallback -->
-                {#if linkPreviewVisible && hoveredLink}
-                    <div class="link-preview" transition:fade={{duration: 150}}>
-                        {hoveredLink.href}
-                    </div>
-                {/if}
-                
-                <!-- Input diff preview for iframe fallback -->
-                {#if inputDiffVisible && inputDiffData}
-                    <div class="input-diff-preview" transition:fade={{duration: 200}}>
-                        <div class="input-diff-header">
-                            <span class="input-diff-element">completion</span>
-                        </div>
-                        <div class="input-diff-content">
-                            {#each inputDiffData.diff as diffItem}
-                                {#if diffItem.type === 'add'}
-                                    <span class="diff-add">{diffItem.char}</span>
-                                {:else if diffItem.type === 'delete'}
-                                    <span class="diff-delete">{diffItem.char}</span>
-                                {:else}
-                                    <span class="diff-same">{diffItem.char}</span>
-                                {/if}
-                            {/each}
-                        </div>
-                    </div>
-                {/if}
-            {:else}
-                <div 
-                    transition:fade={{duration: 150}}
-                    bind:this={tab.frame}
-                    class:window-controls-overlay={headerPartOfMain}
-                    class:no-pointer-events={isScrolling}
-                    id="tab_{tab.id}"
-                    class="frame iframe-blocked"
-                >
-                    <div class="iframe-blocked-content">
-                        <div class="iframe-blocked-icon">⚠️</div>
-                        <div class="iframe-blocked-title">ControlledFrame API Not Available</div>
-                        <div class="iframe-blocked-message">
-                            This app requires the ControlledFrame API to display web content securely. 
-                            {#if tab.url}
-                                The URL "{tab.url}" cannot be displayed in a standard iframe due to security restrictions.
-                            {/if}
-                        </div>
-                        <div class="iframe-blocked-suggestion">
-                            <strong>To enable ControlledFrame API:</strong><br/>
-                            1. Ensure this is running as an Isolated Web App (IWA)<br/>
-                            2. Enable chrome://flags/#isolated-web-app-controlled-frame<br/>
-                            3. Or run Chrome with --enable-features=IsolatedWebApps,IsolatedWebAppControlledFrame
-                        </div>
-                    </div>
-                </div>
-            {/if}
-        {/if}
-    {/key}
-{/if}
-
-<!-- OAuth Popup Modal -->
-{#if oauthPopup}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div 
-        class="oauth-popup-backdrop" 
-        onclick={closeOAuthPopup}
-        transition:fade={{duration: 200}}
-    ></div>
+Key isolation and display parameters:
+- partition: Controls process isolation and session data separation
+    Different partitions = separate cookie stores, localStorage, processes  
+    Format: "persist:name" (persistent) or "ephemeral:name" (session-only)
+    Enables multi-account browsing and security isolation
     
-    <controlledframe
-        bind:this={oauthPopup.frame}
-        class="oauth-popup-frame"
-        style="width: {oauthPopup.width}px; height: {oauthPopup.height}px;"
-        src={oauthPopup.url}
-        partition={oauthPopup.parentTab.partition || 'persist:myapp'}
-        
-        sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
-        allow="camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; usb 'none'; publickey-credentials-create 'self'; publickey-credentials-get 'self'"
-        referrerpolicy="strict-origin-when-cross-origin"
-        allowscaling={false}
-        autosize={true}
-        allowtransparency={false}
-        
-        onconsolemessage={e => handleOAuthPopupEvent('consolemessage', oauthPopup.frame, e)}
-        onloadstart={e => { 
-            handleOAuthPopupEvent('loadstart', oauthPopup.frame, e)
-            handleOAuthPopupAttachment(oauthPopup.frame)
-        }}
-        onloadstop={e => handleOAuthPopupEvent('loadstop', oauthPopup.frame, e)}
-        onloadabort={e => handleOAuthPopupEvent('loadabort', oauthPopup.frame, e)}
-        onexit={e => handleOAuthPopupEvent('exit', oauthPopup.frame, e)}
-        onclose={e => handleOAuthPopupEvent('close', oauthPopup.frame, e)}
-        
-        transition:fade={{duration: 300, delay: 100}}
-    ></controlledframe>
-{/if}
+- allowscaling: Controls whether users can zoom/scale content with touch gestures
+    true = users can pinch-to-zoom, false = fixed scale
+    Important for mobile/touch interfaces and content layout control
+    
+- autosize: Controls automatic frame dimension adjustment  
+    true = frame auto-resizes based on content size
+    false = frame maintains fixed dimensions set by CSS
+    Useful for responsive layouts and dynamic content
+    
+- allowtransparency: Controls background transparency support
+    true = frame background can be transparent, allowing parent styling to show through
+    false = frame has opaque background (better performance)
+    Set to false to prevent visual glitches and improve rendering performance
 
-<!-- Global keyboard event handler for OAuth popup -->
-<svelte:window onkeydown={handleOAuthKeydown} />
+SECURITY & POLICY ATTRIBUTES (available for standard iframes, some may apply to ControlledFrame):
 
+- sandbox: Restricts frame capabilities for security isolation
+    Examples: "allow-scripts allow-same-origin" (most permissive)
+            "allow-scripts" (scripts but no same-origin access)
+            "" or true (maximum restrictions - no scripts, forms, etc.)
+    Values: allow-downloads, allow-forms, allow-modals, allow-orientation-lock,
+            allow-pointer-lock, allow-popups, allow-presentation, allow-same-origin,
+            allow-scripts, allow-top-navigation, allow-top-navigation-by-user-activation
+            
+- csp: Content Security Policy for the embedded content
+    Format: "default-src 'self'; script-src 'unsafe-inline'"
+    Overrides the frame's CSP headers, useful for additional restrictions
+    
+- allow: Feature Policy / Permissions Policy controls
+    Examples: "camera; microphone; geolocation"
+            "camera 'none'; microphone 'self'"
+    Controls: accelerometer, ambient-light-sensor, autoplay, battery, camera,
+            cross-origin-isolated, display-capture, document-domain, encrypted-media,
+            execution-while-not-rendered, fullscreen, geolocation, gyroscope,
+            magnetometer, microphone, midi, navigation-override, payment, picture-in-picture,
+            publickey-credentials-get, screen-wake-lock, sync-xhr, usb, web-share,
+            xr-spatial-tracking
+            
+- credentialless: Controls credential access (experimental)
+    true = frame loads without credentials (cookies, auth headers)
+    false = normal credential behavior
+    Useful for loading untrusted cross-origin content
+    
+- referrerpolicy: Controls referrer information sent to the frame
+    Values: no-referrer, no-referrer-when-downgrade, origin, origin-when-cross-origin,
+            same-origin, strict-origin, strict-origin-when-cross-origin, unsafe-url
+            
+- loading: Controls when the frame loads
+    Values: "lazy" (load when near viewport), "eager" (load immediately)
+    
+Note: ControlledFrame in IWAs may have additional security controls beyond standard iframe attributes
+Check the ControlledFrame specification for IWA-specific security features
 
-<style>
-     .hibernated-frame {
-        background: #0a0a0a;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-        overflow: hidden;
-        --webkit-app-region: no-drag;
-    }
+EXAMPLE SECURITY ATTRIBUTE USAGE:
+sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+csp="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+allow="camera 'none'; microphone 'none'; geolocation 'self'; autoplay 'self'"
+credentialless={false}
+referrerpolicy="strict-origin-when-cross-origin"
+loading="eager"
 
-    .hibernated-screenshot {
+    onconsolemessage={e => { handleEvent(tab, e, 'onconsolemessage') }}
+    onloadprogress={e => { handleEvent(tab, e, 'onloadprogress') }}
+    onzoomchange={e => { handleEvent(tab, e, 'onzoomchange') }}
+ -->
+
+ <style>
+    :global(.frame-instance) {
         width: 100%;
         height: 100%;
-        object-fit: cover;
-        object-position: top;
-        opacity: 0.5;
-    }
-
-    .hibernated-placeholder {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        text-align: center;
-        padding: 40px;
-        color: rgba(255, 255, 255, 0.5);
-    }
-
-    .hibernated-icon {
-        font-size: 48px;
-        opacity: 0.6;
-    }
-
-    .hibernated-text {
-        font-size: 16px;
-        font-weight: 500;
-        color: rgba(255, 255, 255, 0.6);
-    }
-
-    .hibernated-url {
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.4);
-        font-family: 'SF Mono', Consolas, monospace;
-        word-break: break-all;
-        max-width: 300px;
-    }
-
-    .hibernated-frame::before {
-        content: '';
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 24px;
-        height: 24px;
-        background: rgba(0, 0, 0, 0.8);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        z-index: 1;
-        pointer-events: none;
-        border-radius: 12px;
-    }
-
-    .hibernated-frame::after {
-        content: '💤';
-        position: absolute;
-        top: 14px;
-        right: 14px;
-        font-size: 12px;
-        z-index: 2;
-        pointer-events: none;
-    }
-
-    .iframe-blocked {
-        background: #0a0a0a;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-        overflow: hidden;
-        --webkit-app-region: no-drag;
-    }
-
-    .iframe-blocked-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 16px;
-        text-align: center;
-        padding: 40px;
-        color: rgba(255, 255, 255, 0.8);
-        max-width: 480px;
-    }
-
-    .iframe-blocked-icon {
-        font-size: 48px;
-        opacity: 0.6;
-    }
-
-    .iframe-blocked-title {
-        font-size: 18px;
-        font-weight: 600;
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    .iframe-blocked-message {
-        font-size: 14px;
-        color: rgba(255, 255, 255, 0.7);
-        line-height: 1.4;
-    }
-
-    .iframe-blocked-url {
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.5);
-        font-family: 'SF Mono', Consolas, monospace;
-        word-break: break-all;
-        background: rgba(255, 255, 255, 0.05);
-        padding: 8px 12px;
-        border-radius: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .iframe-blocked-suggestion {
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.6);
-        line-height: 1.4;
-        text-align: left;
-        max-width: 100%;
-    }
-
-    .iframe-blocked-suggestion strong {
-        color: rgba(255, 255, 255, 0.8);
-        font-weight: 600;
-    }
-
-    /* OAuth popup styles */
-    .oauth-popup-backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: 9999;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-    }
-
-    .oauth-popup-frame {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 10000;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 
-            0 25px 50px rgba(0, 0, 0, 0.6),
-            0 0 0 1px rgba(255, 255, 255, 0.1);
-        background: #0a0a0a;
-    }
-
-    .link-preview {
-        position: absolute;
-        top: 1px;
-        left: 7px;
-        background: rgba(25, 25, 25, 0.98);
-        color: rgba(255, 255, 255, 0.95);
-        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-        font-size: 11px;
-        font-weight: 400;
-        padding: 6px 10px;
-        border-radius: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.103);
-        backdrop-filter: blur(12px);
-        z-index: 10010;
-        max-width: calc(100% - 24px);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-        user-select: none;
-        pointer-events: none;
-    }
-
-    .input-diff-preview {
-        position: absolute;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.95);
-        color: rgba(255, 255, 255, 0.9);
-        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-        font-size: 12px;
-        font-weight: 400;
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(16px);
-        z-index: 10015;
-        max-width: 480px;
-        min-width: 300px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-        user-select: none;
-        pointer-events: none;
-        overflow: hidden;
-    }
-
-    .input-diff-header {
-        padding: 8px 12px;
-        background: rgba(0, 0, 0, 0.8);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        font-size: 10px;
-        color: rgba(255, 255, 255, 0.4);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-weight: 500;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .input-diff-content {
-        padding: 10px 12px;
-        line-height: 1.4;
-        overflow-wrap: break-word;
-        word-break: break-all;
-        max-height: 120px;
-        overflow-y: auto;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-    }
-
-    .input-diff-content::-webkit-scrollbar {
-        width: 4px;
-    }
-
-    .input-diff-content::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .input-diff-content::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.3);
-        border-radius: 2px;
-    }
-
-    .diff-add {
-        background: rgba(34, 197, 94, 0.3);
-        color: rgba(34, 197, 94, 1);
-        padding: 1px 2px;
-        border-radius: 2px;
-        font-weight: 500;
-    }
-
-    .diff-delete {
-        background: rgba(239, 68, 68, 0.3);
-        color: rgba(239, 68, 68, 1);
-        padding: 1px 2px;
-        border-radius: 2px;
-        text-decoration: line-through;
-        font-weight: 500;
-    }
-
-    .diff-same {
-        color: rgba(255, 255, 255, 0.8);
+        display: block;
     }
 </style>

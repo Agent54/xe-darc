@@ -1,7 +1,7 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
     
-    let { onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods } = $props()
+    let { onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods, requestedResources } = $props()
 
     const resourceSections = [
         { id: 'used', title: 'Used', color: 'green' },
@@ -283,7 +283,8 @@
     ]
 
     // Mock data - in real app this would come from props or API
-    const resourceData = {
+    const resourceData = $derived({
+        requested: requestedResources,
         used: [
             { ...resourceTypes.find(t => t.id === 'network'), lastUsed: '2 minutes ago', status: 'Active' },
             { ...resourceTypes.find(t => t.id === 'javascript'), lastUsed: '5 minutes ago', status: 'Active' },
@@ -309,7 +310,7 @@
             { ...resourceTypes.find(t => t.id === 'motion-sensors'), lastUsed: '1 week ago', status: 'Archived' },
             { ...resourceTypes.find(t => t.id === 'midi-devices'), lastUsed: '2 weeks ago', status: 'Archived' }
         ]
-    }
+    })
 
     function getStatusColor(status) {
         switch (status) {

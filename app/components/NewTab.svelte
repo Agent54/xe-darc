@@ -42,98 +42,100 @@
     let microphone = null
     let animationFrame = null
 
+    let loaded = $state(false)
+
     async function initializeAI() {
-        console.log('🔄 Starting AI initialization...')
+        // console.log('🔄 Starting AI initialization...')
         
-        try {
-            await tryWriterAPI()
-        } catch (error) {
-            console.error('❌ Failed to initialize any AI API:', error)
-            aiSupported = false
-        }
+        // try {
+        //     await tryWriterAPI()
+        // } catch (error) {
+        //     console.error('❌ Failed to initialize any AI API:', error)
+        //     aiSupported = false
+        // }
         
-        console.log('🏁 AI initialization complete. Supported:', aiSupported)
+        // console.log('🏁 AI initialization complete. Supported:', aiSupported)
     }
 
-    const modelOptions = {
-        // sharedContext: 'I am a user entering text into the browser search box. Give the top 5 possible completions separated by newlines. Do not add order numbers, just pure text completions. Include the exact text from this prompt at the start. Do not add any other titles or explanations or other headers.',
-        tone: 'neutral',
-        format: 'plain-text',
-        length: 'medium',
-        // inputQuota: 10000,
-        // outputLanguage: "en",
-        // expectedInputLanguages: ["en"],
-        // expectedContextLanguages: ["en"],
-    }
+    // const modelOptions = {
+    //     // sharedContext: 'I am a user entering text into the browser search box. Give the top 5 possible completions separated by newlines. Do not add order numbers, just pure text completions. Include the exact text from this prompt at the start. Do not add any other titles or explanations or other headers.',
+    //     tone: 'neutral',
+    //     format: 'plain-text',
+    //     length: 'medium',
+    //     // inputQuota: 10000,
+    //     // outputLanguage: "en",
+    //     // expectedInputLanguages: ["en"],
+    //     // expectedContextLanguages: ["en"],
+    // }
 
-    async function tryWriterAPI() {
-        console.log('🔍 Trying Writer API...')
-        console.log('Available APIs:', Object.keys(self))
+    // async function tryWriterAPI() {
+    //     // console.log('🔍 Trying Writer API...')
+    //     // console.log('Available APIs:', Object.keys(self))
         
-        if ('Writer' in self) {
-            console.log('✅ Writer API detected')
+    //     if ('Writer' in self) {
+    //         // console.log('✅ Writer API detected')
             
-            try {
-                const availability = await Writer.availability()
-                console.log('🤖 Writer availability:', availability)
+    //         try {
+    //             const availability = await Writer.availability()
+    //             console.log('🤖 Writer availability:', availability)
                 
-                if (availability === 'available') {
-                    console.log('📝 Creating Writer instance...')
+    //             if (availability === 'available') {
+    //                 console.log('📝 Creating Writer instance...')
                     
-                    try {
-                        aiWriter = await Writer.create({
-                            ...modelOptions
-                        })
+    //                 try {
+    //                     aiWriter = await Writer.create({
+    //                         ...modelOptions
+    //                     })
                         
-                        // Test the writer immediately
-                        // console.log('🧪 Testing Writer with simple prompt...')
-                        // const testResult = await aiWriter.write('Complete: hello')
-                        // console.log('🧪 Writer test successful:', testResult)
+    //                     // Test the writer immediately
+    //                     // console.log('🧪 Testing Writer with simple prompt...')
+    //                     // const testResult = await aiWriter.write('Complete: hello')
+    //                     // console.log('🧪 Writer test successful:', testResult)
                         
-                        aiSupported = true
-                        console.log('✅ Writer initialized and tested successfully')
-                        return true
+    //                     aiSupported = true
+    //                     console.log('✅ Writer initialized and tested successfully')
+    //                     return true
                         
-                    } catch (createError) {
-                        console.error('❌ Writer creation/test failed:', createError)
-                        if (createError.message?.includes('execution config')) {
-                            console.log('💡 Writer API execution config issue detected')
-                            console.log('💡 This usually means:')
-                            console.log('   1. Missing origin trial token')
-                            console.log('   2. Feature not fully enabled')
-                            console.log('   3. Try: chrome://flags/#writer-api-for-gemini-nano')
-                        }
-                        return false
-                    }
+    //                 } catch (createError) {
+    //                     console.error('❌ Writer creation/test failed:', createError)
+    //                     if (createError.message?.includes('execution config')) {
+    //                         console.log('💡 Writer API execution config issue detected')
+    //                         console.log('💡 This usually means:')
+    //                         console.log('   1. Missing origin trial token')
+    //                         console.log('   2. Feature not fully enabled')
+    //                         console.log('   3. Try: chrome://flags/#writer-api-for-gemini-nano')
+    //                     }
+    //                     return false
+    //                 }
                     
-                } else if (availability === 'downloadable') {
-                    console.log('📥 Downloading Writer model...')
-                    aiWriter = await Writer.create({
-                        ...modelOptions,
-                        monitor(m) {
-                            m.addEventListener("downloadprogress", e => {
-                                console.log(`📥 Downloaded ${(e.loaded / e.total * 100).toFixed(1)}%`)
-                            })
-                        }
-                    })
-                    aiSupported = true
-                    console.log('✅ Writer initialized after download')
-                    return true
-                } else {
-                    console.log('❌ Writer not available:', availability)
-                    return false
-                }
+    //             } else if (availability === 'downloadable') {
+    //                 console.log('📥 Downloading Writer model...')
+    //                 aiWriter = await Writer.create({
+    //                     ...modelOptions,
+    //                     monitor(m) {
+    //                         m.addEventListener("downloadprogress", e => {
+    //                             console.log(`📥 Downloaded ${(e.loaded / e.total * 100).toFixed(1)}%`)
+    //                         })
+    //                     }
+    //                 })
+    //                 aiSupported = true
+    //                 console.log('✅ Writer initialized after download')
+    //                 return true
+    //             } else {
+    //                 console.log('❌ Writer not available:', availability)
+    //                 return false
+    //             }
                 
-            } catch (availabilityError) {
-                console.error('❌ Writer availability check failed:', availabilityError)
-                return false
-            }
+    //         } catch (availabilityError) {
+    //             console.error('❌ Writer availability check failed:', availabilityError)
+    //             return false
+    //         }
             
-        } else {
-            console.log('❌ Writer API not available in this browser')
-            return false
-        }
-    }
+    //     } else {
+    //         console.log('❌ Writer API not available in this browser')
+    //         return false
+    //     }
+    // }
 
     // Generate AI completions with streaming and cancellation tracking
     async function generateCompletions(text) {
@@ -575,6 +577,14 @@
             tab.shouldFocus = false
         }
         initializeAI()
+
+        setTimeout(() => {
+            loaded = true
+        }, 100)
+
+        return () => {
+            loaded = false
+        }
     })
 </script>
 
@@ -583,7 +593,7 @@
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
             
             <!-- 3D Scene Container - positioned above input -->
-            <div class="threlte-container relative w-full h-64 pointer-events-none" style="filter: blur({blur}px);">
+            <div class="threlte-container relative w-full h-64 pointer-events-none" style="filter: blur({blur}px);" class:visible={loaded}>
                 <Canvas>
                     <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} {animationSpeed} {lineThickness} {audioLevel} {audioFrequency} />
                 </Canvas>
@@ -612,13 +622,13 @@
                             AI ✓
                         </div> -->
                     {:else if aiSupported && !aiWriter}
-                        <div class="ai-badge absolute right-3 top-1/2 transform -translate-y-1/2 px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 rounded-md" title="AI initializing...">
+                        <!-- <div class="ai-badge absolute right-3 top-1/2 transform -translate-y-1/2 px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 rounded-md" title="AI initializing...">
                             AI ?
-                        </div>
+                        </div> -->
                     {:else}
-                        <div class="ai-badge absolute right-3 top-1/2 transform -translate-y-1/2 px-2 py-1 text-xs bg-red-500/20 text-red-400 rounded-md" title="AI Writer API not available. Check console for setup instructions.">
+                        <!-- <div class="ai-badge absolute right-3 top-1/2 transform -translate-y-1/2 px-2 py-1 text-xs bg-red-500/20 text-red-400 rounded-md" title="AI Writer API not available. Check console for setup instructions.">
                             AI ✗
-                        </div>
+                        </div> -->
                     {/if}
                     
                     {#if completions.length > 0}
@@ -739,6 +749,20 @@
         background-color: black;
         position: relative;
         /* -webkit-app-region: drag; breaks pointer events */
+    }
+
+    .new-tab:focus {
+        outline: none;
+    }
+
+    .threlte-container {
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out 0.1s;
+    }
+
+    .threlte-container.visible {
+        opacity: 1;
+        transition: opacity 0.3s ease-in-out 0.1s;
     }
     
     .new-tab::before {

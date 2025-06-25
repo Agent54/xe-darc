@@ -368,3 +368,7 @@ architecutre diagram in darc excalidraw
 color icons context menus
 
 bg black bug https://climate-conflict.org
+
+cmd 0 reset zoom level
+
+memory / notes center

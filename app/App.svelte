@@ -1,16 +1,19 @@
 <script>
-    import { flip } from 'svelte/animate'
+    // import { flip } from 'svelte/animate'
     import PouchDB from 'pouchdb-browser'
     import NewTab from './components/NewTab.svelte'
-    import ControlledFrame from './components/ControlledFrame.svelte'
+    import Frame from './components/Frame.svelte'
     import Resources from './components/ResourcesPanel.svelte'
     import Settings from './components/Settings.svelte'
     import UserMods from './components/UserMods.svelte'
     import Excalidraw from './components/Excalidraw.svelte'
+    import TabSidebar from './components/TabSidebar.svelte'
+    import { onMount } from 'svelte'
 
     // TODO: add user and session management
     const db = new PouchDB('darc')
 
+    const requestedResources = $state([])
 
    window.getScreenDetails().then(screen => {
         console.log('screen control error', screen)
@@ -38,11 +41,6 @@
             console.log(args)
         }
     )
-
-    for (let space of [{title: 'a', id: 1}, {title: 'b', id: 2}, {title: 'c', id: 3}]) {
-        history.pushState({ direction: space.id }, space.title, "#" + space.id)
-    }
-    history.go(-1)
 
     const partitions = ['persist:1', 'persist:2', 'persist:3', 'ephemeral:1', 'ephemeral:2', 'ephemeral:3']
 
@@ -183,39 +181,6 @@
     ])
 
     let activeTabIndex = $state(0)
-    window.onpopstate = handleShellNavigation
-    
-    let block = false
-    function handleShellNavigation (event) {
-        if (block) {
-            block = false
-            return
-        }
-        
-        block = true
-        if (event.state.direction === 1) {
-            const activeTab = tabs[activeTabIndex]
-            const frame = activeTab.frame
-            
-            if (frame && typeof frame.back === 'function') {
-                // Check if the frame can go back
-                if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
-                    // No back navigation available, set to start page
-                    activeTab.url = 'about:newtab'
-                    activeTab.title = 'New Tab'
-                    activeTab.favicon = null
-                    // TODO: preserve tab history and allow forward navigation
-                } else {
-                    frame.back()
-                }
-            }
-            
-            history.go(1)
-        } else {
-            tabs[activeTabIndex].frame?.forward()
-            history.go(-1)
-        }
-    }
 
     let tabs = $state([
         // {
@@ -528,13 +493,11 @@
     function openTab(tab, index) {
         console.log('Opening tab:', tab)
         activeTabIndex = index
-        const frame = document.getElementById(`tab_${tab.id}`)
-        if (frame) {
-            // Use smooth scrolling unless window is resizing
-            frame.scrollIntoView({ 
-                behavior: isWindowResizing ? 'auto' : 'smooth' 
-            })
-        }
+
+        tab.frame?.scrollIntoView({ 
+            behavior: isWindowResizing ? 'auto' : 'smooth' 
+        })
+    
     }
 
     function closeTab(tab, event) {
@@ -597,8 +560,8 @@
         }
     }
 
-    function reloadTab(tab) {
-        const frame = document.getElementById(`tab_${tab.id}`)
+    function reloadTab (tab) {
+        const frame = tab.frame
         if (frame && typeof frame.reload === 'function') {
             frame.reload()
         } else if (frame) {
@@ -611,7 +574,7 @@
     function goBack() {
         const activeTab = tabs[activeTabIndex]
         if (activeTab) {
-            const frame = document.getElementById(`tab_${activeTab.id}`)
+            const frame = activeTab.frame // document.getElementById(`tab_${activeTab.id}`)
             if (frame && typeof frame.back === 'function') {
                 // Check if the frame can go back
                 if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
@@ -631,7 +594,7 @@
     function goForward() {
         const activeTab = tabs[activeTabIndex]
         if (activeTab) {
-            const frame = document.getElementById(`tab_${activeTab.id}`)
+            const frame = activeTab.frame // document.getElementById(`tab_${activeTab.id}`)
             if (frame && typeof frame.forward === 'function') {
                 frame.forward()
             }
@@ -657,7 +620,7 @@
         const tabIndex = tabs.findIndex(t => t.id === tab.id)
         if (tabIndex !== -1) {
             tabs[tabIndex].muted = !tabs[tabIndex].muted
-            const frame = document.getElementById(`tab_${tab.id}`)
+            const frame = tab.frame // document.getElementById(`tab_${tab.id}`)
             if (frame && typeof frame.setAudioMuted === 'function') {
                 frame.setAudioMuted(tabs[tabIndex].muted)
             }
@@ -706,8 +669,10 @@
 
         // Observe all frames (both controlledframes and NewTab components)
         tabs.forEach(tab => {
-            const frame = document.getElementById(`tab_${tab.id}`)
-            if (frame) observer.observe(frame)
+            const frame = tab.frame // document.getElementById(`tab_${tab.id}`)
+            if (frame) {
+                observer.observe(frame)
+            }
         })
 
         return observer
@@ -747,7 +712,7 @@
 
     async function captureTabScreenshot(tab, frame = null) {
         if (!frame) {
-            frame = document.getElementById(`tab_${tab.id}`)
+            frame = tab.frame // document.getElementById(`tab_${tab.id}`)
         }
         if (!frame) {
             console.log('Frame not found for tab:', tab.id)
@@ -1066,7 +1031,14 @@
     }
 
     function selectViewMode(mode) {
-        // Track the last non-default view mode
+        // if (lastUsedViewMode !== mode) {
+        //     window.instances.forEach(instance => {
+        //         const wrapper = document.getElementById('backgroundFrames')
+        //         const anchorFrame = document.getElementById('anchorFrame')
+        //         wrapper.moveBefore(instance, anchorFrame)
+        //     })
+        // }
+
         if (viewMode !== 'default') {
             lastUsedViewMode = viewMode
         }
@@ -1074,6 +1046,11 @@
     }
     
     function toggleViewMode() {
+        // window.instances.forEach(instance => {
+        //         const wrapper = document.getElementById('backgroundFrames')
+        //         const anchorFrame = document.getElementById('anchorFrame')
+        //         wrapper.moveBefore(instance, anchorFrame)
+        //     })
         if (viewMode === 'default') {
             viewMode = lastUsedViewMode
         } else {
@@ -1532,6 +1509,69 @@
 
     // Initialize drag and drop listeners
     setupGlobalDragDropListeners()
+
+
+    $effect(() => {
+        if (requestedResources.length > 0) {
+            console.log('requestedResources', requestedResources)
+            openSidebars.add('resources')
+        }
+    })
+
+    let block = true
+    function debugHistory() {
+        console.log('=== History Debug ===')
+        console.log('Current URL: block: ' + block, window.location.href)
+        console.log('History length:', window.history.length)
+        console.log('activetab', tabs[activeTabIndex])
+        try {
+            console.log('Current state:', window.history.state)
+        } catch (e) {
+            console.log('Cannot access current state:', e.message)
+        }
+    }
+    function handleShellNavigation (event) {
+        debugHistory() 
+        if (block) {
+            block = false
+            return
+        }
+        // console.log('handleShellNavigation', event.state.direction, tabs[activeTabIndex])
+        
+        block = true
+        if (event.state.direction === 1) {
+            history.forward()
+
+            const activeTab = tabs[activeTabIndex]
+            const frame = activeTab?.frame
+            
+            if (frame && typeof frame.back === 'function') {
+                // Check if the frame can go back
+                if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
+                    // No back navigation available, set to start page
+                    activeTab.url = 'about:newtab'
+                    activeTab.title = 'New Tab'
+                    activeTab.favicon = null
+                    // TODO: preserve tab history and allow forward navigation
+                } else {
+                    frame.back()
+                }
+            }
+        } else if (event.state.direction === 3) {
+            history.back()
+            tabs[activeTabIndex].frame?.forward() 
+        } 
+    }
+
+    onMount(() => {
+        // console.log('setting up app shell navigation')
+        history.replaceState({ direction: 1 }, 'a', "#1")
+        history.pushState({ direction: 2 }, 'b', "#2" )
+        history.pushState({ direction: 3 }, 'c', "#3" )
+        history.back()
+
+        window.onpopstate = handleShellNavigation    
+    })
 </script>
 
 {#snippet trashIcon()}
@@ -1554,8 +1594,9 @@
 <header class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 178px;' : 'right: 137px;'}"></div>
      
-            <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {closed.length > 0 ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled}>
-        <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} transition:flip={{duration: 100}}>
+    <div class="tab-wrapper" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {closed.length > 0 ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled}>
+       <!-- transition:flip={{duration: 100}} -->
+        <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each tabs as tab, i (tab.id)}
                 <li 
                     bind:this={tab.tabButton}
@@ -1617,6 +1658,10 @@
             <div class="tab-spacer"></div>
         </ul>
     </div>
+
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 105px;"></div>
+
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 115px; left: unset; {closed.length > 0 ? 'right: 190px;' : 'right: 158px;'}"></div>
 
     <div class="view-mode-icon" 
         role="button"
@@ -2072,6 +2117,8 @@
     </div>
 {/if}
 
+<TabSidebar {isDragEnabled} />
+
 <div class="controlled-frame-container browser-frame" 
      class:window-controls-overlay={headerPartOfMain} 
      class:scrolling={isScrolling} 
@@ -2153,7 +2200,7 @@
                             </div>
                         {/key}
                         
-                        <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <Frame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
             {/if}
@@ -2179,7 +2226,7 @@
                             </div>
                         {/key}
                         
-                        <ControlledFrame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
             {/if}
@@ -2240,8 +2287,6 @@
     <!-- class:drag-enabled={isDragEnabled} -->
 </div>
 
-<div class="drag-handle-left" class:drag-enabled={isDragEnabled}></div>
-
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
 {#if openSidebars.size > 0}
@@ -2251,7 +2296,7 @@
          style="--sidebar-count: {openSidebars.size};">
         {#if openSidebars.has('resources')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('resources') && !prevOpenSidebars.has('resources') && !isSwitchingSidebars && !isWindowResizing}>
-                <Resources onClose={closeResourcesSidebar} 
+                <Resources onClose={closeResourcesSidebar}  {requestedResources}
                           {openSidebars}
                           {switchToResources} 
                           {switchToSettings}
@@ -2286,7 +2331,14 @@
     </div>
 {/if}
 
+<div id="backgroundFrames">
+    <div id="anchorFrame"></div>
+</div>
+
 <style>
+    #backgroundFrames {
+        display: none;
+    }
     header {
         position: fixed;
         left: env(titlebar-area-x, 0);
@@ -2332,7 +2384,7 @@
         top: 0;
         left: 0;
         right: 0;
-        height: 100%;
+        height: 35px;
         pointer-events: auto;
         z-index: 1;
     }
@@ -2456,7 +2508,7 @@
         position: relative;
         -webkit-app-region: no-drag;
         z-index: 1;
-        top: 7px;
+        top: 6px;
         left: 110px;
     }
 
@@ -3188,7 +3240,7 @@
     }
 
     .controlled-frame-container.window-controls-overlay {
-        height: calc(100vh - 38px);
+        height: calc(100vh - 35px);
     }
     
     .controlled-frame-container::-webkit-scrollbar {
@@ -3223,12 +3275,12 @@
     }
 
     :global(.frame.window-controls-overlay) {
-        height: calc(100vh - 56px);
+        height: calc(100vh - 52px);
     }
 
     .controlled-frame-container.sidebar-open.window-controls-overlay :global(.frame) {
         width: calc(100vw - (320px * var(--sidebar-count)) - 18px);
-        height: calc(100vh - 56px);
+        height: calc(100vh - 52px);
     }
 
     :global(.frame.no-pointer-events) {
@@ -3785,14 +3837,14 @@
 
     .frame-title-bar {
         position: fixed;
-        top: -25px;
+        top: -35px;
         left: 9px;
         height: 34px;
         width: calc(100% - 18px);
         background: #1a1a1a;
         border-top-left-radius: 8px;
         border-top-right-radius: 8px;
-        z-index: 1;
+        z-index: 10;
         opacity: 0;
         transition: opacity 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, top 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, box-shadow 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s;
         overflow: hidden;
@@ -3802,6 +3854,7 @@
         padding: 0 12px;
         font-family: 'Inter', sans-serif;
         border-bottom: 1px solid rgb(255 255 255 / 6%);
+        margin-top: 10px;
     }
 
     .controlled-frame-container.window-controls-overlay .frame-title-bar {
@@ -3809,7 +3862,7 @@
     }
 
     .frame-title-bar:hover {
-        top: 0px;
+        top: -10px;
         z-index: 100;
         opacity: 1;
         transition: opacity 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, top 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, box-shadow 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s;
@@ -3817,7 +3870,7 @@
     }
 
     .controlled-frame-container.window-controls-overlay .frame-title-bar:hover {
-        top: 38px;
+        top: 28px;
     }
 
     .frame-header-controls {
@@ -3915,14 +3968,14 @@
         right: 0;
         width: calc(320px * var(--sidebar-count, 1));
         height: 100vh;
-        z-index: 999;
+        z-index: 10;
         display: flex;
         flex-direction: row;
     }
 
     .sidebar-container.window-controls-overlay {
         top: 38px;
-        height: calc(100vh - 38px);
+        height: calc(100vh - 35px);
     }
 
     .sidebar-panel {

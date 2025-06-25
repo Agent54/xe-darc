@@ -1,7 +1,7 @@
 self.addEventListener('fetch', (e) => {
-    console.log('sw fetch', e.request.url)
+    // console.log('sw fetch', e.request.url)
     e.respondWith(fetch(e.request))
 })
 
-console.log('sw loaded')
+// console.log('sw loaded')
 
