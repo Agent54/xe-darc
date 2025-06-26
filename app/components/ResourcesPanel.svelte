@@ -4,6 +4,7 @@
     let { onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods, requestedResources } = $props()
 
     const resourceSections = [
+        { id: 'requested', title: 'Requested', color: 'yellow' },
         { id: 'used', title: 'Used', color: 'green' },
         { id: 'unused', title: 'Unused', color: 'gray' },
         { id: 'blocked', title: 'Blocked', color: 'red' },

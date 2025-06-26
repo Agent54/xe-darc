@@ -8,7 +8,7 @@
     import UserMods from './components/UserMods.svelte'
     import Excalidraw from './components/Excalidraw.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
-    import { onMount } from 'svelte'
+    import { onMount, untrack } from 'svelte'
 
     // TODO: add user and session management
     const db = new PouchDB('darc')
@@ -255,6 +255,7 @@
     let darkMode = $state(true)
     let dataSaver = $state(false)
     let batterySaver = $state(false)
+    let secondScreenActive = $state(false)
     
     // Window resize state for performance optimization
     let isWindowResizing = $state(false)
@@ -1273,6 +1274,44 @@
     function toggleBatterySaver() {
         batterySaver = !batterySaver
     }
+    
+    function toggleSecondScreen() {
+        // TODO: xr detection + presentation api 
+        if (secondScreenActive) {
+            // Close existing second screen
+            const secondScreenWindow = window.secondScreenWindow
+            if (secondScreenWindow && !secondScreenWindow.closed) {
+                secondScreenWindow.close()
+            }
+            secondScreenActive = false
+        } else {
+            // Open second screen
+            const width = 800
+            const height = 600
+            const left = screen.width - width - 50
+            const top = 50
+            
+            const secondScreenWindow = window.open(
+                window.location.href + '?companion=true',
+                'secondScreen',
+                `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes,status=no,toolbar=no,menubar=no,location=no`
+            )
+            
+            if (secondScreenWindow) {
+                window.secondScreenWindow = secondScreenWindow
+                secondScreenActive = true
+                
+                // Listen for window close
+                const checkClosed = setInterval(() => {
+                    if (secondScreenWindow.closed) {
+                        secondScreenActive = false
+                        clearInterval(checkClosed)
+                        delete window.secondScreenWindow
+                    }
+                }, 1000)
+            }
+        }
+    }
 
     // Check for encrypted sync token on app startup
     async function checkSyncTokenAuth() {
@@ -1512,9 +1551,12 @@
 
 
     $effect(() => {
-        if (requestedResources.length > 0) {
-            console.log('requestedResources', requestedResources)
-            openSidebars.add('resources')
+        if (requestedResources.length > 0 && !openSidebars.has('resources')) {
+            console.log('requestedResources changed...', requestedResources)
+            untrack(() => {
+                openSidebars.add('resources')
+                openSidebars = new Set(openSidebars)
+            })
         }
     })
 
@@ -1697,6 +1739,18 @@
                 {#if viewMode === 'canvas'}<span class="checkmark">•</span>{/if}
             </div>
             <div class="view-mode-menu-item" 
+                    class:active={viewMode === 'tile'}
+                    role="button"
+                    tabindex="0"
+                    onclick={(e) => { e.stopPropagation(); selectViewMode('tile') }}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('tile') } }}>
+                <span class="view-mode-icon-item">
+                    {@html getViewModeIcon('tile')}
+                </span>
+                <span>Tiles</span>
+                {#if viewMode === 'tile'}<span class="checkmark">•</span>{/if}
+            </div>
+            <div class="view-mode-menu-item" 
                     class:active={viewMode === 'reading'}
                     role="button"
                     tabindex="0"
@@ -1708,18 +1762,6 @@
                 <span>Reading</span>
                 {#if viewMode === 'reading'}<span class="checkmark">•</span>{/if}
             </div>
-            <!-- <div class="view-mode-menu-item" 
-                 class:active={viewMode === 'tile'}
-                 role="button"
-                 tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); selectViewMode('tile') }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('tile') } }}>
-                <span class="view-mode-icon-item">
-                    {@html getViewModeIcon('tile')}
-                </span>
-                <span>Tiles</span>
-                {#if viewMode === 'tile'}<span class="checkmark">•</span>{/if}
-            </div> -->
             <div class="view-mode-menu-item" 
                  class:active={viewMode === 'squat'}
                  role="button"
@@ -1732,7 +1774,7 @@
                 <span>Squat</span>
                 {#if viewMode === 'squat'}<span class="checkmark">•</span>{/if}
             </div>
-            <!-- <div class="view-mode-menu-item" 
+            <div class="view-mode-menu-item" 
                 class:active={viewMode === 'notebook'}
                 role="button"
                 tabindex="0"
@@ -1743,7 +1785,7 @@
             </span>
             <span>Notebook</span>
             {#if viewMode === 'notebook'}<span class="checkmark">•</span>{/if}
-            </div> -->
+            </div>
         </div>
     </div>
 
@@ -1836,6 +1878,20 @@
                  </span>
                                  <span>Dark Mode</span>
                  {#if darkMode}<span class="checkmark">•</span>{/if}
+            </div>
+            <div class="settings-menu-item" 
+            class:active={secondScreenActive}
+            role="button"
+            tabindex="0"
+            onclick={(e) => { e.stopPropagation(); toggleSecondScreen() }}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSecondScreen() } }}>
+           <span class="settings-menu-icon-item">
+               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
+               </svg>
+           </span>
+           <span>Start Second Screen</span>
+           {#if secondScreenActive}<span class="checkmark">•</span>{/if}
             </div>
             <div class="settings-menu-item" 
                  class:active={dataSaver}

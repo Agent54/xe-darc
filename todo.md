@@ -372,3 +372,5 @@ bg black bug https://climate-conflict.org
 cmd 0 reset zoom level
 
 memory / notes center
+
+app pin folders
