@@ -227,7 +227,6 @@
     .sidebar :global(.setting-card:hover:not(.disabled):not(.selected)) {
         background: rgba(255, 255, 255, 0.07);
         border-color: rgba(255, 255, 255, 0.16);
-        transform: translateY(-1px);
     }
 
     .w-3 {

@@ -1,6 +1,6 @@
 <script>
     // import { flip } from 'svelte/animate'
-    import PouchDB from 'pouchdb-browser'
+
     import NewTab from './components/NewTab.svelte'
     import Frame from './components/Frame.svelte'
     import Resources from './components/ResourcesPanel.svelte'
@@ -9,9 +9,8 @@
     import Excalidraw from './components/Excalidraw.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
     import { onMount, untrack } from 'svelte'
+    import data from './data.svelte.js'
 
-    // TODO: add user and session management
-    const db = new PouchDB('darc')
 
     const requestedResources = $state([])
 
@@ -26,11 +25,7 @@
     //     console.log(status.state)
     // })
 
-    db.allDocs({
-        include_docs: true
-    }).then(({rows}) => {
-        console.log(rows)
-    })
+
 
     chrome.runtime?.sendMessage(
         'fgeflhglmchkilcegppfkgmmabpppcia',
@@ -2453,7 +2448,7 @@
         height: calc(100vh - 35px);
         z-index: 1000;
         pointer-events: auto;
-        transition: transform 0.05s ease 0.45s, opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45s;
+        transition: transform 190ms 300ms cubic-bezier(.78,-0.01,.34,1.04), opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45s;
         background-color: rgba(0, 0, 0, 0.802);
         backdrop-filter: blur(7px);
         transform: translateX(18px);
@@ -2465,11 +2460,10 @@
     .sidebar-right:hover {
         box-shadow: 0 0 13px 7px #0000003c;
         transform: translateX(0px);
+        transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04),  opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45;
         transition-delay: 0.1s;
         opacity: 1;
     }
-
-
 
     .sidebar-right::before {
         content: '';

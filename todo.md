@@ -374,3 +374,4 @@ cmd 0 reset zoom level
 memory / notes center
 
 app pin folders
+
