@@ -8,6 +8,8 @@
     import UserMods from './components/UserMods.svelte'
     import Excalidraw from './components/Excalidraw.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
+    import CertificateMonitor from './components/CertificateMonitor.svelte'
+    import SecurityIndicator from './components/SecurityIndicator.svelte'
     import { onMount, untrack } from 'svelte'
     import data from './data.svelte.js'
 
@@ -18,7 +20,7 @@
         console.log('screen control error', screen)
    })
 
-   // handle permission change
+    // handle permission change
     // navigator.permissions.query({name:'window-management'})
     // .then((status) => {
     //     // Do what you need with the permission state.
@@ -229,7 +231,8 @@
     let hoverTimeout = null
     let hovercardPosition = $state({ x: 0, y: 0 })
     let isTrashItemHover = $state(false)
-    let contextMenu = $state({ visible: false, x: 0, y: 0, tab: null })
+    let contextMenu = $state({ visible: false, x: 0, y: 0, tab: null, index: null })
+    let faviconMenu = $state({ visible: false, x: 0, y: 0, tab: null, index: null })
     let hovercardCheckInterval = null
     let isDragEnabled = $state(true)
     let hovercardRecentlyActive = $state(false)
@@ -255,6 +258,7 @@
     let dataSaver = $state(false)
     let batterySaver = $state(false)
     let secondScreenActive = $state(false)
+    let certificateMonitorVisible = $state(false)
     
     // Window resize state for performance optimization
     let isWindowResizing = $state(false)
@@ -430,7 +434,7 @@
             shouldFocus: true
         }
         tabs.push(newTab)
-        // activeTabIndex = tabs.length - 1 // Switch to the new tab
+        activeTabIndex = tabs.length - 1 // Switch to the new tab immediately
         setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
     }
 
@@ -454,6 +458,7 @@
             event.stopImmediatePropagation()
             handleZoomReset()
         }
+
     }
 
     function handleZoomReset() {
@@ -491,7 +496,7 @@
     }
 
     function openTab(tab, index) {
-        console.log('Opening tab:', tab)
+        console.log('Opening tab:', $state.snapshot(tab))
         activeTabIndex = index
 
         tab.frame?.scrollIntoView({ 
@@ -504,13 +509,16 @@
         if (event) event.stopPropagation()
         if (tab.pinned) return // Don't close pinned tabs
         
+        const isLastTab = tabs.length === 1
+        
         // If closing the last tab, open a new tab first
-        if (tabs.length === 1) {
+        if (isLastTab) {
             openNewTab()
         }
         
         // Create placeholder for closed tab to maintain spacing (only from tab bar close button)
-        if (createPlaceholder) {
+        // Don't create placeholder when closing the last tab since we immediately create a new one
+        if (createPlaceholder && !isLastTab) {
             closedTabPlaceholderCount++
         }
         
@@ -584,6 +592,10 @@
             event.preventDefault()
             hideContextMenu()
         }
+        if (faviconMenu.visible) {
+            event.preventDefault()
+            hideFaviconMenu()
+        }
     }
 
     function reloadTab (tab) {
@@ -595,6 +607,7 @@
             frame.src = tab.url
         }
         hideContextMenu()
+        hideFaviconMenu()
     }
 
     function goBack() {
@@ -640,6 +653,7 @@
             tabs[tabIndex].pinned = !tabs[tabIndex].pinned
         }
         hideContextMenu()
+        hideFaviconMenu()
     }
 
     function toggleMuteTab(tab) {
@@ -652,6 +666,7 @@
             }
         }
         hideContextMenu()
+        hideFaviconMenu()
     }
 
     function closeTabFromMenu(tab) {
@@ -663,6 +678,7 @@
             }
         }
         hideContextMenu()
+        hideFaviconMenu()
     }
 
     function setupIntersectionObserver() {
@@ -1189,6 +1205,7 @@
         console.log('Selected partition:', partition, 'for tab:', tab.id)
         tab.partition = partition
         hideContextMenu()
+        hideFaviconMenu()
     }
 
     async function copyTabUrl(tab) {
@@ -1206,6 +1223,7 @@
             document.body.removeChild(textArea)
         }
         hideContextMenu()
+        hideFaviconMenu()
     }
 
     function toggleResourcesSidebar() {
@@ -1590,7 +1608,7 @@
         console.log('=== History Debug ===')
         console.log('Current URL: block: ' + block, window.location.href)
         console.log('History length:', window.history.length)
-        console.log('activetab', tabs[activeTabIndex])
+        console.log('activetab', $state.snapshot(tabs[activeTabIndex]))
         try {
             console.log('Current state:', window.history.state)
         } catch (e) {
@@ -1639,12 +1657,244 @@
 
         window.onpopstate = handleShellNavigation    
     })
+
+    function handleFaviconMousedown(event, tab, index) {
+        event.preventDefault()
+        event.stopPropagation()
+        
+        // Close context menu if open
+        if (contextMenu.visible) {
+            hideContextMenu()
+        }
+        
+        // Prevent opening a second favicon menu if one is already visible
+        if (faviconMenu.visible) {
+            return
+        }
+        
+        // Disable drag while favicon menu is open
+        isDragEnabled = false
+        
+        const rect = event.target.getBoundingClientRect()
+        faviconMenu = {
+            visible: true,
+            x: rect.left + rect.width / 2,
+            y: rect.bottom + 5,
+            tab: tab,
+            index: index
+        }
+    }
+
+    function hideFaviconMenu() {
+        faviconMenu = { visible: false, x: 0, y: 0, tab: null, index: null }
+        // Re-enable drag when favicon menu closes
+        isDragEnabled = true
+    }
+
+    function toggleCertificateMonitor() {
+        certificateMonitorVisible = !certificateMonitorVisible
+        hideContextMenu()
+        hideFaviconMenu()
+    }
 </script>
 
 {#snippet trashIcon()}
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
         <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
     </svg>
+{/snippet}
+
+{#snippet globeIcon()}
+    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" class="w-4 h-4">
+        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+    </svg>
+{/snippet}
+
+{#snippet newTabIcon()}
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </svg>
+{/snippet}
+
+{#snippet tabContextMenu(menu, onHide)}
+    <div class="context-menu-scrim" 
+         role="button"
+         tabindex="0"
+         onmousedowncapture={onHide}
+         oncontextmenu={(e) => { e.preventDefault(); onHide(); }}></div>
+    
+    <div class="context-menu" 
+         role="menu"
+         tabindex="0"
+         style="left: {menu.x}px; top: {menu.y}px;"
+         onclick={(e) => e.stopPropagation()}
+         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+         oncontextmenu={(e) => e.preventDefault()}>
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onmouseup={() => reloadTab(menu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reloadTab(menu.tab) } }}>
+            <span class="context-menu-icon">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+            </span>
+            <span>Reload</span>
+        </div>
+        
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onmouseup={toggleCertificateMonitor}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCertificateMonitor() } }}>
+            <span class="context-menu-icon">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                </svg>
+            </span>
+            <span>Certificate Info</span>
+        </div>
+        
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onmouseup={() => togglePinTab(menu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinTab(menu.tab) } }}>
+            <span class="context-menu-icon">
+                {#if menu.tab.pinned}
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                    </svg>
+                {:else}
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                    </svg>
+                {/if}
+            </span>
+            <span>{menu.tab.pinned ? 'Unpin' : 'Pin'} Tab</span>
+        </div>
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onmouseup={() => toggleMuteTab(menu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(menu.tab) } }}>
+            <span class="context-menu-icon">
+                {#if menu.tab.muted}
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.59-.79-1.59-1.76V9.51c0-.97.71-1.76 1.59-1.76h2.24Z" />
+                    </svg>
+                {:else}
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.59-.79-1.59-1.76V9.51c0-.97.71-1.76 1.59-1.76h2.24Z" />
+                    </svg>
+                {/if}
+            </span>
+            <span>{menu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
+        </div>
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onmouseup={() => { menu.tab.hibernated = !menu.tab.hibernated; onHide(); }}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); menu.tab.hibernated = !menu.tab.hibernated; onHide(); } }}>
+            <span class="context-menu-icon">
+                {#if menu.tab.hibernated}
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+                    </svg>
+                {:else}
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+                    </svg>
+                {/if}
+            </span>
+            <span>{menu.tab.hibernated ? 'Wake Up' : 'Hibernate'}</span>
+        </div>
+
+        <div class="context-menu-item has-submenu" 
+             role="menuitem"
+             tabindex="0">
+            <span class="context-menu-icon">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                </svg>
+            </span>
+            <span>Change Container</span>
+            <span class="submenu-arrow">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+            </span>
+            <div class="context-submenu">
+                {#each partitions as partition}
+                    <div class="context-submenu-item" 
+                         class:active={menu.tab?.partition === partition}
+                         role="menuitem"
+                         tabindex="0"
+                         onmouseup={() => selectPartition(partition, menu.tab)}
+                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPartition(partition, menu.tab) } }}>
+                        <span class="partition-icon">
+                            {#if partition.startsWith('persist')}
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                                </svg>
+                            {:else}
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5 10 3.75 16.25 13.5h-12.5Z" />
+                                </svg>
+                            {/if}
+                        </span>
+                        <span>{partition}</span>
+                        {#if menu.tab?.partition === partition}
+                            <span class="checkmark">•</span>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+        </div>
+
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onmouseup={() => copyTabUrl(menu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyTabUrl(menu.tab) } }}>
+            <span class="context-menu-icon">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 7.5V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.057 1.123-.08M15.75 18H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08M15.75 18.75v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5A3.375 3.375 0 0 0 6.375 7.5H5.25m11.9-3.664A2.251 2.251 0 0 0 15 2.25h-1.5a2.251 2.251 0 0 0-2.15 1.586m5.8 0c.065.21.1.433.1.664v.75h-6V4.5c0-.231.035-.454.1-.664M6.75 7.5H4.875c-.621 0-1.125.504-1.125 1.125v9.75c0 .621.504 1.125 1.125 1.125h.75m2.25 0H9a2.25 2.25 0 0 0 2.25-2.25v-.75" />
+                </svg>
+            </span>
+            <span>Copy URL</span>
+        </div>
+
+        <div class="context-menu-item" 
+             role="menuitem"
+             tabindex="0"
+             onmouseup={() => {}}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
+            <span class="context-menu-icon">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+                </svg>
+            </span>
+            <span>Take Screenshot</span>
+        </div>
+
+        <div class="context-menu-separator"></div>
+
+        <div class="context-menu-item danger" 
+             role="menuitem"
+             tabindex="0"
+             onmouseup={() => closeTabFromMenu(menu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTabFromMenu(menu.tab) } }}>
+            <span class="context-menu-icon">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+            </span>
+            <span>Close Tab</span>
+        </div>
+    </div>
 {/snippet}
 
 <svelte:window
@@ -1671,6 +1921,7 @@
                     class:active={i===activeTabIndex} 
                     class:hovered={tab.id === hoveredTab?.id}
                     class:pinned={tab.pinned}
+                    class:menu-open={(contextMenu.visible && contextMenu.tab?.id === tab.id) || (faviconMenu.visible && faviconMenu.tab?.id === tab.id)}
                     role="tab"
                     tabindex="0"
                     onclick={() => openTab(tab, i)}
@@ -1689,20 +1940,32 @@
                                     stroke-linecap="round"/>
                             </svg>
                         {/if}
-                        {#if tab.favicon || tab.pinned}
-                            <div class="favicon-wrapper">
-                                {#if tab.favicon}
-                                    <img src={tab.favicon} alt="favicon" class="favicon" />
-                                {/if}
-                                {#if tab.pinned}
-                                    <div class="pin-icon">
-                                        <svg fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2a1 1 0 0 1 2 0v2h6V2a1 1 0 0 1 2 0v2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v6a1 1 0 0 1-1 1h-2v3a1 1 0 0 1-2 0v-3H8a1 1 0 0 1-1-1V9H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1z" />
-                                        </svg>
-                                    </div>
-                                {/if}
-                            </div>
-                        {/if}
+                                                <div class="favicon-wrapper">
+                                {#if tab.certificateError || tab.hasSecurityWarning || tab.mixedContent || tab.securityState === 'mixed' || (tab.securityState === 'insecure' && tab.url?.startsWith('https:'))}
+                                    <button type="button" class="favicon-button" onmousedown={(e) => handleFaviconMousedown(e, tab, i)}>
+                                        <SecurityIndicator {tab} size="small" />
+                                    </button>
+                                {:else if tab.favicon}
+                                    <button type="button" class="favicon-button" onmousedown={(e) => handleFaviconMousedown(e, tab, i)}>
+                                        <img src={tab.favicon} alt="favicon" class="favicon" />
+                                    </button>
+                                {:else if tab.url === 'about:newtab'}
+                                    <button type="button" class="favicon-button" onmousedown={(e) => handleFaviconMousedown(e, tab, i)}>
+                                        {@render newTabIcon()}
+                                    </button>
+                                {:else}
+                                    <button type="button" class="favicon-button" onmousedown={(e) => handleFaviconMousedown(e, tab, i)}>
+                                        {@render globeIcon()}
+                                    </button>
+                            {/if}
+                            {#if tab.pinned}
+                                <div class="pin-icon">
+                                    <svg fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2a1 1 0 0 1 2 0v2h6V2a1 1 0 0 1 2 0v2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v6a1 1 0 0 1-1 1h-2v3a1 1 0 0 1-2 0v-3H8a1 1 0 0 1-1-1V9H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1z" />
+                                    </svg>
+                                </div>
+                            {/if}
+                        </div>
                         <span class="tab-title"> {#if tab.audioPlaying && !tab.muted}
                             🔊 &nbsp;
                         {:else if tab.muted}
@@ -1718,6 +1981,7 @@
             <button class="inline-new-tab-button" 
                 class:hidden={showFixedNewTabButton}
                 onclick={openNewTab}
+                onmousedown={openNewTab}
                 title="New Tab (⌘T)">
                 <span class="new-tab-icon">+</span>
             </button>
@@ -1726,7 +1990,7 @@
             {#each Array.from({length: closedTabPlaceholderCount}, (_, i) => i) as placeholder (placeholder)}
                 <li class="tab-container tab-placeholder">
                     <div class="tab">
-                        <span class="tab-title">...</span>
+                        <!-- Completely empty for transparent placeholder -->
                     </div>
                 </li>
             {/each}
@@ -1827,6 +2091,7 @@
          role="button"
          tabindex="0"
          onclick={openNewTab}
+         onmousedown={openNewTab}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
          title="New Tab (⌘T)"
          style="{closed.length > 0 ? 'right: 174px;' : 'right: 133px;'}"
@@ -2007,170 +2272,11 @@
 </header>
 
 {#if contextMenu.visible && contextMenu.tab}
-    <div class="context-menu-scrim" 
-         role="button"
-         tabindex="0"
-         onmousedowncapture={hideContextMenu}
-         oncontextmenu={(e) => { e.preventDefault(); hideContextMenu(); }}></div>
-    
-    <div class="context-menu" 
-         role="menu"
-         tabindex="0"
-         style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
-         onclick={(e) => e.stopPropagation()}
-         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
-         oncontextmenu={(e) => e.preventDefault()}>
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => reloadTab(contextMenu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reloadTab(contextMenu.tab) } }}>
-            <span class="context-menu-icon">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-            </span>
-            <span>Reload</span>
-        </div>
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => togglePinTab(contextMenu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinTab(contextMenu.tab) } }}>
-            <span class="context-menu-icon">
-                {#if contextMenu.tab.pinned}
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
-                    </svg>
-                {:else}
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
-                    </svg>
-                {/if}
-            </span>
-            <span>{contextMenu.tab.pinned ? 'Unpin' : 'Pin'} Tab</span>
-        </div>
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => toggleMuteTab(contextMenu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(contextMenu.tab) } }}>
-            <span class="context-menu-icon">
-                {#if contextMenu.tab.muted}
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.59-.79-1.59-1.76V9.51c0-.97.71-1.76 1.59-1.76h2.24Z" />
-                    </svg>
-                {:else}
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.59-.79-1.59-1.76V9.51c0-.97.71-1.76 1.59-1.76h2.24Z" />
-                    </svg>
-                {/if}
-            </span>
-            <span>{contextMenu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
-        </div>
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => { contextMenu.tab.hibernated = !contextMenu.tab.hibernated; hideContextMenu(); }}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); contextMenu.tab.hibernated = !contextMenu.tab.hibernated; hideContextMenu(); } }}>
-            <span class="context-menu-icon">
-                {#if contextMenu.tab.hibernated}
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-                    </svg>
-                {:else}
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
-                    </svg>
-                {/if}
-            </span>
-            <span>{contextMenu.tab.hibernated ? 'Wake Up' : 'Hibernate'}</span>
-        </div>
+    {@render tabContextMenu(contextMenu, hideContextMenu)}
+{/if}
 
-                <div class="context-menu-item has-submenu" 
-             role="menuitem"
-             tabindex="0">
-            <span class="context-menu-icon">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-                </svg>
-            </span>
-            <span>Change Container</span>
-            <span class="submenu-arrow">
-                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                </svg>
-            </span>
-            <div class="context-submenu">
-                {#each partitions as partition}
-                    <div class="context-submenu-item" 
-                         class:active={contextMenu.tab?.partition === partition}
-                         role="menuitem"
-                         tabindex="0"
-                         onmouseup={() => selectPartition(partition, contextMenu.tab)}
-                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPartition(partition, contextMenu.tab) } }}>
-                        <span class="partition-icon">
-                            {#if partition.startsWith('persist')}
-                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-                                </svg>
-                            {:else}
-                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5 10 3.75 16.25 13.5h-12.5Z" />
-                                </svg>
-                            {/if}
-                        </span>
-                        <span>{partition}</span>
-                        {#if contextMenu.tab?.partition === partition}
-                            <span class="checkmark">•</span>
-                        {/if}
-                    </div>
-                {/each}
-            </div>
-        </div>
-
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => copyTabUrl(contextMenu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyTabUrl(contextMenu.tab) } }}>
-            <span class="context-menu-icon">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 7.5V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.057 1.123-.08M15.75 18H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08M15.75 18.75v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5A3.375 3.375 0 0 0 6.375 7.5H5.25m11.9-3.664A2.251 2.251 0 0 0 15 2.25h-1.5a2.251 2.251 0 0 0-2.15 1.586m5.8 0c.065.21.1.433.1.664v.75h-6V4.5c0-.231.035-.454.1-.664M6.75 7.5H4.875c-.621 0-1.125.504-1.125 1.125v9.75c0 .621.504 1.125 1.125 1.125h.75m2.25 0H9a2.25 2.25 0 0 0 2.25-2.25v-.75" />
-                </svg>
-            </span>
-            <span>Copy URL</span>
-        </div>
-
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => {}}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
-            <span class="context-menu-icon">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-                </svg>
-            </span>
-            <span>Take Screenshot</span>
-        </div>
-
-        <div class="context-menu-separator"></div>
-
-        <div class="context-menu-item danger" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => closeTabFromMenu(contextMenu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTabFromMenu(contextMenu.tab) } }}>
-            <span class="context-menu-icon">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-            </span>
-            <span>Close Tab</span>
-        </div>
-    </div>
+{#if faviconMenu.visible && faviconMenu.tab}
+    {@render tabContextMenu(faviconMenu, hideFaviconMenu)}
 {/if}
 
 {#if hoveredTab}
@@ -2317,7 +2423,7 @@
     {#if viewMode === 'canvas'}
         <Excalidraw tabs={tabs} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} {getEnabledUserMods} />
     {:else if viewMode === 'reading'}
-        {#each tabs as tab (tab.id)}
+        {#each tabs as tab, tabIndex (tab.id)}
             {#if tab.url === 'about:newtab'}
                 <div class="frame reading-mode {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
                     {#key origin(tab.url)}
@@ -2337,13 +2443,13 @@
                             </div>
                         {/key}
                         
-                        <Frame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <Frame tab={tabs[tabIndex]} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
             {/if}
         {/each}
     {:else}
-        {#each tabs as tab (tab.id)}
+        {#each tabs as tab, tabIndex (tab.id)}
             {#if tab.url === 'about:newtab'}
                 <div class="frame {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
                     {#key origin(tab.url)}
@@ -2363,7 +2469,7 @@
                             </div>
                         {/key}
                         
-                        <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <Frame tab={tabs[tabIndex]} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
             {/if}
@@ -2373,6 +2479,12 @@
     
 </div>
 
+
+<CertificateMonitor 
+    {tabs} 
+    {activeTabIndex} 
+    bind:visible={certificateMonitorVisible} 
+/>
 
 <!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->
 <div class="sidebar-right" role="region" >

@@ -12,6 +12,7 @@
 
 <script>
     import { untrack } from 'svelte'
+    import SSLErrorPage from './SSLErrorPage.svelte'
     // import { fade } from 'svelte/transition'
 
     let {
@@ -74,8 +75,150 @@
         }
     }
 
+    // Check if an error code represents a certificate issue
+    function isCertificateError(errorCode) {
+        if (!errorCode) return false
+        
+        const error = errorCode.toString()
+        
+        // Check for any ERR_SSL_* or ERR_CERT_* prefix (handles both prefixed and non-prefixed)
+        return error.includes('ERR_SSL_') || 
+               error.includes('ERR_CERT_') || 
+               error.includes('net::ERR_SSL_') || 
+               error.includes('net::ERR_CERT_')
+    }
+
+    // Set certificate error on tab
+    function setCertificateError(tab, errorCode, url) {
+        const humanReadableError = getCertificateErrorDescription(errorCode)
+        
+        tab.certificateError = {
+            code: errorCode,
+            text: humanReadableError,
+            url: url,
+            timestamp: Date.now()
+        }
+        
+        tab.hasSecurityWarning = true
+        
+        // Re-evaluate security state (will be set to 'insecure' due to certificate error)
+        evaluateSecurityState(tab)
+        
+        console.warn(`🔒 Certificate error detected for ${url}: ${errorCode} - ${humanReadableError}`)
+    }
+
+    // Clear certificate error from tab only if navigating to different URL
+    function clearCertificateError(tab, newUrl = null) {
+        if (tab.certificateError) {
+            // Only clear if we're navigating to a different URL
+            if (newUrl && newUrl !== tab.certificateError.url) {
+                delete tab.certificateError
+                tab.hasSecurityWarning = false
+                console.log(`🔒 Certificate error cleared - navigated from ${tab.certificateError.url} to ${newUrl}`)
+            } else if (!newUrl) {
+                // Force clear (for manual clearing)
+                delete tab.certificateError
+                tab.hasSecurityWarning = false
+                console.log(`🔒 Certificate error manually cleared for ${tab.url}`)
+            }
+        }
+    }
+
+    // Properly evaluate and set security state based on URL and certificate status
+    function evaluateSecurityState(tab) {
+        console.log(`🔒 Evaluating security state for ${tab.url}`)
+        console.log(`🔒 Certificate error present: ${!!tab.certificateError}`)
+        
+        if (!tab.url) {
+            tab.securityState = 'unknown'
+            console.log(`🔒 No URL - setting to unknown`)
+            return
+        }
+
+        try {
+            const url = new URL(tab.url)
+            console.log(`🔒 Protocol: ${url.protocol}`)
+            
+            // About pages are secure as they only run inside the browser
+            if (url.protocol === 'about:') {
+                tab.securityState = 'secure'
+                console.log(`🔒 About page - setting to SECURE`)
+                return
+            }
+            
+            // If there's a certificate error, it's insecure
+            if (tab.certificateError) {
+                tab.securityState = 'insecure'
+                console.log(`🔒 Certificate error exists - setting to INSECURE`)
+                return
+            }
+            
+            // HTTPS with no certificate errors = secure
+            if (url.protocol === 'https:') {
+                tab.securityState = 'secure'
+                console.log(`🔒 HTTPS with no cert errors - setting to SECURE`)
+                return
+            }
+            
+            // HTTP = insecure
+            if (url.protocol === 'http:') {
+                tab.securityState = 'insecure'
+                console.log(`🔒 HTTP - setting to INSECURE`)
+                return
+            }
+            
+            // Other protocols = unknown
+            tab.securityState = 'unknown'
+            console.log(`🔒 Other protocol - setting to unknown`)
+            
+        } catch (error) {
+            // Invalid URL
+            tab.securityState = 'unknown'
+            console.log(`🔒 Invalid URL - setting to unknown`)
+        }
+    }
+
+    // Get human-readable description for certificate errors
+    function getCertificateErrorDescription(errorCode) {
+        const descriptions = {
+            'ERR_CERT_DATE_INVALID': 'The certificate has expired or is not yet valid',
+            'ERR_CERT_COMMON_NAME_INVALID': 'The certificate is not valid for this domain',
+            'ERR_CERT_REVOKED': 'The certificate has been revoked',
+            'ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN': 'The certificate does not match the expected public key',
+            'ERR_SSL_VERSION_OR_CIPHER_MISMATCH': 'SSL/TLS version or cipher mismatch',
+            'ERR_CERT_AUTHORITY_INVALID': 'The certificate authority is not trusted',
+            'ERR_CERT_CONTAINS_ERRORS': 'The certificate contains errors',
+            'ERR_CERT_NO_REVOCATION_MECHANISM': 'The certificate has no revocation mechanism',
+            'ERR_CERT_UNABLE_TO_CHECK_REVOCATION': 'Unable to check certificate revocation status',
+            'ERR_CERT_INVALID': 'The certificate is invalid',
+            'ERR_CERT_WEAK_SIGNATURE_ALGORITHM': 'The certificate uses a weak signature algorithm',
+            'ERR_CERT_WEAK_KEY': 'The certificate uses a weak key',
+            'ERR_CERT_NAME_CONSTRAINT_VIOLATION': 'The certificate violates name constraints',
+            'ERR_CERT_VALIDITY_TOO_LONG': 'The certificate validity period is too long',
+            'ERR_CERTIFICATE_TRANSPARENCY_REQUIRED': 'Certificate transparency is required but not present',
+            'ERR_CERT_SYMANTEC_LEGACY': 'This certificate is from a legacy Symantec CA'
+        }
+        
+        return descriptions[errorCode] || `Certificate or SSL error: ${errorCode}`
+    }
+
     function handleEvent(eventName, tab, event) {
-        // console.log(eventName, tab, event)
+        console.log(eventName, tab, event)
+    }
+
+    function handleLoadAbort(tab, event) {
+        console.log('🚨 onloadabort', tab, event)
+        
+        // Check if this is a certificate error
+        if (event && event.reason) {
+            console.log(`🔍 Checking if "${event.reason}" is a certificate error...`)
+            if (isCertificateError(event.reason)) {
+                console.log(`🔒 CERTIFICATE ERROR DETECTED: ${event.reason}`)
+                setCertificateError(tab, event.reason, event.url || tab.url)
+            } else {
+                console.log(`ℹ️ Not a certificate error: ${event.reason}`)
+            }
+        }
     }
 
     function handleContentLoad(tab, event) {
@@ -112,13 +255,26 @@
     }
 
     function handleLoadStart(tab) {
-       tab.loading = true
+        tab.loading = true
+        
+        // Initialize security state if not already set
+        if (tab.securityState === undefined) {
+            tab.securityState = 'unknown'
+        }
+        
+        // Clear any previous certificate errors when starting a new navigation
+        clearCertificateError(tab)
     }
 
     function handleLoadStop(tab) {
         tab.loading = false
 
         tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
+        
+        // Evaluate security state based on current certificate status
+        evaluateSecurityState(tab)
+        
+        console.log(`🔒 Load stop for ${tab.url} - Security state: ${tab.securityState}, Has cert error: ${!!tab.certificateError}`)
         
         // Update title and capture screenshot after page loads
         setTimeout(async () => {
@@ -247,7 +403,8 @@ function setupContentScripts(frame) {
             overscroll-behavior-x: none;
         }`
                 }
-            },    
+            },
+
         {
             name: 'system-script',
             matches: ['<all_urls>', 'http://*/*', 'https://*/*'],
@@ -754,13 +911,27 @@ document.addEventListener('input', function(event) {
         }, allUrlsFilter)
 
         frame.request.onErrorOccurred.addListener((details) => {
-            // console.error('❌ Request Error:', {
-            //     requestId: details.requestId,
-            //     url: details.url,
-            //     error: details.error,
-            //     fromCache: details.fromCache,
-            //     ip: details.ip
-            // })
+            console.error('❌ Request Error:', {
+                requestId: details.requestId,
+                url: details.url,
+                error: details.error,
+                fromCache: details.fromCache,
+                ip: details.ip
+            })
+            
+            // Check if this is a certificate error
+            if (details.error) {
+                console.log(`🔍 Request error - checking if "${details.error}" is a certificate error...`)
+                if (isCertificateError(details.error)) {
+                    // ANY certificate error (main frame OR subresource) compromises the entire page
+                    console.log(`🔒 CERTIFICATE ERROR DETECTED: ${details.error} for ${details.url}`)
+                    console.log(`🚨 SECURITY COMPROMISED: Certificate error in ANY resource makes entire page insecure`)
+                    const errorCode = details.error.replace('net::', '')
+                    setCertificateError(tab, errorCode, details.url)
+                } else {
+                    console.log(`ℹ️ Not a certificate error: ${details.error}`)
+                }
+            }
         }, allUrlsFilter)
     }
 
@@ -1183,7 +1354,7 @@ document.addEventListener('input', function(event) {
             controlledFrame.oncontentresize = e => handleEvent('oncontentresize',tab, e)
             controlledFrame.ondialog = e => handleEvent('ondialog',tab, e)
             controlledFrame.onexit = e => handleEvent('onexit',tab, e)
-            controlledFrame.onloadabort = e => handleEvent('onloadabort',tab, e)
+            controlledFrame.onloadabort = e => handleLoadAbort(tab, e)
             controlledFrame.onloadredirect = e => handleEvent('onloadredirect',tab, e)
             //     onloadredirect={(e) => { 
             //         handleEvent('onloadredirect',tab, e)
@@ -1230,6 +1401,13 @@ document.addEventListener('input', function(event) {
     })
 
     function detach () {
+        // Guard against undefined tab during component cleanup
+        if (!tab || !tab.id) {
+            return {
+                duration: 0
+            }
+        }
+        
         let controlledFrame = instances.get(tab.id)
 
         if (controlledFrame) {
@@ -1238,10 +1416,10 @@ document.addEventListener('input', function(event) {
             backgroundFrames.moveBefore(controlledFrame, anchorFrame)
         }
 
-		return {
-			duration: 0
-		}
-	}
+        return {
+            duration: 0
+        }
+    }
 </script>
 
  {#key tab.partition}
@@ -1252,10 +1430,19 @@ document.addEventListener('input', function(event) {
         
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
+        class:certificate-error={tab.certificateError}
         id="tab_{tab.id}"
         class="frame">
 
         <div class="hidden" bind:this={anchor}></div>
+
+        <!-- <div class="error-page-wrapper"> -->
+            {#if tab.certificateError}
+                <SSLErrorPage
+                    {tab}
+                />
+            {/if}
+        <!-- </div> -->
     </div>
 {/key}
 
@@ -1341,5 +1528,8 @@ loading="eager"
         width: 100%;
         height: 100%;
         display: block;
+    }
+    :global(.certificate-error > .frame-instance:not(.ssl-error)) {
+        display: none;
     }
 </style>
