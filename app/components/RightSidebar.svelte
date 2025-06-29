@@ -6,7 +6,7 @@
     <div class="sidebar-header">
         <h3 class="sidebar-title">{title}</h3>
         <div class="sidebar-controls">
-            <div class="sidebar-nav-buttons">
+            <div class="sidebar-nav-buttons" class:multiple={openSidebars.size > 1}>
                 <button class="sidebar-nav-button" title="Add" aria-label="Add">
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -51,7 +51,7 @@
                 </button>
             </div>
             
-            <button class="close-button" onmousedown={onClose} title="Close {title}">
+            <button class="close-button" onmousedown={onClose} title="Close {title}" aria-label="Close {title}">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -200,6 +200,10 @@
     .sidebar :global(.h-4) {
         height: 16px;
     }
+
+    .multiple > .sidebar-nav-button {
+        display: none;
+    } 
 
     /* Global styles for section titles used by both Resources and Settings */
     .sidebar :global(.section-title) {

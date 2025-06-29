@@ -14,8 +14,9 @@
 
     const resourceSections = [
         { id: 'requested', title: 'Requested' },
-        { id: 'used', title: 'Used' },
+        { id: 'mocked', title: 'Mocked' },
         { id: 'blocked', title: 'Blocked' },
+        { id: 'used', title: 'Used' },
         { id: 'unused', title: 'Unused' },
         { id: 'archived', title: 'Archived' }
     ]
@@ -24,6 +25,7 @@
     let collapsedSections = $state({
         requested: false,
         used: false,
+        mocked: false,
         blocked: false,
         unused: true,
         archived: true
@@ -129,15 +131,26 @@
             ...resource,
             requester: resource.requester || 'example.com',
             explanation: resource.explanation || 'Required for core functionality',
-            status: resource.status || 'Requested'
+            status: resource.status || 'Requested',
+            requestType: resource.requestType || 'foreground'
         })),
         used: [
             { id: 'network', lastUsed: '2 minutes ago', status: 'Active' },
+            { id: 'ip', lastUsed: '2 minutes ago', status: 'Active' },
             { id: 'javascript', lastUsed: '5 minutes ago', status: 'Active' },
             { id: 'images', lastUsed: '1 minute ago', status: 'Active' },
             { id: 'sound', lastUsed: '3 minutes ago', status: 'Active' },
-            { id: 'local-storage', lastUsed: '10 minutes ago', status: 'Active' },
-            { id: 'server-storage', lastUsed: '10 minutes ago', status: 'Active' }
+            { id: 'notifications', lastUsed: '10 minutes ago', status: 'Active' },
+            { id: 'background-sync', lastUsed: '10 minutes ago', status: 'Active' },
+            { id: 'local-storage', lastUsed: '10 minutes ago', status: 
+            'Active' },
+            { id: 'server-storage', lastUsed: '10 minutes ago', status: 
+            'Active' }
+        ],
+        mocked: [
+            { id: 'location', lastUsed: '5 minutes ago', status: 'Mocked', mockValue: 'San Francisco, CA' },
+            { id: 'camera', lastUsed: '8 minutes ago', status: 'Mocked', mockValue: 'Webcam test image' },
+            { id: 'microphone', lastUsed: '12 minutes ago', status: 'Mocked', mockValue: 'Silent audio stream' }
         ],
         blocked: [
             { id: 'intrusive-ads', lastUsed: 'Blocked', status: 'Blocked' },
@@ -170,7 +183,7 @@
                     {#if !collapsedSections[section.id]}
                         <div class="resource-cards">
                             {#each resourceData[section.id] as resource (resource.id)}
-                                {@const resourceType = resourceTypes[resource.id]}
+                                {@const resourceType = resourceTypes[resource.id] || { name: resource.id, icon: '❓', description: 'Unknown resource type' }}
                                 <div class="resource-card">
                                     <div class="resource-header">
                                         <span class="resource-icon">{@html resourceType.icon}</span>
@@ -188,12 +201,27 @@
                                             <span class="last-used-label">Last used:</span>
                                             <span class="last-used-time">{resource.lastUsed}</span>
                                         </div>
+                                        {#if resource.mockValue}
+                                            <div class="resource-mock-value">
+                                                <span class="mock-value-label">Mock value:</span>
+                                                <span class="mock-value-text">{resource.mockValue}</span>
+                                            </div>
+                                        {/if}
                                     </div>
                                     {#if section.id === 'requested'}
                                         <div class="resource-request-info">
                                             <div class="requester-info">
                                                 <span class="requester-label">Requested by:</span>
                                                 <span class="requester-name">{resource.requester}</span>
+                                            </div>
+                                            <div class="request-type-info">
+                                                <span class="request-type-label">Access type:</span>
+                                                <span class="request-type-value {resource.requestType}">
+                                                    {resource.requestType === 'foreground' ? 'Foreground only' : 
+                                                     resource.requestType === 'background' ? 'Background only' : 
+                                                     resource.requestType === 'both' ? 'Foreground and background' : 
+                                                     resource.requestType}
+                                                </span>
                                             </div>
                                             <div class="explanation-info">
                                                 <span class="explanation-text">{resource.explanation}</span>
@@ -286,6 +314,10 @@
         color: #16a34a;
     }
 
+    .mocked .section-title {
+        color: #8b5cf6;
+    }
+
     .unused .section-title {
         color: #6b7280;
     }
@@ -363,6 +395,7 @@
         height: 5px;
         border-radius: 50%;
         flex-shrink: 0;
+        margin-top: -1px;
     }
 
     .active .status-indicator {
@@ -384,6 +417,10 @@
 
     .unused .unavailable .status-indicator {
         background-color: #eab308;
+    }
+
+    .mocked .status-indicator {
+        background-color: #8b5cf6;
     }
 
     .not-checked .status-indicator {
@@ -424,6 +461,22 @@
 
     .last-used-time {
         color: rgba(255, 255, 255, 0.55);
+    }
+
+    .resource-mock-value {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+    }
+
+    .mock-value-label {
+        color: rgba(255, 255, 255, 0.35);
+    }
+
+    .mock-value-text {
+        color: rgba(139, 92, 246, 0.8);
+        font-weight: 500;
     }
 
     .empty-state {
@@ -484,6 +537,37 @@
         font-size: 10px;
         color: rgba(255, 255, 255, 0.6);
         font-weight: 500;
+    }
+
+    .request-type-info {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-bottom: 4px;
+    }
+
+    .request-type-label {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.35);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+
+    .request-type-value {
+        font-size: 10px;
+        font-weight: 500;
+    }
+
+    .request-type-value.foreground {
+        color: rgba(34, 197, 94, 0.8);
+    }
+
+    .request-type-value.background {
+        color: rgba(251, 191, 36, 0.8);
+    }
+
+    .request-type-value.both {
+        color: rgba(168, 85, 247, 0.8);
     }
 
     .explanation-info {

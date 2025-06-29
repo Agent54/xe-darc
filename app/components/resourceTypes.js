@@ -1,4 +1,15 @@
 export default {
+    ip: {
+        name: 'IP Address',
+        icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+        </svg>`,
+        description: 'IP address and network information',
+        availability: async () => {
+            // todo: add ip masking and vpn location integration
+            return { available: true, error: null }
+        }
+    },
     location: {
         name: 'Location',
         icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
