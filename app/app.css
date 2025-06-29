@@ -1294,20 +1294,30 @@ ul::-webkit-scrollbar {
 }
 
 .tab-container.tab-placeholder {
-    opacity: 0.3;
+    opacity: 0;
     pointer-events: none;
     background-color: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    transition: opacity 0.2s ease-out;
+    border: none;
+    transition:
+        width 0.2s ease-in,
+        min-width 0.2s ease-in,
+        max-width 0.2s ease-in,
+        flex-basis 0.2s ease-in;
 }
 
-.tab-container.tab-placeholder .tab {
-    color: rgba(255, 255, 255, 0.3);
+.tab-container.tab-placeholder.collapsing {
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    flex-basis: 0 !important;
+    overflow: hidden;
+    transition:
+    width 0.2s ease-in,
+    min-width 0.2s ease-in,
+    max-width 0.2s ease-in,
+    flex-basis 0.2s ease-in;
 }
 
-.tab-container.tab-placeholder:hover {
-    background-color: rgba(255, 255, 255, 0.02);
-}
 
 .tab-spacer {
     height: 25px;

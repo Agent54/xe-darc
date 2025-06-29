@@ -1,5 +1,6 @@
 <script>
     // import { flip } from 'svelte/animate'
+    import { scale } from 'svelte/transition'
 
     import NewTab from './components/NewTab.svelte'
     import Frame from './components/Frame.svelte'
@@ -248,6 +249,7 @@
     // Placeholder state for closed tabs
     let closedTabPlaceholderCount = $state(0)
     let tabBarHovered = $state(false)
+    let collapsingPlaceholders = $state(false)
 
     let viewMode = $state('default')
     let lastUsedViewMode = $state('canvas')
@@ -542,7 +544,20 @@
 
     function clearAllClosedTabs() {
         closed = []
-        closedTabPlaceholderCount = 0 // Clear placeholders too
+        collapseAndRemovePlaceholders()
+    }
+
+    function collapseAndRemovePlaceholders() {
+        if (closedTabPlaceholderCount === 0) return
+        
+        // Trigger CSS width transition to 0
+        collapsingPlaceholders = true
+        
+        // Remove from DOM after transition completes
+        setTimeout(() => {
+            closedTabPlaceholderCount = 0
+            collapsingPlaceholders = false
+        }, 300) // Match CSS transition duration
     }
 
     function handleTabBarMouseEnter() {
@@ -554,7 +569,7 @@
         // Clear placeholders when leaving tab bar area
         setTimeout(() => {
             if (!tabBarHovered) {
-                closedTabPlaceholderCount = 0
+                collapseAndRemovePlaceholders()
             }
         }, 100) // Small delay to prevent flicker
     }
@@ -1696,6 +1711,8 @@
         hideContextMenu()
         hideFaviconMenu()
     }
+
+
 </script>
 
 {#snippet trashIcon()}
@@ -1711,8 +1728,11 @@
 {/snippet}
 
 {#snippet newTabIcon()}
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="new-tab-icon w-4 h-4">
+        <!-- central plus -->
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12M6 12h12" />
+        <!-- subtle rays -->
+        <path stroke-linecap="round" d="M12 3v2M12 19v2M3 12h2M19 12h2M5.8 5.8l1.3 1.3M16.9 16.9l1.3 1.3M5.8 18.2l1.3-1.3M16.9 7.1l1.3-1.3" />
     </svg>
 {/snippet}
 
@@ -1819,7 +1839,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
                 </svg>
             </span>
-            <span>Change Container</span>
+            <span>Container: {menu.tab?.partition || 'default'}</span>
             <span class="submenu-arrow">
                 <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
@@ -1988,7 +2008,7 @@
             
             <!-- Placeholders for recently closed tabs -->
             {#each Array.from({length: closedTabPlaceholderCount}, (_, i) => i) as placeholder (placeholder)}
-                <li class="tab-container tab-placeholder">
+                <li class="tab-container tab-placeholder" class:collapsing={collapsingPlaceholders}>
                     <div class="tab">
                         <!-- Completely empty for transparent placeholder -->
                     </div>
@@ -2321,34 +2341,6 @@
                         <div class="hovercard-title">{hoveredTab.title || 'Untitled'}</div>
                         <div class="hovercard-url">{hoveredTab.url}</div>
                     </div>
-                    {#if hoveredTab.url !== 'about:newtab' && !isTrashItemHover}
-                        <div class="partition-dropdown">
-                            <div class="partition-button" title="Select Partition">
-                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3-12v3.75M21 12v3.75M21 15v3.75M21 18v3.75M9 9h3.75m3-6v3.75M21 3v3.75" />
-                                </svg>
-                            </div>
-                            <div class="partition-menu">
-                                <div class="partition-menu-header">Data Container</div>
-                                {#each partitions as partition}
-                                    <div class="partition-menu-item" 
-                                         role="button"
-                                         tabindex="0"
-                                         onclick={() => selectPartition(partition, hoveredTab)}
-                                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPartition(partition, hoveredTab) } }}>
-                                        <span class="partition-icon">
-                                            {#if partition.startsWith('persist')}
-                                                💾
-                                            {:else}
-                                                ⚡
-                                            {/if}
-                                        </span>
-                                        <span>{partition}</span>
-                                    </div>
-                                {/each}
-                            </div>
-                        </div>
-                    {/if}
                 </div>
             </div>
             {#if hoveredTab.screenshot}

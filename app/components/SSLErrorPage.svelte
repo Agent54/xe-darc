@@ -74,7 +74,7 @@
         justify-content: center;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
         color: #ffffff;
-        z-index: 1000;
+        z-index: 1;
     }
     
     .error-container {
