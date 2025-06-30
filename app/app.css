@@ -1299,10 +1299,10 @@ ul::-webkit-scrollbar {
     background-color: rgba(255, 255, 255, 0.02);
     border: none;
     transition:
-        width 0.2s ease-in,
-        min-width 0.2s ease-in,
-        max-width 0.2s ease-in,
-        flex-basis 0.2s ease-in;
+        width 0.15s ease-in-out,
+        min-width 0.15s ease-in-out,
+        max-width 0.15s ease-in-out,
+        flex-basis 0.15s ease-in-out;
 }
 
 .tab-container.tab-placeholder.collapsing {
@@ -1312,10 +1312,10 @@ ul::-webkit-scrollbar {
     flex-basis: 0 !important;
     overflow: hidden;
     transition:
-    width 0.2s ease-in,
-    min-width 0.2s ease-in,
-    max-width 0.2s ease-in,
-    flex-basis 0.2s ease-in;
+        width 0.15s ease-in-out,
+        min-width 0.15s ease-in-out,
+        max-width 0.15s ease-in-out,
+        flex-basis 0.15s ease-in-out;
 }
 
 

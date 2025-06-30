@@ -1693,7 +1693,7 @@
         const rect = event.target.getBoundingClientRect()
         faviconMenu = {
             visible: true,
-            x: rect.left + rect.width / 2,
+            x: rect.left - rect.width / 2,
             y: rect.bottom + 5,
             tab: tab,
             index: index
