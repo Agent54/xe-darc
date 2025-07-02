@@ -2010,7 +2010,6 @@
             
             <button class="inline-new-tab-button" 
                 class:hidden={showFixedNewTabButton}
-                onclick={openNewTab}
                 onmousedown={openNewTab}
                 title="New Tab (⌘T)">
                 <span class="new-tab-icon">+</span>
@@ -2119,7 +2118,6 @@
     <div class="new-tab-button" 
          role="button"
          tabindex="0"
-         onclick={openNewTab}
          onmousedown={openNewTab}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
          title="New Tab (⌘T)"
