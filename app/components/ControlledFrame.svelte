@@ -11,6 +11,7 @@
 </script>
 
 <script>
+    import data from '../data.svelte.js'
     import { untrack } from 'svelte'
     import SSLErrorPage from './SSLErrorPage.svelte'
     // import { fade } from 'svelte/transition'
@@ -91,15 +92,19 @@
     // Set certificate error on tab
     function setCertificateError(tab, errorCode, url) {
         const humanReadableError = getCertificateErrorDescription(errorCode)
-        
-        tab.certificateError = {
+
+        const certificateError = {
             code: errorCode,
             text: humanReadableError,
             url: url,
             timestamp: Date.now()
         }
-        
-        tab.hasSecurityWarning = true
+
+        const origin = (new URL(url)).origin
+        data.origins[origin] ??= {}
+        data.origins[origin].certificateError = certificateError
+
+        tab.certificateError = certificateError
         
         // Re-evaluate security state (will be set to 'insecure' due to certificate error)
         evaluateSecurityState(tab)
@@ -107,73 +112,43 @@
         console.warn(`🔒 Certificate error detected for ${url}: ${errorCode} - ${humanReadableError}`)
     }
 
-    // Clear certificate error from tab only if navigating to different URL
-    function clearCertificateError(tab, newUrl = null) {
-        if (tab.certificateError) {
-            // Only clear if we're navigating to a different URL
-            if (newUrl && newUrl !== tab.certificateError.url) {
-                delete tab.certificateError
-                tab.hasSecurityWarning = false
-                console.log(`🔒 Certificate error cleared - navigated from ${tab.certificateError.url} to ${newUrl}`)
-            } else if (!newUrl) {
-                // Force clear (for manual clearing)
-                delete tab.certificateError
-                tab.hasSecurityWarning = false
-                console.log(`🔒 Certificate error manually cleared for ${tab.url}`)
-            }
-        }
-    }
-
     // Properly evaluate and set security state based on URL and certificate status
     function evaluateSecurityState(tab) {
         console.log(`🔒 Evaluating security state for ${tab.url}`)
         console.log(`🔒 Certificate error present: ${!!tab.certificateError}`)
-        
-        if (!tab.url) {
-            tab.securityState = 'unknown'
-            console.log(`🔒 No URL - setting to unknown`)
-            return
-        }
+        const url = new URL(tab.url)
 
+        data.origins[url.origin] ??= {}
+        
         try {
-            const url = new URL(tab.url)
+           
             console.log(`🔒 Protocol: ${url.protocol}`)
             
             // About pages are secure as they only run inside the browser
             if (url.protocol === 'about:') {
-                tab.securityState = 'secure'
-                console.log(`🔒 About page - setting to SECURE`)
-                return
-            }
-            
-            // If there's a certificate error, it's insecure
-            if (tab.certificateError) {
-                tab.securityState = 'insecure'
-                console.log(`🔒 Certificate error exists - setting to INSECURE`)
+                data.origins[url.origin].securityState = 'secure'
                 return
             }
             
             // HTTPS with no certificate errors = secure
             if (url.protocol === 'https:') {
-                tab.securityState = 'secure'
-                console.log(`🔒 HTTPS with no cert errors - setting to SECURE`)
+                data.origins[url.origin].securityState = 'secure'
                 return
             }
             
             // HTTP = insecure
             if (url.protocol === 'http:') {
-                tab.securityState = 'insecure'
-                console.log(`🔒 HTTP - setting to INSECURE`)
+                data.origins[url.origin].securityState = 'insecure'
                 return
             }
             
             // Other protocols = unknown
-            tab.securityState = 'unknown'
+            data.origins[url.origin].securityState = 'unknown'
             console.log(`🔒 Other protocol - setting to unknown`)
             
         } catch (error) {
             // Invalid URL
-            tab.securityState = 'unknown'
+            data.origins[url.origin].securityState = 'unknown'
             console.log(`🔒 Invalid URL - setting to unknown`)
         }
     }
@@ -207,14 +182,14 @@
     }
 
     function handleLoadAbort(tab, event) {
-        console.log('🚨 onloadabort', tab, event)
+        console.log('🚨 onloadabort', event)
         
         // Check if this is a certificate error
         if (event && event.reason) {
             console.log(`🔍 Checking if "${event.reason}" is a certificate error...`)
             if (isCertificateError(event.reason)) {
                 console.log(`🔒 CERTIFICATE ERROR DETECTED: ${event.reason}`)
-                setCertificateError(tab, event.reason, event.url || tab.url)
+                setCertificateError(event.reason, event.url || tab.url)
             } else {
                 console.log(`ℹ️ Not a certificate error: ${event.reason}`)
             }
@@ -256,23 +231,22 @@
 
     function handleLoadStart(tab) {
         tab.loading = true
-        
-        // Initialize security state if not already set
-        if (tab.securityState === undefined) {
-            tab.securityState = 'unknown'
-        }
-        
-        // Clear any previous certificate errors when starting a new navigation
-        clearCertificateError(tab)
+        // Evaluate security state based on current certificate status
+        evaluateSecurityState(tab)
     }
 
     function handleLoadStop(tab) {
         tab.loading = false
 
         tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
-        
-        // Evaluate security state based on current certificate status
-        evaluateSecurityState(tab)
+
+
+        if (data.origins[origin]?.certificateError) {
+            if (tab.url === data.origins[origin].certificateError.url) {
+                delete data.origins[origin]?.certificateError
+                console.log(`🔒 Certificate error cleared - navigated from ${tab.certificateError.url} to ${newUrl}`)
+            }
+        }
         
         console.log(`🔒 Load stop for ${tab.url} - Security state: ${tab.securityState}, Has cert error: ${!!tab.certificateError}`)
         

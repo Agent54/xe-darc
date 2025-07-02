@@ -1,5 +1,6 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
+    import data from '../data.svelte.js'
     
     let { 
         onClose, 

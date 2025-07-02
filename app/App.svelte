@@ -1,6 +1,5 @@
 <script>
     // import { flip } from 'svelte/animate'
-    import { scale } from 'svelte/transition'
 
     import NewTab from './components/NewTab.svelte'
     import Frame from './components/Frame.svelte'
@@ -13,7 +12,6 @@
     import SecurityIndicator from './components/SecurityIndicator.svelte'
     import { onMount, untrack } from 'svelte'
     import data from './data.svelte.js'
-
 
     const requestedResources = $state([])
 
@@ -40,7 +38,14 @@
         }
     )
 
-    const partitions = ['persist:1', 'persist:2', 'persist:3', 'ephemeral:1', 'ephemeral:2', 'ephemeral:3']
+    const partitions = [
+        'persist:1',
+        'persist:2',
+        'persist:3',
+        'ephemeral:1',
+        'ephemeral:2',
+        'ephemeral:3'
+    ]
 
     let closed = $state([
         // FIXME about: support
@@ -260,7 +265,7 @@
     let dataSaver = $state(false)
     let batterySaver = $state(false)
     let secondScreenActive = $state(false)
-    let certificateMonitorVisible = $state(false)
+    let certificateMonitorForTab = $state(null)
     
     // Window resize state for performance optimization
     let isWindowResizing = $state(false)
@@ -1706,13 +1711,15 @@
         isDragEnabled = true
     }
 
-    function toggleCertificateMonitor() {
-        certificateMonitorVisible = !certificateMonitorVisible
+    function toggleCertificateMonitor(tab) {
+        if (!certificateMonitorForTab) {
+            certificateMonitorForTab = tab
+        } else {
+            certificateMonitorForTab = null
+        }
         hideContextMenu()
         hideFaviconMenu()
     }
-
-
 </script>
 
 {#snippet trashIcon()}
@@ -1766,8 +1773,8 @@
         <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
-             onmouseup={toggleCertificateMonitor}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCertificateMonitor() } }}>
+             onmouseup={() => toggleCertificateMonitor(menu.tab)}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCertificateMonitor(menu.tab) } }}>
             <span class="context-menu-icon">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
@@ -1935,6 +1942,8 @@
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each tabs as tab, i (tab.id)}
+
+                {@const origin = (new URL(tab.url)).origin}
                 <li 
                     bind:this={tab.tabButton}
                     class="tab-container" 
@@ -1960,8 +1969,9 @@
                                     stroke-linecap="round"/>
                             </svg>
                         {/if}
-                                                <div class="favicon-wrapper">
-                                {#if tab.certificateError || tab.hasSecurityWarning || tab.mixedContent || tab.securityState === 'mixed' || (tab.securityState === 'insecure' && tab.url?.startsWith('https:'))}
+
+                        <div class="favicon-wrapper">    
+                            {#if data.origins[origin]?.certificateError || data.origins[origin]?.hasSecurityWarning || data.origins[origin]?.mixedContent || data.origins[origin]?.securityState === 'mixed' || (data.origins[origin]?.securityState === 'insecure' && tab.url?.startsWith('https:'))}
                                     <button type="button" class="favicon-button" onmousedown={(e) => handleFaviconMousedown(e, tab, i)}>
                                         <SecurityIndicator {tab} size="small" />
                                     </button>
@@ -2006,7 +2016,6 @@
                 <span class="new-tab-icon">+</span>
             </button>
             
-            <!-- Placeholders for recently closed tabs -->
             {#each Array.from({length: closedTabPlaceholderCount}, (_, i) => i) as placeholder (placeholder)}
                 <li class="tab-container tab-placeholder" class:collapsing={collapsingPlaceholders}>
                     <div class="tab">
@@ -2466,16 +2475,12 @@
                 {/key}
             {/if}
         {/each}
-    {/if}
-
-    
+    {/if}    
 </div>
 
 
 <CertificateMonitor 
-    {tabs} 
-    {activeTabIndex} 
-    bind:visible={certificateMonitorVisible} 
+    bind:certificateMonitorForTab={certificateMonitorForTab} 
 />
 
 <!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->

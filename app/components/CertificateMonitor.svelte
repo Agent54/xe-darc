@@ -1,25 +1,24 @@
 <script>
     import { fade } from 'svelte/transition'
+    import data from '../data.svelte.js'
     
     let {
-        tabs = [],
-        activeTabIndex = 0,
-        visible = $bindable(false)
+        certificateMonitorForTab = $bindable(null)
     } = $props()
     
-    // Get active tab's security info
-    let activeTab = $derived(tabs[activeTabIndex])
-    let securityInfo = $derived(activeTab ? {
-        securityState: activeTab.securityState || 'unknown',
-        certificateError: activeTab.certificateError,
-        mixedContent: activeTab.mixedContent,
-        hasSecurityWarning: activeTab.hasSecurityWarning,
-        url: activeTab.url,
-        hostname: activeTab.url ? new URL(activeTab.url).hostname : ''
-    } : null)
-    
+    let securityInfo = $derived.by(() =>  {
+        if (!certificateMonitorForTab) return null
 
-    
+        const origin = new URL(certificateMonitorForTab.url).origin
+
+        return {
+            securityState: data.origins[origin]?.securityState || 'unknown',
+            certificateError: data.origins[origin]?.certificateError,
+            mixedContent: data.origins[origin]?.mixedContent,
+            hasSecurityWarning: data.origins[origin]?.hasSecurityWarning
+        }
+    })
+
     // Get security icon
     function getSecurityIcon(securityState) {
         switch (securityState) {
@@ -47,21 +46,13 @@
                 return 'text-gray-400'
         }
     }
-    
-    // Format timestamp
-    function formatTimestamp(timestamp) {
-        if (!timestamp) return 'Never'
-        return new Date(timestamp).toLocaleString()
-    }
-    
-
 </script>
 
-{#if visible}
+{#if certificateMonitorForTab}
     <div class="certificate-monitor" transition:fade={{duration: 200}}>
         <div class="monitor-header">
             <h3>🔒 Certificate Monitor</h3>
-            <button onclick={() => visible = false} class="close-btn">×</button>
+            <button onclick={() => certificateMonitorForTab = null} class="close-btn">×</button>
         </div>
         
         <div class="active-tab-info">
@@ -94,11 +85,7 @@
                     <p>This page contains insecure content</p>
                 </div>
             {/if}
-            
-
         </div>
-        
-
     </div>
 {/if}
 

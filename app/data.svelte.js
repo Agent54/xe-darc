@@ -1,10 +1,16 @@
 import PouchDB from 'pouchdb-browser'
-    // TODO: add user and session management
-    const db = new PouchDB('darc')
-    db.allDocs({
-        include_docs: true
-    }).then(({rows}) => {
-        console.log(rows)
-    })
+// TODO: add user and session management
 
-    export default {}
+const db = new PouchDB('darc')
+
+db.allDocs({
+    include_docs: true
+}).then(({rows}) => {
+    console.log(rows)
+})
+
+const origins = $state({})
+
+export default {
+    origins
+}
