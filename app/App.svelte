@@ -1,7 +1,6 @@
 <script>
     // import { flip } from 'svelte/animate'
 
-    import NewTab from './components/NewTab.svelte'
     import Frame from './components/Frame.svelte'
     import Resources from './components/ResourcesPanel.svelte'
     import Settings from './components/Settings.svelte'
@@ -48,141 +47,7 @@
         'ephemeral:3'
     ]
 
-    let closed = $state([
-        // FIXME about: support
-        // {
-        //     id: '11',
-        //     url: 'about://blank',
-        //     title: 'blank',
-        //     audioPlaying: false,
-        //     screenshot: null,
-        //     pinned: false,
-        // },
-
-        // https://testpages.eviltester.com/styled/index.html#:~:text=Index,-About%20Related%20Sites
-        // http://localhost:5173
-        {
-            id: '11',
-            url: 'http://localhost:5173',
-            title: 'XR',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        {
-            id: '10',
-            url: 'https://wicg.github.io/controlled-frame',
-            title: 'Controlled Frame API',
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://wicg.github.io&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        {
-            id: '2',
-            url: 'https://open.spotify.com/', 
-            title: 'Spotify', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://open.spotify.com&size=64',
-            audioPlaying: true,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        { 
-            id: '0',
-            url: 'http://lanes.localhost/', 
-            title: 'Lanes', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://lanes.pm&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        { 
-            id: '1',
-            url: 'https://operaneon.com/', 
-            title: 'Opera Neon', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://operaneon.com&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        {
-            id: '3',
-            url: 'https://google.com', 
-            title: 'Google', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-
-        {
-            id: '5',
-            url: 'https://github.com/orgs/Agent54', 
-            title: 'Agent54', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://github.com&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        {
-            id: '16',
-            url: 'https://agregore.org', 
-            title: 'Agregore', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://agregore.org&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        {
-            id: '26',
-            url: 'https://users-and-agents.com', 
-            title: 'Agents & Agents', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://github.com&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        {
-            id: '36',
-            url: 'https://badssl.com/', 
-            title: 'Bad SSL', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://badssl.com&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
-        {
-            id: '7',
-            url: 'https://www.figma.com/design/HP40QZCsYVBnYahP4oUa2q/Darc-browser?node-id=0-1&p=f&t=mEPREy5GwjSdFBX9-0', 
-            title: 'Figma', 
-            favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://figma.com&size=64',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        }
-    ])
+    let closed = $state([])
 
     let activeTabIndex = $state(0)
 
@@ -2217,7 +2082,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
         </svg>
         <div class="settings-menu">
-            <div class="settings-menu-header">Settings</div>
+            <div class="settings-menu-header">Options</div>
             
             <div class="settings-menu-item" 
                  role="button"
@@ -2463,7 +2328,7 @@
         <Excalidraw tabs={tabs} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} {getEnabledUserMods} />
     {:else if viewMode === 'reading'}
         {#each tabs as tab, tabIndex (tab.id)}
-            {#if tab.url === 'about:newtab'}
+            <!-- {#if tab.url === 'about:newtab'}
                 <div class="frame reading-mode {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
                     {#key origin(tab.url)}
                         <div class="url-display visible">
@@ -2471,9 +2336,9 @@
                         </div>
                     {/key}
                     
-                    <NewTab {tab} />
+                    
                 </div>
-            {:else}
+            {:else} -->
                 {#key userModsHash}
                     <div class="reading-mode">
                         {#key origin(tab.url)}
@@ -2485,11 +2350,11 @@
                         <Frame tab={tabs[tabIndex]} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
-            {/if}
+     
         {/each}
     {:else}
         {#each tabs as tab, tabIndex (tab.id)}
-            {#if tab.url === 'about:newtab'}
+            <!-- {#if tab.url === 'about:newtab'}
                 <div class="frame {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
                     {#key origin(tab.url)}
                         <div class="url-display visible">
@@ -2499,7 +2364,7 @@
                     
                     <NewTab {tab} />
                 </div>
-            {:else}
+            {:else} -->
                 {#key userModsHash}
                     <div>
                         {#key origin(tab.url)}
@@ -2511,7 +2376,6 @@
                         <Frame tab={tabs[tabIndex]} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
-            {/if}
         {/each}
     {/if}    
 </div>

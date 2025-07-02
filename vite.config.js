@@ -32,12 +32,8 @@ const plugins = [
     name: 'patch-link-color',
     transform(code, id) {      
       // Try broader matching first to see if we can catch the files
-
-      // if (code.includes('stroke="#1971c2"')) {
-      //   console.log("ID:", id)
-      // }
       
-      if (id.includes('chunk-FX7ZIABN.js') || id.includes('chunk-3KPV5WBD.js') ||  id.includes('chunk-WQ3BBEXT.js') || id.includes('chunk-KTVO3SBJ.js')) { 
+      if (code.includes('stroke="#1971c2"')) { 
         // console.log("MATCHED FILE ID:", id)
         return {
           code: code.replace(
@@ -64,7 +60,7 @@ const plugins = [
         const chunk = bundle[fileName]
         if (chunk.type === 'chunk' && chunk.code) {
           console.log("Bundle chunk:", fileName)
-          if (fileName.includes('FX7ZIABN') || fileName.includes('3KPV5WBD') || fileName.includes('KTVO3SBJ')
+          if (fileName.includes('FX7ZIABN') || fileName.includes('3KPV5WBD') || fileName.includes('UAGCFJAM')
             ) {
               //chunk.code.includes('stroke="#1971c2"')
             console.log("PROCESSING CHUNK:", fileName)

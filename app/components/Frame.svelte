@@ -2,6 +2,8 @@
     import { fade } from 'svelte/transition'
     import ControlledFrame from './ControlledFrame.svelte'
 
+    import NewTab from './NewTab.svelte'
+
     let {
         style = '',
         tab, 
@@ -291,7 +293,19 @@
         {/if}
     </div>
 {:else}
-    {#if controlledFrameSupported}
+    {#if tab.url === 'about:newtab'}
+        <div 
+            transition:fade={{duration: 150}}
+            bind:this={tab.frame}
+            style={style}
+            class="frame"
+            class:window-controls-overlay={headerPartOfMain}
+            class:no-pointer-events={isScrolling}
+            id="tab_{tab.id}"
+        >
+            <NewTab {tab} />
+        </div>
+    {:else if controlledFrameSupported}
         <ControlledFrame
             {style}
             {isScrolling}

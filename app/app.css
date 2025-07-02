@@ -30,7 +30,7 @@ header.window-controls-overlay {
 }
 
 header.window-background {
-    opacity: 0.43;
+    opacity: 0.6;
 }
 
 header.focus-mode {
@@ -382,7 +382,7 @@ ul::-webkit-scrollbar {
     background-color: #2b2b2b;
 }
 .tab-container.active {
-    background-color: hsl(0 0% 10% / 1);
+    background-color: hsl(0 0% 13% / 1);
 }
 .tab-container .tab {
     user-select: none;
@@ -403,7 +403,7 @@ ul::-webkit-scrollbar {
     color: #999999;
 }
 .tab-container.active .favicon-wrapper {
-    opacity: 0.7;
+    opacity: 0.8;
 }
 .tab-container:hover .favicon-wrapper, .tab-container.hovered .favicon-wrapper, .tab-container.menu-open .favicon-wrapper {
     opacity: 1;

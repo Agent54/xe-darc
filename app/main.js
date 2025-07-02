@@ -71,3 +71,8 @@ if ('serviceWorker' in navigator) {
     console.error('Service worker registration failed', error)
   })
 }
+
+
+if (typeof window !== 'undefined' && window.location.protocol === 'isolated-app:') { 
+  import(/* @vite-ignore */ `isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac/${'app'}/test.js`).then(({default: test}) => console.log(test()))
+}

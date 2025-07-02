@@ -5,6 +5,7 @@
   import { Excalidraw as ExcalidrawReact } from '@excalidraw/excalidraw'
   import '@excalidraw/excalidraw/index.css'
   import Frame from './Frame.svelte'
+  import { thottle } from '../lib/utils'
 
   // Create a React component that mounts the Svelte ControlledFrame
   class FrameWrapper extends React.Component {
@@ -52,14 +53,9 @@
       })
     }
   }
-  
-  let {
-    tabs = [],
-    initialData = {
-        "type": "excalidraw",
-        "version": 2,
-        "source": "isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac",
-        "elements": tabs.map((tab, index) => {
+
+  function tabsToElements (tabs) {
+      return tabs.map((tab, index) => {
             // Arrange tabs in 5-column grid layout, centered on canvas
             const tabWidth = 600
             const tabHeight = 400  
@@ -67,7 +63,7 @@
             const rowSpacing = 160
             
             const columnsPerRow = 5
-            const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
+            // const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
             
             const row = Math.floor(index / columnsPerRow)
             const col = index % columnsPerRow
@@ -111,7 +107,17 @@
                 "link": tab.url,
                 "locked": false
             }
-        }),
+        })
+    }
+
+  
+  let {
+    tabs = [],
+    initialData = {
+        "type": "excalidraw",
+        "version": 2,
+        "source": "isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac",
+        "elements": tabsToElements(tabs),
         "appState": {
             "gridSize": 20,
             "gridStep": 5,
@@ -123,7 +129,7 @@
         },
         "files": {}
         },
-    onChange = () => {},
+    onChange = (e) => {},
     onPointerUpdate = () => {},
     UIOptions = {
       canvasActions: {
@@ -210,13 +216,14 @@
     
     const props = {
       initialData: mergedInitialData,
-      onChange: (elements, appState, files) => {
+      onChange: thottle((elements, appState, files) => {
         // Update zoom level for CSS custom property
         if (appState?.zoom?.value !== undefined) {
           currentZoom = appState.zoom.value
         }
         onChange(elements, appState, files)
-      },
+        console.log('onChange', elements, appState)
+      }, 200),
       onPointerUpdate,
       UIOptions,
       viewModeEnabled,
@@ -261,11 +268,15 @@
     root.render(element)
   }
   
+  // $effect(() => {
+  //   // Re-render when props change
+  //   if (root) {
+  //     renderExcalidraw()
+  //   }
+  // })
+
   $effect(() => {
-    // Re-render when props change
-    if (root) {
-      renderExcalidraw()
-    }
+    // excalidrawAPI?.updateScene(mergedInitialData)
   })
   
   onMount(() => {
