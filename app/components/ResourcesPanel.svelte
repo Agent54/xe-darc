@@ -9,6 +9,7 @@
         switchToResources,
         switchToSettings,
         switchToUserMods,
+        switchToActivity,
         requestedResources
     } = $props()
 
@@ -167,7 +168,7 @@
 
 <svelte:window onclick={handleClickOutside} onmousedown={handleMouseDownOutside} />
 
-<RightSidebar title="Resources" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods}>
+<RightSidebar title="Resources" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity}>
     {#snippet children()}
         {#each resourceSections as section}
             {#if resourceData[section.id].length > 0}

@@ -1,7 +1,7 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
     
-    let { onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods, tabs = [], closed = [] } = $props()
+    let { onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods, switchToActivity, tabs = [], closed = [] } = $props()
 
     // Settings state
     let defaultSearchEngine = $state('google')
@@ -890,7 +890,7 @@ To import this data back into DARC, use the import function in Settings.
     })
 </script>
 
-<RightSidebar title="Settings" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods}>
+<RightSidebar title="Settings" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity}>
     {#snippet children()}
         <!-- AI Providers Section -->
         <div class="setting-section">

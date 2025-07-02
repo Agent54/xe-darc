@@ -6,6 +6,7 @@
     import Resources from './components/ResourcesPanel.svelte'
     import Settings from './components/Settings.svelte'
     import UserMods from './components/UserMods.svelte'
+    import Activity from './components/Activity.svelte'
     import Excalidraw from './components/Excalidraw.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
@@ -1288,9 +1289,23 @@
         openSidebars = new Set(openSidebars)
     }
 
+    function toggleActivitySidebar() {
+        if (openSidebars.has('activity')) {
+            openSidebars.delete('activity')
+        } else {
+            openSidebars.add('activity')
+        }
+        openSidebars = new Set(openSidebars) // trigger reactivity
+    }
+
+    function closeActivitySidebar() {
+        openSidebars.delete('activity')
+        openSidebars = new Set(openSidebars)
+    }
+
     function switchToResources() {
         if (!openSidebars.has('resources')) {
-            if (openSidebars.has('settings') || openSidebars.has('userMods')) {
+            if (openSidebars.has('settings') || openSidebars.has('userMods') || openSidebars.has('activity')) {
                 isSwitchingSidebars = true
             }
             openSidebars.clear()
@@ -1301,7 +1316,7 @@
     
     function switchToSettings() {
         if (!openSidebars.has('settings')) {
-            if (openSidebars.has('resources') || openSidebars.has('userMods')) {
+            if (openSidebars.has('resources') || openSidebars.has('userMods') || openSidebars.has('activity')) {
                 isSwitchingSidebars = true
             }
             openSidebars.clear()
@@ -1312,11 +1327,22 @@
 
     function switchToUserMods() {
         if (!openSidebars.has('userMods')) {
-            if (openSidebars.has('resources') || openSidebars.has('settings')) {
+            if (openSidebars.has('resources') || openSidebars.has('settings') || openSidebars.has('activity')) {
                 isSwitchingSidebars = true
             }
             openSidebars.clear()
             openSidebars.add('userMods')
+            openSidebars = new Set(openSidebars)
+        }
+    }
+
+    function switchToActivity() {
+        if (!openSidebars.has('activity')) {
+            if (openSidebars.has('resources') || openSidebars.has('settings') || openSidebars.has('userMods')) {
+                isSwitchingSidebars = true
+            }
+            openSidebars.clear()
+            openSidebars.add('activity')
             openSidebars = new Set(openSidebars)
         }
     }
@@ -2266,6 +2292,20 @@
                 {#if openSidebars.has('resources')}<span class="checkmark">•</span>{/if}
             </div>
             <div class="settings-menu-item" 
+                 class:active={openSidebars.has('activity')}
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleActivitySidebar() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleActivitySidebar() } }}>
+                <span class="settings-menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                </span>
+                <span>Activity History</span>
+                {#if openSidebars.has('activity')}<span class="checkmark">•</span>{/if}
+            </div>
+            <div class="settings-menu-item" 
                  class:active={openSidebars.has('userMods')}
                  role="button"
                  tabindex="0"
@@ -2515,7 +2555,19 @@
                           {openSidebars}
                           {switchToResources} 
                           {switchToSettings}
-                          {switchToUserMods} />
+                          {switchToUserMods}
+                          {switchToActivity} />
+            </div>
+        {/if}
+        
+        {#if openSidebars.has('activity')}
+            <div class="sidebar-panel" class:new-panel={openSidebars.has('activity') && !prevOpenSidebars.has('activity') && !isSwitchingSidebars && !isWindowResizing}>
+                <Activity onClose={closeActivitySidebar}
+                         {openSidebars}
+                         {switchToResources} 
+                         {switchToSettings}
+                         {switchToUserMods}
+                         {switchToActivity} />
             </div>
         {/if}
         
@@ -2526,6 +2578,7 @@
                          {switchToResources} 
                          {switchToSettings}
                          {switchToUserMods}
+                         {switchToActivity}
                          {userMods}
                          onUpdateUserMods={updateUserMods}
                          currentTab={tabs[activeTabIndex]} />
@@ -2539,6 +2592,7 @@
                          {switchToResources} 
                          {switchToSettings}
                          {switchToUserMods}
+                         {switchToActivity}
                          {tabs}
                          {closed} />
             </div>

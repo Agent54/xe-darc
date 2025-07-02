@@ -8,6 +8,7 @@
         switchToResources, 
         switchToSettings, 
         switchToUserMods,
+        switchToActivity,
         userMods = [],
         onUpdateUserMods,
         currentTab = null
@@ -209,7 +210,7 @@
     })
 </script>
 
-<RightSidebar title="User Mods" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods}>
+<RightSidebar title="User Mods" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity}>
     {#snippet children()}
         <!-- Add/Edit Form -->
         {#if showAddForm}
