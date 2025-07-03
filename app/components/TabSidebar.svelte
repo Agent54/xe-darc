@@ -7,6 +7,8 @@
     let currentSpaceIndex = $state(0)
     let tabListRef = $state(null)
     let openMenuIndex = $state(null)
+    let closedTabsHovered = $state(false)
+    let closedTabsHeaderHovered = $state(false)
     
     // Dummy data matching Arc/Zen browser style
     const globallyPinnedTabs = [
@@ -55,7 +57,25 @@
             tabs: [
                 { id: 'tab7', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>', title: 'Twitter', url: 'https://twitter.com' }
             ]
+        },
+        {
+            id: 'notes',
+            glyph: null,
+            name: 'Notes',
+            pinnedTabs: [],
+            tabs: [
+                { id: 'tab8', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>', title: 'Notes', url: 'https://notes.app' }
+            ]
         }
+    ]
+    
+    // Recently closed tabs
+    const closedTabs = [
+        { id: 'closed-1', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>', title: 'Twitter Home', url: 'https://twitter.com' },
+        { id: 'closed-2', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>', title: 'GitHub Dashboard', url: 'https://github.com' },
+        { id: 'closed-3', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.354-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.015-4.49-4.491S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117v-6.038H8.148zm7.704 0h-.002c-2.476 0-4.49 2.015-4.49 4.491s2.014 4.49 4.49 4.49c2.476 0 4.49-2.014 4.49-4.49s-2.014-4.491-4.49-4.491zm0 7.509c-1.665 0-3.019-1.355-3.019-3.019s1.354-3.019 3.019-3.019 3.019 1.355 3.019 3.019-1.354 3.019-3.019 3.019z"/></svg>', title: 'Figma Design', url: 'https://figma.com' },
+        { id: 'closed-4', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536h-1.568zm-11.136 0c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536H6.432zm12.8 7.68c-.8.8-2.4.8-3.2 0L12 12.8 8.96 15.84c-.8.8-2.4.8-3.2 0-.8-.8-.8-2.4 0-3.2L8.8 9.6c.8-.8 2.4-.8 3.2 0l3.04 3.04c.8.8.8 2.4 0 3.2z"/></svg>', title: 'Raycast Settings', url: 'https://raycast.com' },
+        { id: 'closed-5', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM7 17l10-10M7 7h10v10"/></svg>', title: 'Linear Issues', url: 'https://linear.app' }
     ]
     
     function handleMouseEnter() {
@@ -107,6 +127,8 @@
             openMenuIndex = null
         }
     }
+    
+
 </script>
 
 <svelte:window onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} />
@@ -133,15 +155,26 @@
             
             <!-- Spaces -->
             <div class="section">
-                <div class="spaces-list">
-                    {#each spaces as space, index}
-                        <button class="space-item" 
-                                class:active={currentSpaceIndex === index}
-                                onclick={() => handleSpaceClick(index)}
-                                aria-label={`Switch to ${space.name} space`}>
-                            <span class="space-glyph">{@html space.glyph}</span>
-                        </button>
-                    {/each}
+                <div class="spaces-container">
+                    <div class="spaces-list">
+                        {#each spaces as space, index}
+                            <button class="space-item" 
+                                    class:active={currentSpaceIndex === index}
+                                    onclick={() => handleSpaceClick(index)}
+                                    aria-label={`Switch to ${space.name} space`}>
+                                {#if space.glyph}
+                                    <span class="space-glyph">{@html space.glyph}</span>
+                                {:else}
+                                    <span class="space-glyph-default"></span>
+                                {/if}
+                            </button>
+                        {/each}
+                    </div>
+                    <button class="new-space-button" 
+                            onclick={() => console.log('Create new space')}
+                            aria-label="Create new space">
+                        <span class="plus-icon">+</span>
+                    </button>
                 </div>
             </div>
             
@@ -202,6 +235,34 @@
                     </div>
                 </div>
             </div>
+            
+            {#if closedTabs.length > 0}
+                <div class="section closed-tabs-section"
+                     onmouseenter={() => closedTabsHovered = true}
+                     onmouseleave={() => closedTabsHovered = false}
+                     role="region"
+                     aria-label="Recently closed tabs">
+                    <div class="closed-tabs-header"
+                         onmouseenter={() => closedTabsHeaderHovered = true}
+                         onmouseleave={() => closedTabsHeaderHovered = false}
+                         role="button"
+                         tabindex="0"
+                         aria-label="Clear all recently closed tabs">
+                        <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
+                        <span class="closed-tabs-count">{closedTabs.length}</span>
+                    </div>
+                    <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
+                        <div class="closed-tabs-list">
+                            {#each closedTabs as tab}
+                                <button class="closed-tab-item" title={tab.url}>
+                                    <span class="tab-favicon">{@html tab.favicon}</span>
+                                    <span class="tab-title">{tab.title}</span>
+                                </button>
+                            {/each}
+                        </div>
+                    </div>
+                </div>
+            {/if}
         </div>
     </div>
 </div>
@@ -212,7 +273,6 @@
         position: fixed;
         /* height: 100vh; */
         z-index: 100000;
-        border-radius: 8px;
         bottom: 9px;
         top: 43px;
         left: 0px;
@@ -233,13 +293,13 @@
 
     .sidebar {
         flex: 1;
-        border-radius: 10px;
-        box-shadow: 0 0 2px 0 #000;
+        border-radius: 9px;
+        box-shadow: 0 0 2px 0 #000, -18px 0px 2px 1px #000;
         border: 1px solid hsl(0 0% 12% / 1);
         overflow: hidden;
         height: 100%;
-        backdrop-filter: blur(24px);
-        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(21px);
+        background: rgba(0, 0, 0, 0.85);
     }
 
     .sidebar-content {
@@ -247,10 +307,10 @@
         overflow-y: auto;
         overflow-x: hidden;
         background: transparent;
-        padding: 8px;
+        padding: 4px;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        /* gap: 6px; */
     }
     
     .section {
@@ -269,14 +329,14 @@
         /* Using fixed 41px width instead to keep tabs compact */
         grid-template-columns: repeat(4, 41px);
         gap: 3px;
-        padding: 2px;
+        padding: 4px;
     }
     
     .pinned-tab {
         width: 36px;
         height: 36px;
         border-radius: 10px;
-        background: rgba(255, 255, 255, 0.08);
+        background: rgb(255 255 255 / 7%);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -293,11 +353,18 @@
     }
     
     /* Spaces */
+    .spaces-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px;
+        margin-top: 13px;
+    }
+    
     .spaces-list {
         display: flex;
         flex-direction: row;
         gap: 6px;
-        padding: 4px;
     }
     
     .space-item {
@@ -337,9 +404,52 @@
         color: rgba(255, 255, 255, 0.3);
     }
     
-    .space-glyph svg {
+    :global(.space-glyph svg) {
         width: 100%;
         height: 100%;
+    }
+    
+    .space-glyph-default {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .new-space-button {
+        width: 22px;
+        height: 22px;
+        border-radius: 10px;
+        background: transparent;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 150ms ease;
+        border: 1px solid transparent;
+        opacity: 0;
+        visibility: hidden;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .spaces-container:hover .new-space-button {
+        opacity: 0.6;
+        visibility: visible;
+    }
+    
+    .new-space-button:hover {
+        background: rgba(255, 255, 255, 0.1);
+        opacity: 1;
+    }
+    
+    .plus-icon {
+        font-size: 16px;
+        line-height: 1;
+        color: rgba(255, 255, 255, 0.3);
     }
     
     /* Space Title */
@@ -461,6 +571,7 @@
         gap: 8px;
         height: 100%;
         overflow-y: auto;
+        padding-top: 0;
     }
     
 
@@ -469,7 +580,7 @@
         width: 36px;
         height: 36px;
         border-radius: 10px;
-        background: rgba(255, 255, 255, 0.08);
+        background: rgb(255 255 255 / 7%);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -486,7 +597,7 @@
     }
     
     .app-tab.active {
-        background: rgba(255, 255, 255, 0.25);
+        background: rgb(255 255 255 / 14%);
     }
     
     .app-tab.active:hover {
@@ -505,9 +616,9 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 4px 8px;
+        padding: 4px 6px 4px 8px;
         border-radius: 10px;
-        background: rgba(255, 255, 255, 0.08);
+        background: rgb(255 255 255 / 7%);
         cursor: pointer;
         transition: all 150ms ease;
         border: 1px solid transparent;
@@ -519,7 +630,7 @@
     }
     
     .tab-item.active {
-        background: rgba(255, 255, 255, 0.25);
+        background: rgb(255 255 255 / 14%);
     }
     
     .tab-item.active:hover {
@@ -564,7 +675,7 @@
         border-radius: 10px;
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.6);
+        color: rgba(255, 255, 255, 0.3);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -582,6 +693,95 @@
     
     .tab-close:hover {
         color: rgba(255, 255, 255, 0.9);
+    }
+    
+    /* Recently Closed Tabs */
+    .closed-tabs-section {
+        margin-top: auto;
+        padding-top: 8px;
+    }
+    
+    .closed-tabs-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        cursor: pointer;
+        border-radius: 10px;
+        transition: all 50ms ease;
+        background: transparent;
+    }
+    
+    .closed-tabs-header:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .closed-tabs-title {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 11px;
+        font-weight: 500;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    }
+    
+    .closed-tabs-count {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 10px;
+        font-weight: 400;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 2px 6px;
+        border-radius: 8px;
+        min-width: 16px;
+        text-align: center;
+    }
+    
+    .closed-tabs-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 200ms ease 200ms;
+    }
+    
+    .closed-tabs-content.expanded {
+        max-height: 400px;
+        transition: max-height 200ms ease;
+    }
+    
+    .closed-tabs-list {
+        padding: 8px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .closed-tab-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 4px 8px;
+        border-radius: 10px;
+        background: transparent;
+        cursor: pointer;
+        transition: all 150ms ease;
+        border: 1px solid transparent;
+        min-height: 32px;
+        width: 100%;
+        text-align: left;
+        margin: 0;
+    }
+    
+    .closed-tab-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .closed-tab-item .tab-favicon {
+        opacity: 0.6;
+    }
+    
+    .closed-tab-item .tab-title {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 12px;
     }
 
     /* .sidebar-content::-webkit-scrollbar {

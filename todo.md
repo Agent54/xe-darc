@@ -385,3 +385,6 @@ Specific tools like search or browse? If so, which of their results?
 Specific connections to other services or accounts? If so...
 Streaming Citations: add citations to the relevant articles, videos, PDF, etc. being used to answer a question in real-time.
 https://lukew.com/ff/entry.asp?2077
+
+
+easel create space feature from arc

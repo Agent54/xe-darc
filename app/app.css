@@ -6,7 +6,7 @@ header {
     left: env(titlebar-area-x, 0);
     top: env(titlebar-area-y, 0);
     width: env(titlebar-area-width, 100%);
-    height: env(titlebar-area-height, 33px);
+    height: env(titlebar-area-height, 35px);
     z-index: 1000;
     background-color: #000;
     color: #fff;
@@ -369,7 +369,7 @@ ul::-webkit-scrollbar {
     list-style: none;
     transition: border-color 0.3s ease, width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease, flex-basis 0.2s ease;
     border-radius: 10px;
-    background-color: hsl(0 0% 6% / 1);
+    background-color: rgb(255 255 255 / 7%);
     min-width: 130px;
     max-width: 200px;
     flex: 0 1 200px; /* Don't grow, can shrink from 200px basis */
@@ -382,7 +382,7 @@ ul::-webkit-scrollbar {
     background-color: #2b2b2b;
 }
 .tab-container.active {
-    background-color: hsl(0 0% 13% / 1);
+    background-color: rgb(255 255 255 / 14%);
 }
 .tab-container .tab {
     user-select: none;
@@ -484,7 +484,6 @@ ul::-webkit-scrollbar {
     width: 32px;
     height: 30px;
     padding-bottom: 8px;
-    background: rgba(0, 0, 0, 0.8);
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -493,7 +492,6 @@ ul::-webkit-scrollbar {
     font-size: 12px;
     opacity: 0.4;
     transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
@@ -670,7 +668,6 @@ ul::-webkit-scrollbar {
     width: 32px;
     height: 30px;
     padding-bottom: 8px;
-    background: rgba(0, 0, 0, 0.8);
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -679,7 +676,6 @@ ul::-webkit-scrollbar {
     font-size: 12px;
     opacity: 0.4;
     transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
@@ -698,7 +694,6 @@ ul::-webkit-scrollbar {
     width: 32px;
     height: 30px;
     padding-bottom: 8px;
-    background: rgba(0, 0, 0, 0.8);
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -707,7 +702,6 @@ ul::-webkit-scrollbar {
     font-size: 12px;
     opacity: 0.4;
     transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
@@ -727,7 +721,6 @@ ul::-webkit-scrollbar {
     width: 32px;
     height: 30px;
     padding-bottom: 8px;
-    background: rgba(0, 0, 0, 0.8);
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -736,7 +729,6 @@ ul::-webkit-scrollbar {
     font-size: 12px;
     opacity: 0.4;
     transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
@@ -1354,7 +1346,6 @@ ul::-webkit-scrollbar {
     width: 28px;
     height: 25px;
     margin-right: 5px;
-    background: rgba(0, 0, 0, 0.8);
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -1364,7 +1355,6 @@ ul::-webkit-scrollbar {
     opacity: 0;
     visibility: hidden;
     transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
@@ -1397,7 +1387,6 @@ ul::-webkit-scrollbar {
     padding-bottom: 6px;
     transition: all 0.3s ease;
     border-radius: 6px;
-    background: rgba(0, 0, 0, 0.8);
     width: 28px;
     height: 25px;
     flex-shrink: 0;
@@ -1406,7 +1395,6 @@ ul::-webkit-scrollbar {
     align-items: center;
     justify-content: center;
     border: 1px solid transparent;
-    backdrop-filter: blur(10px);
     user-select: none;
     opacity: 0.7;
     margin-top: 1px;
