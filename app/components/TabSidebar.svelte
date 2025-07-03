@@ -2,11 +2,12 @@
     // Tab sidebar component with Firefox-like hover behavior
     let { isDragEnabled = true } = $props()
     import data from '../data.svelte.js'
+    import Favicon from './Favicon.svelte'
     
     let isHovered = $state(false)
-    let currentSpaceIndex = $state(0)
+    let currentSpaceId = $state('design')
     let tabListRef = $state(null)
-    let openMenuIndex = $state(null)
+    let openMenuId = $state(null)
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
     
@@ -18,8 +19,9 @@
         { id: 'global-4', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636C.732 21.002 0 20.27 0 19.366V5.457c0-.904.732-1.636 1.636-1.636h3.819l6.545 4.91 6.545-4.91h3.819c.904 0 1.636.732 1.636 1.636z"/></svg>', url: 'https://gmail.com' }
     ]
     
-    const spaces = [
-        {
+    const spaces = $derived({
+        ...data.spaces,
+        design: {
             id: 'design',
             glyph: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
             name: 'Design',
@@ -33,7 +35,7 @@
                 { id: 'tab3', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536h-1.568zm-11.136 0c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536H6.432zm12.8 7.68c-.8.8-2.4.8-3.2 0L12 12.8 8.96 15.84c-.8.8-2.4.8-3.2 0-.8-.8-.8-2.4 0-3.2L8.8 9.6c.8-.8 2.4-.8 3.2 0l3.04 3.04c.8.8.8 2.4 0 3.2z"/></svg>', title: 'Raycast', url: 'https://raycast.com' }
             ]
         },
-        {
+        tools: {
             id: 'tools',
             glyph: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>',
             name: 'Tools',
@@ -47,7 +49,7 @@
                 { id: 'tab6', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536h-1.568zm-11.136 0c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536H6.432zm12.8 7.68c-.8.8-2.4.8-3.2 0L12 12.8 8.96 15.84c-.8.8-2.4.8-3.2 0-.8-.8-.8-2.4 0-3.2L8.8 9.6c.8-.8 2.4-.8 3.2 0l3.04 3.04c.8.8.8 2.4 0 3.2z"/></svg>', title: 'Raycast', url: 'https://raycast.com' }
             ]
         },
-        {
+        dev: {
             id: 'dev',
             glyph: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>',
             name: 'Development',
@@ -58,7 +60,7 @@
                 { id: 'tab7', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>', title: 'Twitter', url: 'https://twitter.com' }
             ]
         },
-        {
+        notes: {
             id: 'notes',
             glyph: null,
             name: 'Notes',
@@ -67,7 +69,9 @@
                 { id: 'tab8', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>', title: 'Notes', url: 'https://notes.app' }
             ]
         }
-    ]
+    })
+    
+    const spaceOrder = $derived([...Object.keys(data.spaces).sort((a, b) => a.order.localeCompare(b.order)), 'design', 'tools', 'dev', 'notes'])
     
     // Recently closed tabs
     const closedTabs = [
@@ -86,13 +90,13 @@
         isHovered = false
     }
     
-    function handleSpaceClick(index) {
-        currentSpaceIndex = index
+    function handleSpaceClick(spaceId) {
+        currentSpaceId = spaceId
         
         // Scroll to the corresponding tab content
         if (tabListRef) {
             const containerWidth = tabListRef.clientWidth
-            const scrollPosition = index * containerWidth
+            const scrollPosition = spaceOrder.indexOf(spaceId) * containerWidth
             tabListRef.scrollTo({
                 left: scrollPosition,
                 behavior: 'smooth'
@@ -107,24 +111,31 @@
         const containerWidth = tabListRef.clientWidth
         const newIndex = Math.round(scrollLeft / containerWidth)
         
-        if (newIndex !== currentSpaceIndex && newIndex >= 0 && newIndex < spaces.length) {
-            currentSpaceIndex = newIndex
+        if (newIndex !== spaceOrder.indexOf(currentSpaceId) && newIndex >= 0 && newIndex < spaceOrder.length) {
+            currentSpaceId = spaceOrder[newIndex]
         }
     }
     
-    function handleMenuToggle(spaceIndex) {
-        openMenuIndex = openMenuIndex === spaceIndex ? null : spaceIndex
+    function handleMenuToggle(spaceId) {
+        openMenuId = openMenuId === spaceId ? null : spaceId
     }
     
-    function handleMenuItemClick(action, spaceIndex) {
+    function handleMenuItemClick(action, spaceId) {
         // Handle the action (rename, change icon, set default container)
-        console.log(`Action: ${action} for space: ${spaces[spaceIndex].name}`)
-        openMenuIndex = null
+        console.log(`Action: ${action} for space: ${spaces[spaceId].name}`)
+        
+        if (action.startsWith('container-')) {
+            const containerType = action.replace('container-', '')
+            console.log(`Setting container to: ${containerType} for space: ${spaces[spaceId].name}`)
+            // TODO: Implement container assignment logic
+        }
+        
+        openMenuId = null
     }
     
     function handleClickOutside(event) {
-        if (openMenuIndex !== null && !event.target.closest('.space-menu')) {
-            openMenuIndex = null
+        if (openMenuId !== null && !event.target.closest('.space-menu')) {
+            openMenuId = null
         }
     }
     
@@ -147,7 +158,7 @@
                 <div class="pinned-tabs-grid">
                     {#each globallyPinnedTabs as tab}
                         <button class="pinned-tab" title={tab.url}>
-                            <span class="tab-favicon">{@html tab.favicon}</span>
+                            <Favicon {tab} showButton={false} />
                         </button>
                     {/each}
                 </div>
@@ -157,13 +168,13 @@
             <div class="section">
                 <div class="spaces-container">
                     <div class="spaces-list">
-                        {#each spaces as space, index}
+                        {#each spaceOrder as spaceId}
                             <button class="space-item" 
-                                    class:active={currentSpaceIndex === index}
-                                    onclick={() => handleSpaceClick(index)}
-                                    aria-label={`Switch to ${space.name} space`}>
-                                {#if space.glyph}
-                                    <span class="space-glyph">{@html space.glyph}</span>
+                                    class:active={currentSpaceId === spaceId}
+                                    onclick={() => handleSpaceClick(spaceId)}
+                                    aria-label={`Switch to ${spaces[spaceId].name} space`}>
+                                {#if spaces[spaceId].glyph}
+                                    <span class="space-glyph">{@html spaces[spaceId].glyph}</span>
                                 {:else}
                                     <span class="space-glyph-default"></span>
                                 {/if}
@@ -184,50 +195,50 @@
                      bind:this={tabListRef}
                      onscroll={handleTabScroll}>
                     <div class="tab-content-track">
-                        {#each spaces as space, index}
-                            <div class="space-content" data-space-index={index}>
-                                <!-- Space Title -->
+                        {#each spaceOrder as spaceId}
+                            <div class="space-content" data-space-id={spaceId}>
                                 <div class="space-title-container">
                                     <div class="space-title">
-                                        {space.name}
+                                        {spaces[spaceId].name}
                                     </div>
                                     <div class="space-menu">
                                         <button class="space-menu-button" 
-                                                onmousedown={(e) => { e.stopPropagation(); handleMenuToggle(index); }}
+                                                onmousedown={(e) => { e.stopPropagation(); handleMenuToggle(spaceId); }}
                                                 aria-label="Space options">⋯</button>
-                                        <div class="space-menu-dropdown" class:open={openMenuIndex === index}>
+                                        <div class="space-menu-dropdown" class:open={openMenuId === spaceId}>
                                             <button class="space-menu-item" 
-                                                    onmouseup={() => handleMenuItemClick('rename', index)}
+                                                    onmouseup={() => handleMenuItemClick('rename', spaceId)}
                                                     role="menuitem">Rename</button>
                                             <button class="space-menu-item"
-                                                    onmouseup={() => handleMenuItemClick('change-icon', index)}
-                                                    role="menuitem">Change space icon</button>
+                                                    onmouseup={() => handleMenuItemClick('change-icon', spaceId)}
+                                                    role="menuitem">Change icon</button>
                                             <button class="space-menu-item"
-                                                    onmouseup={() => handleMenuItemClick('set-default', index)}
-                                                    role="menuitem">Set default data container</button>
+                                                    onmouseup={() => handleMenuItemClick('change-color', spaceId)}
+                                                    role="menuitem">Change color</button>
+                                            <button class="space-menu-item"
+                                                    onmouseup={() => handleMenuItemClick('container', spaceId)}
+                                                    role="menuitem">Container</button>
                                         </div>
                                     </div>
                                 </div>
                                 
-                                <!-- App Tabs for this space -->
-                                {#if space.pinnedTabs.length > 0}
+                                {#if spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
-                                        {#each space.pinnedTabs as tab}
+                                        {#each spaces[spaceId].pinnedTabs as tab}
                                             <button class="app-tab" class:active={tab.active} title={tab.url}>
-                                                <span class="tab-favicon">{@html tab.favicon}</span>
+                                                <Favicon {tab} showButton={false} />
                                             </button>
                                         {/each}
                                     </div>
                                 {/if}
                                 
-                                <!-- Regular Tabs for this space -->
                                 <div class="tabs-list">
-                                    {#each space.tabs as tab}
-                                        <div class="tab-item" class:active={tab.active} title={tab.url}>
-                                            <span class="tab-favicon">{@html tab.favicon}</span>
-                                            <span class="tab-title">{tab.title}</span>
-                                            <button class="tab-close" aria-label="Close tab">×</button>
-                                        </div>
+                                    {#each spaces[spaceId].tabs as tab}
+                                                                            <div class="tab-item" class:active={tab.active} title={tab.url}>
+                                        <Favicon {tab} showButton={false} />
+                                        <span class="tab-title">{tab.title}</span>
+                                        <button class="tab-close" aria-label="Close tab">×</button>
+                                    </div>
                                     {/each}
                                 </div>
                             </div>
@@ -254,10 +265,10 @@
                     <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                         <div class="closed-tabs-list">
                             {#each closedTabs as tab}
-                                <button class="closed-tab-item" title={tab.url}>
-                                    <span class="tab-favicon">{@html tab.favicon}</span>
-                                    <span class="tab-title">{tab.title}</span>
-                                </button>
+                                                            <button class="closed-tab-item" title={tab.url}>
+                                <Favicon {tab} showButton={false} />
+                                <span class="tab-title">{tab.title}</span>
+                            </button>
                             {/each}
                         </div>
                     </div>
@@ -271,7 +282,6 @@
     .sidebar-box {
         background: transparent;
         position: fixed;
-        /* height: 100vh; */
         z-index: 100000;
         bottom: 9px;
         top: 43px;
@@ -300,6 +310,7 @@
         height: 100%;
         backdrop-filter: blur(21px);
         background: rgba(0, 0, 0, 0.85);
+        user-select: none;
     }
 
     .sidebar-content {
@@ -325,8 +336,6 @@
     /* Pinned Tabs Grid (shared for global and app tabs) */
     .pinned-tabs-grid {
         display: grid;
-        /* repeat(4, 1fr) creates 4 columns where each takes 1 fractional unit of available space, spreading tabs apart */
-        /* Using fixed 41px width instead to keep tabs compact */
         grid-template-columns: repeat(4, 41px);
         gap: 3px;
         padding: 4px;
@@ -346,13 +355,14 @@
         color: rgba(255, 255, 255, 0.3);
         padding: 0;
         margin: 0;
+        opacity: 0.5;
     }
     
     .pinned-tab:hover {
         background: rgba(255, 255, 255, 0.15);
+        opacity: 1;
     }
     
-    /* Spaces */
     .spaces-container {
         display: flex;
         align-items: center;
@@ -452,7 +462,6 @@
         color: rgba(255, 255, 255, 0.3);
     }
     
-    /* Space Title */
     .space-title-container {
         display: flex;
         align-items: center;
@@ -466,6 +475,8 @@
         font-size: 11px;
         font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
         text-align: left;
     }
     
@@ -480,7 +491,8 @@
         color: rgba(255, 255, 255, 0.4);
         cursor: pointer;
         font-size: 14px;
-        padding: 2px 4px;
+        line-height: 14px;
+        padding: 4px;
         border-radius: 10px;
         transition: all 150ms ease;
         opacity: 0;
@@ -510,6 +522,7 @@
         transform: translateY(-4px);
         transition: all 150ms ease;
         backdrop-filter: blur(12px);
+        overflow: visible;
     }
     
     .space-menu-dropdown.open {
@@ -523,6 +536,8 @@
         color: rgba(255, 255, 255, 0.8);
         font-size: 12px;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
         cursor: pointer;
         transition: background 150ms ease;
         background: transparent;
@@ -539,6 +554,8 @@
     .space-menu-item:active {
         background: rgba(255, 255, 255, 0.15);
     }
+
+
     
     /* Horizontal Tab Content */
     .tab-content-container {
@@ -590,10 +607,12 @@
         color: rgba(255, 255, 255, 0.3);
         padding: 0;
         margin: 0;
+        opacity: 0.5;
     }
     
     .app-tab:hover {
         background: rgba(255, 255, 255, 0.15);
+        opacity: 1;
     }
     
     .app-tab.active {
@@ -602,6 +621,15 @@
     
     .app-tab.active:hover {
         background: rgba(255, 255, 255, 0.3);
+        opacity: 1;
+    }
+    
+    .app-tab.active :global(.tab-favicon) {
+        opacity: 0.6;
+    }
+    
+    .app-tab:hover :global(.tab-favicon) {
+        opacity: 0.8;
     }
     
     /* Regular Tabs */
@@ -623,6 +651,9 @@
         transition: all 150ms ease;
         border: 1px solid transparent;
         min-height: 36px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
     }
     
     .tab-item:hover {
@@ -634,7 +665,7 @@
     }
     
     .tab-item.active:hover {
-        background: rgba(255, 255, 255, 0.3);
+        background: rgb(255 255 255 / 17%);
     }
     
     .tab-favicon {
@@ -647,6 +678,7 @@
         align-items: center;
         justify-content: center;
         color: rgba(255, 255, 255, 0.3);
+        opacity: 0.5;
     }
     
     :global(.tab-favicon svg) {
@@ -655,18 +687,32 @@
     }
     
     .tab-title {
-        color: rgba(255, 255, 255, 0.5);
-        font-size: 14px;
+        color: hsl(0 0% 35% / 1);
+        font-size: 13px;
         font-weight: 300;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         flex: 1;
+        line-height: 1.2;
+        margin-top: 1px;
     }
     
     .tab-item.active .tab-title {
-        color: rgba(255, 255, 255, 0.95);
+        color: #999999;
+    }
+    
+    .tab-item:hover .tab-title {
+        color: #fff;
+    }
+    
+    .tab-item.active :global(.tab-favicon) {
+        opacity: 0.6;
+    }
+    
+    .tab-item:hover :global(.tab-favicon) {
+        opacity: 0.8;
     }
     
     .tab-close {
@@ -721,6 +767,8 @@
         font-size: 11px;
         font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
     }
     
     .closed-tabs-count {
@@ -769,6 +817,9 @@
         width: 100%;
         text-align: left;
         margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
     }
     
     .closed-tab-item:hover {
@@ -776,12 +827,20 @@
     }
     
     .closed-tab-item .tab-favicon {
-        opacity: 0.6;
+        opacity: 0.3;
     }
     
     .closed-tab-item .tab-title {
-        color: rgba(255, 255, 255, 0.4);
+        color: rgba(255, 255, 255, 0.25);
         font-size: 12px;
+    }
+    
+    .closed-tab-item:hover .tab-favicon {
+        opacity: 0.6;
+    }
+    
+    .closed-tab-item:hover .tab-title {
+        color: rgba(255, 255, 255, 0.7);
     }
 
     /* .sidebar-content::-webkit-scrollbar {

@@ -332,7 +332,6 @@ ul::-webkit-scrollbar {
     height: 16px;
     flex-shrink: 0;
     opacity: 0.5;
-    transition: opacity 0.2s ease;
 }
 .pin-icon {
     position: absolute;
@@ -383,6 +382,9 @@ ul::-webkit-scrollbar {
 }
 .tab-container.active {
     background-color: rgb(255 255 255 / 14%);
+}
+.tab-container.active:hover {
+    background-color: rgb(255 255 255 / 17%);
 }
 .tab-container .tab {
     user-select: none;
@@ -437,6 +439,8 @@ ul::-webkit-scrollbar {
     mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
     -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
     margin-left: 4px;
+    line-height: 1.2;
+    margin-top: -1px;
 }
 
 /* Remove extra margin when favicon-wrapper is present (since gap already provides spacing) */
@@ -475,6 +479,7 @@ ul::-webkit-scrollbar {
     opacity: 1;
     width: 20px;
     padding: 0 4px;
+    padding-bottom: 1px;
 }
 
 .trash-icon {

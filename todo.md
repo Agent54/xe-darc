@@ -388,3 +388,11 @@ https://lukew.com/ff/entry.asp?2077
 
 
 easel create space feature from arc
+
+progress feature for tab groups and tabs for agent progresss etc.
+
+arc live folders for mails and githubprs etc.
+
+share folder or space level?
+
+hover zen mode reveal

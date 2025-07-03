@@ -10,6 +10,7 @@
     import TabSidebar from './components/TabSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import SecurityIndicator from './components/SecurityIndicator.svelte'
+    import Favicon from './components/Favicon.svelte'
     import { onMount, untrack } from 'svelte'
     import data from './data.svelte.js'
 
@@ -47,7 +48,7 @@
         'ephemeral:3'
     ]
 
-    let closed = $state([])
+    let closed =  [] // $state([])
 
     let activeTabIndex = $state(0)
 
@@ -395,15 +396,15 @@
             closedTabPlaceholderCount++
         }
         
-        closed.push(tab)
-        tabs = tabs.filter(t => t !== tab)
+        // closed.push(tab)
+        // tabs = tabs.filter(t => t !== tab)
         setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
     }
 
     function restoreTab(tab) {
         tab.shouldFocus = true
-        tabs.push(tab)
-        closed = closed.filter(t => t !== tab)
+        // tabs.push(tab)
+        // closed = closed.filter(t => t !== tab)
         
         // Remove corresponding placeholder if it exists
         if (closedTabPlaceholderCount > 0) {
@@ -414,7 +415,7 @@
     }
 
     function clearAllClosedTabs() {
-        closed = []
+        // closed = []
         collapseAndRemovePlaceholders()
     }
 
@@ -1569,7 +1570,7 @@
         window.onpopstate = handleShellNavigation    
     })
 
-    function handleFaviconMousedown(event, tab, index) {
+    function handleFaviconMousedown(event, tab) {
         event.preventDefault()
         event.stopPropagation()
         
@@ -1585,6 +1586,9 @@
         
         // Disable drag while favicon menu is open
         isDragEnabled = false
+        
+        // Find the tab index
+        const index = tabs.findIndex(t => t.id === tab.id)
         
         const rect = event.target.getBoundingClientRect()
         faviconMenu = {
@@ -1619,20 +1623,7 @@
     </svg>
 {/snippet}
 
-{#snippet globeIcon()}
-    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" class="w-4 h-4">
-        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-    </svg>
-{/snippet}
 
-{#snippet newTabIcon()}
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="new-tab-icon w-4 h-4">
-        <!-- central plus -->
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12M6 12h12" />
-        <!-- subtle rays -->
-        <path stroke-linecap="round" d="M12 3v2M12 19v2M3 12h2M19 12h2M5.8 5.8l1.3 1.3M16.9 16.9l1.3 1.3M5.8 18.2l1.3-1.3M16.9 7.1l1.3-1.3" />
-    </svg>
-{/snippet}
 
 {#snippet tabContextMenu(menu, onHide)}
     <div class="context-menu-scrim" 
@@ -1862,23 +1853,7 @@
                         {/if}
 
                         <div class="favicon-wrapper">    
-                            {#if data.origins[origin]?.certificateError || data.origins[origin]?.hasSecurityWarning || data.origins[origin]?.mixedContent || data.origins[origin]?.securityState === 'mixed' || (data.origins[origin]?.securityState === 'insecure' && tab.url?.startsWith('https:'))}
-                                    <button type="button" class="favicon-button" onmousedown={(e) => handleFaviconMousedown(e, tab, i)}>
-                                        <SecurityIndicator {tab} size="small" />
-                                    </button>
-                                {:else if tab.favicon}
-                                    <button type="button" class="favicon-button" onmousedown={(e) => handleFaviconMousedown(e, tab, i)}>
-                                        <img src={tab.favicon} alt="favicon" class="favicon" />
-                                    </button>
-                                {:else if tab.url === 'about:newtab'}
-                                    <button type="button" class="favicon-button" onmousedown={(e) => handleFaviconMousedown(e, tab, i)}>
-                                        {@render newTabIcon()}
-                                    </button>
-                                {:else}
-                                    <button type="button" class="favicon-button" onmousedown={(e) => handleFaviconMousedown(e, tab, i)}>
-                                        {@render globeIcon()}
-                                    </button>
-                            {/if}
+                            <Favicon {tab} onMenuOpen={handleFaviconMousedown} />
                             {#if tab.pinned}
                                 <div class="pin-icon">
                                     <svg fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -2017,7 +1992,7 @@
         <span class="new-tab-icon">+</span>
     </div>
 
-    {#if closed.length > 0}
+    <!-- {#if closed.length > 0}
         <div class="trash-icon" class:hidden={focusModeEnabled}>
             {@render trashIcon()}
                
@@ -2053,7 +2028,7 @@
                 {/if}
             </div>
         </div>
-    {/if}
+    {/if} -->
 
     <div class="focus-mode-icon" 
         role="button"
@@ -2153,7 +2128,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
                     </svg>
                 </span>
-                <span>Manage Resources</span>
+                <span>Resources</span>
                 {#if openSidebars.has('resources')}<span class="checkmark">•</span>{/if}
             </div>
             <div class="settings-menu-item" 
@@ -2167,7 +2142,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                     </svg>
                 </span>
-                <span>Activity History</span>
+                <span>Activity</span>
                 {#if openSidebars.has('activity')}<span class="checkmark">•</span>{/if}
             </div>
             <div class="settings-menu-item" 
@@ -2181,7 +2156,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
                     </svg>
                 </span>
-                <span>User Mods</span>
+                <span>Mods</span>
                 {#if openSidebars.has('userMods')}<span class="checkmark">•</span>{/if}
             </div>
             <div class="settings-menu-item" 
@@ -2196,7 +2171,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                     </svg>
                 </span>
-                <span>User Settings</span>
+                <span>Settings</span>
                 {#if openSidebars.has('settings')}<span class="checkmark">•</span>{/if}
             </div>
         </div>
