@@ -355,12 +355,10 @@
         color: rgba(255, 255, 255, 0.3);
         padding: 0;
         margin: 0;
-        opacity: 0.5;
     }
     
     .pinned-tab:hover {
         background: rgba(255, 255, 255, 0.15);
-        opacity: 1;
     }
     
     .spaces-container {
@@ -607,12 +605,10 @@
         color: rgba(255, 255, 255, 0.3);
         padding: 0;
         margin: 0;
-        opacity: 0.5;
     }
     
     .app-tab:hover {
         background: rgba(255, 255, 255, 0.15);
-        opacity: 1;
     }
     
     .app-tab.active {
@@ -620,8 +616,7 @@
     }
     
     .app-tab.active:hover {
-        background: rgba(255, 255, 255, 0.3);
-        opacity: 1;
+        background: rgb(255 255 255 / 17%);
     }
     
     .app-tab.active :global(.tab-favicon) {
