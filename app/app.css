@@ -536,7 +536,7 @@ ul::-webkit-scrollbar {
     opacity: 0;
     visibility: hidden;
     transform: translateY(-8px) scale(0.96);
-    transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+
     z-index: 10000;
     pointer-events: none;
     overflow: hidden;
@@ -666,10 +666,10 @@ ul::-webkit-scrollbar {
     flex: 1;
 }
 
-.view-mode-icon {
+/* Shared base class for header icon buttons */
+.header-icon-button {
     position: fixed;
     top: 8px;
-    right: 90px;
     width: 32px;
     height: 30px;
     padding-bottom: 8px;
@@ -680,70 +680,29 @@ ul::-webkit-scrollbar {
     cursor: pointer;
     font-size: 12px;
     opacity: 0.4;
-    transition: all 0.3s ease;
+    transition: opacity 0.2s ease; 
+    /* , transform 0.2s ease; */
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
+    color: white;
 }
 
-.view-mode-icon:hover {
+.header-icon-button:hover {
     opacity: 1;
-    background: rgba(0, 0, 0, 0.9);
-    transform: scale(1.05);
+    /* transform: scale(1.05); */
+}
+
+.view-mode-icon {
+    right: 90px;
 }
 
 .focus-mode-icon {
-    position: fixed;
-    top: 8px;
     right: 4px;
-    width: 32px;
-    height: 30px;
-    padding-bottom: 8px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 12px;
-    opacity: 0.4;
-    transition: all 0.3s ease;
-    z-index: 10000;
-    user-select: none;
-    -webkit-app-region: no-drag;
-    color: white;
-}
-
-.focus-mode-icon:hover {
-    opacity: 1;
-    background: rgba(0, 0, 0, 0.9);
-    transform: scale(1.05);
 }
 
 .settings-menu-icon {
-    position: fixed;
-    top: 8px;
     right: 47px;
-    width: 32px;
-    height: 30px;
-    padding-bottom: 8px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 12px;
-    opacity: 0.4;
-    transition: all 0.3s ease;
-    z-index: 10000;
-    user-select: none;
-    -webkit-app-region: no-drag;
-    color: white;
-}
-
-.settings-menu-icon:hover {
-    opacity: 1;
-    background: rgba(0, 0, 0, 0.9);
-    transform: scale(1.05);
 }
 
 .settings-menu {
@@ -766,7 +725,7 @@ ul::-webkit-scrollbar {
     opacity: 0;
     visibility: hidden;
     transform: translateY(-8px) scale(0.96);
-    transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+
     z-index: 10000;
     pointer-events: none;
     overflow: hidden;
@@ -889,7 +848,7 @@ ul::-webkit-scrollbar {
     opacity: 0;
     visibility: hidden;
     transform: translateY(-8px) scale(0.96);
-    transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+
     z-index: 10000;
     pointer-events: none;
     overflow: hidden;
@@ -1074,7 +1033,7 @@ ul::-webkit-scrollbar {
 
 .tab-hovercard.trash-item {
     transform: translateY(-50%);
-    animation: hovercard-fade-in-trash 0.2s ease-out forwards;
+    animation: hovercard-fade-in 0.2s ease-out forwards;
 }
 
 @keyframes hovercard-fade-in {
@@ -1085,17 +1044,6 @@ ul::-webkit-scrollbar {
     to {
         opacity: 1;
         transform: translateX(-50%) translateY(0) scale(1);
-    }
-}
-
-@keyframes hovercard-fade-in-trash {
-    from {
-        opacity: 0;
-        transform: translateY(-50%) translateX(-10px) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(-50%) translateX(0) scale(1);
     }
 }
 
@@ -1359,7 +1307,7 @@ ul::-webkit-scrollbar {
     font-size: 12px;
     opacity: 0;
     visibility: hidden;
-    transition: all 0.3s ease;
+    transition: opacity 0.2s ease, background 0.2s ease, transform 0.2s ease, visibility 0.2s ease, border 0.2s ease;
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
@@ -1390,7 +1338,7 @@ ul::-webkit-scrollbar {
     font-family: 'Inter', sans-serif;
     padding: 4px;
     padding-bottom: 6px;
-    transition: all 0.3s ease;
+    transition: opacity 0.2s ease, background 0.2s ease, transform 0.2s ease, border 0.2s ease;
     border-radius: 6px;
     width: 28px;
     height: 25px;
@@ -1638,7 +1586,7 @@ ul::-webkit-scrollbar {
     border-top-right-radius: 8px;
     z-index: 10;
     opacity: 0;
-    transition: opacity 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, top 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, box-shadow 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s;
+    transition: opacity 0.1s cubic-bezier(0.25, 0.45, 0.94) 0.3s, top 0.1s cubic-bezier(0.25, 0.45, 0.94) 0.3s, box-shadow 0.1s cubic-bezier(0.25, 0.45, 0.94) 0.3s;
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -1657,7 +1605,7 @@ ul::-webkit-scrollbar {
     top: -10px;
     z-index: 100;
     opacity: 1;
-    transition: opacity 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, top 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s, box-shadow 0.11s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s;
+    transition: opacity 0.11s cubic-bezier(0.25, 0.45, 0.94) 0.3s, top 0.11s cubic-bezier(0.25, 0.45, 0.94) 0.3s, box-shadow 0.11s cubic-bezier(0.25, 0.45, 0.94) 0.3s;
     box-shadow: 0 6px 35px 5px rgb(0 0 0 / 36%);
 }
 

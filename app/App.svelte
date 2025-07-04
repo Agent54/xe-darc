@@ -128,6 +128,9 @@
     let showFixedNewTabButton = $state(false)
     let openSidebars = $state(new Set())
     let focusModeEnabled = $state(false)
+    let focusModeHovered = $state(false)
+    let contentAreaScrimActive = $state(false)
+    let hasLeftToggle = $state(false)
     let darkMode = $state(true)
     let dataSaver = $state(false)
     let batterySaver = $state(false)
@@ -1215,6 +1218,25 @@
 
     function toggleFocusMode() {
         focusModeEnabled = !focusModeEnabled
+        if (focusModeEnabled) {
+            focusModeHovered = false
+            contentAreaScrimActive = false
+            hasLeftToggle = false
+            // Enable hover reveal after a short delay to allow user to move mouse away
+            setTimeout(() => {
+                if (focusModeEnabled) hasLeftToggle = true
+            }, 300)
+        } else {
+            focusModeHovered = false
+            contentAreaScrimActive = false
+            hasLeftToggle = false
+        }
+    }
+    
+    function hideContentAreaScrim() {
+        focusModeHovered = false
+        contentAreaScrimActive = false
+        // Don't reset hasLeftToggle - keep it true so hover reveal can work again
     }
     
     function toggleDarkMode() {
@@ -1617,11 +1639,11 @@
     }
 </script>
 
-{#snippet trashIcon()}
+<!-- {#snippet trashIcon()}
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
         <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
     </svg>
-{/snippet}
+{/snippet} -->
 
 
 
@@ -1817,10 +1839,10 @@
     onvisibilitychange={() => { console.log('visibilitychange', document.visibilityState) }}
 />
 
-<header class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled}>
+<header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) focusModeHovered = true }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) focusModeHovered = false }}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 178px;' : 'right: 137px;'}"></div>
      
-    <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {closed.length > 0 ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+    <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {closed.length > 0 ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each tabs as tab, i (tab.id)}
@@ -1897,12 +1919,12 @@
 
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 115px; left: unset; {closed.length > 0 ? 'right: 190px;' : 'right: 158px;'}"></div>
 
-    <div class="view-mode-icon" 
+    <div class="header-icon-button view-mode-icon" 
         role="button"
         tabindex="0"
         onclick={toggleViewMode}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleViewMode() } }}
-        class:hidden={focusModeEnabled}>
+        class:hidden={focusModeEnabled && !focusModeHovered}>
         {@html getViewModeIcon(viewMode)}
         <div class="view-mode-menu">
             <div class="view-mode-menu-header">View Mode</div>
@@ -1988,7 +2010,7 @@
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
          title="New Tab (⌘T)"
          style="{closed.length > 0 ? 'right: 174px;' : 'right: 133px;'}"
-         class:visible={showFixedNewTabButton && !focusModeEnabled}>
+         class:visible={showFixedNewTabButton && (!focusModeEnabled || focusModeHovered)}>
         <span class="new-tab-icon">+</span>
     </div>
 
@@ -2030,11 +2052,12 @@
         </div>
     {/if} -->
 
-    <div class="focus-mode-icon" 
+    <div class="header-icon-button focus-mode-icon" 
         role="button"
         tabindex="0"
         onclick={toggleFocusMode}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFocusMode() } }}
+        onmouseenter={() => { if (focusModeEnabled && hasLeftToggle) { focusModeHovered = true; contentAreaScrimActive = true; } }}
         title="Toggle Focus Mode">
         {#if focusModeEnabled}
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -2047,11 +2070,11 @@
         {/if}
     </div>
 
-    <div class="settings-menu-icon" 
+    <div class="header-icon-button settings-menu-icon" 
         role="button"
         tabindex="0"
         title="Settings"
-        class:hidden={focusModeEnabled}>
+        class:hidden={focusModeEnabled && !focusModeHovered}>
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
@@ -2177,6 +2200,16 @@
         </div>
     </div>
 </header>
+
+{#if focusModeEnabled && contentAreaScrimActive}
+    <div class="content-area-scrim"
+         role="button"
+         tabindex="0"
+         onmouseenter={hideContentAreaScrim}
+         onclick={hideContentAreaScrim}
+         onkeydown={(e) => { if (e.key === 'Escape') hideContentAreaScrim() }}
+         oncontextmenu={hideContentAreaScrim}></div>
+{/if}
 
 {#if contextMenu.visible && contextMenu.tab}
     {@render tabContextMenu(contextMenu, hideContextMenu)}
@@ -2445,4 +2478,19 @@
 
 <style>
     @import "app.css";
+    
+    .content-area-scrim {
+        position: fixed;
+        top: 48px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 100;
+        pointer-events: all;
+        background: transparent;
+    }
+    
+    header.window-controls-overlay + .content-area-scrim {
+        top: 40px;
+    }
 </style>
