@@ -9,12 +9,18 @@ db.bulkDocs(bootstrap).then(() => {
     // console.log('bootstrap done', res)
 })
 
-const sortOrder = ['archived', 'type', 'space', 'order']
+const sortOrder = ['archived', 'type', 'spaceId', 'order']
 
 const origins = $state({})
 const spaces = $state({})
 const activity = $state({})
 const resources = $state({})
+
+const spaceMeta = $state({
+    activeSpace: null,
+    spaceOrder: [],
+    activeTab: null
+})
 
 let initialLoad = true
 async function refresh() {
@@ -27,19 +33,26 @@ async function refresh() {
         sort: sortOrder.map(key => ({ [key] : 'asc' }))
     })
 
-    console.log(newDocs)
-
     for (const doc of newDocs) {
         if (doc.type === 'space') {
+            if (!spaceMeta. activeSpace) {
+                spaceMeta.activeSpace = doc._id
+            }
             spaces[doc._id] = doc
         } else if (doc.type === 'tab') {
-            spaces[doc.space].tabs.push(doc)
+            doc.id = doc._id // legacy compat, remove this later
+            spaces[doc.spaceId].tabs.push(doc)
+            if (!spaceMeta.activeTab && doc.spaceId === spaceMeta.activeSpace) {
+                spaceMeta.activeTab = doc._id
+            }
         } else if (doc.type === 'activity') {
             activity[doc._id] = doc
         } else if (doc.type === 'resource') {
             resources[doc._id] = doc
         }
     }
+
+    spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => a.order - b.order).map(space => space.id)
 
     initialLoad = false
 }
@@ -52,6 +65,7 @@ db.createIndex({
 
 export default {
     origins,
+    spaceMeta,
     spaces,
     activity,
     resources

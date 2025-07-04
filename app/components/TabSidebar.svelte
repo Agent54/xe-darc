@@ -6,14 +6,15 @@
     import { untrack } from 'svelte'
     
     let isHovered = $state(false)
-    let currentSpaceId = $state('design')
     let tabListRef = $state(null)
     let openMenuId = $state(null)
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
+    let closedTabsHideTimeout = null
 
     let isManualScroll = false
     let previousSpaceIndex = -1
+    let scrollActiveSpaceTimeout = null
     
     // Dummy data matching Arc/Zen browser style
     const globallyPinnedTabs = [
@@ -95,8 +96,8 @@
     }
     
     function scrollToCurrentSpace(behavior = 'smooth') {
-        if (tabListRef && currentSpaceId) {
-            const targetElement = tabListRef.querySelector(`[data-space-id="${currentSpaceId}"]`)
+        if (tabListRef && data.spaceMeta.activeSpace) {
+            const targetElement = tabListRef.querySelector(`[data-space-id="${data.spaceMeta.activeSpace}"]`)
             if (targetElement) {
                 targetElement.scrollIntoView({ behavior, inline: 'start' })
             }
@@ -104,7 +105,7 @@
     }
 
     function handleSpaceClick(spaceId) {
-        currentSpaceId = spaceId
+        data.spaceMeta.activeSpace = spaceId
         previousSpaceIndex = spaceOrder.indexOf(spaceId)
         isManualScroll = true
         scrollToCurrentSpace('smooth')
@@ -118,10 +119,25 @@
         const containerWidth = tabListRef.clientWidth
         const newIndex = Math.round(scrollLeft / containerWidth)
         
-        if (newIndex !== spaceOrder.indexOf(currentSpaceId) && newIndex >= 0 && newIndex < spaceOrder.length) {
-            isManualScroll = true
-            currentSpaceId = spaceOrder[newIndex]
-            setTimeout(() => { isManualScroll = false }, 100)
+        if (newIndex !== spaceOrder.indexOf(data.spaceMeta.activeSpace) && newIndex >= 0 && newIndex < spaceOrder.length) {
+            if (scrollActiveSpaceTimeout) {
+                clearTimeout(scrollActiveSpaceTimeout)
+            }
+            
+            scrollActiveSpaceTimeout = setTimeout(() => {
+                // Double-check that we're still on the same space after the delay
+                const currentScrollLeft = tabListRef.scrollLeft
+                const currentContainerWidth = tabListRef.clientWidth
+                const currentIndex = Math.round(currentScrollLeft / currentContainerWidth)
+                
+                if (currentIndex === newIndex && currentIndex >= 0 && currentIndex < spaceOrder.length) {
+                    isManualScroll = true
+                    data.spaceMeta.activeSpace = spaceOrder[currentIndex]
+                    setTimeout(() => { isManualScroll = false }, 100)
+                }
+                
+                scrollActiveSpaceTimeout = null
+            }, 500)
         }
     }
     
@@ -148,14 +164,29 @@
         }
     }
     
+    function handleClosedTabsMouseEnter() {
+        if (closedTabsHideTimeout) {
+            clearTimeout(closedTabsHideTimeout)
+            closedTabsHideTimeout = null
+        }
+        closedTabsHovered = true
+    }
+    
+    function handleClosedTabsMouseLeave() {
+        closedTabsHideTimeout = setTimeout(() => {
+            closedTabsHovered = false
+            closedTabsHideTimeout = null
+        }, 300)
+    }
+    
     // onMount(() => {
     //     scrollToCurrentSpace('instant')
-    //     previousSpaceIndex = spaceOrder.indexOf(currentSpaceId)
+    //     previousSpaceIndex = spaceOrder.indexOf(data.spaceMeta.activeSpace)
     // })
 
     // Watch for changes in space order that might affect current space position
     $effect(() => {
-        const currentIndex = spaceOrder.indexOf(untrack(() => currentSpaceId))
+        const currentIndex = spaceOrder.indexOf(untrack(() => data.spaceMeta.activeSpace))
         if (currentIndex !== -1 && currentIndex !== previousSpaceIndex && tabListRef && !isManualScroll) {
             scrollToCurrentSpace('instant')
         }
@@ -188,14 +219,13 @@
                     {/each}
                 </div>
             </div>
-            
-            <!-- Spaces -->
+
             <div class="section">
                 <div class="spaces-container">
                     <div class="spaces-list">
                         {#each spaceOrder as spaceId}
                             <button class="space-item" 
-                                    class:active={currentSpaceId === spaceId}
+                                    class:active={data.spaceMeta.activeSpace === spaceId}
                                     onmousedown={() => handleSpaceClick(spaceId)}
                                     aria-label={`Switch to ${spaces[spaceId].name} space`}>
                                 {#if spaces[spaceId].glyph}
@@ -223,7 +253,7 @@
                         {#each spaceOrder as spaceId}
                             <div class="space-content" data-space-id={spaceId}>
                                 <div class="space-title-container">
-                                    <div class="space-title">
+                                    <div class="space-title" class:active={data.spaceMeta.activeSpace === spaceId}>
                                         {spaces[spaceId].name}
                                     </div>
                                     <div class="space-menu">
@@ -274,8 +304,8 @@
             
             {#if closedTabs.length > 0}
                 <div class="section closed-tabs-section"
-                     onmouseenter={() => closedTabsHovered = true}
-                     onmouseleave={() => closedTabsHovered = false}
+                     onmouseenter={handleClosedTabsMouseEnter}
+                     onmouseleave={handleClosedTabsMouseLeave}
                      role="region"
                      aria-label="Recently closed tabs">
                     <div class="closed-tabs-header"
@@ -501,6 +531,11 @@
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
         text-align: left;
+    }
+    
+    .space-title.active {
+        color: white;
+        font-weight: 600;
     }
     
     .space-menu {

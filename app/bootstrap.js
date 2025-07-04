@@ -20,7 +20,7 @@ export default [
     {
         _id: '11',
         type: 'tab',
-        space: '1',
+        spaceId: '1',
         url: 'http://localhost:5173',
         title: 'XR',
         screenshot: null,
@@ -29,7 +29,7 @@ export default [
     {
         _id: '10',
         type: 'tab',
-        space: '1',
+        spaceId: '1',
         url: 'https://wicg.github.io/controlled-frame',
         title: 'Controlled Frame API',
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://wicg.github.io&size=64',
@@ -41,7 +41,7 @@ export default [
         type: 'tab',
         url: 'https://open.spotify.com/', 
         title: 'Spotify', 
-        space: '1',
+        spaceId: '1',
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://open.spotify.com&size=64',
         screenshot: null,
         pinned: false,
@@ -51,7 +51,7 @@ export default [
         type: 'tab',
         url: 'http://lanes.localhost/', 
         title: 'Lanes',
-        space: '1', 
+        spaceId: '1', 
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://lanes.pm&size=64',
         screenshot: null,
         pinned: false,
@@ -59,7 +59,7 @@ export default [
     { 
         _id: '1d',
         type: 'tab',
-        space: '1',
+        spaceId: '1',
         url: 'https://operaneon.com/', 
         title: 'Opera Neon', 
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://operaneon.com&size=64',
@@ -69,7 +69,7 @@ export default [
     {
         _id: '3',
         type: 'tab',
-        space: '1',
+        spaceId: '1',
         url: 'https://google.com', 
         title: 'Google', 
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64',
@@ -80,7 +80,7 @@ export default [
     {
         _id: '5',
         type: 'tab',
-        space: '1',
+        spaceId: '1',
         url: 'https://github.com/orgs/Agent54', 
         title: 'Agent54', 
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://github.com&size=64',
@@ -90,7 +90,7 @@ export default [
     {
         _id: '16',
         type: 'tab',
-        space: '1',
+        spaceId: '1',
         url: 'https://agregore.org', 
         title: 'Agregore', 
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://agregore.org&size=64',
@@ -100,7 +100,7 @@ export default [
     {
         _id: '26',
         type: 'tab',
-        space: '1',
+        spaceId: '1',
         url: 'https://users-and-agents.com', 
         title: 'Agents & Agents', 
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://github.com&size=64',
@@ -110,7 +110,7 @@ export default [
     {
         _id: '36',
         type: 'tab',
-        space: '1',
+        spaceId: '1',
         url: 'https://badssl.com/', 
         title: 'Bad SSL', 
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://badssl.com&size=64',
@@ -120,7 +120,7 @@ export default [
     {
         _id: '7',
         type: 'tab',
-        space: '1',
+        spaceId: '1',
         url: 'https://www.figma.com/design/HP40QZCsYVBnYahP4oUa2q/Darc-browser?node-id=0-1&p=f&t=mEPREy5GwjSdFBX9-0', 
         title: 'Figma', 
         favicon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://figma.com&size=64',

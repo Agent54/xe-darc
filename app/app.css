@@ -497,6 +497,7 @@ ul::-webkit-scrollbar {
     font-size: 12px;
     opacity: 0.4;
     transition: all 0.3s ease;
+    transition-delay: 0.25s;
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
@@ -506,6 +507,7 @@ ul::-webkit-scrollbar {
     opacity: 1;
     background: rgba(0, 0, 0, 0.9);
     transform: scale(1.05);
+    transition-delay: 0s;
 }
 
 .trash-count {
@@ -536,6 +538,8 @@ ul::-webkit-scrollbar {
     opacity: 0;
     visibility: hidden;
     transform: translateY(-8px) scale(0.96);
+    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+    transition-delay: 0.20s;
 
     z-index: 10000;
     pointer-events: none;
@@ -550,7 +554,10 @@ ul::-webkit-scrollbar {
     visibility: visible;
     transform: translateY(0) scale(1);
     pointer-events: auto;
+    transition-delay: 0.20s;
 }
+
+
 
 .trash-menu-header {
     padding: 8px 12px;
@@ -682,6 +689,7 @@ ul::-webkit-scrollbar {
     opacity: 0.4;
     transition: opacity 0.2s ease; 
     /* , transform 0.2s ease; */
+    transition-delay: 0.20s;
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
@@ -691,6 +699,7 @@ ul::-webkit-scrollbar {
 .header-icon-button:hover {
     opacity: 1;
     /* transform: scale(1.05); */
+    transition-delay: 0.20s;
 }
 
 .view-mode-icon {
@@ -725,6 +734,8 @@ ul::-webkit-scrollbar {
     opacity: 0;
     visibility: hidden;
     transform: translateY(-8px) scale(0.96);
+    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+    transition-delay: 0.20s;
 
     z-index: 10000;
     pointer-events: none;
@@ -736,6 +747,7 @@ ul::-webkit-scrollbar {
     visibility: visible;
     transform: translateY(0) scale(1);
     pointer-events: auto;
+    transition-delay: 0.20s;
 }
 
 .settings-menu-header {
@@ -848,6 +860,8 @@ ul::-webkit-scrollbar {
     opacity: 0;
     visibility: hidden;
     transform: translateY(-8px) scale(0.96);
+    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+    transition-delay: 0.20s;
 
     z-index: 10000;
     pointer-events: none;
@@ -859,6 +873,7 @@ ul::-webkit-scrollbar {
     visibility: visible;
     transform: translateY(0) scale(1);
     pointer-events: auto;
+    transition-delay: 0.20s;
 }
 
 .view-mode-menu-header {

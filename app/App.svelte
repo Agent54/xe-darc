@@ -9,7 +9,6 @@
     import Excalidraw from './components/Excalidraw.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
-    import SecurityIndicator from './components/SecurityIndicator.svelte'
     import Favicon from './components/Favicon.svelte'
     import { onMount, untrack } from 'svelte'
     import data from './data.svelte.js'
@@ -26,8 +25,6 @@
     //     // Do what you need with the permission state.
     //     console.log(status.state)
     // })
-
-
 
     chrome.runtime?.sendMessage(
         'fgeflhglmchkilcegppfkgmmabpppcia',
@@ -52,53 +49,55 @@
 
     let activeTabIndex = $state(0)
 
-    let tabs = $state([
-        // {
-        //     id: '111',
-        //     url: 'http://code.xe', 
-        //     title: 'Code',
-        //     audioPlaying: false,
-        //     // favicon: 'file://photon_logo.png',
-        //     screenshot: null,
-        //     pinned: false,
-        //     muted: false,
-        //     loading: false
-        // },
-        {
-            id: '4',
-            url: 'about:newtab', 
-            title: 'New Tab',
-            audioPlaying: false,
-            // favicon: 'file://photon_logo.png',
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false
-        },
+    let tabs = $derived((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || [])
 
-        // {
-        //     id: '5',
-        //     url: `isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac/public/test.html`, 
-        //     title: 'Test',
-        //     audioPlaying: false,
-        //     // favicon: 'file://photon_logo.png',
-        //     screenshot: null,
-        //     pinned: false,
-        //     muted: false,
-        //     loading: false
-        // }
-        // {
-        //     id: '5',
-        //     url: '/test-links.html', 
-        //     title: 'Link Tracking Test',
-        //     audioPlaying: false,
-        //     // favicon: 'file://photon_logo.png',
-        //     screenshot: null,
-        //     pinned: false,
-        //     muted: false,
-        //     loading: false
-        // }
-    ])
+    // let tabs = $state([
+    //     // {
+    //     //     id: '111',
+    //     //     url: 'http://code.xe', 
+    //     //     title: 'Code',
+    //     //     audioPlaying: false,
+    //     //     // favicon: 'file://photon_logo.png',
+    //     //     screenshot: null,
+    //     //     pinned: false,
+    //     //     muted: false,
+    //     //     loading: false
+    //     // },
+    //     {
+    //         id: '4',
+    //         url: 'about:newtab', 
+    //         title: 'New Tab',
+    //         audioPlaying: false,
+    //         // favicon: 'file://photon_logo.png',
+    //         screenshot: null,
+    //         pinned: false,
+    //         muted: false,
+    //         loading: false
+    //     },
+
+    //     // {
+    //     //     id: '5',
+    //     //     url: `isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac/public/test.html`, 
+    //     //     title: 'Test',
+    //     //     audioPlaying: false,
+    //     //     // favicon: 'file://photon_logo.png',
+    //     //     screenshot: null,
+    //     //     pinned: false,
+    //     //     muted: false,
+    //     //     loading: false
+    //     // }
+    //     // {
+    //     //     id: '5',
+    //     //     url: '/test-links.html', 
+    //     //     title: 'Link Tracking Test',
+    //     //     audioPlaying: false,
+    //     //     // favicon: 'file://photon_logo.png',
+    //     //     screenshot: null,
+    //     //     pinned: false,
+    //     //     muted: false,
+    //     //     loading: false
+    //     // }
+    // ])
     let visibilityTimers = new Map()
     let hoveredTab = $state(null)
     let hoverTimeout = null
@@ -145,7 +144,6 @@
     let prevOpenSidebars = $state(new Set())
     let isSwitchingSidebars = $state(false)
 
-    // User Mods state
     let userMods = $state([])
 
     function getEnabledUserMods(tab) {
