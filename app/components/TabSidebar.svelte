@@ -3,6 +3,7 @@
     let { isDragEnabled = true } = $props()
     import data from '../data.svelte.js'
     import Favicon from './Favicon.svelte'
+    import { onMount } from 'svelte'
     
     let isHovered = $state(false)
     let currentSpaceId = $state('design')
@@ -10,6 +11,8 @@
     let openMenuId = $state(null)
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
+    let isManualScroll = $state(false)
+    let previousSpaceIndex = $state(-1)
     
     // Dummy data matching Arc/Zen browser style
     const globallyPinnedTabs = [
@@ -90,18 +93,21 @@
         isHovered = false
     }
     
+    function scrollToCurrentSpace(behavior = 'smooth') {
+        if (tabListRef && currentSpaceId) {
+            const targetElement = tabListRef.querySelector(`[data-space-id="${currentSpaceId}"]`)
+            if (targetElement) {
+                targetElement.scrollIntoView({ behavior, inline: 'start' })
+            }
+        }
+    }
+
     function handleSpaceClick(spaceId) {
         currentSpaceId = spaceId
-        
-        // Scroll to the corresponding tab content
-        if (tabListRef) {
-            const containerWidth = tabListRef.clientWidth
-            const scrollPosition = spaceOrder.indexOf(spaceId) * containerWidth
-            tabListRef.scrollTo({
-                left: scrollPosition,
-                behavior: 'smooth'
-            })
-        }
+        previousSpaceIndex = spaceOrder.indexOf(spaceId)
+        isManualScroll = true
+        scrollToCurrentSpace('smooth')
+        setTimeout(() => { isManualScroll = false }, 300)
     }
     
     function handleTabScroll(event) {
@@ -139,6 +145,22 @@
         }
     }
     
+    // onMount(() => {
+    //     scrollToCurrentSpace('instant')
+    //     previousSpaceIndex = spaceOrder.indexOf(currentSpaceId)
+    // })
+
+    // Watch for changes in space order that might affect current space position
+    $effect(() => {
+        const currentIndex = spaceOrder.indexOf(currentSpaceId)
+        if (currentIndex !== -1 && currentIndex !== previousSpaceIndex && tabListRef && !isManualScroll) {
+            scrollToCurrentSpace('instant')
+        }
+        if (currentIndex !== -1) {
+            previousSpaceIndex = currentIndex
+        }
+    })
+    
 
 </script>
 
@@ -171,7 +193,7 @@
                         {#each spaceOrder as spaceId}
                             <button class="space-item" 
                                     class:active={currentSpaceId === spaceId}
-                                    onclick={() => handleSpaceClick(spaceId)}
+                                    onmousedown={() => handleSpaceClick(spaceId)}
                                     aria-label={`Switch to ${spaces[spaceId].name} space`}>
                                 {#if spaces[spaceId].glyph}
                                     <span class="space-glyph">{@html spaces[spaceId].glyph}</span>
