@@ -1586,7 +1586,7 @@ ul::-webkit-scrollbar {
     border-top-right-radius: 8px;
     z-index: 10;
     opacity: 0;
-    transition: opacity 0.1s cubic-bezier(0.25, 0.45, 0.94) 0.3s, top 0.1s cubic-bezier(0.25, 0.45, 0.94) 0.3s, box-shadow 0.1s cubic-bezier(0.25, 0.45, 0.94) 0.3s;
+    transition: opacity 0.1s cubic-bezier(0.25, 0.45, 0.94, 1) 0.3s, top 0.1s cubic-bezier(0.25, 0.45, 0.94, 1) 0.3s, box-shadow 0.1s cubic-bezier(0.25, 0.45, 0.94, 1) 0.3s;
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -1605,7 +1605,7 @@ ul::-webkit-scrollbar {
     top: -10px;
     z-index: 100;
     opacity: 1;
-    transition: opacity 0.11s cubic-bezier(0.25, 0.45, 0.94) 0.3s, top 0.11s cubic-bezier(0.25, 0.45, 0.94) 0.3s, box-shadow 0.11s cubic-bezier(0.25, 0.45, 0.94) 0.3s;
+    transition: opacity 0.11s cubic-bezier(0.25, 0.45, 0.94, 1) 0.3s, top 0.11s cubic-bezier(0.25, 0.45, 0.94, 1) 0.3s, box-shadow 0.11s cubic-bezier(0.25, 0.45, 0.94, 1) 0.3s;
     box-shadow: 0 6px 35px 5px rgb(0 0 0 / 36%);
 }
 
