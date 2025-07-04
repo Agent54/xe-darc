@@ -14,6 +14,7 @@
     import data from '../data.svelte.js'
     import { untrack } from 'svelte'
     import SSLErrorPage from './SSLErrorPage.svelte'
+    import NetworkErrorPage from './NetworkErrorPage.svelte'
     // import { fade } from 'svelte/transition'
 
     let {
@@ -177,6 +178,84 @@
         return descriptions[errorCode] || `Certificate or SSL error: ${errorCode}`
     }
 
+    // Check if an error code represents a network error
+    function isNetworkError(errorCode) {
+        if (!errorCode) return false
+        
+        const error = errorCode.toString()
+        
+        // Check for network error patterns
+        return error.includes('ERR_NAME_NOT_RESOLVED') ||
+               error.includes('ERR_INTERNET_DISCONNECTED') ||
+               error.includes('ERR_CONNECTION_REFUSED') ||
+               error.includes('ERR_CONNECTION_TIMED_OUT') ||
+               error.includes('ERR_NETWORK_CHANGED') ||
+               error.includes('ERR_CONNECTION_ABORTED') ||
+               error.includes('ERR_CONNECTION_RESET') ||
+               error.includes('ERR_CONNECTION_FAILED') ||
+               error.includes('ERR_NETWORK_IO_SUSPENDED') ||
+               error.includes('ERR_NETWORK_ACCESS_DENIED') ||
+               error.includes('ERR_PROXY_CONNECTION_FAILED') ||
+               error.includes('ERR_DNS_TIMED_OUT') ||
+               error.includes('ERR_DNS_MALFORMED_RESPONSE') ||
+               error.includes('ERR_DNS_SERVER_FAILED') ||
+               error.includes('ERR_DNS_CACHE_MISS') ||
+               error.includes('ERR_ADDRESS_UNREACHABLE') ||
+               error.includes('ERR_NETWORK_TIMEOUT')
+    }
+
+    // Set network error on tab
+    function setNetworkError(tab, errorCode, url) {
+        const networkError = {
+            code: errorCode,
+            url: url,
+            timestamp: Date.now()
+        }
+
+        const origin = (new URL(url)).origin
+        data.origins[origin] ??= {}
+        data.origins[origin].networkError = networkError
+
+        tab.networkError = networkError
+        
+        console.warn(`🌐 Network error detected for ${url}: ${errorCode}`)
+    }
+
+    // Clear network error from tab
+    function clearNetworkError(tab) {
+        if (tab.networkError) {
+            const origin = (new URL(tab.url)).origin
+            delete data.origins[origin]?.networkError
+            delete tab.networkError
+            console.log(`🌐 Network error cleared for ${tab.url}`)
+        }
+    }
+
+    // Reload the current tab
+    function reloadTab(tab) {
+        const frame = tab.frame
+        if (frame) {
+            console.log(`🔄 User initiated reload for tab ${tab.id}`)
+            clearNetworkError(tab)
+            
+            // Set loading state
+            tab.loading = true
+            
+            // Reload the frame
+            if (frame.reload) {
+                frame.reload()
+            } else {
+                // Fallback: reload by setting src again
+                const currentUrl = tab.url
+                frame.src = currentUrl
+            }
+            
+            console.log(`🔄 Reload initiated for tab ${tab.id} - URL: ${tab.url}`)
+        } else {
+            console.error(`❌ Cannot reload tab ${tab.id} - frame not found`)
+        }
+    }
+
     function handleEvent(eventName, tab, event) {
         console.log(eventName, tab, event)
     }
@@ -189,9 +268,13 @@
             console.log(`🔍 Checking if "${event.reason}" is a certificate error...`)
             if (isCertificateError(event.reason)) {
                 console.log(`🔒 CERTIFICATE ERROR DETECTED: ${event.reason}`)
-                setCertificateError(event.reason, event.url || tab.url)
+                setCertificateError(tab, event.reason, event.url || tab.url)
+            } else if (isNetworkError(event.reason)) {
+                console.log(`🌐 NETWORK ERROR DETECTED in loadabort: ${event.reason}`)
+                const errorCode = event.reason.replace('net::', '')
+                setNetworkError(tab, errorCode, event.url || tab.url)
             } else {
-                console.log(`ℹ️ Not a certificate error: ${event.reason}`)
+                console.log(`ℹ️ Not a certificate or network error: ${event.reason}`)
             }
         }
     }
@@ -237,18 +320,37 @@
 
     function handleLoadStop(tab) {
         tab.loading = false
+        
+        console.log(`🔄 handleLoadStop called for ${tab.url}`)
+        console.log(`🔄 Network error before processing:`, tab.networkError)
 
         tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
+        // Don't clear network errors automatically - they should only be cleared by:
+        // 1. User clicking reload button
+        // 2. Successfully navigating to a different URL
+        
+        // Only clear network error if we successfully navigated to a different URL
+        if (tab.networkError && tab.networkError.url !== tab.url) {
+            clearNetworkError(tab)
+            console.log(`🌐 Network error cleared - successfully navigated from ${tab.networkError.url} to ${tab.url}`)
+        } else if (tab.networkError && tab.networkError.url === tab.url) {
+            // Keep the network error - the page load might have "stopped" due to the error
+            console.log(`🌐 Network error preserved - still on error URL: ${tab.url}`)
+        } else {
+            // No network error, this is a successful load
+            console.log(`✅ Page loaded successfully: ${tab.url}`)
+        }
 
+        const origin = (new URL(tab.url)).origin
         if (data.origins[origin]?.certificateError) {
             if (tab.url === data.origins[origin].certificateError.url) {
                 delete data.origins[origin]?.certificateError
-                console.log(`🔒 Certificate error cleared - navigated from ${tab.certificateError.url} to ${newUrl}`)
+                console.log(`🔒 Certificate error cleared - navigated from ${tab.certificateError.url} to ${tab.url}`)
             }
         }
         
-        console.log(`🔒 Load stop for ${tab.url} - Security state: ${tab.securityState}, Has cert error: ${!!tab.certificateError}`)
+        console.log(`🔒 Load stop for ${tab.url} - Security state: ${tab.securityState}, Has cert error: ${!!tab.certificateError}, Has network error: ${!!tab.networkError}`)
         
         // Update title and capture screenshot after page loads
         setTimeout(async () => {
@@ -407,6 +509,27 @@ document.addEventListener('keydown', function(event) {
         return false;
     }
 }, { capture: true, passive: false });
+
+// Global mouse event listeners for controlled frame
+document.addEventListener('mousedown', function(event) {
+    console.log('🖱️ [CONTROLLED-FRAME] mousedown detected in tab ${tab.id}', {
+        button: event.button,
+        target: event.target?.tagName,
+        clientX: event.clientX,
+        clientY: event.clientY
+    });
+    console.log('iwa:mousedown:${tab.id}');
+}, { capture: true, passive: true });
+
+document.addEventListener('mouseup', function(event) {
+    console.log('🖱️ [CONTROLLED-FRAME] mouseup detected in tab ${tab.id}', {
+        button: event.button,
+        target: event.target?.tagName,
+        clientX: event.clientX,
+        clientY: event.clientY
+    });
+    console.log('iwa:mouseup:${tab.id}');
+}, { capture: true, passive: true });
 
 // Global wheel event listener for controlled frame zoom control
 document.addEventListener('wheel', function(event) {
@@ -902,8 +1025,17 @@ document.addEventListener('input', function(event) {
                     console.log(`🚨 SECURITY COMPROMISED: Certificate error in ANY resource makes entire page insecure`)
                     const errorCode = details.error.replace('net::', '')
                     setCertificateError(tab, errorCode, details.url)
+                } else if (isNetworkError(details.error)) {
+                    // Network error detected - only set for main frame errors
+                    console.log(`🌐 NETWORK ERROR DETECTED: ${details.error} for ${details.url}`)
+                    const errorCode = details.error.replace('net::', '')
+                    
+                    // Only show network error page for main frame errors (not subresources)
+                    if (details.frameId === 0) {
+                        setNetworkError(tab, errorCode, details.url)
+                    }
                 } else {
-                    console.log(`ℹ️ Not a certificate error: ${details.error}`)
+                    console.log(`ℹ️ Not a certificate or network error: ${details.error}`)
                 }
             }
         }, allUrlsFilter)
@@ -1162,6 +1294,26 @@ document.addEventListener('input', function(event) {
                 } catch (error) {
                     console.error('Failed to parse additional drag/drop data:', error)
                 }
+            } else if (message.startsWith('iwa:mousedown:')) {
+                // Handle mousedown from controlled frame
+                const tabId = message.split(':')[2]
+                console.log(`🖱️ [FRAME-LISTENER] Mouse down received from tab ${tabId}`)
+                
+                // Dispatch mousedown event to parent app
+                console.log(`🖱️ [FRAME-LISTENER] Dispatching darc-controlled-frame-mousedown event`)
+                window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
+                    detail: { tabId: tabId }
+                }))
+            } else if (message.startsWith('iwa:mouseup:')) {
+                // Handle mouseup from controlled frame
+                const tabId = message.split(':')[2]
+                console.log(`🖱️ [FRAME-LISTENER] Mouse up received from tab ${tabId}`)
+                
+                // Dispatch mouseup event to parent app
+                console.log(`🖱️ [FRAME-LISTENER] Dispatching darc-controlled-frame-mouseup event`)
+                window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
+                    detail: { tabId: tabId }
+                }))
             }
         })
     }
@@ -1405,6 +1557,7 @@ document.addEventListener('input', function(event) {
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
         class:certificate-error={tab.certificateError}
+        class:network-error={tab.networkError}
         id="tab_{tab.id}"
         class="frame">
 
@@ -1414,6 +1567,12 @@ document.addEventListener('input', function(event) {
             {#if tab.certificateError}
                 <SSLErrorPage
                     {tab}
+                />
+
+            {:else if tab.networkError}
+                <NetworkErrorPage
+                    {tab}
+                    onReload={() => reloadTab(tab)}
                 />
             {/if}
         <!-- </div> -->
@@ -1504,6 +1663,9 @@ loading="eager"
         display: block;
     }
     :global(.certificate-error > .frame-instance:not(.ssl-error)) {
+        display: none;
+    }
+    :global(.network-error > .frame-instance:not(.network-error)) {
         display: none;
     }
 </style>

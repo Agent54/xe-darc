@@ -49,7 +49,7 @@
 
     let activeTabIndex = $state(0)
 
-    let tabs = $derived((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || [])
+    let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || []).slice(0,1))
 
     // let tabs = $state([
     //     // {
@@ -292,9 +292,19 @@
         openNewTab()
     }
 
+    function handleFrameMouseDown(event) {
+        isMouseDown = true
+    }
+
+    function handleFrameMouseUp(event) {
+        isMouseDown = false
+    }
+
     window.addEventListener('darc-close-tab', handleGlobalTabClose)
     window.addEventListener('darc-close-tab-from-frame', handleFrameTabClose)
     window.addEventListener('darc-new-tab-from-frame', handleFrameNewTab)
+    window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
+    window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
 
     function openNewTab() {
         const newTab = { 
@@ -499,9 +509,15 @@
     }
 
     function goBack() {
+        // If mouse is down, navigate spaces instead of frame navigation
+        if (isMouseDown) {
+            previousSpace()
+            return
+        }
+
         const activeTab = tabs[activeTabIndex]
         if (activeTab) {
-            const frame = activeTab.frame // document.getElementById(`tab_${activeTab.id}`)
+            const frame = activeTab.frame
             if (frame && typeof frame.back === 'function') {
                 // Check if the frame can go back
                 if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
@@ -519,9 +535,15 @@
     }
 
     function goForward() {
+        // If mouse is down, navigate spaces instead of frame navigation
+        if (isMouseDown) {
+            nextSpace()
+            return
+        }
+
         const activeTab = tabs[activeTabIndex]
         if (activeTab) {
-            const frame = activeTab.frame // document.getElementById(`tab_${activeTab.id}`)
+            const frame = activeTab.frame
             if (frame && typeof frame.forward === 'function') {
                 frame.forward()
             }
@@ -637,6 +659,8 @@
             window.removeEventListener('darc-close-tab', handleGlobalTabClose)
             window.removeEventListener('darc-close-tab-from-frame', handleFrameTabClose)
             window.removeEventListener('darc-new-tab-from-frame', handleFrameNewTab)
+            window.removeEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
+            window.removeEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
         }
     })
 
@@ -942,10 +966,34 @@
         }
     }
 
-    // Track mouse position globally
+    // Track mouse position and state globally
+    let isMouseDown = false
+    
     function handleGlobalMouseMove(event) {
         window.mouseX = event.clientX
         window.mouseY = event.clientY
+    }
+
+    function handleGlobalMouseDown(event) {
+        isMouseDown = true
+    }
+
+    function handleGlobalMouseUp(event) {
+        isMouseDown = false
+    }
+
+    function previousSpace() {
+        const success = data.previousSpace()
+        if (success) {
+            activeTabIndex = 0 // Reset to first tab in new space
+        }
+    }
+
+    function nextSpace() {
+        const success = data.nextSpace()
+        if (success) {
+            activeTabIndex = 0 // Reset to first tab in new space
+        }
     }
 
     function handleScroll() {
@@ -1536,49 +1584,22 @@
     })
 
     let block = true
-    function debugHistory() {
-        console.log('=== History Debug ===')
-        console.log('Current URL: block: ' + block, window.location.href)
-        console.log('History length:', window.history.length)
-        console.log('activetab', $state.snapshot(tabs[activeTabIndex]))
-        try {
-            console.log('Current state:', window.history.state)
-        } catch (e) {
-            console.log('Cannot access current state:', e.message)
-        }
-    }
     function handleShellNavigation (event) {
-        debugHistory() 
         if (block) {
             block = false
             return
         }
-        // console.log('handleShellNavigation', event.state.direction, tabs[activeTabIndex])
         
         block = true
         if (event.state.direction === 1) {
             history.forward()
-
-            const activeTab = tabs[activeTabIndex]
-            const frame = activeTab?.frame
-            
-            if (frame && typeof frame.back === 'function') {
-                // Check if the frame can go back
-                if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
-                    // No back navigation available, set to start page
-                    activeTab.url = 'about:newtab'
-                    activeTab.title = 'New Tab'
-                    activeTab.favicon = null
-                    // TODO: preserve tab history and allow forward navigation
-                } else {
-                    frame.back()
-                }
-            }
+            goBack()
         } else if (event.state.direction === 3) {
             history.back()
-            tabs[activeTabIndex].frame?.forward() 
+            goForward()
         } 
     }
+
 
     onMount(() => {
         // console.log('setting up app shell navigation')
@@ -1831,6 +1852,8 @@
     onclick={hideContextMenu}
     oncontextmenu={handleGlobalContextMenu}
     onmousemove={handleGlobalMouseMove}
+    onmousedown={handleGlobalMouseDown}
+    onmouseup={handleGlobalMouseUp}
     onresize={handleResize}
     onfocus={updateWindowFocusState}
     onblur={updateWindowFocusState}

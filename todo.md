@@ -405,3 +405,18 @@ error
 
 add mouse coordinate callback to activate hover outside window.
 
+share on folder level
+tabs in folders get trash instead of close icon
+tabs navigated in folders are pinned urls and have home button to get home to pinned url
+
+drag drop into sidebar to add tab at that position
+
+auto collapse old tabs by month/week or  year
+
+different levels of success and timeframes:
+    - we have an internal platform that is great for agents (4 months)
+    - we have an internal full browser that is perfect for us (6 months)
+    - we have a diverse community of users > 10 (1 to 2 years)
+    - we have a revenue stream to offset llm and hosting (2 years) 
+
+space switch animation

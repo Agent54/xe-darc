@@ -3,7 +3,15 @@ export default [
         _id: '1',
         type: 'space',
         name: 'Default',
+        order: 1,
         tabs: []
+    },
+    {
+        _id: '66',
+        type: 'space',
+        name: 'Test',
+        tabs: [],
+        order: 1000
     },
     // FIXME about: support
     // {
