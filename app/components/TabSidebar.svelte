@@ -3,7 +3,7 @@
     let { isDragEnabled = true } = $props()
     import data from '../data.svelte.js'
     import Favicon from './Favicon.svelte'
-    import { onMount } from 'svelte'
+    import { untrack } from 'svelte'
     
     let isHovered = $state(false)
     let currentSpaceId = $state('design')
@@ -11,8 +11,9 @@
     let openMenuId = $state(null)
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
-    let isManualScroll = $state(false)
-    let previousSpaceIndex = $state(-1)
+
+    let isManualScroll = false
+    let previousSpaceIndex = -1
     
     // Dummy data matching Arc/Zen browser style
     const globallyPinnedTabs = [
@@ -118,7 +119,9 @@
         const newIndex = Math.round(scrollLeft / containerWidth)
         
         if (newIndex !== spaceOrder.indexOf(currentSpaceId) && newIndex >= 0 && newIndex < spaceOrder.length) {
+            isManualScroll = true
             currentSpaceId = spaceOrder[newIndex]
+            setTimeout(() => { isManualScroll = false }, 100)
         }
     }
     
@@ -152,7 +155,7 @@
 
     // Watch for changes in space order that might affect current space position
     $effect(() => {
-        const currentIndex = spaceOrder.indexOf(currentSpaceId)
+        const currentIndex = spaceOrder.indexOf(untrack(() => currentSpaceId))
         if (currentIndex !== -1 && currentIndex !== previousSpaceIndex && tabListRef && !isManualScroll) {
             scrollToCurrentSpace('instant')
         }
