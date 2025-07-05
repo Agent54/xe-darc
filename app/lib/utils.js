@@ -32,3 +32,14 @@ export function thottle (func, window = 100) {
     }
   }
 }
+
+export function origin(url) {
+  try {
+    return new URL(url).origin
+  } catch (error) {
+    // Handle internal pages with proper origin designators
+    if (url?.startsWith('about:')) {
+      return 'about'
+    }
+  }
+}

@@ -12,6 +12,7 @@
     import Favicon from './components/Favicon.svelte'
     import { onMount, untrack } from 'svelte'
     import data from './data.svelte.js'
+    import { origin } from './lib/utils.js'
 
     const requestedResources = $state([])
 
@@ -1460,17 +1461,7 @@
     //     sidebarRightHovered = false
     // }
 
-    function origin(url) {
-        try {
-            return new URL(url).origin
-        } catch (error) {
-            // Handle internal pages with proper origin designators
-            if (url?.startsWith('about:')) {
-                return 'about'
-            }
-        
-        }
-    }
+
 
     // Global drag and drop event listeners for debugging and logging
     function setupGlobalDragDropListeners() {

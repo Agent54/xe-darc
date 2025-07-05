@@ -16,6 +16,7 @@
     import SSLErrorPage from './SSLErrorPage.svelte'
     import NetworkErrorPage from './NetworkErrorPage.svelte'
     import NewTab from './NewTab.svelte'
+    import { origin } from '../lib/utils.js'
     // import { fade } from 'svelte/transition'
 
     let {
@@ -107,9 +108,9 @@
             timestamp: Date.now()
         }
 
-        const origin = (new URL(url)).origin
-        data.origins[origin] ??= {}
-        data.origins[origin].certificateError = certificateError
+        const originValue = origin(url)
+        data.origins[originValue] ??= {}
+        data.origins[originValue].certificateError = certificateError
 
         tab.certificateError = certificateError
         
@@ -123,39 +124,39 @@
     function evaluateSecurityState(tab) {
         console.log(`🔒 Evaluating security state for ${tab.url}`)
         console.log(`🔒 Certificate error present: ${!!tab.certificateError}`)
-        const url = new URL(tab.url)
-
-        data.origins[url.origin] ??= {}
+        
+        const originValue = origin(tab.url)
+        data.origins[originValue] ??= {}
         
         try {
-           
+            const url = new URL(tab.url)
             console.log(`🔒 Protocol: ${url.protocol}`)
             
             // About pages are secure as they only run inside the browser
             if (url.protocol === 'about:') {
-                data.origins[url.origin].securityState = 'secure'
+                data.origins[originValue].securityState = 'secure'
                 return
             }
             
             // HTTPS with no certificate errors = secure
             if (url.protocol === 'https:') {
-                data.origins[url.origin].securityState = 'secure'
+                data.origins[originValue].securityState = 'secure'
                 return
             }
             
             // HTTP = insecure
             if (url.protocol === 'http:') {
-                data.origins[url.origin].securityState = 'insecure'
+                data.origins[originValue].securityState = 'insecure'
                 return
             }
             
             // Other protocols = unknown
-            data.origins[url.origin].securityState = 'unknown'
+            data.origins[originValue].securityState = 'unknown'
             console.log(`🔒 Other protocol - setting to unknown`)
             
         } catch (error) {
             // Invalid URL
-            data.origins[url.origin].securityState = 'unknown'
+            data.origins[originValue].securityState = 'unknown'
             console.log(`🔒 Invalid URL - setting to unknown`)
         }
     }
@@ -218,9 +219,9 @@
             timestamp: Date.now()
         }
 
-        const origin = (new URL(url)).origin
-        data.origins[origin] ??= {}
-        data.origins[origin].networkError = networkError
+        const originValue = origin(url)
+        data.origins[originValue] ??= {}
+        data.origins[originValue].networkError = networkError
 
         tab.networkError = networkError
         
@@ -230,8 +231,8 @@
     // Clear network error from tab
     function clearNetworkError(tab) {
         if (tab.networkError) {
-            const origin = (new URL(tab.url)).origin
-            delete data.origins[origin]?.networkError
+            const originValue = origin(tab.url)
+            delete data.origins[originValue]?.networkError
             delete tab.networkError
             console.log(`🌐 Network error cleared for ${tab.url}`)
         }
@@ -346,10 +347,10 @@
             }
             
             // Clear certificate error if we successfully navigated to a different URL
-            const origin = (new URL(tab.url)).origin
-            if (data.origins[origin]?.certificateError) {
-                if (tab.url !== data.origins[origin].certificateError.url) {
-                    delete data.origins[origin]?.certificateError
+            const originValue = origin(tab.url)
+            if (data.origins[originValue]?.certificateError) {
+                if (tab.url !== data.origins[originValue].certificateError.url) {
+                    delete data.origins[originValue]?.certificateError
                     delete tab.certificateError
                     console.log(`🔒 Certificate error cleared - successfully navigated to ${tab.url}`)
                 }
@@ -551,22 +552,19 @@ document.addEventListener('mouseup', function(event) {
 }, { capture: true, passive: true });
 
 // Global wheel event listener for controlled frame zoom control
-document.addEventListener('wheel', function(event) {
-    // Check for Ctrl key (Windows/Linux) or Cmd key (Mac) - same as zoom prevention in main app
-    if (event.ctrlKey || event.metaKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        
-        // Determine zoom direction based on deltaY
-        const zoomDirection = event.deltaY < 0 ? 'in' : 'out';
-        
-        // Log zoom direction to console IPC system
-        console.log('iwa:zoom:${tab.id}:' + zoomDirection);
-        
-        return false;
-    }
-}, { capture: true, passive: false });
+// document.onwheel = function(event) {
+//     // Check for Ctrl key (Windows/Linux) or Cmd key (Mac) - same as zoom prevention in main app
+//     if (event.ctrlKey || event.metaKey) {
+//         event.preventDefault();
+//         event.stopPropagation();
+//         event.stopImmediatePropagation();       
+//         // Determine zoom direction based on deltaY
+//         const zoomDirection = event.deltaY < 0 ? 'in' : 'out';
+//         // Log zoom direction to console IPC system
+//         console.log('iwa:zoom:${tab.id}:' + zoomDirection);
+//         return false;
+//     }
+// }, { capture: true, passive: false });
 
 // Track hovered anchor elements
 let currentHoveredAnchor = null;
@@ -1603,35 +1601,18 @@ document.addEventListener('input', function(event) {
         id="tab_{tab.id}"
         class="frame"
         role="tabpanel"
-       >
-
-       <!-- 
-
-       onfocus={() => {
-        console.log(`🔍 [INTERNAL-PAGE] Focus on tab ${tab.id}`)
-        window.dispatchEvent(new CustomEvent('darc-controlled-frame-focus', {
-            detail: { tabId: tab.id }
-        }))
-       }}   
-       onblur={() => {
-        console.log(`🔍 [INTERNAL-PAGE] Blur on tab ${tab.id}`)
-        window.dispatchEvent(new CustomEvent('darc-controlled-frame-blur', {
-            detail: { tabId: tab.id }
-        }))
-       }}
-       
-       onmousedown={() => {
-        console.log(`🖱️ [INTERNAL-PAGE] Mouse down on tab ${tab.id}`)
-        window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
-            detail: { tabId: tab.id }
-        }))
-    }}
-    onmouseup={() => {
-        console.log(`🖱️ [INTERNAL-PAGE] Mouse up on tab ${tab.id}`)
-        window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
-            detail: { tabId: tab.id }
-        }))
-    }} -->
+        tabindex="0"
+        onmousedown={() => {
+            window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
+                detail: { tabId: tab.id }
+            }))
+            onFrameFocus()
+        }}
+        onmouseup={() => {
+            window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
+                detail: { tabId: tab.id }
+            }))
+        }} >
 
         <div class="hidden" bind:this={anchor}></div>
            
