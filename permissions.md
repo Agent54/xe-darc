@@ -1,15 +1,17 @@
 all:
-    Location
-    Camera
-    Microphone
+    Location: checked
+    Camera: checked
+    Microphone: checked
+    Sound: checked
+    Images: checked
+    Fonts: checked
+   
     Motion sensors
     Notifications
     JavaScript
-    Images
     Pop-ups and redirects
     Intrusive ads
     Background sync
-    Sound
     Automatic downloads
     MIDI device control and reprogramme
     USB devices
@@ -25,7 +27,6 @@ all:
     Virtual reality
     Your device use
     Window management
-    Fonts
     Automatic picture-in-picture
     Scrolling and zooming shared tabs
     Automatic full screen

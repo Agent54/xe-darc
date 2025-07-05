@@ -140,7 +140,9 @@
         width: 100%;
         height: 100%;
         background: #000;
-        background-image: radial-gradient(circle at 50% 0%, #0c0c0c 0%, #000 80%);
+        background-image: 
+            radial-gradient(circle at 50% 0%, #0c0c0c 0%, #000 80%),
+            radial-gradient(circle at 50% 50%, rgba(156, 163, 175, 0.15) 0%, transparent 50%);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -252,13 +254,13 @@
     .reload-button {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 14px 28px;
-        background: rgba(255, 255, 255, 0.08);
+        gap: 6px;
+        padding: 10px 18px;
+        background: rgba(255, 255, 255, 0.12);
         color: #ffffff;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 8px;
-        font-size: 14px;
+        border: none;
+        border-radius: 6px;
+        font-size: 13px;
         font-weight: 500;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -266,13 +268,11 @@
     }
     
     .reload-button:hover {
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.18);
     }
     
     .reload-button:active {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.08);
     }
     
     .reload-button svg {

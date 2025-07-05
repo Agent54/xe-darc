@@ -1,8 +1,9 @@
 <script>
     // Tab sidebar component with Firefox-like hover behavior
-    let { isDragEnabled = true } = $props()
+    // let { isDragEnabled = true } = $props()
     import data from '../data.svelte.js'
     import Favicon from './Favicon.svelte'
+    import Tooltip from './Tooltip.svelte'
     import { untrack } from 'svelte'
     
     let isHovered = $state(false)
@@ -17,77 +18,9 @@
     let previousSpaceIndex = -1
     let scrollActiveSpaceTimeout = null
 
-    const globallyPinnedTabs = [
-        { id: 'global-1', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>', url: 'https://twitter.com' },
-        { id: 'global-2', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>', url: 'https://github.com' },
-        { id: 'global-3', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.354-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.015-4.49-4.491S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117v-6.038H8.148zm7.704 0h-.002c-2.476 0-4.49 2.015-4.49 4.491s2.014 4.49 4.49 4.49c2.476 0 4.49-2.014 4.49-4.49s-2.014-4.491-4.49-4.491zm0 7.509c-1.665 0-3.019-1.355-3.019-3.019s1.354-3.019 3.019-3.019 3.019 1.355 3.019 3.019-1.354 3.019-3.019 3.019z"/></svg>', url: 'https://figma.com' },
-        { id: 'global-4', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636C.732 21.002 0 20.27 0 19.366V5.457c0-.904.732-1.636 1.636-1.636h3.819l6.545 4.91 6.545-4.91h3.819c.904 0 1.636.732 1.636 1.636z"/></svg>', url: 'https://gmail.com' }
-    ]
+    const globallyPinnedTabs = $derived(data.globalPins)
     
-    const spaces = $derived({
-        ...data.spaces,
-        design: {
-            id: 'design',
-            glyph: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
-            name: 'Design',
-            pinnedTabs: [
-                { id: 'figma', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.354-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.015-4.49-4.491S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117v-6.038H8.148zm7.704 0h-.002c-2.476 0-4.49 2.015-4.49 4.491s2.014 4.49 4.49 4.49c2.476 0 4.49-2.014 4.49-4.49s-2.014-4.491-4.49-4.491zm0 7.509c-1.665 0-3.019-1.355-3.019-3.019s1.354-3.019 3.019-3.019 3.019 1.355 3.019 3.019-1.354 3.019-3.019 3.019z"/></svg>', url: 'https://figma.com', active: true },
-                { id: 'linear', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM7 17l10-10M7 7h10v10"/></svg>', url: 'https://linear.app' }
-            ],
-            tabs: [
-                { id: 'tab1', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>', title: 'Twitter', url: 'https://twitter.com' },
-                { id: 'divider1', type: 'divider', title: 'Social Media' },
-                { id: 'tab2', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.174-.105-.949-.199-2.403.042-3.441.219-.937 1.404-5.965 1.404-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738.098.119.112.224.083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.357-.631-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24.009 12.017 24.009c6.624 0 11.99-5.367 11.99-11.988C24.007 5.367 18.641.001.012.001z"/></svg>', title: 'Apple', url: 'https://apple.com' },
-                { id: 'divider2', type: 'divider' },
-                { id: 'tab3', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536h-1.568zm-11.136 0c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536H6.432zm12.8 7.68c-.8.8-2.4.8-3.2 0L12 12.8 8.96 15.84c-.8.8-2.4.8-3.2 0-.8-.8-.8-2.4 0-3.2L8.8 9.6c.8-.8 2.4-.8 3.2 0l3.04 3.04c.8.8.8 2.4 0 3.2z"/></svg>', title: 'Raycast', url: 'https://raycast.com' }
-            ]
-        },
-        tools: {
-            id: 'tools',
-            glyph: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>',
-            name: 'Tools',
-            pinnedTabs: [
-                { id: 'raycast', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536h-1.568zm-11.136 0c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536H6.432zm12.8 7.68c-.8.8-2.4.8-3.2 0L12 12.8 8.96 15.84c-.8.8-2.4.8-3.2 0-.8-.8-.8-2.4 0-3.2L8.8 9.6c.8-.8 2.4-.8 3.2 0l3.04 3.04c.8.8.8 2.4 0 3.2z"/></svg>', url: 'https://raycast.com' },
-                { id: 'linear2', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM7 17l10-10M7 7h10v10"/></svg>', url: 'https://linear.app' }
-            ],
-            tabs: [
-                { id: 'tab4', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>', title: 'Twitter', url: 'https://twitter.com', active: true },
-                { id: 'tab5', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>', title: 'Twitter', url: 'https://twitter.com' },
-                { id: 'tab6', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536h-1.568zm-11.136 0c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536H6.432zm12.8 7.68c-.8.8-2.4.8-3.2 0L12 12.8 8.96 15.84c-.8.8-2.4.8-3.2 0-.8-.8-.8-2.4 0-3.2L8.8 9.6c.8-.8 2.4-.8 3.2 0l3.04 3.04c.8.8.8 2.4 0 3.2z"/></svg>', title: 'Raycast', url: 'https://raycast.com' }
-            ]
-        },
-        dev: {
-            id: 'dev',
-            glyph: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>',
-            name: 'Development',
-            pinnedTabs: [
-                { id: 'github', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>', url: 'https://github.com' }
-            ],
-            tabs: [
-                { id: 'tab7', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>', title: 'Twitter', url: 'https://twitter.com' }
-            ]
-        },
-        notes: {
-            id: 'notes',
-            glyph: null,
-            name: 'Notes',
-            pinnedTabs: [],
-            tabs: [
-                { id: 'tab8', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>', title: 'Notes', url: 'https://notes.app' }
-            ]
-        }
-    })
-    
-    const spaceOrder = $derived([...Object.keys(data.spaces).sort((a, b) => a.order?.localeCompare(b.order) || 0), 'design', 'tools', 'dev', 'notes'])
-    
-    // Recently closed tabs
-    const closedTabs = [
-        { id: 'closed-1', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>', title: 'Twitter Home', url: 'https://twitter.com' },
-        { id: 'closed-2', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>', title: 'GitHub Dashboard', url: 'https://github.com' },
-        { id: 'closed-3', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.354-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.015-4.49-4.491S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117v-6.038H8.148zm7.704 0h-.002c-2.476 0-4.49 2.015-4.49 4.491s2.014 4.49 4.49 4.49c2.476 0 4.49-2.014 4.49-4.49s-2.014-4.491-4.49-4.491zm0 7.509c-1.665 0-3.019-1.355-3.019-3.019s1.354-3.019 3.019-3.019 3.019 1.355 3.019 3.019-1.354 3.019-3.019 3.019z"/></svg>', title: 'Figma Design', url: 'https://figma.com' },
-        { id: 'closed-4', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536h-1.568zm-11.136 0c-.169-.113-.752-.849-.752-1.536 0-.849.696-1.536 1.536-1.536s1.536.687 1.536 1.536c0 .687-.583 1.423-.752 1.536H6.432zm12.8 7.68c-.8.8-2.4.8-3.2 0L12 12.8 8.96 15.84c-.8.8-2.4.8-3.2 0-.8-.8-.8-2.4 0-3.2L8.8 9.6c.8-.8 2.4-.8 3.2 0l3.04 3.04c.8.8.8 2.4 0 3.2z"/></svg>', title: 'Raycast Settings', url: 'https://raycast.com' },
-        { id: 'closed-5', favicon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM7 17l10-10M7 7h10v10"/></svg>', title: 'Linear Issues', url: 'https://linear.app' }
-    ]
+    const spaceOrder = $derived([...Object.keys(data.spaces).sort((a, b) => a.order?.localeCompare(b.order) || 0)])
     
     function handleMouseEnter() {
         isHovered = true
@@ -149,11 +82,11 @@
     
     function handleMenuItemClick(action, spaceId) {
         // Handle the action (rename, change icon, set default container)
-        console.log(`Action: ${action} for space: ${spaces[spaceId].name}`)
+        console.log(`Action: ${action} for space: ${data.spaces[spaceId].name}`)
         
         if (action.startsWith('container-')) {
             const containerType = action.replace('container-', '')
-            console.log(`Setting container to: ${containerType} for space: ${spaces[spaceId].name}`)
+            console.log(`Setting container to: ${containerType} for space: ${data.spaces[spaceId].name}`)
             // TODO: Implement container assignment logic
         }
         
@@ -232,32 +165,34 @@
      aria-label="Tab Sidebar">
     <div class="sidebar">
         <div class="sidebar-content">
-            <!-- Globally Pinned Tabs -->
-            <div class="section">
-                <div class="pinned-tabs-grid">
-                    {#each globallyPinnedTabs as tab}
-                        <button class="pinned-tab" title={tab.url}>
-                            <Favicon {tab} showButton={false} />
-                        </button>
-                    {/each}
+            {#if globallyPinnedTabs.length > 0}
+                <div class="section global-pins-section">
+                    <div class="pinned-tabs-grid">
+                        {#each globallyPinnedTabs as tab}
+                            <button class="pinned-tab" title={tab.url}>
+                                <Favicon {tab} showButton={false} />
+                            </button>
+                        {/each}
+                    </div>
                 </div>
-            </div>
+            {/if}
 
             <div class="section">
                 <div class="spaces-container">
                     <div class="spaces-list">
                         {#each spaceOrder as spaceId}
-                            <button class="space-item" 
-                                    class:active={data.spaceMeta.activeSpace === spaceId}
-                                    onmousedown={() => handleSpaceClick(spaceId)}
-                                    title={spaces[spaceId].name}
-                                    aria-label={`Switch to ${spaces[spaceId].name} space`}>
-                                {#if spaces[spaceId].glyph}
-                                    <span class="space-glyph">{@html spaces[spaceId].glyph}</span>
-                                {:else}
-                                    <span class="space-glyph-default"></span>
-                                {/if}
-                            </button>
+                            <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
+                                <button class="space-item" 
+                                        class:active={data.spaceMeta.activeSpace === spaceId}
+                                        onmousedown={() => handleSpaceClick(spaceId)}
+                                        aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
+                                    {#if data.spaces[spaceId].glyph}
+                                        <span class="space-glyph">{@html data.spaces[spaceId].glyph}</span>
+                                    {:else}
+                                        <span class="space-glyph-default"></span>
+                                    {/if}
+                                </button>
+                            </Tooltip>
                         {/each}
                     </div>
                     <div class="new-space-menu">
@@ -291,7 +226,7 @@
                             <div class="space-content" data-space-id={spaceId}>
                                 <div class="space-title-container">
                                     <div class="space-title" class:active={data.spaceMeta.activeSpace === spaceId}>
-                                        {spaces[spaceId].name}
+                                        {data.spaces[spaceId].name}
                                     </div>
                                     <div class="space-menu">
                                         <button class="space-menu-button" 
@@ -314,9 +249,9 @@
                                     </div>
                                 </div>
                                 
-                                {#if spaces[spaceId].pinnedTabs?.length > 0}
+                                {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
-                                        {#each spaces[spaceId].pinnedTabs as tab}
+                                        {#each data.spaces[spaceId].pinnedTabs as tab}
                                             <button class="app-tab" class:active={tab.active} title={tab.url}>
                                                 <Favicon {tab} showButton={false} />
                                             </button>
@@ -332,7 +267,7 @@
                                         <span class="new-tab-text">New Tab</span>
                                     </button>
                                     
-                                    {#each spaces[spaceId].tabs as tab}
+                                    {#each data.spaces[spaceId].tabs as tab}
                                         {#if tab.type === 'divider'}
                                             <div class="tab-divider">
                                                 {#if tab.title}
@@ -351,7 +286,6 @@
                                         {/if}
                                     {/each}
                                     
-                                    <!-- Tab Group Example -->
                                     <div class="tab-group" title="April - 10 tabs">
                                         <div class="tab-group-favicons">
                                             <div class="tab-group-favicon">
@@ -374,7 +308,7 @@
                 </div>
             </div>
             
-            {#if closedTabs.length > 0}
+            {#if data.closedTabs.length > 0}
                 <div class="section closed-tabs-section"
                      onmouseenter={handleClosedTabsMouseEnter}
                      onmouseleave={handleClosedTabsMouseLeave}
@@ -383,15 +317,16 @@
                     <div class="closed-tabs-header"
                          onmouseenter={() => closedTabsHeaderHovered = true}
                          onmouseleave={() => closedTabsHeaderHovered = false}
+                         onclick={() => data.clearClosedTabs()}
                          role="button"
                          tabindex="0"
                          aria-label="Clear all recently closed tabs">
                         <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
-                        <span class="closed-tabs-count">{closedTabs.length}</span>
+                        <span class="closed-tabs-count">{data.closedTabs.length}</span>
                     </div>
                     <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                         <div class="closed-tabs-list">
-                            {#each closedTabs as tab}
+                            {#each data.closedTabs as tab}
                                                             <button class="closed-tab-item" title={tab.url}>
                                 <Favicon {tab} showButton={false} />
                                 <span class="tab-title">{tab.title}</span>
@@ -409,7 +344,7 @@
     .sidebar-box {
         background: transparent;
         position: fixed;
-        z-index: 100000;
+        z-index: 5;
         bottom: 9px;
         top: 43px;
         left: 0px;
@@ -456,6 +391,10 @@
         flex-direction: column;
     }
     
+    .global-pins-section {
+        margin-bottom: 10px;
+    }
+    
     .flex-1 {
         flex: 1;
     }
@@ -493,7 +432,6 @@
         align-items: center;
         justify-content: space-between;
         padding: 4px;
-        margin-top: 13px;
     }
     
     .spaces-list {

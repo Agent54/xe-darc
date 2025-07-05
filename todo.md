@@ -395,14 +395,6 @@ arc live folders for mails and githubprs etc.
 
 share folder or space level?
 
-hover zen mode reveal
-
-Request Error: 
-{requestId: '97191', url: 'https://.../', error: 'net::ERR_NAME_NOT_RESOLVED', fromCache: false, ip: undefined}
-error
-: 
-"net::ERR_NAME_NOT_RESOLVED"
-
 add mouse coordinate callback to activate hover outside window.
 
 share on folder level
