@@ -135,6 +135,40 @@
         }, 300)
     }
     
+    function restoreClosedTab(tab) {
+        // Remove from closed tabs
+        const closedIndex = data.closedTabs.findIndex(t => t.id === tab.id)
+        if (closedIndex !== -1) {
+            data.closedTabs.splice(closedIndex, 1)
+        }
+        
+        // Add back to the space (use active space if the original space doesn't exist)
+        const targetSpaceId = data.spaces[tab.spaceId] ? tab.spaceId : data.spaceMeta.activeSpace
+        if (targetSpaceId) {
+            // Clean up the tab object before adding back (remove closedAt and other closed-specific properties)
+            const { closedAt, ...cleanTab } = tab
+            const restoredTab = {
+                ...cleanTab,
+                _id: cleanTab._id || cleanTab.id,
+                id: cleanTab.id,
+                spaceId: targetSpaceId,
+                pinned: cleanTab.pinned || false,
+                muted: cleanTab.muted || false,
+                order: data.spaces[targetSpaceId]?.tabs?.length || 0
+            }
+            
+            if (!data.spaces[targetSpaceId].tabs) {
+                data.spaces[targetSpaceId].tabs = []
+            }
+            
+            data.spaces[targetSpaceId].tabs.push(restoredTab)
+            
+            // Set as active tab
+            data.spaceMeta.activeSpace = targetSpaceId
+            data.spaceMeta.activeTab = cleanTab.id
+        }
+    }
+    
     // onMount(() => {
     //     scrollToCurrentSpace('instant')
     //     previousSpaceIndex = spaceOrder.indexOf(data.spaceMeta.activeSpace)
@@ -252,21 +286,21 @@
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
                                         {#each data.spaces[spaceId].pinnedTabs as tab}
-                                            <button class="app-tab" class:active={tab.active} title={tab.url}>
+                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTab} title={tab.url} onmousedown={() => data.spaceMeta.activeTab = tab.id}>
                                                 <Favicon {tab} showButton={false} />
                                             </button>
                                         {/each}
                                     </div>
                                 {/if}
                                 
+                                <button class="new-tab-button" 
+                                        onmousedown={() => data.newTab(spaceId)}
+                                        aria-label="Create new tab">
+                                    <span class="new-tab-icon">+</span>
+                                    <span class="new-tab-text">New Tab</span>
+                                </button>
+                                
                                 <div class="tabs-list">
-                                    <button class="new-tab-button" 
-                                            onclick={() => console.log('Create new tab in space:', spaceId)}
-                                            aria-label="Create new tab">
-                                        <span class="new-tab-icon">+</span>
-                                        <span class="new-tab-text">New Tab</span>
-                                    </button>
-                                    
                                     {#each data.spaces[spaceId].tabs as tab}
                                         {#if tab.type === 'divider'}
                                             <div class="tab-divider">
@@ -278,10 +312,12 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item" class:active={tab.active} title={tab.url}>
-                                                <Favicon {tab} showButton={false} />
-                                                <span class="tab-title">{tab.title}</span>
-                                                <button class="tab-close" aria-label="Close tab">×</button>
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab}>
+                                                <button class="tab-item-main" title={tab.url} onmousedown={() => data.spaceMeta.activeTab = tab.id}>
+                                                    <Favicon {tab} showButton={false} />
+                                                    <span class="tab-title">{tab.title}</span>
+                                                </button>
+                                                <button class="tab-close" aria-label="Close tab" onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}>×</button>
                                             </div>
                                         {/if}
                                     {/each}
@@ -308,35 +344,36 @@
                 </div>
             </div>
             
-            {#if data.closedTabs.length > 0}
-                <div class="section closed-tabs-section"
-                     onmouseenter={handleClosedTabsMouseEnter}
-                     onmouseleave={handleClosedTabsMouseLeave}
-                     role="region"
-                     aria-label="Recently closed tabs">
-                    <div class="closed-tabs-header"
-                         onmouseenter={() => closedTabsHeaderHovered = true}
-                         onmouseleave={() => closedTabsHeaderHovered = false}
-                         onclick={() => data.clearClosedTabs()}
-                         role="button"
-                         tabindex="0"
-                         aria-label="Clear all recently closed tabs">
-                        <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
-                        <span class="closed-tabs-count">{data.closedTabs.length}</span>
-                    </div>
-                    <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
-                        <div class="closed-tabs-list">
-                            {#each data.closedTabs as tab}
-                                                            <button class="closed-tab-item" title={tab.url}>
+
+        </div>
+        
+        <!-- Closed Tabs Overlay -->
+        {#if data.closedTabs.length > 0}
+            <div class="closed-tabs-section"
+                 onmouseenter={handleClosedTabsMouseEnter}
+                 onmouseleave={handleClosedTabsMouseLeave}
+                 role="region"
+                 aria-label="Recently closed tabs">
+                <button class="closed-tabs-header"
+                        onmouseenter={() => closedTabsHeaderHovered = true}
+                        onmouseleave={() => closedTabsHeaderHovered = false}
+                        onclick={() => data.clearClosedTabs()}
+                        aria-label="Clear all recently closed tabs">
+                    <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
+                    <span class="closed-tabs-count">{data.closedTabs.length}</span>
+                </button>
+                <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
+                    <div class="closed-tabs-list">
+                        {#each data.closedTabs as tab}
+                            <button class="closed-tab-item" title={tab.url} onmousedown={() => restoreClosedTab(tab)}>
                                 <Favicon {tab} showButton={false} />
                                 <span class="tab-title">{tab.title}</span>
                             </button>
-                            {/each}
-                        </div>
+                        {/each}
                     </div>
                 </div>
-            {/if}
-        </div>
+            </div>
+        {/if}
     </div>
 </div>
 
@@ -378,25 +415,33 @@
     .sidebar-content {
         height: 100%;
         overflow-y: auto;
-        overflow-x: hidden;
+        overflow-x: visible;
         background: transparent;
         padding: 4px;
         display: flex;
         flex-direction: column;
+        position: relative;
         /* gap: 6px; */
     }
     
     .section {
         display: flex;
         flex-direction: column;
+        flex-shrink: 0;
     }
     
     .global-pins-section {
         margin-bottom: 10px;
+        flex-shrink: 0;
     }
     
     .flex-1 {
         flex: 1;
+        min-height: 0; /* Ensures proper flex behavior */
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
     }
     
     /* Pinned Tabs Grid (shared for global and app tabs) */
@@ -405,6 +450,7 @@
         grid-template-columns: repeat(4, 41px);
         gap: 3px;
         padding: 4px;
+        flex-shrink: 0;
     }
     
     .pinned-tab {
@@ -432,6 +478,7 @@
         align-items: center;
         justify-content: space-between;
         padding: 4px;
+        flex-shrink: 0;
     }
     
     .spaces-list {
@@ -583,6 +630,7 @@
         justify-content: space-between;
         padding: 0 4px 0px 6px;
         margin-bottom: -4px;
+        flex-shrink: 0;
     }
     
     .space-title {
@@ -684,7 +732,8 @@
         scroll-snap-type: x mandatory;
         scrollbar-width: none;
         -ms-overflow-style: none;
-        height: 100%;
+        flex: 1;
+        min-height: 0;
         border-radius: 10px;
     }
     
@@ -707,7 +756,7 @@
         flex-direction: column;
         gap: 8px;
         height: 100%;
-        overflow-y: auto;
+        overflow-y: hidden;
         padding-top: 0;
     }
     
@@ -742,7 +791,7 @@
     }
     
     .app-tab.active :global(.tab-favicon) {
-        opacity: 0.6;
+        opacity: 0.85;
     }
     
     .app-tab:hover :global(.tab-favicon) {
@@ -755,33 +804,68 @@
         flex-direction: column;
         gap: 8px;
         flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding-bottom: 60px; /* Add space at bottom for closed tabs overlay */
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        margin-top: 8px;
     }
     
-    .tab-item {
+    .tabs-list::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .tabs-list::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .tabs-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+
+    .tabs-list::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+    
+    .tab-item-container {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 10px;
+        background: rgb(255 255 255 / 7%);
+        transition: all 150ms ease;
+        border: 1px solid transparent;
+        min-height: 36px;
+    }
+    
+    .tab-item-main {
         display: flex;
         align-items: center;
         gap: 10px;
         padding: 4px 6px 4px 8px;
-        border-radius: 10px;
-        background: rgb(255 255 255 / 7%);
+        background: transparent;
+        border: none;
         cursor: pointer;
-        transition: all 150ms ease;
-        border: 1px solid transparent;
+        flex: 1;
         min-height: 36px;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
+        text-align: left;
+        border-radius: 10px;
     }
     
-    .tab-item:hover {
+    .tab-item-container:hover {
         background: rgba(255, 255, 255, 0.15);
     }
     
-    .tab-item.active {
+    .tab-item-container.active {
         background: rgb(255 255 255 / 14%);
     }
     
-    .tab-item.active:hover {
+    .tab-item-container.active:hover {
         background: rgb(255 255 255 / 17%);
     }
     
@@ -810,48 +894,61 @@
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
         flex: 1;
         line-height: 1.2;
         margin-top: 1px;
+        mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
+        -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
+        min-width: 0;
     }
     
-    .tab-item.active .tab-title {
-        color: #999999;
+
+    
+    .tab-item-container.active .tab-title {
+        color: #c6c6c6;
     }
     
-    .tab-item:hover .tab-title {
+    .tab-item-container:hover .tab-title {
         color: #fff;
     }
     
-    .tab-item.active :global(.tab-favicon) {
-        opacity: 0.6;
+    .tab-item-container.active :global(.tab-favicon) {
+        opacity: 0.85;
     }
     
-    .tab-item:hover :global(.tab-favicon) {
+    .tab-item-container:hover :global(.tab-favicon) {
         opacity: 0.8;
     }
     
     .tab-close {
-        width: 20px;
-        height: 20px;
-        border-radius: 10px;
-        background: transparent;
+        background: none;
         border: none;
         color: rgba(255, 255, 255, 0.3);
         cursor: pointer;
+        font-size: 18px;
+        padding: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 18px;
-        line-height: 1;
+        width: 0;
+        height: 20px;
+        border-radius: 4px;
         opacity: 0;
-        transition: all 150ms ease;
+        margin-right: 8px;
         flex-shrink: 0;
+        overflow: hidden;
+        line-height: 1;
+    }
+
+    .tab-close:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.9);
     }
     
-    .tab-item:hover .tab-close {
+    .tab-item-container:hover .tab-close {
         opacity: 1;
+        width: 20px;
+        padding: 0 4px;
     }
     
     .tab-close:hover {
@@ -910,6 +1007,7 @@
         text-rendering: optimizeLegibility;
         width: 100%;
         text-align: left;
+        flex-shrink: 0;
     }
     
     .new-tab-button:hover {
@@ -930,7 +1028,7 @@
     }
     
     .new-tab-text {
-        color: #999999;
+        color: #c6c6c6;
         font-size: 13px;
         font-weight: 400;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -940,6 +1038,7 @@
         flex: 1;
         line-height: 1.2;
         margin-top: 1px;
+        max-width: 180px;
     }
     
     .new-tab-button:hover .new-tab-icon {
@@ -1005,7 +1104,7 @@
     }
     
     .tab-group-title {
-        color: #999999;
+        color: #c6c6c6;
         font-size: 13px;
         font-weight: 400;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -1015,6 +1114,7 @@
         flex: 1;
         line-height: 1.2;
         margin-top: 1px;
+        max-width: 140px;
     }
     
     .tab-group-count {
@@ -1039,8 +1139,12 @@
     
     /* Recently Closed Tabs */
     .closed-tabs-section {
-        margin-top: auto;
-        padding-top: 8px;
+        position: absolute;
+        bottom: 4px;
+        left: 4px;
+        right: 4px;
+        z-index: 10;
+        pointer-events: auto;
     }
     
     .closed-tabs-header {
@@ -1051,7 +1155,12 @@
         cursor: pointer;
         border-radius: 10px;
         transition: all 50ms ease;
-        background: transparent;
+        background: rgba(0, 0, 0, 0.9);
+        backdrop-filter: blur(20px);
+        border: none;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+        position: relative;
+        z-index: 11;
     }
     
     .closed-tabs-header:hover {
@@ -1080,23 +1189,59 @@
     }
     
     .closed-tabs-content {
-        max-height: 0;
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px 10px 0 0;
+        border-bottom: none;
+        backdrop-filter: blur(20px);
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(10px);
+        transition: opacity 200ms ease, visibility 200ms ease, transform 200ms ease;
+        pointer-events: none;
+        max-height: 400px;
         overflow: hidden;
-        transition: max-height 200ms ease 200ms;
     }
     
     .closed-tabs-content.expanded {
-        max-height: 400px;
-        transition: max-height 200ms ease;
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+        pointer-events: auto;
+        transition: opacity 200ms ease, visibility 200ms ease, transform 200ms ease;
     }
     
     .closed-tabs-list {
-        padding: 8px 0;
+        padding: 12px 8px 8px 8px;
         display: flex;
         flex-direction: column;
         gap: 4px;
-        max-height: 400px;
+        max-height: 360px;
         overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+    
+    .closed-tabs-list::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .closed-tabs-list::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .closed-tabs-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+
+    .closed-tabs-list::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
     }
     
     .closed-tab-item {
@@ -1129,6 +1274,7 @@
     .closed-tab-item .tab-title {
         color: rgba(255, 255, 255, 0.25);
         font-size: 12px;
+        max-width: 180px;
     }
     
     .closed-tab-item:hover .tab-favicon {

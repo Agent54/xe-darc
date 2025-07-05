@@ -15,6 +15,7 @@
     import { untrack } from 'svelte'
     import SSLErrorPage from './SSLErrorPage.svelte'
     import NetworkErrorPage from './NetworkErrorPage.svelte'
+    import NewTab from './NewTab.svelte'
     // import { fade } from 'svelte/transition'
 
     let {
@@ -41,6 +42,11 @@
     let anchor = $state(null)
 
     let initialUrl = $state('')
+
+    // Check if the current URL is about:newtab
+    function isNewTabUrl(url) {
+        return url === 'about:newtab' || url === 'about:blank'
+    }
 
     function handlePermissionRequest(eventName, tab, event) {
         requestedResources.push({
@@ -331,9 +337,9 @@
         // 2. Successfully navigating to a different URL
         
         // Only clear network error if we successfully navigated to a different URL
-        if (tab.networkError && tab.networkError.url !== tab.url) {
+        if (tab.networkError && tab.networkError.url !== tab?.url) {
             clearNetworkError(tab)
-            console.log(`🌐 Network error cleared - successfully navigated from ${tab.networkError.url} to ${tab.url}`)
+            console.log(`🌐 Network error cleared - successfully navigated from ${tab.networkError?.url} to ${tab?.url}`)
         } else if (tab.networkError && tab.networkError.url === tab.url) {
             // Keep the network error - the page load might have "stopped" due to the error
             console.log(`🌐 Network error preserved - still on error URL: ${tab.url}`)
@@ -1459,6 +1465,23 @@ document.addEventListener('input', function(event) {
         }
         
         let controlledFrame = instances.get(tab.id)
+        
+        // If current URL is about:newtab, don't create/use controlled frame
+        if (isNewTabUrl(initialUrl)) {
+            console.log('Skipping controlled frame creation for:', initialUrl)
+            // Hide any existing controlled frame by moving it to background
+            if (controlledFrame && attached) {
+                const backgroundFrames = document.getElementById('backgroundFrames')
+                const anchorFrame = document.getElementById('anchorFrame')
+                if (backgroundFrames && anchorFrame) {
+                    backgroundFrames.moveBefore(controlledFrame, anchorFrame)
+                    attached = false
+                }
+            }
+            return
+        }
+        
+        // If transitioning from newtab to real URL, create frame if needed
 
         let addNode = false
         if (!controlledFrame) {
@@ -1511,7 +1534,6 @@ document.addEventListener('input', function(event) {
         if (controlledFrame.src !== initialUrl) {
             controlledFrame.src = initialUrl
         }
-        
 
         console.log('controlledFrame', controlledFrame, {initialUrl, addNode})
        
@@ -1558,6 +1580,7 @@ document.addEventListener('input', function(event) {
         class:no-pointer-events={isScrolling}
         class:certificate-error={tab.certificateError}
         class:network-error={tab.networkError}
+        class:new-tab-page={isNewTabUrl(tab.url)}
         id="tab_{tab.id}"
         class="frame">
 
@@ -1573,6 +1596,11 @@ document.addEventListener('input', function(event) {
                 <NetworkErrorPage
                     {tab}
                     onReload={() => reloadTab(tab)}
+                />
+
+            {:else if isNewTabUrl(tab.url)}
+                <NewTab
+                    {tab}
                 />
             {/if}
         <!-- </div> -->
@@ -1666,6 +1694,9 @@ loading="eager"
         display: none;
     }
     :global(.network-error > .frame-instance:not(.network-error)) {
+        display: none;
+    }
+    :global(.new-tab-page > .frame-instance) {
         display: none;
     }
 </style>

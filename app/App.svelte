@@ -45,11 +45,19 @@
         'ephemeral:3'
     ]
 
-    let closed =  [] // $state([])
 
-    let activeTabIndex = $state(0)
 
-    let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || []).slice(0,1))
+    // Remove activeTabIndex since we'll derive it from data module
+    let activeTabIndex = $derived(() => {
+        if (!data.spaceMeta.activeSpace || !data.spaceMeta.activeTab) return 0;
+        const currentSpace = data.spaces[data.spaceMeta.activeSpace];
+        if (!currentSpace?.tabs) return 0;
+        const index = currentSpace.tabs.findIndex(tab => tab.id === data.spaceMeta.activeTab);
+        return index !== -1 ? index : 0;
+    })
+
+    // Get all tabs from the current active space
+    let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || []))
 
     // let tabs = $state([
     //     // {
@@ -271,16 +279,10 @@
         console.log(`Received tab close request from controlled frame: ${tabId}`)
         
         // Find the tab with matching ID
-        const tabIndex = tabs.findIndex(t => t.id === tabId)
-        if (tabIndex !== -1) {
-            console.log(`Closing tab at index ${tabIndex}: ${tabs[tabIndex].title}`)
-            const tabToClose = tabs[tabIndex]
-            closeTab(tabToClose, event)
-            
-            // Update active tab index if necessary
-            if (activeTabIndex >= tabs.length) {
-                activeTabIndex = tabs.length - 1
-            }
+        const tab = tabs.find(t => t.id === tabId)
+        if (tab) {
+            console.log(`Closing tab: ${tab.title}`)
+            closeTab(tab, event)
         } else {
             console.warn(`Tab with ID ${tabId} not found`)
         }
@@ -307,20 +309,18 @@
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
 
     function openNewTab() {
-        const newTab = { 
-            id: crypto.randomUUID(),
-            url: 'about:newtab', 
-            title: 'New Tab',
-            audioPlaying: false,
-            screenshot: null,
-            pinned: false,
-            muted: false,
-            loading: false,
-            shouldFocus: true
+        // Use data module to create new tab in current active space
+        if (!data.spaceMeta.activeSpace) {
+            console.warn('No active space to create tab in')
+            return
         }
-        tabs.push(newTab)
-        activeTabIndex = tabs.length - 1 // Switch to the new tab immediately
-        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
+        
+        const newTab = data.newTab(data.spaceMeta.activeSpace)
+        if (newTab) {
+            // Set this tab as the active tab
+            data.spaceMeta.activeTab = newTab.id
+            setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
+        }
     }
 
     function handleKeyDown(event) {
@@ -347,20 +347,24 @@
     }
 
     function handleZoomReset() {
-        if (tabs.length > 0 && activeTabIndex >= 0 && activeTabIndex < tabs.length) {
-            const activeTab = tabs[activeTabIndex]
-            const frame = activeTab.frame
-            
-            if (frame && frame.setZoom) {
-                frame.setZoom(1.0).then(() => {
-                    console.log(`[Tab ${activeTab.id}] Zoom reset to 100%`)
-                }).catch((error) => {
-                    console.error(`[Tab ${activeTab.id}] Failed to reset zoom:`, error)
-                })
-            } else if (frame && !frame.setZoom) {
-                console.warn(`[Tab ${activeTab.id}] setZoom API not available on this frame`)
+        if (tabs.length > 0 && data.spaceMeta.activeTab) {
+            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            if (activeTab) {
+                const frame = activeTab.frame
+                
+                if (frame && frame.setZoom) {
+                    frame.setZoom(1.0).then(() => {
+                        console.log(`[Tab ${activeTab.id}] Zoom reset to 100%`)
+                    }).catch((error) => {
+                        console.error(`[Tab ${activeTab.id}] Failed to reset zoom:`, error)
+                    })
+                } else if (frame && !frame.setZoom) {
+                    console.warn(`[Tab ${activeTab.id}] setZoom API not available on this frame`)
+                } else {
+                    console.warn('No active frame available for zoom reset')
+                }
             } else {
-                console.warn('No active frame available for zoom reset')
+                console.warn('Active tab not found')
             }
         } else {
             console.warn('No active tab available for zoom reset')
@@ -369,11 +373,10 @@
 
     function handleTabClose(event) {
         console.log('Handling tab close request')
-        if (tabs.length > 0) {
-            const tabToClose = tabs[activeTabIndex]
-            closeTab(tabToClose, event)
-            if (activeTabIndex >= tabs.length) {
-                activeTabIndex = tabs.length - 1
+        if (tabs.length > 0 && data.spaceMeta.activeTab) {
+            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            if (activeTab) {
+                closeTab(activeTab, event)
             }
         } else {
             console.log('No tabs to close')
@@ -382,53 +385,63 @@
 
     function openTab(tab, index) {
         console.log('Opening tab:', $state.snapshot(tab))
-        activeTabIndex = index
+        
+        // Set this tab as active in the data module
+        data.spaceMeta.activeTab = tab.id
 
         tab.frame?.scrollIntoView({ 
             behavior: isWindowResizing ? 'auto' : 'smooth' 
         })
-    
     }
 
     function closeTab(tab, event, createPlaceholder = false) {
         if (event) event.stopPropagation()
         if (tab.pinned) return // Don't close pinned tabs
         
-        const isLastTab = tabs.length === 1
+        if (!data.spaceMeta.activeSpace) {
+            console.warn('No active space to close tab in')
+            return
+        }
         
-        // If closing the last tab, open a new tab first
-        if (isLastTab) {
+        // Use data module to close the tab
+        const result = data.closeTab(data.spaceMeta.activeSpace, tab.id)
+        
+        if (!result.success) {
+            console.warn('Failed to close tab:', tab.id)
+            return
+        }
+        
+        // If closing the last tab, open a new tab
+        if (result.wasLastTab) {
             openNewTab()
         }
         
         // Create placeholder for closed tab to maintain spacing (only from tab bar close button)
         // Don't create placeholder when closing the last tab since we immediately create a new one
-        if (createPlaceholder && !isLastTab) {
+        if (createPlaceholder && !result.wasLastTab) {
             closedTabPlaceholderCount++
         }
         
-        // closed.push(tab)
-        // tabs = tabs.filter(t => t !== tab)
         setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
     }
 
-    function restoreTab(tab) {
-        tab.shouldFocus = true
-        // tabs.push(tab)
-        // closed = closed.filter(t => t !== tab)
+    // function restoreTab(tab) {
+    //     tab.shouldFocus = true
+    //     // tabs.push(tab)
+    //     // closed = closed.filter(t => t !== tab)
         
-        // Remove corresponding placeholder if it exists
-        if (closedTabPlaceholderCount > 0) {
-            closedTabPlaceholderCount--
-        }
+    //     // Remove corresponding placeholder if it exists
+    //     if (closedTabPlaceholderCount > 0) {
+    //         closedTabPlaceholderCount--
+    //     }
         
-        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
-    }
+    //     setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
+    // }
 
-    function clearAllClosedTabs() {
-        // closed = []
-        collapseAndRemovePlaceholders()
-    }
+    // function clearAllClosedTabs() {
+    //     // closed = []
+    //     collapseAndRemovePlaceholders()
+    // }
 
     function collapseAndRemovePlaceholders() {
         if (closedTabPlaceholderCount === 0) return
@@ -511,25 +524,27 @@
     function goBack() {
         // If mouse is down, navigate spaces instead of frame navigation
         if (isMouseDown) {
-            previousSpace()
+            data.previousSpace()
             return
         }
 
-        const activeTab = tabs[activeTabIndex]
-        if (activeTab) {
-            const frame = activeTab.frame
-            if (frame && typeof frame.back === 'function') {
-                // Check if the frame can go back
-                if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
-                    // No back navigation available, set to start page
+        if (data.spaceMeta.activeTab) {
+            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            if (activeTab) {
+                const frame = activeTab.frame
+                if (frame && typeof frame.back === 'function') {
+                    // Check if the frame can go back
+                    if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
+                        // No back navigation available, set to start page
+                        activeTab.url = 'about:newtab'
+                    } else {
+                        frame.back()
+                    }
+                } else if (activeTab.url !== 'about:newtab') {
+                    // Frame doesn't support navigation or is not a controlled frame
+                    // Set to start page
                     activeTab.url = 'about:newtab'
-                } else {
-                    frame.back()
                 }
-            } else if (activeTab.url !== 'about:newtab') {
-                // Frame doesn't support navigation or is not a controlled frame
-                // Set to start page
-                activeTab.url = 'about:newtab'
             }
         }
     }
@@ -537,42 +552,58 @@
     function goForward() {
         // If mouse is down, navigate spaces instead of frame navigation
         if (isMouseDown) {
-            nextSpace()
+            data.nextSpace()
             return
         }
 
-        const activeTab = tabs[activeTabIndex]
-        if (activeTab) {
-            const frame = activeTab.frame
-            if (frame && typeof frame.forward === 'function') {
-                frame.forward()
+        if (data.spaceMeta.activeTab) {
+            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            if (activeTab) {
+                const frame = activeTab.frame
+                if (frame && typeof frame.forward === 'function') {
+                    frame.forward()
+                }
             }
         }
     }
 
     function reloadActiveTab() {
-        const activeTab = tabs[activeTabIndex]
-        if (activeTab) {
-            reloadTab(activeTab)
+        if (data.spaceMeta.activeTab) {
+            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            if (activeTab) {
+                reloadTab(activeTab)
+            }
         }
     }
 
     function togglePinTab(tab) {
-        const tabIndex = tabs.findIndex(t => t.id === tab.id)
-        if (tabIndex !== -1) {
-            tabs[tabIndex].pinned = !tabs[tabIndex].pinned
+        if (!data.spaceMeta.activeSpace || !tab) return
+        
+        // Find the tab in the current space and toggle its pinned state
+        const space = data.spaces[data.spaceMeta.activeSpace]
+        if (space && space.tabs) {
+            const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
+            if (tabIndex !== -1) {
+                space.tabs[tabIndex].pinned = !space.tabs[tabIndex].pinned
+            }
         }
         hideContextMenu()
         hideFaviconMenu()
     }
 
     function toggleMuteTab(tab) {
-        const tabIndex = tabs.findIndex(t => t.id === tab.id)
-        if (tabIndex !== -1) {
-            tabs[tabIndex].muted = !tabs[tabIndex].muted
-            const frame = tab.frame // document.getElementById(`tab_${tab.id}`)
-            if (frame && typeof frame.setAudioMuted === 'function') {
-                frame.setAudioMuted(tabs[tabIndex].muted)
+        if (!data.spaceMeta.activeSpace || !tab) return
+        
+        // Find the tab in the current space and toggle its muted state
+        const space = data.spaces[data.spaceMeta.activeSpace]
+        if (space && space.tabs) {
+            const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
+            if (tabIndex !== -1) {
+                space.tabs[tabIndex].muted = !space.tabs[tabIndex].muted
+                const frame = tab.frame
+                if (frame && typeof frame.setAudioMuted === 'function') {
+                    frame.setAudioMuted(space.tabs[tabIndex].muted)
+                }
             }
         }
         hideContextMenu()
@@ -580,12 +611,8 @@
     }
 
     function closeTabFromMenu(tab) {
-        const tabIndex = tabs.findIndex(t => t.id === tab.id)
-        if (tabIndex !== -1) {
+        if (tab) {
             closeTab(tab)
-            if (activeTabIndex >= tabs.length) {
-                activeTabIndex = tabs.length - 1
-            }
         }
         hideContextMenu()
         hideFaviconMenu()
@@ -595,13 +622,13 @@
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 const tabId = entry.target.id.replace('tab_', '')
-                const tabIndex = tabs.findIndex(t => t.id === tabId)
+                const tab = tabs.find(t => t.id === tabId)
                 
                 if (entry.isIntersecting) {
                     // Start timer when tab becomes visible
                     const timer = setTimeout(() => {
-                        if (entry.isIntersecting) {
-                            activeTabIndex = tabIndex
+                        if (entry.isIntersecting && tab) {
+                            data.spaceMeta.activeTab = tab.id
                         }
                     }, 250)
                     visibilityTimers.set(tabId, timer)
@@ -980,20 +1007,6 @@
 
     function handleGlobalMouseUp(event) {
         isMouseDown = false
-    }
-
-    function previousSpace() {
-        const success = data.previousSpace()
-        if (success) {
-            activeTabIndex = 0 // Reset to first tab in new space
-        }
-    }
-
-    function nextSpace() {
-        const success = data.nextSpace()
-        if (success) {
-            activeTabIndex = 0 // Reset to first tab in new space
-        }
     }
 
     function handleScroll() {
@@ -1409,7 +1422,11 @@
         try {
             return new URL(url).origin
         } catch (error) {
-            return url
+            // Handle internal pages with proper origin designators
+            if (url?.startsWith('about:')) {
+                return 'about'
+            }
+        
         }
     }
 
@@ -1861,18 +1878,16 @@
 />
 
 <header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) focusModeHovered = true }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) focusModeHovered = false }}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closed.length > 0 ? 'right: 178px;' : 'right: 137px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{data.closedTabs.length > 0 ? 'right: 178px;' : 'right: 137px;'}"></div>
      
-    <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {closed.length > 0 ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+            <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {data.closedTabs.length > 0 ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each tabs as tab, i (tab.id)}
-
-                {@const origin = (new URL(tab.url)).origin}
                 <li 
                     bind:this={tab.tabButton}
                     class="tab-container" 
-                    class:active={i===activeTabIndex} 
+                    class:active={tab.id === data.spaceMeta.activeTab} 
                     class:hovered={tab.id === hoveredTab?.id}
                     class:pinned={tab.pinned}
                     class:menu-open={(contextMenu.visible && contextMenu.tab?.id === tab.id) || (faviconMenu.visible && faviconMenu.tab?.id === tab.id)}
@@ -1938,7 +1953,7 @@
 
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 105px;"></div>
 
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 115px; left: unset; {closed.length > 0 ? 'right: 190px;' : 'right: 158px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 115px; left: unset; {data.closedTabs.length > 0 ? 'right: 190px;' : 'right: 158px;'}"></div>
 
     <div class="header-icon-button view-mode-icon" 
         role="button"
@@ -2030,7 +2045,7 @@
          onmousedown={openNewTab}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
          title="New Tab (⌘T)"
-         style="{closed.length > 0 ? 'right: 174px;' : 'right: 133px;'}"
+         style="{data.closedTabs.length > 0 ? 'right: 174px;' : 'right: 133px;'}"
          class:visible={showFixedNewTabButton && (!focusModeEnabled || focusModeHovered)}>
         <span class="new-tab-icon">+</span>
     </div>
@@ -2323,13 +2338,13 @@
         
         <div class="frame-header-url-container">
             <div class="frame-header-url">
-                {tabs[activeTabIndex]?.url || ''}
+                {tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.url || ''}
             </div>
         </div>
 
         <div class="frame-header-actions">
-            <button class="frame-button" title="{tabs[activeTabIndex]?.pinned ? 'Unpin Tab' : 'Pin Tab'}" aria-label="{tabs[activeTabIndex]?.pinned ? 'Unpin Tab' : 'Pin Tab'}" onclick={() => togglePinTab(tabs[activeTabIndex])}>
-                {#if tabs[activeTabIndex]?.pinned}
+            <button class="frame-button" title="{tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.pinned ? 'Unpin Tab' : 'Pin Tab'}" aria-label="{tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.pinned ? 'Unpin Tab' : 'Pin Tab'}" onclick={() => togglePinTab(tabs.find(tab => tab.id === data.spaceMeta.activeTab))}>
+                {#if tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.pinned}
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2a1 1 0 0 1 2 0v2h6V2a1 1 0 0 1 2 0v2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v6a1 1 0 0 1-1 1h-2v3a1 1 0 0 1-2 0v-3H8a1 1 0 0 1-1-1V9H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1z" />
                     </svg>
@@ -2345,7 +2360,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                 </svg>
             </button>
-            <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onclick={(e) => closeTab(tabs[activeTabIndex], e)}>
+            <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onclick={(e) => closeTab(tabs.find(tab => tab.id === data.spaceMeta.activeTab), e)}>
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                 </svg>
@@ -2357,17 +2372,6 @@
         <Excalidraw tabs={tabs} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} {getEnabledUserMods} />
     {:else if viewMode === 'reading'}
         {#each tabs as tab, tabIndex (tab.id)}
-            <!-- {#if tab.url === 'about:newtab'}
-                <div class="frame reading-mode {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
-                    {#key origin(tab.url)}
-                        <div class="url-display visible">
-                            {tab.url}
-                        </div>
-                    {/key}
-                    
-                    
-                </div>
-            {:else} -->
                 {#key userModsHash}
                     <div class="reading-mode">
                         {#key origin(tab.url)}
@@ -2376,24 +2380,12 @@
                             </div>
                         {/key}
                         
-                        <Frame tab={tabs[tabIndex]} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <Frame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
-     
         {/each}
     {:else}
         {#each tabs as tab, tabIndex (tab.id)}
-            <!-- {#if tab.url === 'about:newtab'}
-                <div class="frame {headerPartOfMain ? 'window-controls-overlay': ''}" id="tab_{tab.id}">
-                    {#key origin(tab.url)}
-                        <div class="url-display visible">
-                            {tab.url}
-                        </div>
-                    {/key}
-                    
-                    <NewTab {tab} />
-                </div>
-            {:else} -->
                 {#key userModsHash}
                     <div>
                         {#key origin(tab.url)}
@@ -2402,7 +2394,7 @@
                             </div>
                         {/key}
                         
-                        <Frame tab={tabs[tabIndex]} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
         {/each}
@@ -2464,6 +2456,7 @@
             </div>
         {/if}
         
+        
         {#if openSidebars.has('userMods')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('userMods') && !prevOpenSidebars.has('userMods') && !isSwitchingSidebars && !isWindowResizing}>
                 <UserMods onClose={closeUserModsSidebar} 
@@ -2487,7 +2480,7 @@
                          {switchToUserMods}
                          {switchToActivity}
                          {tabs}
-                         {closed} />
+                         closedTabs={data.closedTabs} />
             </div>
         {/if}
     </div>

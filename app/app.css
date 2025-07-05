@@ -402,10 +402,10 @@ ul::-webkit-scrollbar {
     position: relative;
 }
 .tab-container.active .tab {
-    color: #999999;
+    color: #c6c6c6;
 }
 .tab-container.active .favicon-wrapper {
-    opacity: 0.8;
+    opacity: 0.85;
 }
 .tab-container:hover .favicon-wrapper, .tab-container.hovered .favicon-wrapper, .tab-container.menu-open .favicon-wrapper {
     opacity: 1;
