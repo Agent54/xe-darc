@@ -39,7 +39,6 @@
         inputDiffData = $bindable(),
     } = $props()
 
-    let wrapper = $state(null)
     let anchor = $state(null)
 
     let initialUrl = $state('')
@@ -50,16 +49,11 @@
             initialUrl = tab.url
         }  
 
-        if (tab.url && tab.url !== 'about:blank') {
-            // Update favicon for any URL change
-            tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
-            
+        if (tab.url) {
             // Update title if it's an about: page or if current title is empty/generic
             if (tab.url.startsWith('about:')) {
-                if (tab.url === 'about:newtab') {
+                if (tab.url.startsWith('about:newtab') || tab.url.startsWith('about:blank')) {
                     tab.title = 'New Tab'
-                } else if (tab.url === 'about:blank') {
-                    tab.title = 'Blank Page'
                 } else if (tab.url.startsWith('about:')) {
                     tab.title = tab.url.charAt(6).toUpperCase() + tab.url.slice(7)
                 } else {
@@ -71,13 +65,15 @@
                         tab.title = tab.url
                     }
                 }
+            } else {
+                tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
             }
         }
     })
 
     // Check if the current URL is about:newtab
     function isNewTabUrl(url) {
-        return url === 'about:newtab' || url === 'about:blank'
+        return url?.startsWith('about:newtab') || url?.startsWith('about:blank')
     }
 
     function handlePermissionRequest(eventName, tab, event) {
@@ -475,11 +471,17 @@
 
     async function updateTabMeta(tab, frame = null) {
         if (!frame) {
-            frame = tab.frame //  document.getElementById(`tab_${tab.id}`)
+            frame = tab.frame
         }
         if (!frame) return
 
         tab.url = frame.src
+
+        // Don't update meta from controlled frame for about: URLs
+        if (tab.url && tab.url.startsWith('about:')) {
+            return
+        }
+
         tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
         try {
@@ -497,12 +499,12 @@
             }
 
             // Update the tab title directly
-            if (title && title !== 'about:blank') {
+            if (title) {
                 tab.title = title
             } else {
                 // Fallback to URL if no title is available
                 const url = tab.url
-                if (url && url !== 'about:blank') {
+                if (url) {
                     try {
                         const urlObj = new URL(url)
                         tab.title = urlObj.hostname || url
@@ -1508,26 +1510,26 @@ document.addEventListener('input', function(event) {
 
     let attached = false
     $effect(() => {
-        if (!anchor || !wrapper) { 
+        if (!anchor || !tab.wrapper) { 
             return
         }
         
         let controlledFrame = instances.get(tab.id)
         
         // If current URL is about:newtab, don't create/use controlled frame
-        if (isNewTabUrl(initialUrl)) {
-            console.log('Skipping controlled frame creation for:', initialUrl)
-            // Hide any existing controlled frame by moving it to background
-            if (controlledFrame && attached) {
-                const backgroundFrames = document.getElementById('backgroundFrames')
-                const anchorFrame = document.getElementById('anchorFrame')
-                if (backgroundFrames && anchorFrame) {
-                    backgroundFrames.moveBefore(controlledFrame, anchorFrame)
-                    attached = false
-                }
-            }
-            return
-        }
+        // if (isNewTabUrl(initialUrl)) {
+        //     console.log('Skipping controlled frame creation for:', initialUrl)
+        //     // Hide any existing controlled frame by moving it to background
+        //     if (controlledFrame && attached) {
+        //         const backgroundFrames = document.getElementById('backgroundFrames')
+        //         const anchorFrame = document.getElementById('anchorFrame')
+        //         if (backgroundFrames && anchorFrame) {
+        //             backgroundFrames.moveBefore(controlledFrame, anchorFrame)
+        //             attached = false
+        //         }
+        //     }
+        //     return
+        // }
         
         // If transitioning from newtab to real URL, create frame if needed
 
@@ -1586,12 +1588,12 @@ document.addEventListener('input', function(event) {
         console.log('controlledFrame', controlledFrame, {initialUrl, addNode})
        
         if (addNode) {
-            wrapper.insertBefore(controlledFrame, anchor)
+            tab.wrapper.insertBefore(controlledFrame, anchor)
             attached = true
         }
 
         if (!attached) {
-            wrapper.moveBefore(controlledFrame, anchor)
+            tab.wrapper.moveBefore(controlledFrame, anchor)
             attached = true
         }
     })
@@ -1622,7 +1624,7 @@ document.addEventListener('input', function(event) {
     <div
         out:detach|global
         style={style}
-        bind:this={wrapper} 
+        bind:this={tab.wrapper} 
         
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}

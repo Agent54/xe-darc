@@ -89,7 +89,7 @@
     }
 </script>
 
-<div  bind:this={tab.frame} class="frame-instance network-error">
+<div class="frame-instance network-error">
     <div class="network-error-page">
         <div class="error-container">
             <div class="error-icon">

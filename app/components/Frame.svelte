@@ -259,9 +259,7 @@
         if (tab.shouldFocus) {
             tab.shouldFocus = false
             setTimeout(() => {
-                if (tab.frame) {
-                    tab.frame.scrollIntoView({ behavior: 'smooth' })
-                }
+                tab.wrapper.scrollIntoView({ behavior: 'smooth' })
                 if (tab.tabButton) {
                     tab.tabButton.scrollIntoView({ behavior: 'smooth' })
                 }
@@ -273,7 +271,7 @@
 
 {#if tab.hibernated}
     <div 
-        bind:this={tab.frame}
+        bind:this={tab.wrapper}
         transition:fade={{duration: 150}}
         style={style}
         class="frame hibernated-frame"

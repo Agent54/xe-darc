@@ -30,7 +30,7 @@
         return `This server could not prove its identity; its security certificate has a problem. This may be caused by a misconfiguration or an attacker intercepting your connection.`
     }
 </script>
-<div bind:this={tab.frame} class="frame-instance ssl-error">
+<div class="frame-instance ssl-error">
     <div class="ssl-error-page">
         <div class="error-container">
             <div class="error-icon">

@@ -41,6 +41,11 @@
             return { type: 'security', component: SecurityIndicator }
         }
         
+        // New tab icon
+        if (tab?.url?.startsWith?.('about:newtab') || tab?.url?.startsWith?.('about:blank')) {
+            return { type: 'newTab' }
+        }
+
         // Custom favicon - check if it's SVG markup or URL
         if (tab?.favicon) {
             if (tab.favicon.startsWith('<svg') || tab.favicon.includes('viewBox')) {
@@ -51,11 +56,6 @@
                 // Assume it's SVG markup if it's not a URL
                 return { type: 'svg', markup: tab.favicon }
             }
-        }
-        
-        // New tab icon
-        if (tab?.url === 'about:newtab') {
-            return { type: 'newTab' }
         }
         
         // Default globe icon
