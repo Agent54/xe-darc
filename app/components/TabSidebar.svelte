@@ -17,6 +17,7 @@
     let isManualScroll = false
     let previousSpaceIndex = -1
     let scrollActiveSpaceTimeout = null
+    let previousClosedTabsLength = 0
 
     const globallyPinnedTabs = $derived(data.globalPins)
     
@@ -129,10 +130,13 @@
     }
     
     function handleClosedTabsMouseLeave() {
+        if (closedTabsHideTimeout) {
+            clearTimeout(closedTabsHideTimeout)
+        }
         closedTabsHideTimeout = setTimeout(() => {
             closedTabsHovered = false
             closedTabsHideTimeout = null
-        }, 300)
+        }, 1000)
     }
     
     function restoreClosedTab(tab) {
@@ -183,6 +187,23 @@
         if (currentIndex !== -1) {
             previousSpaceIndex = currentIndex
         }
+    })
+
+    // Watch for new closed tabs and auto-show menu
+    $effect(() => {
+        const currentLength = data.closedTabs.length
+        if (currentLength > previousClosedTabsLength) {
+            // New tab was closed, show menu
+            if (closedTabsHideTimeout) {
+                clearTimeout(closedTabsHideTimeout)
+            }
+            closedTabsHovered = true
+            closedTabsHideTimeout = setTimeout(() => {
+                closedTabsHovered = false
+                closedTabsHideTimeout = null
+            }, 1000)
+        }
+        previousClosedTabsLength = currentLength
     })
     
 
@@ -355,8 +376,6 @@
                  role="region"
                  aria-label="Recently closed tabs">
                 <button class="closed-tabs-header"
-                        onmouseenter={() => closedTabsHeaderHovered = true}
-                        onmouseleave={() => closedTabsHeaderHovered = false}
                         onclick={() => data.clearClosedTabs()}
                         aria-label="Clear all recently closed tabs">
                     <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
@@ -421,7 +440,7 @@
         display: flex;
         flex-direction: column;
         position: relative;
-        /* gap: 6px; */
+        padding-bottom: 0;
     }
     
     .section {
@@ -809,7 +828,6 @@
         padding-bottom: 60px; /* Add space at bottom for closed tabs overlay */
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-        margin-top: 8px;
     }
     
     .tabs-list::-webkit-scrollbar {
@@ -837,7 +855,8 @@
         background: rgb(255 255 255 / 7%);
         transition: all 150ms ease;
         border: 1px solid transparent;
-        min-height: 36px;
+        height: 36px;
+        flex-shrink: 0;
         width: 100%;
         max-width: 100%;
         overflow: hidden;
@@ -853,7 +872,7 @@
         border: none;
         cursor: pointer;
         flex: 1;
-        min-height: 36px;
+        height: 36px;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
@@ -963,13 +982,13 @@
         color: rgba(255, 255, 255, 0.9);
     }
     
-    /* Tab Dividers */
     .tab-divider {
         padding: 8px 8px 8px 8px;
         margin: 4px 0;
         display: flex;
         align-items: center;
         gap: 8px;
+        flex-shrink: 0;
     }
     
     .tab-divider-title {
@@ -1009,13 +1028,13 @@
         cursor: pointer;
         transition: all 150ms ease;
         border: none;
-        min-height: 36px;
+        height: 36px;
+        flex-shrink: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
         width: 100%;
         text-align: left;
-        flex-shrink: 0;
     }
     
     .new-tab-button:hover {
@@ -1068,7 +1087,8 @@
         cursor: pointer;
         transition: all 150ms ease;
         border: 1px solid transparent;
-        min-height: 36px;
+        height: 36px;
+        flex-shrink: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
@@ -1153,6 +1173,10 @@
         right: 4px;
         z-index: 10;
         pointer-events: auto;
+        display: flex;
+        flex-direction: column;
+        width: calc(100% - 8px);
+        flex-shrink: 0;
     }
     
     .closed-tabs-header {
@@ -1163,12 +1187,15 @@
         cursor: pointer;
         border-radius: 10px;
         transition: all 50ms ease;
-        background: rgba(0, 0, 0, 0.9);
-        backdrop-filter: blur(20px);
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(15px);
         border: none;
         box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
         position: relative;
         z-index: 11;
+        width: 100%;
+        min-width: 0;
+        border: 1px solid #232323;
     }
     
     .closed-tabs-header:hover {
@@ -1182,6 +1209,9 @@
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
+        flex: 1;
+        text-align: left;
+        min-width: 0;
     }
     
     .closed-tabs-count {
@@ -1214,18 +1244,21 @@
         pointer-events: none;
         max-height: 400px;
         overflow: hidden;
+        width: 100%;
+        box-sizing: border-box;
+        flex-shrink: 0;
     }
     
     .closed-tabs-content.expanded {
         opacity: 1;
         visibility: visible;
-        transform: translateY(0);
+        transform: translateY(8px);
         pointer-events: auto;
         transition: opacity 200ms ease, visibility 200ms ease, transform 200ms ease;
     }
     
     .closed-tabs-list {
-        padding: 12px 8px 8px 8px;
+        padding: 8px 8px 8px 8px;
         display: flex;
         flex-direction: column;
         gap: 4px;
@@ -1233,6 +1266,7 @@
         overflow-y: auto;
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        flex-shrink: 0;
     }
     
     .closed-tabs-list::-webkit-scrollbar {
@@ -1262,7 +1296,8 @@
         cursor: pointer;
         transition: all 150ms ease;
         border: 1px solid transparent;
-        min-height: 32px;
+        height: 32px;
+        flex-shrink: 0;
         width: 100%;
         text-align: left;
         margin: 0;
@@ -1280,7 +1315,7 @@
     }
     
     .closed-tab-item .tab-title {
-        color: rgba(255, 255, 255, 0.25);
+        color: #c6c6c6;
         font-size: 12px;
         max-width: 180px;
     }
