@@ -189,7 +189,7 @@
 
     // Watch for active tab changes and scroll to it in sidebar
     $effect(() => {
-        if (!data.spaceMeta.activeTab || !data.spaceMeta.activeSpace) {
+        if (!data.spaceMeta.activeTab) {
             return
         }
         

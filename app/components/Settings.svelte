@@ -1,5 +1,6 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
+    import data from '../data.svelte.js'
     
     let { onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods, switchToActivity, tabs = [], closed = [] } = $props()
 
@@ -779,7 +780,7 @@
                         muted: tab.muted,
                         audioPlaying: tab.audioPlaying
                     })),
-                    activeTabIndex: tabs.findIndex(tab => tab === tabs[0]) // Could be improved to track actual active tab
+                    activeTabId: tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.id || tabs[0]?.id || null
                 },
                 localStorage: { ...localStorage },
                 version: '1.0.0'

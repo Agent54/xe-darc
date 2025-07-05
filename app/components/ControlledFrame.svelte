@@ -269,6 +269,9 @@
     function handleLoadAbort(tab, event) {
         console.log('🚨 onloadabort', event)
         
+        // Load failed, stop loading immediately
+        tab.loading = false
+        
         // Check if this is a certificate error
         if (event && event.reason) {
             console.log(`🔍 Checking if "${event.reason}" is a certificate error...`)
@@ -325,44 +328,54 @@
     }
 
     function handleLoadStop(tab) {
+        const wasLoading = tab.loading
         tab.loading = false
         
         console.log(`🔄 handleLoadStop called for ${tab.url}`)
+        console.log(`🔄 Was loading (successful): ${wasLoading}`)
         console.log(`🔄 Network error before processing:`, tab.networkError)
 
         tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
-        // Don't clear network errors automatically - they should only be cleared by:
-        // 1. User clicking reload button
-        // 2. Successfully navigating to a different URL
-        
-        // Only clear network error if we successfully navigated to a different URL
-        if (tab.networkError && tab.networkError.url !== tab?.url) {
-            clearNetworkError(tab)
-            console.log(`🌐 Network error cleared - successfully navigated from ${tab.networkError?.url} to ${tab?.url}`)
-        } else if (tab.networkError && tab.networkError.url === tab.url) {
-            // Keep the network error - the page load might have "stopped" due to the error
-            console.log(`🌐 Network error preserved - still on error URL: ${tab.url}`)
-        } else {
-            // No network error, this is a successful load
+        // Only clear errors if the load was successful (was still loading when this was called)
+        if (wasLoading) {
+            // Clear network error if we successfully navigated to a different URL
+            if (tab.networkError && tab.networkError.url !== tab?.url) {
+                clearNetworkError(tab)
+                console.log(`🌐 Network error cleared - successfully navigated from ${tab.networkError?.url} to ${tab?.url}`)
+            }
+            
+            // Clear certificate error if we successfully navigated to a different URL
+            const origin = (new URL(tab.url)).origin
+            if (data.origins[origin]?.certificateError) {
+                if (tab.url !== data.origins[origin].certificateError.url) {
+                    delete data.origins[origin]?.certificateError
+                    delete tab.certificateError
+                    console.log(`🔒 Certificate error cleared - successfully navigated to ${tab.url}`)
+                }
+            }
+            
             console.log(`✅ Page loaded successfully: ${tab.url}`)
-        }
-
-        const origin = (new URL(tab.url)).origin
-        if (data.origins[origin]?.certificateError) {
-            if (tab.url === data.origins[origin].certificateError.url) {
-                delete data.origins[origin]?.certificateError
-                console.log(`🔒 Certificate error cleared - navigated from ${tab.certificateError.url} to ${tab.url}`)
+        } else {
+            // Load failed - preserve errors
+            console.log(`🚨 Load failed - preserving errors for ${tab.url}`)
+            if (tab.networkError) {
+                console.log(`🌐 Network error preserved: ${tab.networkError.code}`)
+            }
+            if (tab.certificateError) {
+                console.log(`🔒 Certificate error preserved: ${tab.certificateError.code}`)
             }
         }
         
         console.log(`🔒 Load stop for ${tab.url} - Security state: ${tab.securityState}, Has cert error: ${!!tab.certificateError}, Has network error: ${!!tab.networkError}`)
         
-        // Update title and capture screenshot after page loads
-        setTimeout(async () => {
-            await updateTabMeta(tab)
-            await captureTabScreenshot(tab)
-        }, 2) // Wait a bit for the page to fully render
+        // Update title and capture screenshot after page loads (only if successful)
+        if (wasLoading) {
+            setTimeout(async () => {
+                await updateTabMeta(tab)
+                await captureTabScreenshot(tab)
+            }, 2) // Wait a bit for the page to fully render
+        }
     }
 
     function handleNewWindow(tab, e) {
@@ -1031,6 +1044,10 @@ document.addEventListener('input', function(event) {
                     console.log(`🚨 SECURITY COMPROMISED: Certificate error in ANY resource makes entire page insecure`)
                     const errorCode = details.error.replace('net::', '')
                     setCertificateError(tab, errorCode, details.url)
+                    // Load failed due to certificate error
+                    if (details.frameId === 0) {
+                        tab.loading = false
+                    }
                 } else if (isNetworkError(details.error)) {
                     // Network error detected - only set for main frame errors
                     console.log(`🌐 NETWORK ERROR DETECTED: ${details.error} for ${details.url}`)
@@ -1039,6 +1056,8 @@ document.addEventListener('input', function(event) {
                     // Only show network error page for main frame errors (not subresources)
                     if (details.frameId === 0) {
                         setNetworkError(tab, errorCode, details.url)
+                        // Load failed due to network error
+                        tab.loading = false
                     }
                 } else {
                     console.log(`ℹ️ Not a certificate or network error: ${details.error}`)
@@ -1586,7 +1605,22 @@ document.addEventListener('input', function(event) {
         role="tabpanel"
        >
 
-       <!-- onmousedown={() => {
+       <!-- 
+
+       onfocus={() => {
+        console.log(`🔍 [INTERNAL-PAGE] Focus on tab ${tab.id}`)
+        window.dispatchEvent(new CustomEvent('darc-controlled-frame-focus', {
+            detail: { tabId: tab.id }
+        }))
+       }}   
+       onblur={() => {
+        console.log(`🔍 [INTERNAL-PAGE] Blur on tab ${tab.id}`)
+        window.dispatchEvent(new CustomEvent('darc-controlled-frame-blur', {
+            detail: { tabId: tab.id }
+        }))
+       }}
+       
+       onmousedown={() => {
         console.log(`🖱️ [INTERNAL-PAGE] Mouse down on tab ${tab.id}`)
         window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
             detail: { tabId: tab.id }

@@ -45,16 +45,7 @@
         'ephemeral:3'
     ]
 
-
-
-    // Remove activeTabIndex since we'll derive it from data module
-    let activeTabIndex = $derived(() => {
-        if (!data.spaceMeta.activeSpace || !data.spaceMeta.activeTab) return 0;
-        const currentSpace = data.spaces[data.spaceMeta.activeSpace];
-        if (!currentSpace?.tabs) return 0;
-        const index = currentSpace.tabs.findIndex(tab => tab.id === data.spaceMeta.activeTab);
-        return index !== -1 ? index : 0;
-    })
+    // Active tab is now managed via data.spaceMeta.activeTab (ID-based)
 
     // Get all tabs from the current active space
     let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || []))
@@ -1182,20 +1173,20 @@
         isWindowBackground = !shouldBeActive
     }
     
-    function handleControlledFrameFocus(focusedTab) {
+    function handleFrameFocus(focusedTab) {
         controlledFrameHasFocus = true
         updateWindowFocusState()
         
         // Make the focused tab active
         if (focusedTab) {
-            const tabIndex = tabs.findIndex(tab => tab.id === focusedTab.id)
-            if (tabIndex !== -1 && tabIndex !== activeTabIndex) {
-                activeTabIndex = tabIndex
+            // Set the active tab directly using the ID-based system
+            if (focusedTab.id !== data.spaceMeta.activeTab) {
+                data.spaceMeta.activeTab = focusedTab.id
             }
         }
     }
     
-    function handleControlledFrameBlur() {
+    function handleFrameBlur() {
         controlledFrameHasFocus = false
         updateWindowFocusState()
     }
@@ -2420,7 +2411,7 @@
     </div>
 
     {#if viewMode === 'canvas'}
-        <Excalidraw tabs={tabs} onFrameFocus={handleControlledFrameFocus} onFrameBlur={handleControlledFrameBlur} {getEnabledUserMods} />
+        <Excalidraw tabs={tabs} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
     {:else if viewMode === 'reading'}
         {#each tabs as tab, tabIndex (tab.id)}
                 {#key userModsHash}
@@ -2431,7 +2422,7 @@
                             </div>
                         {/key}
                         
-                        <Frame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <Frame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
         {/each}
@@ -2445,7 +2436,7 @@
                             </div>
                         {/key}
                         
-                        <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleControlledFrameFocus(tab)} onFrameBlur={handleControlledFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} />
                     </div>
                 {/key}
         {/each}
@@ -2518,7 +2509,7 @@
                          {switchToActivity}
                          {userMods}
                          onUpdateUserMods={updateUserMods}
-                         currentTab={tabs[activeTabIndex]} />
+                         currentTab={tabs.find(tab => tab.id === data.spaceMeta.activeTab)} />
             </div>
         {/if}
         
