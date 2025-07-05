@@ -1717,6 +1717,9 @@
         }
         return url
     }
+
+    // reserved for possibly handling only closed tabs from current tab group in future do not remove or switch to data.closedTabs
+    const closedTabs = []
 </script>
 
 <!-- {#snippet trashIcon()}
@@ -1920,9 +1923,9 @@
 />
 
 <header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) focusModeHovered = true }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) focusModeHovered = false }}>
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{data.closedTabs.length > 0 ? 'right: 178px;' : 'right: 137px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{closedTabs.length > 0 ? 'right: 178px;' : 'right: 137px;'}"></div>
      
-            <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {data.closedTabs.length > 0 ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+            <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {closedTabs.length > 0 ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each tabs as tab, i (tab.id)}
@@ -1995,7 +1998,7 @@
 
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 105px;"></div>
 
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 115px; left: unset; {data.closedTabs.length > 0 ? 'right: 190px;' : 'right: 158px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 115px; left: unset; {closedTabs.length > 0 ? 'right: 190px;' : 'right: 158px;'}"></div>
 
     <div class="header-icon-button view-mode-icon" 
         role="button"
@@ -2087,7 +2090,7 @@
          onmousedown={openNewTab}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
          title="New Tab (⌘T)"
-         style="{data.closedTabs.length > 0 ? 'right: 174px;' : 'right: 133px;'}"
+         style="{closedTabs.length > 0 ? 'right: 174px;' : 'right: 133px;'}"
          class:visible={showFixedNewTabButton && (!focusModeEnabled || focusModeHovered)}>
         <span class="new-tab-icon">+</span>
     </div>
@@ -2380,7 +2383,7 @@
         
         <div class="frame-header-url-container">
             <div class="frame-header-url">
-                {tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.url || ''}
+                {getDisplayUrl(tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.url)}
             </div>
         </div>
 
