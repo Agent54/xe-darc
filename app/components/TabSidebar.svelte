@@ -503,12 +503,14 @@
         transition: all 150ms ease;
         border: 1px solid transparent;
         color: rgba(255, 255, 255, 0.3);
+        opacity: 0.5;
         padding: 0;
         margin: 0;
     }
     
     .pinned-tab:hover {
         background: rgba(255, 255, 255, 0.15);
+        opacity: 0.8;
     }
     
     .spaces-container {
@@ -812,12 +814,14 @@
         transition: all 150ms ease;
         border: 1px solid transparent;
         color: rgba(255, 255, 255, 0.3);
+        opacity: 0.5;
         padding: 0;
         margin: 0;
     }
     
     .app-tab:hover {
         background: rgba(255, 255, 255, 0.15);
+        opacity: 0.8;
     }
     
     .app-tab.active {
@@ -1151,9 +1155,9 @@
     }
     
     .tab-group-title {
-        color: #c6c6c6;
+        color: hsl(0 0% 35% / 1);
         font-size: 13px;
-        font-weight: 400;
+        font-weight: 600;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         white-space: nowrap;
         overflow: hidden;

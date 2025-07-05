@@ -414,3 +414,25 @@ different levels of success and timeframes:
 space switch animation
 
 dns probe error page
+
+mac native fullscreen broken (weird bar and header after leaving)
+
+toggle tab sidebar
+
+hover outside window from tauri
+
+tab search
+
+reset zoom button
+
+header transparency and borders for tabs
+
+darc shared folders with message closing shared tab only clises it for you to remove for everyone from shared folder use that option from context menu
+
+birth and death of js
+
+netscape documentary
+
+synced folders from desicord plugin with links
+
+move tabs between windows!!!?
