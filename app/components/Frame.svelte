@@ -273,6 +273,7 @@
 
 {#if tab.hibernated}
     <div 
+        bind:this={tab.frame}
         transition:fade={{duration: 150}}
         style={style}
         class="frame hibernated-frame"

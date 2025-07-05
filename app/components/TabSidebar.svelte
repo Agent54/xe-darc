@@ -132,11 +132,9 @@
     function handleClosedTabsMouseLeave() {
         if (closedTabsHideTimeout) {
             clearTimeout(closedTabsHideTimeout)
-        }
-        closedTabsHideTimeout = setTimeout(() => {
-            closedTabsHovered = false
             closedTabsHideTimeout = null
-        }, 1000)
+        }
+        closedTabsHovered = false
     }
     
     function restoreClosedTab(tab) {
@@ -189,22 +187,44 @@
         }
     })
 
-    // Watch for new closed tabs and auto-show menu
+    // Watch for active tab changes and scroll to it in sidebar
     $effect(() => {
-        const currentLength = data.closedTabs.length
-        if (currentLength > previousClosedTabsLength) {
-            // New tab was closed, show menu
-            if (closedTabsHideTimeout) {
-                clearTimeout(closedTabsHideTimeout)
-            }
-            closedTabsHovered = true
-            closedTabsHideTimeout = setTimeout(() => {
-                closedTabsHovered = false
-                closedTabsHideTimeout = null
-            }, 1000)
+        if (!data.spaceMeta.activeTab || !data.spaceMeta.activeSpace) {
+            return
         }
-        previousClosedTabsLength = currentLength
+        
+        // Find the active tab element in the sidebar
+        setTimeout(() => {
+            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTab}"]`)
+            if (activeTabElement) {
+                const tabsList = activeTabElement.closest('.tabs-list')
+                if (tabsList) {
+                    // Scroll the tab into view within its tabs list
+                    activeTabElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'nearest'
+                    })
+                }
+            }
+        }, 50) // Small delay to ensure DOM is updated
     })
+
+    // Watch for new closed tabs and auto-show menu, might be a bit much?
+    // $effect(() => {
+    //     const currentLength = data.closedTabs.length
+    //     if (currentLength > previousClosedTabsLength) {
+    //         // New tab was closed, show menu
+    //         if (closedTabsHideTimeout) {
+    //             clearTimeout(closedTabsHideTimeout)
+    //         }
+    //         closedTabsHovered = true
+    //         closedTabsHideTimeout = setTimeout(() => {
+    //             closedTabsHovered = false
+    //             closedTabsHideTimeout = null
+    //         }, 1000)
+    //     }
+    //     previousClosedTabsLength = currentLength
+    // })
     
 
 </script>
@@ -270,14 +290,13 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Horizontally Scrollable Tab Content -->
+
             <div class="section flex-1">
                 <div class="tab-content-container" 
                      bind:this={tabListRef}
                      onscroll={handleTabScroll}>
                     <div class="tab-content-track">
-                        {#each spaceOrder as spaceId}
+                        {#each spaceOrder as spaceId (spaceId)}
                             <div class="space-content" data-space-id={spaceId}>
                                 <div class="space-title-container">
                                     <div class="space-title" class:active={data.spaceMeta.activeSpace === spaceId}>
@@ -306,7 +325,7 @@
                                 
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
-                                        {#each data.spaces[spaceId].pinnedTabs as tab}
+                                        {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
                                             <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTab} title={tab.url} onmousedown={() => data.spaceMeta.activeTab = tab.id}>
                                                 <Favicon {tab} showButton={false} />
                                             </button>
@@ -322,7 +341,7 @@
                                 </button>
                                 
                                 <div class="tabs-list">
-                                    {#each data.spaces[spaceId].tabs as tab}
+                                    {#each data.spaces[spaceId].tabs as tab (tab.id)}
                                         {#if tab.type === 'divider'}
                                             <div class="tab-divider">
                                                 {#if tab.title}
@@ -333,7 +352,7 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab}>
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab} data-tab-id={tab.id}>
                                                 <button class="tab-item-main" title={tab.url} onmousedown={() => data.spaceMeta.activeTab = tab.id}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>
@@ -364,11 +383,8 @@
                     </div>
                 </div>
             </div>
-            
-
         </div>
         
-        <!-- Closed Tabs Overlay -->
         {#if data.closedTabs.length > 0}
             <div class="closed-tabs-section"
                  onmouseenter={handleClosedTabsMouseEnter}
@@ -376,7 +392,7 @@
                  role="region"
                  aria-label="Recently closed tabs">
                 <button class="closed-tabs-header"
-                        onclick={() => data.clearClosedTabs()}
+                        onclick={() => { data.clearClosedTabs(); handleClosedTabsMouseLeave() }}
                         aria-label="Clear all recently closed tabs">
                     <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
                     <span class="closed-tabs-count">{data.closedTabs.length}</span>
@@ -386,7 +402,10 @@
                         {#each data.closedTabs as tab}
                             <button class="closed-tab-item" title={tab.url} onmousedown={() => restoreClosedTab(tab)}>
                                 <Favicon {tab} showButton={false} />
-                                <span class="tab-title">{tab.title}</span>
+                                <div class="tab-text">
+                                    <span class="tab-title">{tab.title}</span>
+                                    <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
+                                </div>
                             </button>
                         {/each}
                     </div>
@@ -1258,7 +1277,7 @@
     }
     
     .closed-tabs-list {
-        padding: 8px 8px 8px 8px;
+        padding: 8px 8px 16px 8px;
         display: flex;
         flex-direction: column;
         gap: 4px;
@@ -1290,13 +1309,13 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 4px 8px;
+        padding: 6px 8px;
         border-radius: 10px;
         background: transparent;
         cursor: pointer;
         transition: all 150ms ease;
         border: 1px solid transparent;
-        height: 32px;
+        height: 44px;
         flex-shrink: 0;
         width: 100%;
         text-align: left;
@@ -1314,10 +1333,32 @@
         opacity: 0.3;
     }
     
+    .tab-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        flex: 1;
+        min-width: 0;
+        max-width: 180px;
+    }
+    
     .closed-tab-item .tab-title {
         color: #c6c6c6;
         font-size: 12px;
-        max-width: 180px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.2;
+    }
+    
+    .closed-tab-item .tab-space {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 10px;
+        font-weight: 400;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.2;
     }
     
     .closed-tab-item:hover .tab-favicon {
@@ -1326,6 +1367,10 @@
     
     .closed-tab-item:hover .tab-title {
         color: rgba(255, 255, 255, 0.7);
+    }
+    
+    .closed-tab-item:hover .tab-space {
+        color: rgba(255, 255, 255, 0.6);
     }
 
     /* .sidebar-content::-webkit-scrollbar {

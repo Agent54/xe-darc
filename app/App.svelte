@@ -384,15 +384,53 @@
     }
 
     function openTab(tab, index) {
-        console.log('Opening tab:', $state.snapshot(tab))
+        // console.log('Opening tab:', $state.snapshot(tab))
         
         // Set this tab as active in the data module
         data.spaceMeta.activeTab = tab.id
-
-        tab.frame?.scrollIntoView({ 
-            behavior: isWindowResizing ? 'auto' : 'smooth' 
-        })
+        
+        // // Immediate scroll for user interaction
+        // tab.frame?.scrollIntoView({ 
+        //     behavior: isWindowResizing ? 'auto' : 'smooth' 
+        // })
     }
+
+    // Effect to handle scrolling to active tab when it changes
+    $effect(() => {
+        if (!data.spaceMeta.activeTab) {
+            return
+        }
+        
+        // Don't scroll if tab change was caused by scrolling
+        if (tabChangeFromScroll) {
+            return
+        }
+        
+        const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+        if (activeTab) {
+            // Scroll frame into view
+            setTimeout(() => {
+                if (activeTab.frame) {
+                    activeTab.frame.scrollIntoView({ 
+                        behavior: isWindowResizing ? 'auto' : 'smooth' 
+                    })
+                } else {
+                    console.warn('Frame not available for tab:', activeTab.id)
+                }
+            }, 10)
+            
+            // Scroll tab in header tab list into view
+            setTimeout(() => {
+                if (activeTab.tabButton) {
+                    activeTab.tabButton.scrollIntoView({
+                        behavior: isWindowResizing ? 'auto' : 'smooth',
+                        inline: 'center',
+                        block: 'nearest'
+                    })
+                }
+            }, 10)
+        }
+    })
 
     function closeTab(tab, event, createPlaceholder = false) {
         if (event) event.stopPropagation()
@@ -628,7 +666,16 @@
                     // Start timer when tab becomes visible
                     const timer = setTimeout(() => {
                         if (entry.isIntersecting && tab) {
-                            data.spaceMeta.activeTab = tab.id
+                            // Set flag BEFORE changing active tab to prevent race condition
+                            tabChangeFromScroll = true
+                            // Use untrack to prevent triggering the scroll effect
+                            untrack(() => {
+                                data.spaceMeta.activeTab = tab.id
+                            })
+                            // Reset flag after a short delay
+                            setTimeout(() => {
+                                tabChangeFromScroll = false
+                            }, 100)
                         }
                     }, 250)
                     visibilityTimers.set(tabId, timer)
@@ -646,11 +693,11 @@
             root: document.querySelector('.controlled-frame-container')
         })
 
-        // Observe all frames (both controlledframes and NewTab components)
+        // Observe the wrapper divs with ID format "tab_{tab.id}" instead of the frame elements
         tabs.forEach(tab => {
-            const frame = tab.frame // document.getElementById(`tab_${tab.id}`)
-            if (frame) {
-                observer.observe(frame)
+            const wrapper = document.getElementById(`tab_${tab.id}`)
+            if (wrapper) {
+                observer.observe(wrapper)
             }
         })
 
@@ -658,14 +705,18 @@
     }
 
     let observer
+    let tabChangeFromScroll = false
 
     $effect(() => {
         if (tabs) {
-            console.log('fix obeserver effect')
+            console.log('fix: obeserver effect')
             if (observer) {
                 observer.disconnect()
             }
-            observer = setupIntersectionObserver()
+            // Wait a tick to ensure DOM is updated
+            setTimeout(() => {
+                observer = setupIntersectionObserver()
+            }, 100)
         }
     })
 
@@ -682,7 +733,7 @@
             if (resizeTimeout) {
                 clearTimeout(resizeTimeout)
             }
-            // Clean up global event listeners
+
             window.removeEventListener('darc-close-tab', handleGlobalTabClose)
             window.removeEventListener('darc-close-tab-from-frame', handleFrameTabClose)
             window.removeEventListener('darc-new-tab-from-frame', handleFrameNewTab)
@@ -693,7 +744,7 @@
 
     async function captureTabScreenshot(tab, frame = null) {
         if (!frame) {
-            frame = tab.frame // document.getElementById(`tab_${tab.id}`)
+            frame = tab.frame
         }
         if (!frame) {
             console.log('Frame not found for tab:', tab.id)

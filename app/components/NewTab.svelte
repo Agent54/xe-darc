@@ -565,10 +565,9 @@
         }
     })
 
-    let newTabContainer = null
     $effect(() => {
         if (tab.shouldFocus) {
-            newTabContainer.scrollIntoView({ behavior: 'smooth' })
+            tab.frame.scrollIntoView({ behavior: 'smooth' })
             tab.tabButton.scrollIntoView({ behavior: 'smooth' })
             // Focus the input element
             if (inputElement) {
@@ -588,7 +587,7 @@
     })
 </script>
 
-<div bind:this={newTabContainer} class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
+<div bind:this={tab.frame} class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
     <div class="content-container relative pt-[15vh] w-full">
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
             

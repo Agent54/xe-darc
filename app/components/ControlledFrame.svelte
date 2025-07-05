@@ -1582,28 +1582,41 @@ document.addEventListener('input', function(event) {
         class:network-error={tab.networkError}
         class:new-tab-page={isNewTabUrl(tab.url)}
         id="tab_{tab.id}"
-        class="frame">
+        class="frame"
+        role="tabpanel"
+       >
+
+       <!-- onmousedown={() => {
+        console.log(`🖱️ [INTERNAL-PAGE] Mouse down on tab ${tab.id}`)
+        window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
+            detail: { tabId: tab.id }
+        }))
+    }}
+    onmouseup={() => {
+        console.log(`🖱️ [INTERNAL-PAGE] Mouse up on tab ${tab.id}`)
+        window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
+            detail: { tabId: tab.id }
+        }))
+    }} -->
 
         <div class="hidden" bind:this={anchor}></div>
+           
+        {#if tab.certificateError}
+            <SSLErrorPage
+                {tab}
+            />
 
-        <!-- <div class="error-page-wrapper"> -->
-            {#if tab.certificateError}
-                <SSLErrorPage
-                    {tab}
-                />
+        {:else if tab.networkError}
+            <NetworkErrorPage
+                {tab}
+                onReload={() => reloadTab(tab)}
+            />
 
-            {:else if tab.networkError}
-                <NetworkErrorPage
-                    {tab}
-                    onReload={() => reloadTab(tab)}
-                />
-
-            {:else if isNewTabUrl(tab.url)}
-                <NewTab
-                    {tab}
-                />
-            {/if}
-        <!-- </div> -->
+        {:else if isNewTabUrl(tab.url)}
+            <NewTab
+                {tab}
+            />
+        {/if}
     </div>
 {/key}
 

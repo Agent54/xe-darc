@@ -412,3 +412,5 @@ different levels of success and timeframes:
     - we have a revenue stream to offset llm and hosting (2 years) 
 
 space switch animation
+
+dns probe error page
