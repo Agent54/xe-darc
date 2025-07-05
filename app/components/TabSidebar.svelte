@@ -838,6 +838,10 @@
         transition: all 150ms ease;
         border: 1px solid transparent;
         min-height: 36px;
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+        position: relative;
     }
     
     .tab-item-main {
@@ -855,6 +859,8 @@
         text-rendering: optimizeLegibility;
         text-align: left;
         border-radius: 10px;
+        min-width: 0;
+        overflow: hidden;
     }
     
     .tab-item-container:hover {
@@ -900,6 +906,7 @@
         mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
         -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
         min-width: 0;
+        max-width: 100%;
     }
     
 
@@ -938,6 +945,7 @@
         flex-shrink: 0;
         overflow: hidden;
         line-height: 1;
+        max-width: 28px;
     }
 
     .tab-close:hover {
