@@ -403,14 +403,14 @@
         
         try {
             let url = new URL(inputValue)
-            tab.url = url
+            tab.url = url.href
         } catch {
             // Not a valid URL, check for Kagi prefix or use default search engine
             if (inputValue.toLowerCase().startsWith('k ')) {
                 // Use Kagi search, remove the "k " prefix
                 let searchUrl = new URL('https://kagi.com/search')
                 searchUrl.searchParams.set('q', inputValue.slice(2))
-                tab.url = searchUrl
+                tab.url = searchUrl.href
             } else {
                 // Use default search engine from settings
                 const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
@@ -425,7 +425,7 @@
                         if (customUrl) {
                             try {
                                 searchUrl = new URL(customUrl + encodeURIComponent(inputValue))
-                                tab.url = searchUrl
+                                tab.url = searchUrl.href
                                 return
                             } catch {
                                 // Fallback to Google if custom URL is invalid
@@ -441,7 +441,7 @@
                 }
                 
                 searchUrl.searchParams.set('q', inputValue)
-                tab.url = searchUrl
+                tab.url = searchUrl.href
             }
         }
     }

@@ -562,19 +562,20 @@
             const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
             if (activeTab) {
                 const frame = activeTab.frame
-                if (frame && typeof frame.back === 'function') {
-                    // Check if the frame can go back
-                    if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
-                        // No back navigation available, set to start page
-                        activeTab.url = 'about:newtab'
-                    } else {
-                        frame.back()
-                    }
-                } else if (activeTab.url !== 'about:newtab') {
-                    // Frame doesn't support navigation or is not a controlled frame
-                    // Set to start page
-                    activeTab.url = 'about:newtab'
-                }
+                frame.back?.()
+                // if (frame && typeof frame.back === 'function') {
+                //     // Check if the frame can go back
+                //     // if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
+                //     //     // No back navigation available, set to start page
+                //     //     activeTab.url = 'about:newtab'
+                //     // } else {
+                //     frame.back()
+                //     // }
+                // } else if (activeTab.url !== 'about:newtab') {
+                //     // Frame doesn't support navigation or is not a controlled frame
+                //     // Set to start page
+                //     activeTab.url = 'about:newtab'
+                // }
             }
         }
     }

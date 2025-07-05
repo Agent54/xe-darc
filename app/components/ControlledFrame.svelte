@@ -43,6 +43,37 @@
     let anchor = $state(null)
 
     let initialUrl = $state('')
+    
+    // Update initialUrl when tab URL changes
+    $effect(() => {
+        if (initialUrl !== tab.url) {
+            initialUrl = tab.url
+        }  
+
+        if (tab.url && tab.url !== 'about:blank') {
+            // Update favicon for any URL change
+            tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
+            
+            // Update title if it's an about: page or if current title is empty/generic
+            if (tab.url.startsWith('about:')) {
+                if (tab.url === 'about:newtab') {
+                    tab.title = 'New Tab'
+                } else if (tab.url === 'about:blank') {
+                    tab.title = 'Blank Page'
+                } else if (tab.url.startsWith('about:')) {
+                    tab.title = tab.url.charAt(6).toUpperCase() + tab.url.slice(7)
+                } else {
+                    // For regular URLs, extract hostname as fallback title
+                    try {
+                        const urlObj = new URL(tab.url)
+                        tab.title = urlObj.hostname || tab.url
+                    } catch {
+                        tab.title = tab.url
+                    }
+                }
+            }
+        }
+    })
 
     // Check if the current URL is about:newtab
     function isNewTabUrl(url) {
