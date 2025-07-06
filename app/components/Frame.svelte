@@ -50,7 +50,6 @@
             const linkOrigin = origin(hoveredLink.href)
             const tabOrigin = origin(tab.url)
             const different = linkOrigin !== tabOrigin
-            console.log('Origin check:', { linkOrigin, tabOrigin, different })
             return different
         } catch (error) {
             console.log('Origin check error:', error)
@@ -717,6 +716,7 @@
         opacity: 0.8;
         flex-shrink: 0;
         margin-right: 4px;
+        margin-top: -2px;
         color: rgba(255, 255, 255, 0.9);
     }
 
