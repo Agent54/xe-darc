@@ -10,6 +10,7 @@
     import TabSidebar from './components/TabSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import Favicon from './components/Favicon.svelte'
+    import UrlRenderer from './components/UrlRenderer.svelte'
     import { onMount, untrack } from 'svelte'
     import data from './data.svelte.js'
     import { origin } from './lib/utils.js'
@@ -2405,7 +2406,9 @@
                 <div class="hovercard-header">
                     <div class="hovercard-text">
                         <div class="hovercard-title">{hoveredTab.title || 'Untitled'}</div>
-                        <div class="hovercard-url">{hoveredTab.url}</div>
+                        <div class="hovercard-url">
+                            <UrlRenderer url={hoveredTab.url} variant="compact" />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2448,7 +2451,7 @@
         
         <div class="frame-header-url-container">
             <div class="frame-header-url">
-                {getDisplayUrl(tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.url)}
+                <UrlRenderer url={getDisplayUrl(tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.url)} variant="compact" />
             </div>
         </div>
 
@@ -2486,7 +2489,7 @@
                     <div class="reading-mode">
                         {#key origin(tab.url)}
                             <div class="url-display visible">
-                                {getDisplayUrl(tab.url)}
+                                <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
                             </div>
                         {/key}
                         
@@ -2501,7 +2504,7 @@
                         <div>
                             {#key origin(tab.url)}
                                 <div class="url-display visible">
-                                    {getDisplayUrl(tab.url)}
+                                    <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
                                 </div>
                             {/key}
                             

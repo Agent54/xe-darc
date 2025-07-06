@@ -1360,7 +1360,7 @@ document.addEventListener('input', function(event) {
                             linkPreviewVisible = false
                             hoveredLink = null
                             linkPreviewTimeout = null
-                        }, 1500)
+                        }, 5000)
                     }
                 } catch (error) {
                     console.error('Failed to parse link enter data:', error)

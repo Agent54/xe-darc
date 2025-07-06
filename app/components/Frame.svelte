@@ -1,6 +1,7 @@
 <script>
     import { fade } from 'svelte/transition'
     import ControlledFrame from './ControlledFrame.svelte'
+    import UrlRenderer from './UrlRenderer.svelte'
 
     let {
         style = '',
@@ -319,7 +320,7 @@
 
         {#if linkPreviewVisible && hoveredLink}
             <div class="link-preview" transition:fade={{duration: 150}}>
-                {hoveredLink?.href}
+                <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
             </div>
         {/if}
         
@@ -366,7 +367,7 @@
             <!-- Link preview for iframe fallback -->
             {#if linkPreviewVisible && hoveredLink}
                 <div class="link-preview" transition:fade={{duration: 150}}>
-                    {hoveredLink.href}
+                    <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
                 </div>
             {/if}
             
