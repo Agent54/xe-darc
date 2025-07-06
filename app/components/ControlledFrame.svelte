@@ -44,6 +44,29 @@
 
     let initialUrl = $state('')
 
+    // Derived values for error checking from origins store
+    let currentCertificateError = $derived.by(() => {
+        if (!tab.url) {
+            return null
+        }
+        const originValue = origin(tab.url)
+        const origins = data.origins[originValue]
+        const certError = origins?.certificateError || null
+        // console.log(`🔒 [DEBUG] Tab ${tab.id} (${tab.url}) - Origin: ${originValue}, Origins obj:`, origins, 'CertError:', certError)
+        return certError
+    })
+
+    let currentNetworkError = $derived.by(() => {
+        if (!tab.url) {
+            return null
+        }
+        const originValue = origin(tab.url)
+        const origins = data.origins[originValue]
+        const netError = origins?.networkError || null
+        // console.log(`🌐 [DEBUG] Tab ${tab.id} (${tab.url}) - Origin: ${originValue}, Origins obj:`, origins, 'NetError:', netError)
+        return netError
+    })
+
     // LED indicator states
     let networkAccessActive = $state(false)
     let blockedRequestActive = $state(false)
@@ -229,7 +252,7 @@
                error.includes('net::ERR_CERT_')
     }
 
-    // Set certificate error on tab
+    // Set certificate error on origin
     function setCertificateError(tab, errorCode, url) {
         const humanReadableError = getCertificateErrorDescription(errorCode)
 
@@ -243,8 +266,6 @@
         const originValue = origin(url)
         data.origins[originValue] ??= {}
         data.origins[originValue].certificateError = certificateError
-
-        tab.certificateError = certificateError
         
         // Re-evaluate security state (will be set to 'insecure' due to certificate error)
         evaluateSecurityState(tab)
@@ -254,15 +275,13 @@
 
     // Properly evaluate and set security state based on URL and certificate status
     function evaluateSecurityState(tab) {
-        console.log(`🔒 Evaluating security state for ${tab.url}`)
-        console.log(`🔒 Certificate error present: ${!!tab.certificateError}`)
-        
         const originValue = origin(tab.url)
         data.origins[originValue] ??= {}
         
+        // const hasCertificateError = !!data.origins[originValue]?.certificateError
+        
         try {
             const url = new URL(tab.url)
-            console.log(`🔒 Protocol: ${url.protocol}`)
             
             // About pages are secure as they only run inside the browser
             if (url.protocol === 'about:') {
@@ -284,12 +303,10 @@
             
             // Other protocols = unknown
             data.origins[originValue].securityState = 'unknown'
-            console.log(`🔒 Other protocol - setting to unknown`)
             
         } catch (error) {
             // Invalid URL
             data.origins[originValue].securityState = 'unknown'
-            console.log(`🔒 Invalid URL - setting to unknown`)
         }
     }
 
@@ -343,7 +360,7 @@
                error.includes('ERR_NETWORK_TIMEOUT')
     }
 
-    // Set network error on tab
+    // Set network error on origin
     function setNetworkError(tab, errorCode, url) {
         const networkError = {
             code: errorCode,
@@ -354,18 +371,15 @@
         const originValue = origin(url)
         data.origins[originValue] ??= {}
         data.origins[originValue].networkError = networkError
-
-        tab.networkError = networkError
         
         console.warn(`🌐 Network error detected for ${url}: ${errorCode}`)
     }
 
-    // Clear network error from tab
+    // Clear network error from origin
     function clearNetworkError(tab) {
-        if (tab.networkError) {
-            const originValue = origin(tab.url)
-            delete data.origins[originValue]?.networkError
-            delete tab.networkError
+        const originValue = origin(tab.url)
+        if (data.origins[originValue]?.networkError) {
+            delete data.origins[originValue].networkError
             console.log(`🌐 Network error cleared for ${tab.url}`)
         }
     }
@@ -464,43 +478,44 @@
         const wasLoading = tab.loading
         tab.loading = false
         
+        const originValue = origin(tab.url)
+        const currentNetworkErr = data.origins[originValue]?.networkError
+        const currentCertErr = data.origins[originValue]?.certificateError
+        
         console.log(`🔄 handleLoadStop called for ${tab.url}`)
         console.log(`🔄 Was loading (successful): ${wasLoading}`)
-        console.log(`🔄 Network error before processing:`, tab.networkError)
+        console.log(`🔄 Network error before processing:`, currentNetworkErr)
 
         tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
         // Only clear errors if the load was successful (was still loading when this was called)
         if (wasLoading) {
             // Clear network error if we successfully navigated to a different URL
-            if (tab.networkError && tab.networkError.url !== tab?.url) {
+            if (currentNetworkErr && currentNetworkErr.url !== tab?.url) {
                 clearNetworkError(tab)
-                console.log(`🌐 Network error cleared - successfully navigated from ${tab.networkError?.url} to ${tab?.url}`)
+                console.log(`🌐 Network error cleared - successfully navigated from ${currentNetworkErr?.url} to ${tab?.url}`)
             }
             
             // Clear certificate error if we successfully navigated to a different URL
-            const originValue = origin(tab.url)
-            if (data.origins[originValue]?.certificateError) {
-                if (tab.url !== data.origins[originValue].certificateError.url) {
-                    delete data.origins[originValue]?.certificateError
-                    delete tab.certificateError
-                    console.log(`🔒 Certificate error cleared - successfully navigated to ${tab.url}`)
-                }
+            if (currentCertErr && tab.url !== currentCertErr.url) {
+                delete data.origins[originValue]?.certificateError
+                console.log(`🔒 Certificate error cleared - successfully navigated to ${tab.url}`)
             }
             
             console.log(`✅ Page loaded successfully: ${tab.url}`)
         } else {
             // Load failed - preserve errors
             console.log(`🚨 Load failed - preserving errors for ${tab.url}`)
-            if (tab.networkError) {
-                console.log(`🌐 Network error preserved: ${tab.networkError.code}`)
+            if (currentNetworkErr) {
+                console.log(`🌐 Network error preserved: ${currentNetworkErr.code}`)
             }
-            if (tab.certificateError) {
-                console.log(`🔒 Certificate error preserved: ${tab.certificateError.code}`)
+            if (currentCertErr) {
+                console.log(`🔒 Certificate error preserved: ${currentCertErr.code}`)
             }
         }
         
-        console.log(`🔒 Load stop for ${tab.url} - Security state: ${tab.securityState}, Has cert error: ${!!tab.certificateError}, Has network error: ${!!tab.networkError}`)
+        const hasNetworkError = !!currentNetworkErr
+        const hasCertError = !!currentCertErr
         
         // Update title and capture screenshot after page loads (only if successful)
         if (wasLoading) {
@@ -1763,8 +1778,8 @@ document.addEventListener('input', function(event) {
         
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
-        class:certificate-error={tab.certificateError}
-        class:network-error={tab.networkError}
+        class:certificate-error={!!currentCertificateError}
+        class:network-error={!!currentNetworkError}
         class:new-tab-page={isNewTabUrl(tab.url)}
         id="tab_{tab.id}"
         class="frame"
@@ -1793,14 +1808,16 @@ document.addEventListener('input', function(event) {
             </div>
         {/if}
            
-        {#if tab.certificateError}
+        {#if currentCertificateError}
             <SSLErrorPage
                 {tab}
+                certificateError={currentCertificateError}
             />
 
-        {:else if tab.networkError}
+        {:else if currentNetworkError}
             <NetworkErrorPage
                 {tab}
+                networkError={currentNetworkError}
                 onReload={() => reloadTab(tab)}
             />
 

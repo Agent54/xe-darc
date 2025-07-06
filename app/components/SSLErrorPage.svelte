@@ -1,9 +1,8 @@
 <script>
     let {
-        tab
+        tab,
+        certificateError
     } = $props()
-    
-    let certificateError = $derived(tab?.certificateError)
     let url = $derived(tab?.url || '')
     let hostname = $derived.by(() => {
         try {

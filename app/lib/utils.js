@@ -41,5 +41,7 @@ export function origin(url) {
     if (url?.startsWith('about:')) {
       return 'about'
     }
+    // Return a fallback for invalid URLs
+    return 'unknown'
   }
 }

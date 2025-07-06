@@ -1,13 +1,20 @@
 <script>
+    import data from '../data.svelte.js'
+    import { origin } from '../lib/utils.js'
+    
     let {
         tab,
         size = 'small' // 'small' or 'large'
     } = $props()
     
-    let securityState = $derived(tab?.securityState || 'unknown')
-    let hasSecurityWarning = $derived(tab?.hasSecurityWarning || false)
-    let certificateError = $derived(tab?.certificateError)
-    let mixedContent = $derived(tab?.mixedContent || false)
+    // Get origin data from the data store
+    let originValue = $derived(tab?.url ? origin(tab.url) : null)
+    let originData = $derived(originValue ? data.origins[originValue] : null)
+    
+    // Use origin data instead of tab properties
+    let securityState = $derived(originData?.securityState || 'unknown')
+    let certificateError = $derived(originData?.certificateError)
+    let networkError = $derived(originData?.networkError)
     let isSecure = $derived(tab?.url?.startsWith('https:') || false)
     let isAboutUrl = $derived(tab?.url?.startsWith('about:') || false)
     
@@ -16,15 +23,14 @@
     let hasSecurityIssue = $derived(
         !isAboutUrl && (
             certificateError || 
-            hasSecurityWarning || 
-            mixedContent || 
+            networkError ||
             securityState === 'mixed' || 
             (securityState === 'insecure' && isSecure)
         )
     )
     
     function getSecurityIcon() {
-        if (certificateError || hasSecurityWarning) {
+        if (certificateError || networkError) {
             return 'warning'
         }
         if (securityState === 'secure') {
@@ -43,7 +49,7 @@
     }
     
     function getSecurityColor() {
-        if (certificateError || hasSecurityWarning) {
+        if (certificateError || networkError) {
             return '#ef4444' // red
         }
         if (securityState === 'secure') {
@@ -60,13 +66,10 @@
     
     function getTooltipText() {
         if (certificateError) {
-            return `Certificate Error: ${certificateError.text.substring(0, 100)}...`
+            return `Certificate Error: ${certificateError.text}`
         }
-        if (hasSecurityWarning) {
-            return 'Security warning detected'
-        }
-        if (mixedContent) {
-            return 'Mixed content: This page contains insecure content'
+        if (networkError) {
+            return `Network Error: ${networkError.code}`
         }
         if (securityState === 'secure') {
             return 'Secure connection'

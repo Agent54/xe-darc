@@ -1,11 +1,11 @@
 <script>
     let {
         tab,
+        networkError,
         onReload = () => {}
     } = $props()
     
-    let networkError = $derived(tab?.networkError)
-    let url = $derived(tab?.networkError?.url || tab?.url || '')
+    let url = $derived(networkError?.url || tab?.url || '')
     let hostname = $derived.by(() => {
         try {
             return new URL(url).hostname
