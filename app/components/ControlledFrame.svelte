@@ -12,7 +12,7 @@
 
 <script>
     import data from '../data.svelte.js'
-    import { untrack } from 'svelte'
+    import { untrack, onDestroy } from 'svelte'
     import SSLErrorPage from './SSLErrorPage.svelte'
     import NetworkErrorPage from './NetworkErrorPage.svelte'
     import NewTab from './NewTab.svelte'
@@ -1585,7 +1585,7 @@ document.addEventListener('input', function(event) {
             controlledFrame.src = initialUrl
         }
 
-        console.log('controlledFrame', controlledFrame, {initialUrl, addNode})
+        console.log('controlledFrame', controlledFrame, { attached, initialUrl, addNode })
        
         if (addNode) {
             tab.wrapper.insertBefore(controlledFrame, anchor)
@@ -1598,9 +1598,20 @@ document.addEventListener('input', function(event) {
         }
     })
 
+    let detached = false
+    onDestroy(() => {
+        console.log('ondestro', { tab, instances, detached })
+        if (tab?.id && !detached && !tab.hibernated) {
+            tab.frame = null
+            instances.delete(tab.id)
+        }
+    })
+
+    
     function detach () {
-        // Guard against undefined tab during component cleanup
-        if (!tab || !tab.id) {
+        if (!tab?._id || tab.hibernated) {
+            tab.frame = null
+            instances.delete(tab.id)
             return {
                 duration: 0
             }
@@ -1612,6 +1623,7 @@ document.addEventListener('input', function(event) {
             const backgroundFrames = document.getElementById('backgroundFrames')
             const anchorFrame = document.getElementById('anchorFrame')
             backgroundFrames.moveBefore(controlledFrame, anchorFrame)
+            detached = true
         }
 
         return {

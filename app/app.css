@@ -367,7 +367,7 @@ ul::-webkit-scrollbar {
     padding: 4px;
     list-style: none;
     transition: border-color 0.3s ease, width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease, flex-basis 0.2s ease;
-    border-radius: 10px;
+    border-radius: 8px;
     background-color: rgb(255 255 255 / 7%);
     min-width: 130px;
     max-width: 200px;
@@ -376,15 +376,18 @@ ul::-webkit-scrollbar {
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
     -webkit-font-smoothing: subpixel-antialiased;
     text-rendering: optimizeLegibility;
+    border: 1px solid hsl(0deg 0% 100% / 2%);
 }
 .tab-container:hover, .tab-container.hovered, .tab-container.menu-open, .tab-container.active:hover, .tab-container.active.hovered, .tab-container.active.menu-open {
     background-color: #2b2b2b;
 }
 .tab-container.active {
     background-color: rgb(255 255 255 / 14%);
+    border: 1px solid hsl(0deg 0% 100% / 4%);
 }
 .tab-container.active:hover {
     background-color: rgb(255 255 255 / 17%);
+    border: 1px solid hsl(0deg 0% 100% / 5%);
 }
 .tab-container .tab {
     user-select: none;
@@ -409,6 +412,7 @@ ul::-webkit-scrollbar {
 }
 .tab-container:hover .favicon-wrapper, .tab-container.hovered .favicon-wrapper, .tab-container.menu-open .favicon-wrapper {
     opacity: 1;
+    border: 1px solid hsl(0deg 0% 100% / 5%);
 }
 .tab-container:hover .tab, .tab-container.hovered .tab, .tab-container.menu-open .tab {
     color: #fff;
@@ -1396,10 +1400,10 @@ ul::-webkit-scrollbar {
 .context-menu {
     position: fixed;
     z-index: 10002;
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0, 0, 0, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    min-width: 180px;
+    min-width: 200px;
     box-shadow: 
         0 20px 40px rgba(0, 0, 0, 0.4),
         0 8px 16px rgba(0, 0, 0, 0.2),
@@ -1408,6 +1412,7 @@ ul::-webkit-scrollbar {
     font-family: 'Inter', sans-serif;
     animation: context-menu-appear 0.15s ease-out;
     -webkit-app-region: no-drag;
+    white-space: nowrap;
 }
 
 @keyframes context-menu-appear {
@@ -1422,27 +1427,43 @@ ul::-webkit-scrollbar {
 }
 
 .context-menu-item {
-    padding: 10px 16px;
+    padding: 6px 12px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 13px;
+    font-size: 12px;
     color: rgba(255, 255, 255, 0.9);
     user-select: none;
 }
 
 .context-menu-item:hover {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
 }
 
-.context-menu-item:first-child {
+.context-menu-item:first-child:not(.context-menu-item-left):not(.context-menu-item-right) {
     border-radius: 8px 8px 0 0;
 }
 
-.context-menu-item:last-child {
+.context-menu-item:last-child:not(.context-menu-item-left):not(.context-menu-item-right) {
     border-radius: 0 0 8px 8px;
+}
+
+.context-menu-item-row:first-child .context-menu-item-left {
+    border-radius: 8px 0 0 0;
+}
+
+.context-menu-item-row:first-child .context-menu-item-right {
+    border-radius: 0 8px 0 0;
+}
+
+.context-menu-item-row:last-child .context-menu-item-left {
+    border-radius: 0 0 0 8px;
+}
+
+.context-menu-item-row:last-child .context-menu-item-right {
+    border-radius: 0 0 8px 0;
 }
 
 .context-menu-icon {
@@ -1459,6 +1480,30 @@ ul::-webkit-scrollbar {
     height: 1px;
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
     margin: 4px 0;
+}
+
+.context-menu-item-row {
+    display: flex;
+    width: 100%;
+}
+
+.context-menu-item-left,
+.context-menu-item-right {
+    flex: 1;
+    border-radius: 0;
+}
+
+.context-menu-item-left {
+    border-right: 1px solid rgba(255, 255, 255, 0.01);
+}
+
+.context-menu-item-left:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+    border-right-color: rgba(255, 255, 255, 0);
+}
+
+.context-menu-item-right:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
 }
 
 .context-menu-item.has-submenu {
@@ -1482,8 +1527,8 @@ ul::-webkit-scrollbar {
     position: absolute;
     left: calc(100% + 4px);
     top: -1px;
-    min-width: 160px;
-    background: rgba(0, 0, 0, 0.9);
+    min-width: 180px;
+    background: rgba(0, 0, 0, 0.96);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     box-shadow: 
@@ -1497,6 +1542,7 @@ ul::-webkit-scrollbar {
     transition: all 0.12s ease-out;
     z-index: 10003;
     pointer-events: none;
+    white-space: nowrap;
 }
 
 .context-menu-item.has-submenu:hover .context-submenu,
@@ -1520,20 +1566,21 @@ ul::-webkit-scrollbar {
 }
 
 .context-submenu-item {
-    padding: 8px 12px;
+    padding: 6px 12px;
     display: flex;
     align-items: center;
     gap: 8px;
     cursor: pointer;
     transition: all 0.15s ease;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.9);
     user-select: none;
     position: relative;
+    white-space: nowrap;
 }
 
 .context-submenu-item:hover {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
     color: rgba(255, 255, 255, 0.95);
 }
 
@@ -1543,7 +1590,7 @@ ul::-webkit-scrollbar {
 }
 
 .context-submenu-item.active:hover {
-    background: rgba(59, 130, 246, 0.15);
+    background: rgba(59, 130, 246, 0.12);
     color: rgba(59, 130, 246, 1);
 }
 

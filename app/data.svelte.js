@@ -319,3 +319,52 @@ export default {
         }
     }
 }
+
+
+    // let tabs = $state([
+    //     // {
+    //     //     id: '111',
+    //     //     url: 'http://code.xe', 
+    //     //     title: 'Code',
+    //     //     audioPlaying: false,
+    //     //     // favicon: 'file://photon_logo.png',
+    //     //     screenshot: null,
+    //     //     pinned: false,
+    //     //     muted: false,
+    //     //     loading: false
+    //     // },
+    //     {
+    //         id: '4',
+    //         url: 'about:newtab', 
+    //         title: 'New Tab',
+    //         audioPlaying: false,
+    //         // favicon: 'file://photon_logo.png',
+    //         screenshot: null,
+    //         pinned: false,
+    //         muted: false,
+    //         loading: false
+    //     },
+
+    //     // {
+    //     //     id: '5',
+    //     //     url: `isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac/public/test.html`, 
+    //     //     title: 'Test',
+    //     //     audioPlaying: false,
+    //     //     // favicon: 'file://photon_logo.png',
+    //     //     screenshot: null,
+    //     //     pinned: false,
+    //     //     muted: false,
+    //     //     loading: false
+    //     // }
+    //     // {
+    //     //     id: '5',
+    //     //     url: '/test-links.html', 
+    //     //     title: 'Link Tracking Test',
+    //     //     audioPlaying: false,
+    //     //     // favicon: 'file://photon_logo.png',
+    //     //     screenshot: null,
+    //     //     pinned: false,
+    //     //     muted: false,
+    //     //     loading: false
+    //     // }
+    // ])

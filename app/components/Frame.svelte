@@ -277,6 +277,11 @@
         class="frame hibernated-frame"
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
+        role="button"
+        tabindex="0"
+        onmousedown={() => {
+            tab.hibernated = false
+        }}
         id="tab_{tab.id}"
     >
         {#if tab.screenshot}
