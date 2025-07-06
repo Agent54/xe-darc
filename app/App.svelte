@@ -1954,52 +1954,58 @@
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each tabs as tab, i (tab.id)}
-                <li 
-                    bind:this={tab.tabButton}
-                    class="tab-container" 
-                    class:active={tab.id === data.spaceMeta.activeTab} 
-                    class:hovered={tab.id === hoveredTab?.id}
-                    class:pinned={tab.pinned}
-                    class:menu-open={(contextMenu.visible && contextMenu.tab?.id === tab.id) || (faviconMenu.visible && faviconMenu.tab?.id === tab.id)}
-                    role="tab"
-                    tabindex="0"
-                    onclick={() => openTab(tab, i)}
-                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTab(tab, i) } }}
-                    oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
-                    onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                    onmouseleave={handleTabMouseLeave}
-                    >
-                    <div class="tab">
-                        {#if tab.loading}
-                            <svg class="tab-loading-spinner" viewBox="0 0 16 16">
-                                <path d="M8 2 A6 6 0 0 1 14 8" 
-                                    fill="none" 
-                                    stroke="rgba(255, 255, 255, 0.8)" 
-                                    stroke-width="2" 
-                                    stroke-linecap="round"/>
-                            </svg>
-                        {/if}
+                {#if tab.type === 'divider'}
+                    <li class="tab-divider-container">
+                        <div class="tab-divider-vertical"></div>
+                    </li>
+                {:else}
+                    <li 
+                        bind:this={tab.tabButton}
+                        class="tab-container" 
+                        class:active={tab.id === data.spaceMeta.activeTab} 
+                        class:hovered={tab.id === hoveredTab?.id}
+                        class:pinned={tab.pinned}
+                        class:menu-open={(contextMenu.visible && contextMenu.tab?.id === tab.id) || (faviconMenu.visible && faviconMenu.tab?.id === tab.id)}
+                        role="tab"
+                        tabindex="0"
+                        onclick={() => openTab(tab, i)}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTab(tab, i) } }}
+                        oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
+                        onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                        onmouseleave={handleTabMouseLeave}
+                        >
+                        <div class="tab">
+                            {#if tab.loading}
+                                <svg class="tab-loading-spinner" viewBox="0 0 16 16">
+                                    <path d="M8 2 A6 6 0 0 1 14 8" 
+                                        fill="none" 
+                                        stroke="rgba(255, 255, 255, 0.8)" 
+                                        stroke-width="2" 
+                                        stroke-linecap="round"/>
+                                </svg>
+                            {/if}
 
-                        <div class="favicon-wrapper">    
-                            <Favicon {tab} onMenuOpen={handleFaviconMousedown} />
-                            {#if tab.pinned}
-                                <div class="pin-icon">
-                                    <svg fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2a1 1 0 0 1 2 0v2h6V2a1 1 0 0 1 2 0v2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v6a1 1 0 0 1-1 1h-2v3a1 1 0 0 1-2 0v-3H8a1 1 0 0 1-1-1V9H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1z" />
-                                    </svg>
-                                </div>
+                            <div class="favicon-wrapper">    
+                                <Favicon {tab} onMenuOpen={handleFaviconMousedown} />
+                                {#if tab.pinned}
+                                    <div class="pin-icon">
+                                        <svg fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2a1 1 0 0 1 2 0v2h6V2a1 1 0 0 1 2 0v2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v6a1 1 0 0 1-1 1h-2v3a1 1 0 0 1-2 0v-3H8a1 1 0 0 1-1-1V9H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1z" />
+                                        </svg>
+                                    </div>
+                                {/if}
+                            </div>
+                            <span class="tab-title"> {#if tab.audioPlaying && !tab.muted}
+                                🔊 &nbsp;
+                            {:else if tab.muted}
+                                🔇 &nbsp;
+                            {/if}{tab.title || tab.url}</span>
+                            {#if !tab.pinned}
+                                <button class="close-btn" onclick={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
                             {/if}
                         </div>
-                        <span class="tab-title"> {#if tab.audioPlaying && !tab.muted}
-                            🔊 &nbsp;
-                        {:else if tab.muted}
-                            🔇 &nbsp;
-                        {/if}{tab.title || tab.url}</span>
-                        {#if !tab.pinned}
-                            <button class="close-btn" onclick={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
-                        {/if}
-                    </div>
-                </li>
+                    </li>
+                {/if}
             {/each}
             
             <button class="inline-new-tab-button" 
@@ -2457,15 +2463,17 @@
     {:else}
         {#each tabs as tab (tab.id)}
                 {#key userModsHash}
-                    <div>
-                        {#key origin(tab.url)}
-                            <div class="url-display visible">
-                                {getDisplayUrl(tab.url)}
-                            </div>
-                        {/key}
-                        
-                        <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} />
-                    </div>
+                    {#if  tab.type !== 'divider'}
+                        <div>
+                            {#key origin(tab.url)}
+                                <div class="url-display visible">
+                                    {getDisplayUrl(tab.url)}
+                                </div>
+                            {/key}
+                            
+                            <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        </div>
+                    {/if}
                 {/key}
         {/each}
     {/if}    
@@ -2576,5 +2584,22 @@
     
     header.window-controls-overlay + .content-area-scrim {
         top: 40px;
+    }
+    
+    .tab-divider-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 32px;
+        min-width: 16px;
+        flex-shrink: 0;
+        margin: 0 4px;
+    }
+    
+    .tab-divider-vertical {
+        width: 1px;
+        height: 20px;
+        background: rgba(255, 255, 255, 0.14);
+        flex-shrink: 0;
     }
 </style>
