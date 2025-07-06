@@ -1342,25 +1342,20 @@ document.addEventListener('input', function(event) {
                     }
                 }))
             } else if (message.startsWith('iwa:link-enter:')) {
-                // Parse link enter event
                 const parts = message.split(':')
                 const tabId = parts[2]
                 try {
                     const linkData = JSON.parse(parts.slice(3).join(':'))
-                    console.log(`[Tab ${tabId}] Link enter:`, linkData)
                     
-                    // Show link preview if it's for this tab
                     if (tabId === tab.id && linkData.href) {
                         hoveredLink = linkData
                         linkPreviewVisible = true
                         
-                        // Clear any existing timeout
                         if (linkPreviewTimeout) {
                             clearTimeout(linkPreviewTimeout)
                             linkPreviewTimeout = null
                         }
-                        
-                        // Set timeout to auto-hide after 1.5 seconds (similar to origin preview)
+
                         linkPreviewTimeout = setTimeout(() => {
                             linkPreviewVisible = false
                             hoveredLink = null
@@ -1371,19 +1366,15 @@ document.addEventListener('input', function(event) {
                     console.error('Failed to parse link enter data:', error)
                 }
             } else if (message.startsWith('iwa:link-leave:')) {
-                // Parse link leave event
                 const parts = message.split(':')
                 const tabId = parts[2]
                 try {
                     const linkData = JSON.parse(parts.slice(3).join(':'))
-                    console.log(`[Tab ${tabId}] Link leave:`, linkData)
                     
-                    // Hide link preview immediately if it's for this tab
                     if (tabId === tab.id) {
                         linkPreviewVisible = false
                         hoveredLink = null
-                        
-                        // Clear any existing timeout
+
                         if (linkPreviewTimeout) {
                             clearTimeout(linkPreviewTimeout)
                             linkPreviewTimeout = null
@@ -1481,27 +1472,22 @@ document.addEventListener('input', function(event) {
             } else if (message.startsWith('iwa:mousedown:')) {
                 // Handle mousedown from controlled frame
                 const tabId = message.split(':')[2]
-                console.log(`🖱️ [FRAME-LISTENER] Mouse down received from tab ${tabId}`)
                 
                 // Dispatch mousedown event to parent app
-                console.log(`🖱️ [FRAME-LISTENER] Dispatching darc-controlled-frame-mousedown event`)
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
                     detail: { tabId: tabId }
                 }))
             } else if (message.startsWith('iwa:mouseup:')) {
                 // Handle mouseup from controlled frame
                 const tabId = message.split(':')[2]
-                console.log(`🖱️ [FRAME-LISTENER] Mouse up received from tab ${tabId}`)
                 
                 // Dispatch mouseup event to parent app
-                console.log(`🖱️ [FRAME-LISTENER] Dispatching darc-controlled-frame-mouseup event`)
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
                     detail: { tabId: tabId }
                 }))
             }
         })
     }
-
 
     // Simple diff algorithm to generate additions/deletions
     function generateDiff(oldText, newText) {

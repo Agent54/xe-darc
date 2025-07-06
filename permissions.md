@@ -5,6 +5,7 @@ all:
     Sound: checked
     Images: checked
     Fonts: checked
+    Automatic downloads: checked
    
     Motion sensors
     Notifications
@@ -12,7 +13,6 @@ all:
     Pop-ups and redirects
     Intrusive ads
     Background sync
-    Automatic downloads
     MIDI device control and reprogramme
     USB devices
     Serial ports
