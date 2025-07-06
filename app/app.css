@@ -410,9 +410,9 @@ ul::-webkit-scrollbar {
 .tab-container.active .favicon-wrapper {
     opacity: 0.85;
 }
+
 .tab-container:hover .favicon-wrapper, .tab-container.hovered .favicon-wrapper, .tab-container.menu-open .favicon-wrapper {
     opacity: 1;
-    border: 1px solid hsl(0deg 0% 100% / 5%);
 }
 .tab-container:hover .tab, .tab-container.hovered .tab, .tab-container.menu-open .tab {
     color: #fff;
