@@ -8,6 +8,7 @@
     
     let isHovered = $state(false)
     let tabListRef = $state(null)
+    let spacesListRef = $state(null)
     let openMenuId = $state(null)
     let newSpaceMenuOpen = $state(false)
     let closedTabsHovered = $state(false)
@@ -40,11 +41,21 @@
         }
     }
 
+    function scrollActiveSpaceIntoView() {
+        if (spacesListRef && data.spaceMeta.activeSpace) {
+            const targetButton = spacesListRef.querySelector(`[data-space-id="${data.spaceMeta.activeSpace}"]`)
+            if (targetButton) {
+                targetButton.scrollIntoView({ behavior: 'smooth', inline: 'center' })
+            }
+        }
+    }
+
     function handleSpaceClick(spaceId) {
         data.spaceMeta.activeSpace = spaceId
         previousSpaceIndex = spaceOrder.indexOf(spaceId)
         isManualScroll = true
         scrollToCurrentSpace('smooth')
+        scrollActiveSpaceIntoView()
         setTimeout(() => { isManualScroll = false }, 300)
     }
 
@@ -199,6 +210,16 @@
         }
     })
 
+    // Watch for active space changes and scroll space button into view
+    $effect(() => {
+        if (data.spaceMeta.activeSpace && spacesListRef && !isManualScroll) {
+            // Small delay to ensure DOM is updated
+            setTimeout(() => {
+                scrollActiveSpaceIntoView()
+            }, 50)
+        }
+    })
+
     // Watch for active tab changes and scroll to it in sidebar
     $effect(() => {
         if (!data.spaceMeta.activeTab) {
@@ -266,11 +287,12 @@
 
             <div class="section">
                 <div class="spaces-container">
-                    <div class="spaces-list">
+                    <div class="spaces-list" bind:this={spacesListRef}>
                         {#each spaceOrder as spaceId}
                             <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
                                 <button class="space-item" 
                                         class:active={data.spaceMeta.activeSpace === spaceId}
+                                        data-space-id={spaceId}
                                         onmousedown={() => handleSpaceClick(spaceId)}
                                         aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
                                     {#if data.spaces[spaceId].glyph}
@@ -538,6 +560,16 @@
         display: flex;
         flex-direction: row;
         gap: 6px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .spaces-list::-webkit-scrollbar {
+        display: none;
     }
     
     .space-item {
