@@ -438,3 +438,5 @@ synced folders from desicord plugin with links
 move tabs between windows!!!?
 
 active tabs order timestamps
+
+show visit state and open tabs in link previews, on long hover, show link preview wit screenshot and summary

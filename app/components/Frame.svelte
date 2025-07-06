@@ -2,6 +2,7 @@
     import { fade } from 'svelte/transition'
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
+    import { origin } from '../lib/utils.js'
 
     let {
         style = '',
@@ -41,6 +42,22 @@
     let inputDiffVisible = $state(false)
     let inputDiffTimeout = null
     let inputDiffData = $state(null)
+    
+    // Check if hovered link has different origin than current tab
+    let isDifferentOrigin = $derived.by(() => {
+        if (!hoveredLink?.href || !tab.url) return false
+        try {
+            const linkOrigin = origin(hoveredLink.href)
+            const tabOrigin = origin(tab.url)
+            const different = linkOrigin !== tabOrigin
+            console.log('Origin check:', { linkOrigin, tabOrigin, different })
+            return different
+        } catch (error) {
+            console.log('Origin check error:', error)
+            return false
+        }
+    })
+
     
     // Proper detection of ControlledFrame API support
     function isControlledFrameSupported() {
@@ -320,6 +337,13 @@
 
         {#if linkPreviewVisible && hoveredLink}
             <div class="link-preview" transition:fade={{duration: 150}}>
+                {#if isDifferentOrigin}
+                    <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15,3 21,3 21,9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                {/if}
                 <img 
                     src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
                     alt=""
@@ -372,6 +396,13 @@
             <!-- Link preview for iframe fallback -->
             {#if linkPreviewVisible && hoveredLink}
                 <div class="link-preview" transition:fade={{duration: 150}}>
+                    {#if isDifferentOrigin}
+                        <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15,3 21,3 21,9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                    {/if}
                     <img 
                         src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
                         alt=""
@@ -678,6 +709,15 @@
         height: 12px;
         flex-shrink: 0;
         opacity: 0.8;
+    }
+    
+    .link-preview-external {
+        width: 13px;
+        height: 13px;
+        opacity: 0.8;
+        flex-shrink: 0;
+        margin-right: 4px;
+        color: rgba(255, 255, 255, 0.9);
     }
 
     .input-diff-preview {

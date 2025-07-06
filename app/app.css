@@ -688,7 +688,7 @@ ul::-webkit-scrollbar {
     justify-content: center;
     cursor: pointer;
     font-size: 12px;
-    opacity: 0.4;
+    opacity: 0.6;
     transition: opacity 0.2s ease; 
     /* , transform 0.2s ease; */
     z-index: 10000;
@@ -1108,11 +1108,11 @@ ul::-webkit-scrollbar {
 
 .hovercard-url {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
     line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    opacity: 0.5;
 }
 
 .partition-dropdown {
