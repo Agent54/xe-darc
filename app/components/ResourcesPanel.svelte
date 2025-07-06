@@ -1,6 +1,6 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
-    import resourceTypes from './resourceTypes.js'
+    import resourceTypes from '../lib/resourceTypes.js'
 // FIXME: use app global click outside scrim handler
 
     let {

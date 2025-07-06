@@ -213,6 +213,10 @@ export default {
         }
 
         spaces[spaceId].tabs.unshift(tab)
+        
+        // Set the new tab as active
+        spaceMeta.activeTab = _id
+        
         return tab
     },
     closeTab: (spaceId, tabId) => {

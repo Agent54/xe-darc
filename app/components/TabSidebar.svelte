@@ -1055,7 +1055,7 @@
         background: transparent;
         cursor: pointer;
         transition: all 150ms ease;
-        border: none;
+        border: 1px solid transparent;
         height: 36px;
         flex-shrink: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -1066,7 +1066,8 @@
     }
     
     .new-tab-button:hover {
-        background: rgba(255, 255, 255, 0.1);
+        background: #2b2b2b;
+        border: 1px solid hsl(0deg 0% 100% / 2%);
     }
     
     .new-tab-icon {
