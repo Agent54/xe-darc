@@ -320,6 +320,11 @@
 
         {#if linkPreviewVisible && hoveredLink}
             <div class="link-preview" transition:fade={{duration: 150}}>
+                <img 
+                    src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
+                    alt=""
+                    class="link-preview-favicon"
+                />
                 <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
             </div>
         {/if}
@@ -367,6 +372,11 @@
             <!-- Link preview for iframe fallback -->
             {#if linkPreviewVisible && hoveredLink}
                 <div class="link-preview" transition:fade={{duration: 150}}>
+                    <img 
+                        src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
+                        alt=""
+                        class="link-preview-favicon"
+                    />
                     <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
                 </div>
             {/if}
@@ -658,6 +668,16 @@
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
         user-select: none;
         pointer-events: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .link-preview-favicon {
+        width: 12px;
+        height: 12px;
+        flex-shrink: 0;
+        opacity: 0.8;
     }
 
     .input-diff-preview {
