@@ -317,7 +317,7 @@
 
         {#if linkPreviewVisible && hoveredLink}
             <div class="link-preview" transition:fade={{duration: 150}}>
-                {hoveredLink.href}
+                {hoveredLink?.href}
             </div>
         {/if}
         
@@ -637,7 +637,7 @@
     .link-preview {
         position: absolute;
         top: 1px;
-        left: 7px;
+        /* margin-left: 7px; */
         background: rgba(25, 25, 25, 0.98);
         color: rgba(255, 255, 255, 0.95);
         font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;

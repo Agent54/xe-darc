@@ -436,3 +436,5 @@ netscape documentary
 synced folders from desicord plugin with links
 
 move tabs between windows!!!?
+
+active tabs order timestamps
