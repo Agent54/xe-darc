@@ -2,7 +2,7 @@
     import SecurityIndicator from './SecurityIndicator.svelte'
     import data from '../data.svelte.js'
     
-    let { tab, onMenuOpen, security = null, showButton = true, size = 'normal' } = $props()
+    let { tab, security = null, showButton = true, size = 'normal' } = $props()
     
     // Derive security status if not provided
     const securityStatus = $derived(() => {
@@ -26,14 +26,6 @@
             return null
         }
     })
-    
-    function handleFaviconMousedown(event) {
-        if (onMenuOpen) {
-            event.preventDefault()
-            event.stopPropagation()
-            onMenuOpen(event, tab)
-        }
-    }
     
     function getFaviconContent() {
         // Security indicator takes precedence
@@ -81,11 +73,9 @@
 {/snippet}
 
 {#if showButton}
-    <button 
-        type="button" 
-        class="favicon-button" 
+    <span 
+        class="favicon-display" 
         class:small={size === 'small'}
-        onmousedown={handleFaviconMousedown}
         title={tab?.title || tab?.url || ''}
         aria-label="Tab favicon and security status">
         {#if faviconContent.type === 'security'}
@@ -99,7 +89,7 @@
         {:else}
             {@render globeIcon()}
         {/if}
-    </button>
+    </span>
 {:else}
     <span class="favicon-wrapper" class:small={size === 'small'}>
         {#if faviconContent.type === 'security'}
@@ -117,23 +107,17 @@
 {/if}
 
 <style>
-    .favicon-button {
+    .favicon-display {
         display: flex;
         align-items: center;
         justify-content: center;
         background: transparent;
         border: none;
         padding: 0;
-        cursor: pointer;
         border-radius: 3px;
-        transition: background-color 150ms ease;
         width: 100%;
         height: 100%;
         overflow: hidden;
-    }
-    
-    .favicon-button:hover {
-        background: rgba(255, 255, 255, 0.1);
     }
     
     .favicon-wrapper {
@@ -169,7 +153,7 @@
         border-radius: 3px;
     }
     
-    :global(.favicon-button svg),
+    :global(.favicon-display svg),
     :global(.favicon-wrapper svg) {
         width: 100%;
         height: 100%;

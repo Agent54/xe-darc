@@ -57,7 +57,6 @@
     let hovercardPosition = $state({ x: 0, y: 0 })
     let isTrashItemHover = $state(false)
     let contextMenu = $state({ visible: false, x: 0, y: 0, tab: null, index: null })
-    let faviconMenu = $state({ visible: false, x: 0, y: 0, tab: null, index: null })
     let contextMenuOpenTime = 0
     let hovercardCheckInterval = null
     let isDragEnabled = $state(true)
@@ -502,10 +501,6 @@
             event.preventDefault()
             hideContextMenu()
         }
-        if (faviconMenu.visible) {
-            event.preventDefault()
-            hideFaviconMenu()
-        }
     }
 
     function reloadTab (tab) {
@@ -517,7 +512,6 @@
             frame.src = tab.url
         }
         hideContextMenu()
-        hideFaviconMenu()
     }
 
     function goBack() {
@@ -588,7 +582,6 @@
             }
         }
         hideContextMenu()
-        hideFaviconMenu()
     }
 
     function pinTabLeft(tab) {
@@ -602,7 +595,6 @@
             }
         }
         hideContextMenu()
-        hideFaviconMenu()
     }
 
     function pinTabRight(tab) {
@@ -616,7 +608,6 @@
             }
         }
                 hideContextMenu()
-        hideFaviconMenu()
     }
 
     function unpinTab(tab) {
@@ -630,7 +621,6 @@
             }
         }
         hideContextMenu()
-        hideFaviconMenu()
     }
 
     function toggleMuteTab(tab) {
@@ -649,7 +639,6 @@
             }
         }
         hideContextMenu()
-        hideFaviconMenu()
     }
 
     function closeTabFromMenu(tab) {
@@ -657,7 +646,6 @@
             closeTab(tab)
         }
         hideContextMenu()
-        hideFaviconMenu()
     }
 
     function setupIntersectionObserver() {
@@ -1209,7 +1197,6 @@
         console.log('Selected partition:', partition, 'for tab:', tab.id)
         tab.partition = partition
         hideContextMenu()
-        hideFaviconMenu()
     }
 
     async function copyTabUrl(tab) {
@@ -1227,7 +1214,6 @@
             document.body.removeChild(textArea)
         }
         hideContextMenu()
-        hideFaviconMenu()
     }
 
     function toggleResourcesSidebar() {
@@ -1678,42 +1664,7 @@
         window.onpopstate = handleShellNavigation    
     })
 
-    function handleFaviconMousedown(event, tab) {
-        event.preventDefault()
-        event.stopPropagation()
-        
-        // Close context menu if open
-        if (contextMenu.visible) {
-            hideContextMenu()
-        }
-        
-        // Prevent opening a second favicon menu if one is already visible
-        if (faviconMenu.visible) {
-            return
-        }
-        
-        // Disable drag while favicon menu is open
-        isDragEnabled = false
-        
-        // Find the tab index
-        const index = tabs.findIndex(t => t.id === tab.id)
-        
-        const rect = event.target.getBoundingClientRect()
-        faviconMenu = {
-            visible: true,
-            x: rect.left - rect.width / 2,
-            y: rect.bottom + 5,
-            tab: tab,
-            index: index
-        }
-        contextMenuOpenTime = Date.now()
-    }
 
-    function hideFaviconMenu() {
-        faviconMenu = { visible: false, x: 0, y: 0, tab: null, index: null }
-        // Re-enable drag when favicon menu closes
-        isDragEnabled = true
-    }
 
     function toggleCertificateMonitor(tab) {
         if (!certificateMonitorForTab) {
@@ -1722,7 +1673,6 @@
             certificateMonitorForTab = null
         }
         hideContextMenu()
-        hideFaviconMenu()
     }
 
     function getDisplayUrl(url) {
@@ -1985,7 +1935,7 @@
                         class:active={tab.id === data.spaceMeta.activeTab} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:pinned={tab.pinned}
-                        class:menu-open={(contextMenu.visible && contextMenu.tab?.id === tab.id) || (faviconMenu.visible && faviconMenu.tab?.id === tab.id)}
+                        class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
                         tabindex="0"
                         onclick={() => openTab(tab, i)}
@@ -2006,7 +1956,7 @@
                             {/if}
 
                             <div class="favicon-wrapper">    
-                                <Favicon {tab} onMenuOpen={handleFaviconMousedown} />
+                                <Favicon {tab} />
                                 {#if tab.pinned}
                                     <div class="pin-icon">
                                         <svg fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -2360,10 +2310,6 @@
 
 {#if contextMenu.visible && contextMenu.tab}
     {@render tabContextMenu(contextMenu, hideContextMenu)}
-{/if}
-
-{#if faviconMenu.visible && faviconMenu.tab}
-    {@render tabContextMenu(faviconMenu, hideFaviconMenu)}
 {/if}
 
 {#if hoveredTab}
