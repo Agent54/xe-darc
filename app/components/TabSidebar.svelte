@@ -47,6 +47,18 @@
         scrollToCurrentSpace('smooth')
         setTimeout(() => { isManualScroll = false }, 300)
     }
+
+    function activateTab(tabId) {
+        data.spaceMeta.activeTab = tabId
+        // Set shouldFocus to trigger input focus for new tab pages
+        const activeSpace = data.spaces[data.spaceMeta.activeSpace]
+        if (activeSpace && activeSpace.tabs) {
+            const tab = activeSpace.tabs.find(t => t.id === tabId)
+            if (tab && tab.url === 'about:newtab') {
+                tab.shouldFocus = true
+            }
+        }
+    }
     
     function handleTabScroll(event) {
         if (!tabListRef) return
@@ -167,7 +179,7 @@
             
             // Set as active tab
             data.spaceMeta.activeSpace = targetSpaceId
-            data.spaceMeta.activeTab = cleanTab.id
+            activateTab(cleanTab.id)
         }
     }
     
@@ -326,7 +338,7 @@
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
                                         {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
-                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTab} title={tab.url} onmousedown={() => data.spaceMeta.activeTab = tab.id}>
+                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTab} title={tab.url} onmousedown={() => activateTab(tab.id)}>
                                                 <Favicon {tab} showButton={false} />
                                             </button>
                                         {/each}
@@ -353,7 +365,7 @@
                                             </div>
                                         {:else}
                                             <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab} data-tab-id={tab.id}>
-                                                <button class="tab-item-main" title={tab.url} onmousedown={() => data.spaceMeta.activeTab = tab.id}>
+                                                <button class="tab-item-main" title={tab.url} onmousedown={() => activateTab(tab.id)}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>
                                                 </button>
@@ -449,7 +461,7 @@
         overflow: hidden;
         height: 100%;
         backdrop-filter: blur(21px);
-        background: rgba(0, 0, 0, 0.92);
+        background: rgb(0 0 0 / 96%);
         user-select: none;
     }
 

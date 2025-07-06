@@ -567,12 +567,19 @@
 
     $effect(() => {
         if (tab.shouldFocus) {
-            tab.wrapper.scrollIntoView({ behavior: 'smooth' })
-            tab.tabButton.scrollIntoView({ behavior: 'smooth' })
-            // Focus the input element
-            if (inputElement) {
-                inputElement.focus()
-            }
+            tab.wrapper?.scrollIntoView({ behavior: 'smooth' })
+            tab.tabButton?.scrollIntoView({ behavior: 'smooth' })
+            
+            // Focus the input element with a small delay to ensure DOM is ready
+            setTimeout(() => {
+                if (inputElement) {
+                    console.log('🎯 Focusing input element', inputElement)
+                    inputElement.focus()
+                } else {
+                    console.warn('🎯 Input element not available for focus')
+                }
+            }, 50)
+            
             tab.shouldFocus = false
         }
         initializeAI()

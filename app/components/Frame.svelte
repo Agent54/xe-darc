@@ -13,6 +13,7 @@
         onFrameBlur = () => {},
         userMods = { css: [], js: [] },
         requestedResources = [],
+        statusLightsEnabled = false,
     } = $props()
 
     // see https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/controlled_frame/controlled_frame_permissions_unittest.cc;l=53 for supported permissions 
@@ -307,6 +308,7 @@
             {onFrameBlur}
             {userMods}
             {requestedResources}
+            {statusLightsEnabled}
             bind:hoveredLink
             bind:linkPreviewVisible
             bind:linkPreviewTimeout

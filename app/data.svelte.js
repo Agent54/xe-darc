@@ -202,6 +202,7 @@ export default {
             url: 'about:newtab',
             title: 'New Tab',
             order: spaces[spaceId]?.tabs?.length || 0,
+            shouldFocus: true
         }
         
         if (!spaces[spaceId]) {

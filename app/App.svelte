@@ -87,6 +87,7 @@
     let dataSaver = $state(false)
     let batterySaver = $state(false)
     let secondScreenActive = $state(false)
+    let statusLightsEnabled = $state(false)
     let certificateMonitorForTab = $state(null)
     
     // Window resize state for performance optimization
@@ -139,6 +140,12 @@
                 // dont slow done app start 
                 userModsHash = 'initial' // await createSHA256Hash(savedMods)
                 userMods = JSON.parse(savedMods)
+            }
+            
+            // Load status lights setting
+            const savedStatusLights = localStorage.getItem('statusLightsEnabled')
+            if (savedStatusLights !== null) {
+                statusLightsEnabled = savedStatusLights === 'true'
             }
         } catch (error) {
             console.error('Error loading user mods:', error)
@@ -264,6 +271,8 @@
         if (newTab) {
             // Set this tab as the active tab
             data.spaceMeta.activeTab = newTab.id
+            // Set shouldFocus to trigger input focus for new tab pages
+            newTab.shouldFocus = true
             setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
         }
     }
@@ -333,6 +342,11 @@
         
         // Set this tab as active in the data module
         data.spaceMeta.activeTab = tab.id
+        
+        // Set shouldFocus to trigger input focus for new tab pages
+        if (tab.url === 'about:newtab') {
+            tab.shouldFocus = true
+        }
         
         // // Immediate scroll for user interaction
         // tab.frame?.scrollIntoView({ 
@@ -1389,6 +1403,11 @@
         }
     }
 
+    function toggleStatusLights() {
+        statusLightsEnabled = !statusLightsEnabled
+        localStorage.setItem('statusLightsEnabled', statusLightsEnabled.toString())
+    }
+
     // Check for encrypted sync token on app startup
     async function checkSyncTokenAuth() {
         const encryptedTokenData = localStorage.getItem('darc-encrypted-token')
@@ -2249,6 +2268,21 @@
                 <span>Second Screen</span>
                 {#if secondScreenActive}<span class="checkmark">•</span>{/if}
             </div>
+            <div class="settings-menu-item" 
+                class:active={statusLightsEnabled}
+                role="button"
+                tabindex="0"
+                onclick={(e) => { e.stopPropagation(); toggleStatusLights() }}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleStatusLights() } }}>
+                <span class="settings-menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <circle cx="12" cy="16" r="2" fill="currentColor"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 14v-2M10 8l2-2 2 2M8 6l4-4 4 4"/>
+                    </svg>
+                </span>
+                <span>Status Lights</span>
+                {#if statusLightsEnabled}<span class="checkmark">•</span>{/if}
+            </div>
             
             <div class="settings-menu-separator"></div>
             
@@ -2456,7 +2490,7 @@
                             </div>
                         {/key}
                         
-                        <Frame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} />
+                        <Frame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/key}
         {/each}
@@ -2471,7 +2505,7 @@
                                 </div>
                             {/key}
                             
-                            <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} />
+                            <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                         </div>
                     {/if}
                 {/key}
