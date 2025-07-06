@@ -21,7 +21,13 @@ const resources = $state({})
 const spaceMeta = $state({
     activeSpace: null,
     spaceOrder: [],
-    activeTab: null
+    activeTab: null,
+    config: {
+        leftPinnedTabWidth: 400,
+        rightPinnedTabWidth: 350,
+        leftSidebarWidth: 320,
+        rightSidebarWidth: 320
+    }
 })
 
 let initialLoad = true

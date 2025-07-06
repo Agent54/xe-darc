@@ -74,5 +74,5 @@ if ('serviceWorker' in navigator) {
 
 
 if (typeof window !== 'undefined' && window.location.protocol === 'isolated-app:') { 
-  import(/* @vite-ignore */ `isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac/${'app'}/test.js`).then(({default: test}) => console.log(test()))
+  import(/* @vite-ignore */ `isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac/${'app'}/test.js`).then(({default: test}) => console.log(test()))
 }

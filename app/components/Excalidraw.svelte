@@ -116,7 +116,7 @@
     initialData = {
         "type": "excalidraw",
         "version": 2,
-        "source": "isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac",
+        "source": "isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac",
         "elements": tabsToElements(tabs),
         "appState": {
             "gridSize": 20,

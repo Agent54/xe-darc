@@ -716,7 +716,7 @@
         opacity: 0.8;
         flex-shrink: 0;
         margin-right: 4px;
-        margin-top: -2px;
+        margin-top: -1px;
         color: rgba(255, 255, 255, 0.9);
     }
 

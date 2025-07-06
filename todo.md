@@ -440,3 +440,5 @@ move tabs between windows!!!?
 active tabs order timestamps
 
 show visit state and open tabs in link previews, on long hover, show link preview wit screenshot and summary
+
+Error code: RESULT_CODE_KILLED_BAD_MESSAGE
