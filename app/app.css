@@ -353,14 +353,15 @@ ul::-webkit-scrollbar {
     text-rendering: optimizeLegibility;
     border: 1px solid hsl(0deg 0% 100% / 2%);
 }
-.tab-container:hover, .tab-container.hovered, .tab-container.menu-open, .tab-container.active:hover, .tab-container.active.hovered, .tab-container.active.menu-open {
-    /* background-color: #2b2b2b; */
+.tab-container:hover, .tab-container.hovered, .tab-container.menu-open {
+    background-color: rgb(255 255 255 / 9%);
+    border: 1px solid hsl(0deg 0% 100% / 3%);
 }
 .tab-container.active {
     background-color: rgb(255 255 255 / 14%);
     border: 1px solid hsl(0deg 0% 100% / 4%);
 }
-.tab-container.active:hover {
+.tab-container.active:hover, .tab-container.active.hovered, .tab-container.active.menu-open {
     background-color: rgb(255 255 255 / 17%);
     border: 1px solid hsl(0deg 0% 100% / 5%);
 }

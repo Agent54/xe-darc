@@ -279,12 +279,28 @@
             event.stopPropagation()
             event.stopImmediatePropagation()
             event.cancelBubble = true
+            // Clear flag on user-initiated actions
+            if (tabChangeFromScroll) {
+                tabChangeFromScroll = false
+                if (tabChangeFromScrollTimer) {
+                    clearTimeout(tabChangeFromScrollTimer)
+                    tabChangeFromScrollTimer = null
+                }
+            }
             openNewTab()
         }
         if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
             event.preventDefault()
             event.stopPropagation()
             event.stopImmediatePropagation()
+            // Clear flag on user-initiated actions
+            if (tabChangeFromScroll) {
+                tabChangeFromScroll = false
+                if (tabChangeFromScrollTimer) {
+                    clearTimeout(tabChangeFromScrollTimer)
+                    tabChangeFromScrollTimer = null
+                }
+            }
             handleTabClose(event)
         }
         if ((event.metaKey || event.ctrlKey) && event.key === '0') {
@@ -334,7 +350,14 @@
     }
 
     function openTab(tab, index) {
-        // console.log('Opening tab:', $state.snapshot(tab))
+        // Clear the tabChangeFromScroll flag when user explicitly clicks a tab
+        if (tabChangeFromScroll) {
+            tabChangeFromScroll = false
+            if (tabChangeFromScrollTimer) {
+                clearTimeout(tabChangeFromScrollTimer)
+                tabChangeFromScrollTimer = null
+            }
+        }
         
         // If clicking on the currently active tab, switch to previous tab
         if (tab.id === data.spaceMeta.activeTab?.id) {
@@ -376,7 +399,7 @@
                         behavior: isWindowResizing ? 'auto' : 'smooth' 
                     })
                 } else {
-                    console.warn('Frame not available for tab:', activeTab.id)
+                    console.warn('Frame wrapper not available for tab:', activeTab.id)
                 }
             }, 10)
         }
@@ -707,11 +730,16 @@
                         if (entry.isIntersecting && tab) {
                             // Set flag BEFORE changing active tab to prevent race condition
                             tabChangeFromScroll = true
+                            // Clear any existing timer to prevent multiple timers
+                            if (tabChangeFromScrollTimer) {
+                                clearTimeout(tabChangeFromScrollTimer)
+                            }
                             // Change active tab directly (without untrack since we're using the flag)
                             data.spaceMeta.activeTab = tab
                             // Reset flag after a longer delay to prevent race conditions with the effect
-                            setTimeout(() => {
+                            tabChangeFromScrollTimer = setTimeout(() => {
                                 tabChangeFromScroll = false
+                                tabChangeFromScrollTimer = null
                             }, 400)
                         }
                     }, 250)
@@ -743,6 +771,33 @@
 
     let observer
     let tabChangeFromScroll = false
+    let tabChangeFromScrollTimer = null
+    let tabChangeFromScrollFailsafe = null
+
+    // Failsafe effect to reset tabChangeFromScroll if it gets stuck
+    $effect(() => {
+        if (tabChangeFromScroll) {
+            // Clear any existing failsafe
+            if (tabChangeFromScrollFailsafe) {
+                clearTimeout(tabChangeFromScrollFailsafe)
+            }
+            // Set a failsafe to reset the flag after 2 seconds
+            tabChangeFromScrollFailsafe = setTimeout(() => {
+                tabChangeFromScroll = false
+                tabChangeFromScrollFailsafe = null
+                if (tabChangeFromScrollTimer) {
+                    clearTimeout(tabChangeFromScrollTimer)
+                    tabChangeFromScrollTimer = null
+                }
+            }, 2000)
+        } else {
+            // Clear failsafe when flag is properly reset
+            if (tabChangeFromScrollFailsafe) {
+                clearTimeout(tabChangeFromScrollFailsafe)
+                tabChangeFromScrollFailsafe = null
+            }
+        }
+    })
 
     $effect(() => {
         if (tabs) {
@@ -769,6 +824,12 @@
             }
             if (resizeTimeout) {
                 clearTimeout(resizeTimeout)
+            }
+            if (tabChangeFromScrollTimer) {
+                clearTimeout(tabChangeFromScrollTimer)
+            }
+            if (tabChangeFromScrollFailsafe) {
+                clearTimeout(tabChangeFromScrollFailsafe)
             }
 
             window.removeEventListener('darc-close-tab', handleGlobalTabClose)

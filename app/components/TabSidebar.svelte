@@ -542,7 +542,8 @@
     }
     
     .pinned-tab:hover {
-        /* background: #2b2b2b; */
+        background-color: rgb(255 255 255 / 9%);
+        border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
     .spaces-container {
@@ -861,7 +862,8 @@
     }
     
     .app-tab:hover {
-        /* background: #2b2b2b; */
+        background-color: rgb(255 255 255 / 9%);
+        border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
     .app-tab.active {
@@ -960,7 +962,8 @@
     }
     
     .tab-item-container:hover {
-        /* background: #2b2b2b; */
+        background-color: rgb(255 255 255 / 9%);
+        border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
     .tab-item-container.active {
@@ -1107,8 +1110,8 @@
     }
     
     .new-tab-button:hover {
-        background: rgb(255 255 255 / 7%);
-        border: 1px solid hsl(0deg 0% 100% / 2%);
+        background-color: rgb(255 255 255 / 9%);
+        border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
     .new-tab-icon {
@@ -1167,7 +1170,8 @@
     }
     
     .tab-group:hover {
-        /* background: #2b2b2b; */
+        background-color: rgb(255 255 255 / 9%);
+        border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
     .tab-group-main {
