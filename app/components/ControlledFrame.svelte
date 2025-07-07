@@ -1897,6 +1897,9 @@ loading="eager"
         width: 100%;
         height: 100%;
         display: block;
+        border-radius: 8px;
+        overflow: hidden;
+        border: none;
     }
     :global(.certificate-error > .frame-instance:not(.ssl-error)) {
         display: none;

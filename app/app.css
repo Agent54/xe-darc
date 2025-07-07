@@ -988,11 +988,13 @@ ul::-webkit-scrollbar {
   transition: width 0.3s ease;
 }
 
+.has-right-pins :global(.frame) {
+    width: calc(100vw - var(--space-taken, 0px) - 18px - 9px);
+}
 
 /* .controlled-frame-container.sidebar-open :global(.frame) {
     width: calc(100vw - (320px * var(--sidebar-count)) - 18px);
 }
-
 
 .controlled-frame-container.sidebar-open {
     width: calc(100% - (320px * var(--sidebar-count)));
@@ -1740,6 +1742,7 @@ ul::-webkit-scrollbar {
     overflow: hidden;
     z-index: 1;
     transition: width 0.3s ease;
+    overflow: visible;
 }
 
 .pinned-frames-left.window-controls-overlay {
@@ -1748,6 +1751,7 @@ ul::-webkit-scrollbar {
 }
 
 .pinned-frames-right {
+    overflow: visible;
     position: fixed;
     top: 0;
     right: var(--sidebar-width, 0px);
@@ -1771,11 +1775,15 @@ ul::-webkit-scrollbar {
 .pinned-frames-left :global(.frame),
 .pinned-frames-right :global(.frame) {
     height: calc(100vh - 18px);
-    border: 1px solid #ffffff12;
-    border-radius: 8px;
-    overflow: hidden;
+    /* border: 1px solid #ffffff12; */
+    border: none;
+    /* border-radius: 8px;
+    overflow: hidden; */
     flex-shrink: 0;
     transition: width 0.3s ease;
+    border-radius: 8px;
+    box-shadow: 0px 0px 9px 8px #00000040;
+    overflow: visible;
 }
 
 .pinned-frames-left.window-controls-overlay :global(.frame),

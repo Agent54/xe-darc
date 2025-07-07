@@ -1752,8 +1752,8 @@
         
         // Reduce space taken to allow content to scroll behind pinned tabs
         let reduction = 0
-        if (leftPinnedTabs.length > 0) reduction += 8  // 8px for left pins
-        if (rightPinnedTabs.length > 0) reduction += 8  // 8px for right pins
+        if (leftPinnedTabs.length > 0) reduction += 9  // 8px for left pins
+        if (rightPinnedTabs.length > 0) reduction += 9  // 8px for right pins
         
         return baseSpace - reduction
     })
