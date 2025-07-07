@@ -365,6 +365,9 @@
         //     return
         // }
         
+        // Set flag to prevent intersection observer from activating intermediate tabs during scroll
+        // tabChangeFromScroll = true
+        
         // Only scroll frame into view if tab change was NOT caused by scrolling
         if (!tabChangeFromScroll) {
             setTimeout(() => {
@@ -388,6 +391,10 @@
             }
         }, 10)
         
+        // Reset flag after scroll animation completes (longer delay for smooth scrolling)
+        // setTimeout(() => {
+        //     tabChangeFromScroll = false
+        // }, isWindowResizing ? 100 : 800)
     })
 
     let pinsInit = false
@@ -395,7 +402,7 @@
         const leftCount = leftPinnedTabs.length
         const rightCount = rightPinnedTabs.length
 
-        console.log({leftCount, rightCount, tabChangeFromScroll})
+        // console.log({leftCount, rightCount, tabChangeFromScroll})
         
         if (tabChangeFromScroll || !pinsInit) {
             return
@@ -693,6 +700,10 @@
                 if (entry.isIntersecting) {
                     // Start timer when tab becomes visible
                     const timer = setTimeout(() => {
+                        if (tabChangeFromScroll) {
+                            return
+                        }
+                        
                         if (entry.isIntersecting && tab) {
                             // Set flag BEFORE changing active tab to prevent race condition
                             tabChangeFromScroll = true
@@ -701,7 +712,7 @@
                             // Reset flag after a longer delay to prevent race conditions with the effect
                             setTimeout(() => {
                                 tabChangeFromScroll = false
-                            }, 500)
+                            }, 400)
                         }
                     }, 250)
                     visibilityTimers.set(tabId, timer)
