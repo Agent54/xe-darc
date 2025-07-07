@@ -664,7 +664,7 @@ ul::-webkit-scrollbar {
     justify-content: center;
     cursor: pointer;
     font-size: 12px;
-    opacity: 0.6;
+        opacity: 0.7;
     transition: opacity 0.2s ease; 
     /* , transform 0.2s ease; */
     z-index: 10000;
@@ -1300,7 +1300,7 @@ ul::-webkit-scrollbar {
 }
 
 .new-tab-button.visible {
-    opacity: 0.5;
+    opacity: 0.7;
     visibility: visible;
     transform: translateX(0);
 }
@@ -1793,6 +1793,7 @@ ul::-webkit-scrollbar {
     border-radius: 8px;
     box-shadow: 0px 0px 9px 8px #00000040;
     overflow: visible;
+    /* border: 1px solid #111111; */
 }
 
 .pinned-frames-left.window-controls-overlay :global(.frame),
@@ -2049,4 +2050,9 @@ header.window-controls-overlay + .content-area-scrim {
     height: 20px;
     background: rgba(255, 255, 255, 0.14);
     flex-shrink: 0;
+}
+
+:global(.frame > *) {
+    border-radius: 8px;
+    overflow: hidden;
 }
