@@ -269,10 +269,8 @@
         
         const newTab = data.newTab(data.spaceMeta.activeSpace)
         if (newTab) {
-            // Set this tab as the active tab
-            data.spaceMeta.activeTab = newTab.id
-            // Set shouldFocus to trigger input focus for new tab pages
-            newTab.shouldFocus = true
+            // Set this tab as the active tab using the data store function
+            data.activate(newTab.id)
             setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
         }
     }
@@ -340,13 +338,8 @@
     function openTab(tab, index) {
         // console.log('Opening tab:', $state.snapshot(tab))
         
-        // Set this tab as active in the data module
-        data.spaceMeta.activeTab = tab.id
-        
-        // Set shouldFocus to trigger input focus for new tab pages
-        if (tab.url === 'about:newtab') {
-            tab.shouldFocus = true
-        }
+        // Set this tab as active using the data store function
+        data.activate(tab.id)
         
         // // Immediate scroll for user interaction
         // tab.frame?.scrollIntoView({ 
@@ -1221,9 +1214,9 @@
         
         // Make the focused tab active
         if (focusedTab) {
-            // Set the active tab directly using the ID-based system
+            // Set the active tab using the data store function
             if (focusedTab.id !== data.spaceMeta.activeTab) {
-                data.spaceMeta.activeTab = focusedTab.id
+                data.activate(focusedTab.id)
             }
         }
     }

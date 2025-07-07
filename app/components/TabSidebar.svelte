@@ -60,15 +60,7 @@
     }
 
     function activateTab(tabId) {
-        data.spaceMeta.activeTab = tabId
-        // Set shouldFocus to trigger input focus for new tab pages
-        const activeSpace = data.spaces[data.spaceMeta.activeSpace]
-        if (activeSpace && activeSpace.tabs) {
-            const tab = activeSpace.tabs.find(t => t.id === tabId)
-            if (tab && tab.url === 'about:newtab') {
-                tab.shouldFocus = true
-            }
-        }
+        data.activate(tabId)
     }
     
     function handleTabScroll(event) {
@@ -190,7 +182,7 @@
             
             // Set as active tab
             data.spaceMeta.activeSpace = targetSpaceId
-            activateTab(cleanTab.id)
+            data.activate(cleanTab.id)
         }
     }
     

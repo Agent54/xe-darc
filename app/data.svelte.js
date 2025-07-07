@@ -77,6 +77,24 @@ db.createIndex({
    refresh()
 })
 
+// Define activate function separately so it can be used internally
+function activate(tabId) {
+    // Set the active tab
+    spaceMeta.activeTab = tabId
+    
+    // Find the tab and set shouldFocus if it's a new tab
+    const activeSpace = spaces[spaceMeta.activeSpace]
+    if (activeSpace && activeSpace.tabs) {
+        const tab = activeSpace.tabs.find(t => t.id === tabId)
+        if (tab && tab.url === 'about:newtab') {
+            tab.shouldFocus = true
+        }
+        return tab
+    }
+    
+    return null
+}
+
 $effect.root(() => {
     // Initialize with sample data if no activeSpace is set
     $effect(() => {
@@ -102,6 +120,8 @@ export default {
     spaces,
     activity,
     resources,
+
+    activate,
 
     newSpace: () => {
         const space = {
@@ -134,8 +154,7 @@ export default {
             spaceId,
             url: 'about:newtab',
             title: 'New Tab',
-            order: spaces[spaceId]?.tabs?.length || 0,
-            shouldFocus: true
+            order: spaces[spaceId]?.tabs?.length || 0
         }
         
         if (!spaces[spaceId]) {
@@ -147,9 +166,6 @@ export default {
         }
 
         spaces[spaceId].tabs.unshift(tab)
-        
-        // Set the new tab as active
-        spaceMeta.activeTab = _id
         
         return tab
     },
@@ -182,7 +198,8 @@ export default {
             if (space.tabs.length > 0) {
                 // Set the next tab as active, or the previous one if this was the last
                 const newActiveIndex = Math.min(tabIndex, space.tabs.length - 1)
-                spaceMeta.activeTab = space.tabs[newActiveIndex]?.id || space.tabs[0]?.id
+                const newActiveTabId = space.tabs[newActiveIndex]?.id || space.tabs[0]?.id
+                activate(newActiveTabId)
             } else {
                 spaceMeta.activeTab = null
             }
@@ -215,7 +232,7 @@ export default {
             // Set the first tab of the new space as active
             const newSpace = spaces[newActiveSpace]
             if (newSpace?.tabs?.length > 0) {
-                spaceMeta.activeTab = newSpace.tabs[0].id
+                activate(newSpace.tabs[0].id)
             } else {
                 spaceMeta.activeTab = null
             }
@@ -246,7 +263,7 @@ export default {
             // Set the first tab of the new space as active
             const newSpace = spaces[newActiveSpace]
             if (newSpace?.tabs?.length > 0) {
-                spaceMeta.activeTab = newSpace.tabs[0].id
+                activate(newSpace.tabs[0].id)
             } else {
                 spaceMeta.activeTab = null
             }
