@@ -139,7 +139,7 @@
 
     // Check if current tab has applicable user mods
     $effect(() => {
-        if (tab.url && tab.id === data.spaceMeta.activeTab) {
+        if (tab.url && tab.id === data.spaceMeta.activeTab?.id) {
             console.log('checking for applicable mods', tab.url)
             const applicableMods = getApplicableMods(tab.url)
             if (applicableMods.length > 0) {
@@ -1785,7 +1785,7 @@ document.addEventListener('input', function(event) {
 
         <div class="hidden" bind:this={anchor}></div>
 
-        {#if tab.id === data.spaceMeta.activeTab && statusLightsEnabled}
+        {#if tab.id === data.spaceMeta.activeTab?.id && statusLightsEnabled}
             <div class="led-indicator-array">
                 <div class="led-dot network-access" class:active={networkAccessActive}></div>
                 <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>

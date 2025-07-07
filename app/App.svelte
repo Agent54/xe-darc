@@ -47,8 +47,6 @@
         'ephemeral:3'
     ]
 
-    // Active tab is now managed via data.spaceMeta.activeTab (ID-based)
-
     // Get all tabs from the current active space
     let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || []))
     let visibilityTimers = new Map()
@@ -300,7 +298,7 @@
 
     function handleZoomReset() {
         if (tabs.length > 0 && data.spaceMeta.activeTab) {
-            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
                 const frame = activeTab.frame
                 
@@ -326,7 +324,7 @@
     function handleTabClose(event) {
         console.log('Handling tab close request')
         if (tabs.length > 0 && data.spaceMeta.activeTab) {
-            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
                 closeTab(activeTab, event)
             }
@@ -338,8 +336,13 @@
     function openTab(tab, index) {
         // console.log('Opening tab:', $state.snapshot(tab))
         
-        // Set this tab as active using the data store function
-        data.activate(tab.id)
+        // If clicking on the currently active tab, switch to previous tab
+        if (tab.id === data.spaceMeta.activeTab?.id) {
+            data.previous()
+        } else {
+            // Set this tab as active using the data store function
+            data.activate(tab.id)
+        }
         
         // // Immediate scroll for user interaction
         // tab.frame?.scrollIntoView({ 
@@ -350,10 +353,10 @@
     // Effect to handle scrolling to active tab when it changes or when sidebars are toggled
     $effect(() => {
         // Watch for changes to active tab and sidebar state
-        const activeTabId = data.spaceMeta.activeTab
+        const activeTab = data.spaceMeta.activeTab
         const sidebarCount = openSidebars.size
         
-        if (!activeTabId) {
+        if (!activeTab) {
             return
         }
         
@@ -362,31 +365,29 @@
         //     return
         // }
         
-        const activeTab = tabs.find(tab => tab.id === activeTabId)
-        if (activeTab) {
-            // Only scroll frame into view if tab change was NOT caused by scrolling
-            if (!tabChangeFromScroll) {
-                setTimeout(() => {
-                    if (activeTab.wrapper) {
-                        activeTab.wrapper.scrollIntoView({ 
-                            behavior: isWindowResizing ? 'auto' : 'smooth' 
-                        })
-                    } else {
-                        console.warn('Frame not available for tab:', activeTab.id)
-                    }
-                }, 10)
-            }
-            
+        // Only scroll frame into view if tab change was NOT caused by scrolling
+        if (!tabChangeFromScroll) {
             setTimeout(() => {
-                if (activeTab.tabButton) {
-                    activeTab.tabButton.scrollIntoView({
-                        behavior: isWindowResizing ? 'auto' : 'smooth',
-                        inline: 'nearest',
-                        block: 'nearest'
+                if (activeTab.wrapper) {
+                    activeTab.wrapper.scrollIntoView({ 
+                        behavior: isWindowResizing ? 'auto' : 'smooth' 
                     })
+                } else {
+                    console.warn('Frame not available for tab:', activeTab.id)
                 }
             }, 10)
         }
+        
+        setTimeout(() => {
+            if (activeTab.tabButton) {
+                activeTab.tabButton.scrollIntoView({
+                    behavior: isWindowResizing ? 'auto' : 'smooth',
+                    inline: 'nearest',
+                    block: 'nearest'
+                })
+            }
+        }, 10)
+        
     })
 
     let pinsInit = false
@@ -404,7 +405,7 @@
     
         untrack(() => {
              // Find the active tab in unpinned tabs
-            const activeTab = unpinnedTabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
                 // Scroll the active unpinned tab into view after pinned tabs layout change
                 setTimeout(() => {
@@ -557,7 +558,7 @@
         }
 
         if (data.spaceMeta.activeTab) {
-            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
                 const frame = activeTab.frame
                 frame.back?.()
@@ -586,7 +587,7 @@
         }
 
         if (data.spaceMeta.activeTab) {
-            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
                 const frame = activeTab.frame
                 if (frame && typeof frame.forward === 'function') {
@@ -598,7 +599,7 @@
 
     function reloadActiveTab() {
         if (data.spaceMeta.activeTab) {
-            const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
                 reloadTab(activeTab)
             }
@@ -696,7 +697,7 @@
                             // Set flag BEFORE changing active tab to prevent race condition
                             tabChangeFromScroll = true
                             // Change active tab directly (without untrack since we're using the flag)
-                            data.spaceMeta.activeTab = tab.id
+                            data.spaceMeta.activeTab = tab
                             // Reset flag after a longer delay to prevent race conditions with the effect
                             setTimeout(() => {
                                 tabChangeFromScroll = false
@@ -1215,7 +1216,7 @@
         // Make the focused tab active
         if (focusedTab) {
             // Set the active tab using the data store function
-            if (focusedTab.id !== data.spaceMeta.activeTab) {
+            if (focusedTab.id !== data.spaceMeta.activeTab?.id) {
                 data.activate(focusedTab.id)
             }
         }
@@ -1991,7 +1992,7 @@
                     <li 
                         bind:this={tab.tabButton}
                         class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTab} 
+                        class:active={tab.id === data.spaceMeta.activeTab?.id} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
@@ -2042,7 +2043,7 @@
                     <li 
                         bind:this={tab.tabButton}
                         class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTab} 
+                        class:active={tab.id === data.spaceMeta.activeTab?.id} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
@@ -2089,7 +2090,7 @@
                     <li 
                         bind:this={tab.tabButton}
                         class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTab} 
+                        class:active={tab.id === data.spaceMeta.activeTab?.id} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
@@ -2540,7 +2541,7 @@
     
     <div class="frame-header-url-container">
         <div class="frame-header-url">
-            <UrlRenderer url={getDisplayUrl(tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.url)} variant="compact" />
+            <UrlRenderer url={getDisplayUrl(data.spaceMeta.activeTab?.url)} variant="compact" />
         </div>
     </div>
 
@@ -2562,7 +2563,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
             </svg>
         </button>
-        <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onclick={(e) => closeTab(tabs.find(tab => tab.id === data.spaceMeta.activeTab), e)}>
+        <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onclick={(e) => closeTab(data.spaceMeta.activeTab, e)}>
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -2719,7 +2720,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          {switchToActivity}
                          {userMods}
                          onUpdateUserMods={updateUserMods}
-                         currentTab={tabs.find(tab => tab.id === data.spaceMeta.activeTab)} />
+                         currentTab={data.spaceMeta.activeTab} />
             </div>
         {/if}
         

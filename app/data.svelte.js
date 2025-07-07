@@ -49,15 +49,15 @@ async function refresh() {
             spaces[doc._id] = doc
         } else if (doc.type === 'tab') {
             doc.id = doc._id // legacy compat, remove this later
-            if (!spaces[doc.spaceId]) {
-                spaces[doc.spaceId] = { _id: doc.spaceId, tabs: [] }
-            }
+            // if (!spaces[doc.spaceId]) {
+            //     spaces[doc.spaceId] = { _id: doc.spaceId, tabs: [] }
+            // }
             if (!spaces[doc.spaceId].tabs) {
                 spaces[doc.spaceId].tabs = []
             }
             spaces[doc.spaceId].tabs.push(doc)
             if (!spaceMeta.activeTab && doc.spaceId === spaceMeta.activeSpace) {
-                spaceMeta.activeTab = doc._id
+                spaceMeta.activeTab = doc
             }
         } else if (doc.type === 'activity') {
             activity[doc._id] = doc
@@ -78,14 +78,17 @@ db.createIndex({
 })
 
 // Define activate function separately so it can be used internally
-function activate(tabId) {
-    // Set the active tab
-    spaceMeta.activeTab = tabId
-    
+function activate(tabId) {    
     // Find the tab and set shouldFocus if it's a new tab
     const activeSpace = spaces[spaceMeta.activeSpace]
     if (activeSpace && activeSpace.tabs) {
         const tab = activeSpace.tabs.find(t => t.id === tabId)
+
+        activeSpace.activeTabsOrder ??= []
+        activeSpace.activeTabsOrder = [tabId, ...activeSpace.activeTabsOrder]
+
+        spaceMeta.activeTab = tab
+
         if (tab && tab.url === 'about:newtab') {
             tab.shouldFocus = true
         }
@@ -106,7 +109,7 @@ $effect.root(() => {
             // Set the first tab of that space as active
             const firstSpace = spaces[firstSpaceId]
             if (firstSpace?.tabs?.length > 0) {
-                spaceMeta.activeTab = firstSpace.tabs[0].id
+                spaceMeta.activeTab = firstSpace.tabs[0]
             }
         }
     })
@@ -123,6 +126,34 @@ export default {
 
     activate,
 
+    previous: () => {
+        const activeSpace = spaces[spaceMeta.activeSpace]
+        if (!activeSpace || !activeSpace.activeTabsOrder || activeSpace.activeTabsOrder.length < 2) {
+            return false // No previous tab available
+        }
+        
+        // Get the previous tab ID (at index 1)
+        const previousTabId = activeSpace.activeTabsOrder[1]
+        
+        // Find the tab to make sure it still exists
+        const previousTab = activeSpace.tabs?.find(t => t.id === previousTabId)
+        if (!previousTab) {
+            // Previous tab doesn't exist anymore, clean up the order and try again
+            activeSpace.activeTabsOrder = activeSpace.activeTabsOrder.filter(id => 
+                activeSpace.tabs?.some(t => t.id === id)
+            )
+            return false
+        }
+        
+        // Remove the current tab (at index 0) from the order
+        activeSpace.activeTabsOrder.shift()
+        
+        // Set the previous tab as active
+        spaceMeta.activeTab = previousTab
+        
+        return true
+    },
+
     newSpace: () => {
         const space = {
             _id: `space-${Date.now()}`,
@@ -134,6 +165,7 @@ export default {
         spaceMeta.spaceOrder.push(space._id)
         return space
     },
+
     deleteSpace: (spaceId) => {
         delete spaces[spaceId]
         spaceMeta.spaceOrder = spaceMeta.spaceOrder.filter(id => id !== spaceId)
@@ -141,6 +173,7 @@ export default {
             spaceMeta.activeSpace = spaceMeta.spaceOrder[0] || null
         }
     },
+
     editSpace: (spaceId, data) => {
         spaces[spaceId] = data
     },
@@ -169,6 +202,7 @@ export default {
         
         return tab
     },
+
     closeTab: (spaceId, tabId) => {
         const space = spaces[spaceId]
         if (!space || !space.tabs) {
@@ -194,7 +228,7 @@ export default {
         space.tabs.splice(tabIndex, 1)
         
         // If we closed the active tab, need to set a new active tab
-        if (spaceMeta.activeTab === tabId) {
+        if (spaceMeta.activeTab?.id === tabId) {
             if (space.tabs.length > 0) {
                 // Set the next tab as active, or the previous one if this was the last
                 const newActiveIndex = Math.min(tabIndex, space.tabs.length - 1)

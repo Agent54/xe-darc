@@ -780,7 +780,7 @@
                         muted: tab.muted,
                         audioPlaying: tab.audioPlaying
                     })),
-                    activeTabId: tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.id || tabs[0]?.id || null
+                    activeTabId: data.spaceMeta.activeTab?.id || tabs[0]?.id || null
                 },
                 localStorage: { ...localStorage },
                 version: '1.0.0'

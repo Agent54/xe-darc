@@ -60,7 +60,12 @@
     }
 
     function activateTab(tabId) {
-        data.activate(tabId)
+        // If clicking on the currently active tab, switch to previous tab
+        if (tabId === data.spaceMeta.activeTab?.id) {
+            data.previous()
+        } else {
+            data.activate(tabId)
+        }
     }
     
     function handleTabScroll(event) {
@@ -220,7 +225,7 @@
         
         // Find the active tab element in the sidebar
         setTimeout(() => {
-            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTab}"]`)
+            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTab.id}"]`)
             if (activeTabElement) {
                 const tabsList = activeTabElement.closest('.tabs-list')
                 if (tabsList) {
@@ -378,7 +383,7 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab} data-tab-id={tab.id}>
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab.id} data-tab-id={tab.id}>
                                                 <button class="tab-item-main" title={tab.url} onmousedown={() => activateTab(tab.id)}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>
