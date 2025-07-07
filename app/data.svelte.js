@@ -19,7 +19,7 @@ const activity = $state({})
 const resources = $state({})
 
 const spaceMeta = $state({
-    activeSpace: null,
+    activeSpace: '1',
     spaceOrder: [],
     activeTab: null,
     config: {

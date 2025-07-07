@@ -970,8 +970,8 @@ ul::-webkit-scrollbar {
 }
 
 :global(.frame) {
-  /* width: calc(100vw - var(--space-taken, 0px) - 18px); */
-  width: calc(100vw - 18px);
+  width: calc(100vw - var(--space-taken, 0px) - 18px);
+  /* width: calc(100vw - 18px); */
   height: calc(100vh - 18px);
   border: none;
   display: block;
@@ -989,7 +989,7 @@ ul::-webkit-scrollbar {
 }
 
 
-.controlled-frame-container.sidebar-open :global(.frame) {
+/* .controlled-frame-container.sidebar-open :global(.frame) {
     width: calc(100vw - (320px * var(--sidebar-count)) - 18px);
 }
 
@@ -997,7 +997,7 @@ ul::-webkit-scrollbar {
 .controlled-frame-container.sidebar-open {
     width: calc(100% - (320px * var(--sidebar-count)));
     transition: width 0.3s ease;
-}
+} */
 
 :global(.frame.window-controls-overlay) {
     height: calc(100vh - 52px);
@@ -1716,19 +1716,87 @@ ul::-webkit-scrollbar {
     color: rgba(255, 255, 255, 1);
 }
 
-/* .controlled-frame-container { */
-    /* width: calc(100% - var(--space-taken, 0px));
-    left: var(--left-pinned-width, 0px); */
-    /* position: relative; */
-    /* transition: width 0.3s ease, left 0.3s ease; */
-/* } */
+.controlled-frame-container {
+    width: calc(100% - var(--space-taken, 0px));
+    left: var(--left-pinned-width, 0px);
+    transition: width 0.3s ease, left 0.3s ease;
+}
+
+.controlled-frame-container.has-left-pins {
+    left: calc(var(--left-pinned-width, 0px) - 8px);
+}
+
+.pinned-frames-left {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--left-pinned-width, 0px);
+    height: 100vh;
+    padding: 9px 0 9px 9px;
+    display: flex;
+    flex-direction: row;
+    gap: 9px;
+    align-items: flex-end;
+    overflow: hidden;
+    z-index: 1;
+    transition: width 0.3s ease;
+}
+
+.pinned-frames-left.window-controls-overlay {
+    height: calc(100vh - 35px);
+    top: 35px;
+}
+
+.pinned-frames-right {
+    position: fixed;
+    top: 0;
+    right: var(--sidebar-width, 0px);
+    width: var(--right-pinned-width, 0px);
+    height: 100vh;
+    padding: 9px 9px 9px 0;
+    display: flex;
+    flex-direction: row;
+    gap: 9px;
+    align-items: flex-end;
+    overflow: hidden;
+    z-index: 1;
+    transition: width 0.3s ease, right 0.3s ease;
+}
+
+.pinned-frames-right.window-controls-overlay {
+    height: calc(100vh - 35px);
+    top: 35px;
+}
+
+.pinned-frames-left :global(.frame),
+.pinned-frames-right :global(.frame) {
+    height: calc(100vh - 18px);
+    border: 1px solid #ffffff12;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: width 0.3s ease;
+}
+
+.pinned-frames-left.window-controls-overlay :global(.frame),
+.pinned-frames-right.window-controls-overlay :global(.frame) {
+    height: calc(100vh - 52px);
+}
+
+.pinned-frames-left :global(.frame) {
+    width: calc((var(--left-pinned-width, 0px) - 9px * var(--left-pinned-count, 1)) / var(--left-pinned-count, 1));
+}
+
+.pinned-frames-right :global(.frame) {
+    width: calc((var(--right-pinned-width, 0px) - 9px * var(--right-pinned-count, 1)) / var(--right-pinned-count, 1));
+}
 
 .sidebar-container {
     position: fixed;
     top: 0;
     right: 0;
-    /* width: var(--sidebar-width, 320px); */
-    width: calc(320px * var(--sidebar-count, 1));
+    width: var(--sidebar-width, 320px);
+    /* width: calc(320px * var(--sidebar-count, 1)); */
     height: 100vh;
     z-index: 10;
     display: flex;
@@ -1798,6 +1866,16 @@ ul::-webkit-scrollbar {
     transition: none !important;
 }
 
+.pinned-frames-left.no-transitions,
+.pinned-frames-right.no-transitions {
+    transition: none !important;
+}
+
+.pinned-frames-left.no-transitions :global(.frame),
+.pinned-frames-right.no-transitions :global(.frame) {
+    transition: none !important;
+}
+
 .sidebar-container.no-transitions {
     transition: none !important;
 }
@@ -1824,9 +1902,9 @@ ul::-webkit-scrollbar {
 
 /* Disable any width-related transitions on sidebar containers */
 .sidebar-container.no-transitions {
-    /* width: var(--sidebar-width, 320px) !important; */
+    width: var(--sidebar-width, 320px) !important;
 
-    width: calc(320px * var(--sidebar-count, 1)) !important;
+    /* width: calc(320px * var(--sidebar-count, 1)) !important; */
 
 }
 

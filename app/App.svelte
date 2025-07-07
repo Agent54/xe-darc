@@ -354,9 +354,13 @@
         // })
     }
 
-    // Effect to handle scrolling to active tab when it changes
+    // Effect to handle scrolling to active tab when it changes or when sidebars are toggled
     $effect(() => {
-        if (!data.spaceMeta.activeTab) {
+        // Watch for changes to active tab and sidebar state
+        const activeTabId = data.spaceMeta.activeTab
+        const sidebarCount = openSidebars.size
+        
+        if (!activeTabId) {
             return
         }
         
@@ -365,7 +369,7 @@
         //     return
         // }
         
-        const activeTab = tabs.find(tab => tab.id === data.spaceMeta.activeTab)
+        const activeTab = tabs.find(tab => tab.id === activeTabId)
         if (activeTab) {
             // Only scroll frame into view if tab change was NOT caused by scrolling
             if (!tabChangeFromScroll) {
@@ -390,6 +394,44 @@
                 }
             }, 10)
         }
+    })
+
+    let pinsInit = false
+    $effect(() => {
+        const leftCount = leftPinnedTabs.length
+        const rightCount = rightPinnedTabs.length
+
+        console.log({leftCount, rightCount, tabChangeFromScroll})
+        
+        if (tabChangeFromScroll || !pinsInit) {
+            return
+        }
+
+        pinsInit = true
+    
+        untrack(() => {
+             // Find the active tab in unpinned tabs
+            const activeTab = unpinnedTabs.find(tab => tab.id === data.spaceMeta.activeTab)
+            if (activeTab) {
+                // Scroll the active unpinned tab into view after pinned tabs layout change
+                setTimeout(() => {
+                    if (activeTab.wrapper) {
+                        activeTab.wrapper.scrollIntoView({ 
+                            behavior: isWindowResizing ? 'auto' : 'smooth' 
+                        })
+                    } else {
+                        // If no specific active tab, scroll to the beginning of unpinned section
+                        const firstUnpinnedTab = unpinnedTabs[0]
+                        if (firstUnpinnedTab?.wrapper) {
+                            firstUnpinnedTab.wrapper.scrollIntoView({ 
+                                behavior: isWindowResizing ? 'auto' : 'smooth' 
+                            })
+                        }
+                    }
+                }, 200)
+            }
+        })
+       
     })
 
     function closeTab(tab, event, createPlaceholder = false) {
@@ -660,14 +702,12 @@
                         if (entry.isIntersecting && tab) {
                             // Set flag BEFORE changing active tab to prevent race condition
                             tabChangeFromScroll = true
-                            // Use untrack to prevent triggering the scroll effect
-                            untrack(() => {
-                                data.spaceMeta.activeTab = tab.id
-                            })
-                            // Reset flag after a short delay
+                            // Change active tab directly (without untrack since we're using the flag)
+                            data.spaceMeta.activeTab = tab.id
+                            // Reset flag after a longer delay to prevent race conditions with the effect
                             setTimeout(() => {
                                 tabChangeFromScroll = false
-                            }, 100)
+                            }, 500)
                         }
                     }, 250)
                     visibilityTimers.set(tabId, timer)
@@ -1708,7 +1748,14 @@
     
             // Total space taken by all UI elements (affects available width)
     let spaceTaken = $derived.by(() => {
-        return leftPinnedWidth + rightPinnedWidth + rightSidebarWidth
+        let baseSpace = leftPinnedWidth + rightPinnedWidth + rightSidebarWidth
+        
+        // Reduce space taken to allow content to scroll behind pinned tabs
+        let reduction = 0
+        if (leftPinnedTabs.length > 0) reduction += 8  // 8px for left pins
+        if (rightPinnedTabs.length > 0) reduction += 8  // 8px for right pins
+        
+        return baseSpace - reduction
     })
 </script>
 
@@ -2532,10 +2579,11 @@
 
 
 <div class="pinned-frames-left" class:window-controls-overlay={headerPartOfMain} 
-class:scrolling={isScrolling} class:no-transitions={isWindowResizing}>
+class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
+style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length};">
     {#each leftPinnedTabs as tab (tab.id)}
         {#key userModsHash}
-            {#if  tab.type !== 'divider'}
+            {#if tab.type !== 'divider'}
                 <div>
                     {#key origin(tab.url)}
                         <div class="url-display visible">
@@ -2555,8 +2603,10 @@ class:scrolling={isScrolling} class:no-transitions={isWindowResizing}>
      class:scrolling={isScrolling} 
      class:sidebar-open={openSidebars.size > 0}
      class:no-transitions={isWindowResizing}
+     class:has-left-pins={leftPinnedTabs.length > 0}
+     class:has-right-pins={rightPinnedTabs.length > 0}
      onscroll={handleScroll} 
-     style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
+     style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
     {#if viewMode === 'canvas'}
         <Excalidraw tabs={tabs} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
     {:else if viewMode === 'reading'}
@@ -2597,7 +2647,8 @@ class:scrolling={isScrolling} class:no-transitions={isWindowResizing}>
 />
 
 <div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
-class:scrolling={isScrolling} class:no-transitions={isWindowResizing}>
+class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
+style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px;">
     {#each rightPinnedTabs as tab (tab.id)}
         {#key userModsHash}
             {#if  tab.type !== 'divider'}
