@@ -1034,7 +1034,10 @@ document.addEventListener('input', function(event) {
                 }
             }
 
-            const block = details.url.indexOf("google-analytics.com") != -1
+            const block = details.url.indexOf("google-analytics.com") != -1 
+                || details.url.indexOf("googletagmanager.com") != -1
+                || details.url.indexOf("adservice.google.com") != -1
+                || details.url.indexOf("doubleclick.net") != -1
 
             if (block) {
                 // Show red LED for blocked requests
@@ -1810,6 +1813,7 @@ document.addEventListener('input', function(event) {
         {:else if isNewTabUrl(tab.url)}
             <NewTab
                 {tab}
+                isActive={tab.id === data.spaceMeta.activeTab?.id}
             />
         {/if}
     </div>

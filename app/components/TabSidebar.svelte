@@ -14,15 +14,15 @@
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
     let closedTabsHideTimeout = null
+    let spaceContextMenuId = $state(null)
+    let contextMenuJustOpened = false
+    let contextMenuPosition = $state({ x: 0, y: 0 })
 
     let isManualScroll = false
     let previousSpaceIndex = -1
     let scrollActiveSpaceTimeout = null
-    let previousClosedTabsLength = 0
 
     const globallyPinnedTabs = $derived(data.globalPins)
-    
-    const spaceOrder = $derived([...Object.keys(data.spaces).sort((a, b) => a.order?.localeCompare(b.order) || 0)])
     
     function handleMouseEnter() {
         isHovered = true
@@ -30,6 +30,10 @@
     
     function handleMouseLeave() {
         isHovered = false
+        // Close context menu when leaving sidebar
+        if (spaceContextMenuId !== null) {
+            spaceContextMenuId = null
+        }
     }
     
     function scrollToCurrentSpace(behavior = 'smooth') {
@@ -50,13 +54,34 @@
         }
     }
 
-    function handleSpaceClick(spaceId) {
-        data.spaceMeta.activeSpace = spaceId
-        previousSpaceIndex = spaceOrder.indexOf(spaceId)
-        isManualScroll = true
-        scrollToCurrentSpace('smooth')
-        scrollActiveSpaceIntoView()
-        setTimeout(() => { isManualScroll = false }, 300)
+    function handleSpaceClick(event, spaceId) {
+        // Right-click (button 2) - show context menu
+        if (event.button === 2) {
+            event.preventDefault()
+            event.stopPropagation()
+            
+            // Calculate menu position based on mouse coordinates with offset
+            contextMenuPosition = {
+                x: event.clientX - 10,
+                y: event.clientY - 30
+            }
+            
+            spaceContextMenuId = spaceContextMenuId === spaceId ? null : spaceId
+            contextMenuJustOpened = true
+            // Reset flag after a longer delay to prevent mouseup from closing menu immediately
+            setTimeout(() => { contextMenuJustOpened = false }, 500)
+            return
+        }
+        
+        // Left-click (button 0) - switch space
+        if (event.button === 0) {
+            data.spaceMeta.activeSpace = spaceId
+            previousSpaceIndex = data.spaceMeta.spaceOrder.indexOf(spaceId)
+            isManualScroll = true
+            scrollToCurrentSpace('smooth')
+            scrollActiveSpaceIntoView()
+            setTimeout(() => { isManualScroll = false }, 300)
+        }
     }
 
     function activateTab(tabId) {
@@ -75,7 +100,7 @@
         const containerWidth = tabListRef.clientWidth
         const newIndex = Math.round(scrollLeft / containerWidth)
         
-        if (newIndex !== spaceOrder.indexOf(data.spaceMeta.activeSpace) && newIndex >= 0 && newIndex < spaceOrder.length) {
+        if (newIndex !== data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace) && newIndex >= 0 && newIndex < data.spaceMeta.spaceOrder.length) {
             if (scrollActiveSpaceTimeout) {
                 clearTimeout(scrollActiveSpaceTimeout)
             }
@@ -86,9 +111,9 @@
                 const currentContainerWidth = tabListRef.clientWidth
                 const currentIndex = Math.round(currentScrollLeft / currentContainerWidth)
                 
-                if (currentIndex === newIndex && currentIndex >= 0 && currentIndex < spaceOrder.length) {
+                if (currentIndex === newIndex && currentIndex >= 0 && currentIndex < data.spaceMeta.spaceOrder.length) {
                     isManualScroll = true
-                    data.spaceMeta.activeSpace = spaceOrder[currentIndex]
+                    data.spaceMeta.activeSpace = data.spaceMeta.spaceOrder[currentIndex]
                     setTimeout(() => { isManualScroll = false }, 100)
                 }
                 
@@ -121,6 +146,15 @@
         if (newSpaceMenuOpen && !event.target.closest('.new-space-menu')) {
             newSpaceMenuOpen = false
         }
+        if (spaceContextMenuId !== null && !event.target.closest('.space-context-menu-dropdown') && !event.target.closest('.space-item') && !contextMenuJustOpened) {
+            spaceContextMenuId = null
+        }
+    }
+    
+    function handleMouseUpOutside(event) {
+        if (spaceContextMenuId !== null && !event.target.closest('.space-context-menu-dropdown') && !contextMenuJustOpened) {
+            spaceContextMenuId = null
+        }
     }
     
     function handleNewSpaceMenuToggle() {
@@ -128,16 +162,15 @@
     }
     
     function handleNewSpaceMenuAction(action) {
-        console.log(`New space menu action: ${action}`)
         newSpaceMenuOpen = false
         
-        // Handle the actions
         if (action === 'new-space') {
             console.log('Creating new space...')
+            data.newSpace()
         } else if (action === 'new-divider') {
-            console.log('Creating new divider...')
+            data.newDivider()
         } else if (action === 'new-folder') {
-            console.log('Creating new folder...')
+            data.newFolder()
         }
     }
     
@@ -193,12 +226,12 @@
     
     // onMount(() => {
     //     scrollToCurrentSpace('instant')
-    //     previousSpaceIndex = spaceOrder.indexOf(data.spaceMeta.activeSpace)
+    //     previousSpaceIndex = data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace)
     // })
 
     // Watch for changes in space order that might affect current space position
     $effect(() => {
-        const currentIndex = spaceOrder.indexOf(untrack(() => data.spaceMeta.activeSpace))
+        const currentIndex = data.spaceMeta.spaceOrder.indexOf(untrack(() => data.spaceMeta.activeSpace))
         if (currentIndex !== -1 && currentIndex !== previousSpaceIndex && tabListRef && !isManualScroll) {
             scrollToCurrentSpace('instant')
         }
@@ -225,7 +258,7 @@
         
         // Find the active tab element in the sidebar
         setTimeout(() => {
-            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTab.id}"]`)
+            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTab?.id}"]`)
             if (activeTabElement) {
                 const tabsList = activeTabElement.closest('.tabs-list')
                 if (tabsList) {
@@ -256,10 +289,29 @@
     //     previousClosedTabsLength = currentLength
     // })
     
+    function handleSpaceContextMenuAction(action, spaceId) {
+        if (action === 'rename') {
+            // TODO: Implement rename functionality
+            console.log('Rename space:', spaceId)
+        } else if (action === 'change-color') {
+            // TODO: Implement color change functionality
+            console.log('Change color for space:', spaceId)
+        } else if (action === 'change-icon') {
+            // TODO: Implement icon change functionality
+            console.log('Change icon for space:', spaceId)
+        } else if (action === 'delete') {
+            // TODO: Implement delete functionality
+            console.log('Delete space:', spaceId)
+        }
+        
+        spaceContextMenuId = null
+    }
 
 </script>
 
-<svelte:window onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; } }} />
+<svelte:window onclick={handleClickOutside} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
+
+
 
 <div class="sidebar-box" 
      class:hovered={isHovered}
@@ -269,6 +321,27 @@
      role="complementary"
      aria-label="Tab Sidebar">
     <div class="sidebar">
+        {#if spaceContextMenuId}
+    <div class="space-context-menu-overlay">
+        <div class="space-context-menu-dropdown" 
+            class:open={spaceContextMenuId !== null}
+            style="top: {contextMenuPosition.y}px; left: {contextMenuPosition.x}px;">
+            <button class="space-context-menu-item" 
+                    onmouseup={() => handleSpaceContextMenuAction('rename', spaceContextMenuId)}
+                    role="menuitem">Rename</button>
+            <button class="space-context-menu-item"
+                    onmouseup={() => handleSpaceContextMenuAction('change-color', spaceContextMenuId)}
+                    role="menuitem">Change Color</button>
+            <button class="space-context-menu-item"
+                    onmouseup={() => handleSpaceContextMenuAction('change-icon', spaceContextMenuId)}
+                    role="menuitem">Change Icon</button>
+            <button class="space-context-menu-item delete"
+                    onmouseup={() => handleSpaceContextMenuAction('delete', spaceContextMenuId)}
+                    role="menuitem">Delete</button>
+        </div>
+    </div>
+{/if}
+
         <div class="sidebar-content">
             {#if globallyPinnedTabs.length > 0}
                 <div class="section global-pins-section">
@@ -285,18 +358,19 @@
             <div class="section">
                 <div class="spaces-container">
                     <div class="spaces-list" bind:this={spacesListRef}>
-                        {#each spaceOrder as spaceId}
+                        {#each data.spaceMeta.spaceOrder as spaceId}
                             <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
                                 <button class="space-item" 
                                         class:active={data.spaceMeta.activeSpace === spaceId}
                                         data-space-id={spaceId}
-                                        onmousedown={() => handleSpaceClick(spaceId)}
+                                        onmousedown={(e) => handleSpaceClick(e, spaceId)}
+                                        oncontextmenu={(e) => e.preventDefault()}
                                         aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
-                                    {#if data.spaces[spaceId].glyph}
-                                        <span class="space-glyph">{@html data.spaces[spaceId].glyph}</span>
-                                    {:else}
-                                        <span class="space-glyph-default"></span>
-                                    {/if}
+                       {#if data.spaces[spaceId].glyph}
+                            <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.3)'}">{@html data.spaces[spaceId].glyph}</span>
+                        {:else}
+                            <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.3)'}"></span>
+                        {/if}
                                 </button>
                             </Tooltip>
                         {/each}
@@ -327,7 +401,7 @@
                      bind:this={tabListRef}
                      onscroll={handleTabScroll}>
                     <div class="tab-content-track">
-                        {#each spaceOrder as spaceId (spaceId)}
+                        {#each data.spaceMeta.spaceOrder as spaceId (spaceId)}
                             <div class="space-content" data-space-id={spaceId}>
                                 <div class="space-title-container">
                                     <div class="space-title" class:active={data.spaceMeta.activeSpace === spaceId}>
@@ -383,7 +457,7 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab.id} data-tab-id={tab.id}>
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab?.id} data-tab-id={tab.id}>
                                                 <button class="tab-item-main" title={tab.url} onmousedown={() => activateTab(tab.id)}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>
@@ -418,6 +492,7 @@
                 </div>
             </div>
         </div>
+        
         
         {#if data.closedTabs.length > 0}
             <div class="closed-tabs-section"
@@ -457,7 +532,6 @@
         bottom: 9px;
         top: 43px;
         left: 0px;
-        overflow: hidden;
         transition: transform 190ms 340ms cubic-bezier(.78,-0.01,.34,1.04);
         padding-right: 15px;
         transform: translateX(-248px);
@@ -465,6 +539,7 @@
         padding-left: 9px;
         width: 263px;
         pointer-events: auto;
+        overflow: visible;
     }
 
     .sidebar-box.hovered, .sidebar-box:hover {
@@ -474,14 +549,11 @@
 
     .sidebar {
         flex: 1;
-        border-radius: 9px;
-        box-shadow: 0 0 2px 0 #000, -18px 0px 2px 1px #000;
-        border: 1px solid hsl(0 0% 12% / 1);
-        overflow: hidden;
         height: 100%;
         backdrop-filter: blur(21px);
         background: rgb(0 0 0 / 96%);
         user-select: none;
+        overflow:visible;
     }
 
     .sidebar-content {
@@ -494,6 +566,10 @@
         flex-direction: column;
         position: relative;
         padding-bottom: 0;
+        border-radius: 9px;
+        box-shadow: 0 0 2px 0 #000, -18px 0px 2px 1px #000;
+        border: 1px solid hsl(0 0% 12% / 1);
+        overflow: hidden
     }
     
     .section {
@@ -561,7 +637,6 @@
         overflow-x: auto;
         overflow-y: hidden;
         scrollbar-width: none;
-        -ms-overflow-style: none;
         flex: 1;
         min-width: 0;
     }
@@ -1502,6 +1577,83 @@
     .sidebar-content::-webkit-scrollbar-thumb:hover {
         background: rgba(255, 255, 255, 0.3);
     } */
+
+    /* .space-item-container {
+        position: relative;
+    }
+
+    .space-context-menu {
+        position: relative;
+    } */
+
+    .space-context-menu-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        /* background: rgba(0, 0, 0, 0.5); */
+        z-index: 9999;
+        pointer-events: none;
+    }
+
+    .space-context-menu-dropdown {
+        position: fixed;
+        background: rgba(0, 0, 0, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 4px 0;
+        width: 140px;
+        z-index: 10000;
+        opacity: 0;
+        visibility: hidden;
+        backdrop-filter: blur(12px);
+        overflow: visible;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+        pointer-events: auto;
+    }
+
+    .space-context-menu-dropdown.open {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .space-context-menu-item {
+        padding: 6px 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
+        cursor: pointer;
+        transition: background 50ms ease;
+        background: transparent;
+        border: none;
+        width: 100%;
+        text-align: left;
+    }
+
+    .space-context-menu-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .space-context-menu-item:active {
+        background: rgba(255, 255, 255, 0.15);
+    }
+
+    .space-context-menu-item.delete {
+        color: #ff6b6b;
+    }
+
+    .space-context-menu-item.delete:hover {
+        color: #ff4444;
+        background: rgba(255, 107, 107, 0.1);
+    }
+
+    .space-context-menu-item.delete:active {
+        background: rgba(255, 107, 107, 0.2);
+    }
 </style>
 
 <!-- <div class="drag-handle-left" class:drag-enabled={isDragEnabled}></div> -->

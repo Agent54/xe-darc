@@ -1,15 +1,83 @@
 import PouchDB from 'pouchdb-browser'
 import findPlugin from 'pouchdb-find'
 import bootstrap from './bootstrap.js'
+import testData from './test-data.js'
 // TODO: add user and session management
+// import indexeddb from 'pouchdb-adapter-indexeddb'
+// PouchDB.plugin(indexeddb)
 
-const db = new PouchDB.plugin(findPlugin)('darc')
+const projectColors = [
+    { name: "Magenta", color: "#b800bb" },
+    { name: "Yellow", color: "#ffc100" },
+    { name: "Green Apple", color: "#71be00" },
+    { name: "Turquoise", color: "#00a3d6" },
+    { name: "Red", color: "#d82b00" },
+    { name: "Grape", color: "#8100ea" },
+    { name: "Orange", color: "#ce9f00" },
+    { name: "Swamp Green", color: "#91a400" },
+    { name: "Ice Blue", color: "#74a4d7" },
+    { name: "Peach", color: "#e46642" },
+    { name: "Violet", color: "#ba6eff" },
+    { name: "Pea Green", color: "#6e7306" },
+    { name: "Tan", color: "#908675" },
+    { name: "Aquamarine", color: "#008c8d" },
+    { name: "Maroon", color: "#ac3f65" },
+    { name: "Light Gray", color: "#cccccc" },
+    { name: "Medium Gray", color: "#818182" },
+    { name: "Dark Gray", color: "#555555" },
+    { name: "Ocean Blue", color: "#155f8b" },
+    { name: "Pink", color: "#ee61f0" },
+]
 
-db.bulkDocs(bootstrap).then(() => {
-    // console.log('bootstrap done', res)
+
+PouchDB.plugin(findPlugin)
+const db = new PouchDB('darc', { adapter: 'idb' })
+
+const sortOrder = ['archived', 'spaceId', 'type', 'order']
+
+const docs = $state({})
+
+db.bulkDocs(bootstrap).then(async (res) => {
+    db.createIndex({
+        index: { fields: sortOrder }
+    }).then(() => {
+        refresh()
+    })
+
+    const docsToUpdate = []
+    for (const doc of res) {
+        if (doc.error && doc.error === 'conflict') {
+            // Find the corresponding bootstrap document
+            const bootstrapDoc = bootstrap.find(bdoc => bdoc._id === doc.id)
+            if (bootstrapDoc) {
+                try {
+                    // Get the existing document from the database
+                    const existingDoc = await db.get(doc.id)
+                    
+                    // Update the existing document with bootstrap data, keeping the _rev
+                    const updatedDoc = {
+                        ...bootstrapDoc,
+                        _rev: existingDoc._rev
+                    }
+                    
+                    docsToUpdate.push(updatedDoc)
+                } catch (error) {
+                    console.error('Failed to get existing doc for update:', doc.id, error)
+                }
+            }
+        }
+    }
+    
+    // Update all conflicting documents
+    if (docsToUpdate.length > 0) {
+        try {
+            const updateRes = await db.bulkDocs(docsToUpdate)
+            console.log('Updated bootstrap docs:', updateRes)
+        } catch (error) {
+            console.error('Failed to update bootstrap docs:', error)
+        }
+    }
 })
-
-const sortOrder = ['archived', 'type', 'spaceId', 'order']
 
 const closedTabs = $state([])
 const origins = $state({})
@@ -19,7 +87,7 @@ const activity = $state({})
 const resources = $state({})
 
 const spaceMeta = $state({
-    activeSpace: '1',
+    activeSpace: null,
     spaceOrder: [],
     activeTab: null,
     config: {
@@ -31,50 +99,105 @@ const spaceMeta = $state({
 })
 
 let initialLoad = true
-async function refresh() {
+async function refresh(spaceId) {
     const { docs: newDocs } = await db.find({
         selector: {
             archived: { $lt: true },
-            type: { $exists: true },
+            spaceId: spaceId ? spaceId : { $exists: true },
         },
         fields: initialLoad ? undefined : ['_id'],
         sort: sortOrder.map(key => ({ [key] : 'asc' }))
-    })
+    }).catch(err => console.error(err))
 
-    for (const doc of newDocs) {
+    if (spaceId) {
+        spaces[spaceId] ??= {}
+        spaces[spaceId].tabs = []
+    }
+
+    for (const refreshDoc of newDocs) {
+        let doc
+        if (initialLoad) {
+            docs[refreshDoc._id] = refreshDoc
+            doc = refreshDoc 
+        } else {
+            doc = docs[refreshDoc._id]
+        }
+        
         if (doc.type === 'space') {
             if (!spaceMeta.activeSpace) {
                 spaceMeta.activeSpace = doc._id
             }
-            spaces[doc._id] = doc
+            if (!spaces[doc._id]) {
+                spaces[doc._id] = doc
+            } else {
+                spaces[doc._id] = { ...spaces[doc._id], ...doc }
+            }
+           
         } else if (doc.type === 'tab') {
             doc.id = doc._id // legacy compat, remove this later
-            // if (!spaces[doc.spaceId]) {
-            //     spaces[doc.spaceId] = { _id: doc.spaceId, tabs: [] }
-            // }
+            if (!spaces[doc.spaceId]) {
+                spaces[doc.spaceId] = { _id: doc.spaceId, tabs: [] }
+            }
+
             if (!spaces[doc.spaceId].tabs) {
                 spaces[doc.spaceId].tabs = []
             }
             spaces[doc.spaceId].tabs.push(doc)
+
             if (!spaceMeta.activeTab && doc.spaceId === spaceMeta.activeSpace) {
                 spaceMeta.activeTab = doc
             }
-        } else if (doc.type === 'activity') {
-            activity[doc._id] = doc
-        } else if (doc.type === 'resource') {
-            resources[doc._id] = doc
         }
+        //  else if (doc.type === 'activity') {
+        //     activity[doc._id] = doc
+        // } else if (doc.type === 'resource') {
+        //     resources[doc._id] = doc
+        // }
     }
 
-    spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 0) - (b.order || 0)).map(space => space._id)
-
+    sortSpaces()
     initialLoad = false
 }
 
-db.createIndex({
-    index: { fields: sortOrder }
-}).then(() => {
-   refresh()
+function sortSpaces () {
+    spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
+}
+
+let lastLocalSeq = null
+let changes = []
+let editingId = null
+db.changes({
+    live: true,
+    since: 'now',
+    include_docs: true,
+    filter: doc => !doc._id.startsWith('_design/')
+}).on('change', async change => {
+    lastLocalSeq = change.seq
+
+    // if (change.doc instanceof type.errors) {
+    //     console.error(change.doc.summary, change.doc)
+    //     return
+    // }
+
+    const oldDoc = docs[change.id]
+    changes = [change, ...changes]
+    if (editingId !== change.id) {
+        docs[change.id] = change.doc
+
+        for (const key of sortOrder) {
+            if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
+                if (change.doc.spaceId && change.doc.type !== 'space') {
+                    refresh(change.doc.spaceId)
+                } else if (change.doc.type === 'space') {
+                    spaces[change.doc._id] = { ...spaces[change.doc._id], ...change.doc }
+                    sortSpaces()
+                } else {
+                    console.warn('unknown change', change)
+                }
+                break
+            }        
+        }
+    }
 })
 
 // Define activate function separately so it can be used internally
@@ -115,6 +238,13 @@ $effect.root(() => {
     })
 })
 
+function loadSampleData () {
+    db.bulkDocs(testData).then((res) => {
+        console.log('sample data loaded', res)
+        refresh()
+    })
+}
+
 export default {
     origins,
     spaceMeta,
@@ -125,6 +255,7 @@ export default {
     resources,
 
     activate,
+    loadSampleData,
 
     previous: () => {
         const activeSpace = spaces[spaceMeta.activeSpace]
@@ -155,15 +286,18 @@ export default {
     },
 
     newSpace: () => {
+        const _id = `darc:space_${crypto.randomUUID()}`
         const space = {
-            _id: `space-${Date.now()}`,
-            id: `space-${Date.now()}`, // legacy compat
-            order: Object.keys(spaces).length,
-            tabs: []
+            _id,
+            spaceId: _id,
+            type: 'space',
+            order: Date.now(),
+            created: Date.now(),
+            color: projectColors[Object.keys(spaces).length % projectColors.length].color,
+            name: 'Space ' + (Object.keys(spaces).length + 1)
         }
-        spaces[space._id] = space
-        spaceMeta.spaceOrder.push(space._id)
-        return space
+
+        db.put(space)
     },
 
     deleteSpace: (spaceId) => {
@@ -179,67 +313,54 @@ export default {
     },
     
     newTab: (spaceId) => {
-        const _id = crypto.randomUUID()
+        const _id = `darc:tab_${crypto.randomUUID()}`
 
         const tab = {
             _id,
-            id: _id, // legacy compat
+            id: _id,
+            type: 'tab',
             spaceId,
             url: 'about:newtab',
             title: 'New Tab',
-            order: spaces[spaceId]?.tabs?.length || 0
+            order: Date.now()
         }
         
-        if (!spaces[spaceId]) {
-            return null
-        }
-
-        if (!spaces[spaceId].tabs) {
-            spaces[spaceId].tabs = []
-        }
-
-        spaces[spaceId].tabs.unshift(tab)
-        
-        return tab
+        db.put(tab)
     },
 
     closeTab: (spaceId, tabId) => {
-        const space = spaces[spaceId]
-        if (!space || !space.tabs) {
-            return { success: false, wasLastTab: false }
-        }
-        
-        const tabIndex = space.tabs.findIndex(tab => tab.id === tabId)
-        if (tabIndex === -1) {
-            return { success: false, wasLastTab: false }
-        }
-        
-        const tab = space.tabs[tabIndex]
-        const wasLastTab = space.tabs.length === 1
-        
-        // Add to closed tabs before removing
-        closedTabs.push({
-            ...tab,
-            closedAt: Date.now(),
-            spaceId // Ensure spaceId is preserved
-        })
-        
-        // Remove from space
-        space.tabs.splice(tabIndex, 1)
-        
-        // If we closed the active tab, need to set a new active tab
-        if (spaceMeta.activeTab?.id === tabId) {
-            if (space.tabs.length > 0) {
-                // Set the next tab as active, or the previous one if this was the last
-                const newActiveIndex = Math.min(tabIndex, space.tabs.length - 1)
-                const newActiveTabId = space.tabs[newActiveIndex]?.id || space.tabs[0]?.id
-                activate(newActiveTabId)
-            } else {
-                spaceMeta.activeTab = null
-            }
-        }
-        
-        return { success: true, wasLastTab }
+        const doc = docs[tabId]
+        doc.closed = true
+        db.put(doc)
+        // const space = spaces[spaceId]
+        // if (!space || !space.tabs) {
+        //     return { success: false, wasLastTab: false }
+        // }
+        // const tabIndex = space.tabs.findIndex(tab => tab.id === tabId)
+        // if (tabIndex === -1) {
+        //     return { success: false, wasLastTab: false }
+        // }
+        // const tab = space.tabs[tabIndex]
+        // const wasLastTab = space.tabs.length === 1
+        // // Add to closed tabs before removing
+        // closedTabs.push({
+        //     ...tab,
+        //     closedAt: Date.now(),
+        //     spaceId // Ensure spaceId is preserved
+        // })
+        // space.tabs.splice(tabIndex, 1)
+        // // If we closed the active tab, need to set a new active tab
+        // if (spaceMeta.activeTab?.id === tabId) {
+        //     if (space.tabs.length > 0) {
+        //         // Set the next tab as active, or the previous one if this was the last
+        //         const newActiveIndex = Math.min(tabIndex, space.tabs.length - 1)
+        //         const newActiveTabId = space.tabs[newActiveIndex]?.id || space.tabs[0]?.id
+        //         activate(newActiveTabId)
+        //     } else {
+        //         spaceMeta.activeTab = null
+        //     }
+        // }
+        // return { success: true, wasLastTab }
     },
 
     clearClosedTabs: () => {
@@ -258,6 +379,7 @@ export default {
             
             // Validate the space exists
             if (!spaces[newActiveSpace]) {
+                console.warn('🔄 [DATA] previousSpace: target space does not exist:', newActiveSpace)
                 return false
             }
             

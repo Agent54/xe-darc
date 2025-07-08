@@ -3,7 +3,7 @@
     import Scene from './InteractiveLineScene.svelte'
     // import { sandbox } from './sandbox.js'
     
-    let { tab } = $props()
+    let { tab, isActive = false } = $props()
     
     let inputValue = $state('')
     let mouseX = $state(0)
@@ -600,9 +600,11 @@
             
             <!-- 3D Scene Container - positioned above input -->
             <div class="threlte-container relative w-full h-64 pointer-events-none" style="filter: blur({blur}px);" class:visible={loaded}>
-                <Canvas>
-                    <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} {animationSpeed} {lineThickness} {audioLevel} {audioFrequency} />
-                </Canvas>
+                {#if isActive}
+                    <Canvas>
+                        <Scene {mouseX} {mouseY} {grainOpacity} {grainAmount} {grainSize} {grainFlicker} {grainSpread} {animationSpeed} {lineThickness} {audioLevel} {audioFrequency} />
+                    </Canvas>
+                {/if}
             </div>
             
             <form onsubmit={handleSubmit} class="relative">

@@ -20,6 +20,7 @@
     "@threlte/core": "8.0.4",
     "@threlte/extras": "9.2.1",
     "events": "3.3.0",
+    "pouchdb-adapter-indexeddb": "^9.0.0",
     "pouchdb-browser": "9.0.0",
     "pouchdb-find": "9.0.0",
     "react": "18.3.1",
