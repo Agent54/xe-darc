@@ -1,134 +1,101 @@
 <script>
-  import { onMount, mount, unmount } from 'svelte'
+  import { onMount } from 'svelte'
   import React from 'react'
   import ReactDOM from 'react-dom/client'
   import { Excalidraw as ExcalidrawReact } from '@excalidraw/excalidraw'
   import '@excalidraw/excalidraw/index.css'
-  import Frame from './Frame.svelte'
+  import FrameWrapper from './ReactFrameWrapper.js'
   import { thottle } from '../lib/utils'
+  import data from '../data.svelte.js'
 
-  // Create a React component that mounts the Svelte ControlledFrame
-  class FrameWrapper extends React.Component {
-    constructor(props) {
-      super(props)
-      this.containerRef = React.createRef()
-      this.frameInstance = null
-    }
-    
-    componentDidMount() {
-      if (this.containerRef.current) {  
-        // Mount the Svelte ControlledFrame component using Svelte 5 syntax
-        const currentTab = this.props.tabs.find(tab => tab.id === this.props.element.id)
-        this.frameInstance = mount(Frame, {
-          target: this.containerRef.current,
-          props: {
-            style: 'width: 100%; height: 100%;',
-            tab: currentTab,
-            tabs: this.props.tabs,
-            headerPartOfMain: false,
-            isScrolling: false,
-            captureTabScreenshot: () => {},
-            onFrameFocus: () => this.props.onFrameFocus(currentTab),
-            onFrameBlur: this.props.onFrameBlur || (() => {}),
-            userMods: this.props.getEnabledUserMods(this.props.tabs[0])
-          }
-        })
-      }
-    }
-    
-    async componentWillUnmount() {
-      if (this.frameInstance) {
-        await unmount(this.frameInstance, { outro: true })
-      }
-    }
-    
-    render() {
-      return React.createElement('div', {
-        ref: this.containerRef,
-        style: {
-          width: '100%',
-          height: '100%',
-          position: 'relative'
+  let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || []))
+
+  let elements = $derived(tabs.map((tab, index) => {
+        const tabWidth = 1000
+        const tabHeight = 700  
+        const columnSpacing = 80
+        const rowSpacing = 160
+        
+        const columnsPerRow = 5
+        // const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
+        
+        const row = Math.floor(index / columnsPerRow)
+        const col = index % columnsPerRow
+        
+        const startX = 200
+        const startY = 200
+        
+        const x = startX + (col * (tabWidth + columnSpacing))  
+        const y = startY + (row * (tabHeight + rowSpacing))
+        
+        return {
+            "id": tab.id,
+            "type": "embeddable",
+            
+            "x": x,
+            "y": y,
+            "width": tabWidth,
+            "height": tabHeight,
+            "angle": tab.angle || 0,
+            
+            "strokeColor": "none",
+            "backgroundColor": "none",
+            "fillStyle": "solid",
+            "strokeWidth": 2,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "groupIds": [],
+            "frameId": null,
+            "index": "a2",
+            "roundness": {
+                "type": 4
+            },
+            "seed": 1218149059,
+            "version": 104,
+            "versionNonce": 1873698765,
+            "isDeleted": tab.closed,
+            "boundElements": null,
+            "updated": 1749946396932,
+            "link": tab.url,
+            "locked": false
         }
-      })
-    }
-  }
+    }))
 
-  function tabsToElements (tabs) {
-      return tabs.map((tab, index) => {
-            // Arrange tabs in 5-column grid layout, centered on canvas
-            const tabWidth = 600
-            const tabHeight = 400  
-            const columnSpacing = 80
-            const rowSpacing = 160
-            
-            const columnsPerRow = 5
-            // const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
-            
-            const row = Math.floor(index / columnsPerRow)
-            const col = index % columnsPerRow
-            
-            // Position tabs starting from top-left with positive coordinates
-            const startX = 200
-            const startY = 200
-            
-            const x = startX + (col * (tabWidth + columnSpacing))  
-            const y = startY + (row * (tabHeight + rowSpacing))
-            
-            return {
-                "id": tab.id,
-                "type": "embeddable",
-                
-                "x": x,
-                "y": y,
-                "width": tabWidth,
-                "height": tabHeight,
-                "angle": tab.angle || 0,
-                
-                "strokeColor": "none",
-                "backgroundColor": "none",
-                "fillStyle": "solid",
-                "strokeWidth": 2,
-                "strokeStyle": "solid",
-                "roughness": 0,
-                "opacity": 100,
-                "groupIds": [],
-                "frameId": null,
-                "index": "a2",
-                "roundness": {
-                    "type": 4
-                },
-                "seed": 1218149059,
-                "version": 104,
-                "versionNonce": 1873698765,
-                "isDeleted": tab.closed,
-                "boundElements": null,
-                "updated": 1749946396932,
-                "link": tab.url,
-                "locked": false
-            }
-        })
-    }
-
-  
-  let {
-    tabs = [],
-    initialData = {
+  let initialData = $derived({
         "type": "excalidraw",
         "version": 2,
         "source": "isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac",
-        "elements": tabsToElements(tabs),
+        elements,
         "appState": {
             "gridSize": 20,
             "gridStep": 5,
             "gridModeEnabled": false,
             "viewBackgroundColor": "#0000",
-            "zoom": { "value": 0.35 },
+            "zoom": { "value": 0.3 },
             "scrollX": -100,
             "scrollY": 0
         },
         "files": {}
-        },
+  })
+
+      
+  // Merge default app state for precise drawing with user's initialData
+  let mergedInitialData = $derived({
+    ...initialData,
+    appState: {
+      currentItemRoughness: 0, // 0 = precise/architect style
+      currentItemStrokeColor: "#6c757d", // Default line color to mid gray
+      currentItemFontSize: 40, // Double the standard font size (20px -> 40px)
+      viewBackgroundColor: "#0000",
+      zoom: { value: 0.35 }, // Set zoom to 35% for double-sized tiles
+      scrollX: -300, // Center horizontally for larger tiles  
+      scrollY: 0, // Position tabs properly on screen
+      ...initialData.appState
+    }
+  })
+
+  let {
     onChange = (e) => {},
     onPointerUpdate = () => {},
     UIOptions = {
@@ -142,7 +109,6 @@
         clearCanvas: false
       }
     },
-    renderTopRightUI = null,
     viewModeEnabled = false,
     zenModeEnabled = true,
     gridModeEnabled = false,
@@ -156,7 +122,6 @@
     onFrameFocus = () => {},
     onFrameBlur = () => {},
     getEnabledUserMods = () => { return { css: [], js: [] } },
-    ...restProps
   } = $props()
   
   let container
@@ -166,55 +131,8 @@
   
   function renderExcalidraw () {
     if (!container || !root) return
-
-      // For shapes:
-      // {
-      // "id": "BIU3Ng9qVuSrm_gBelQ4v",
-      // "type": "rectangle",
-      // "x": 191.38671875,
-      // "y": 157.23046875,
-      // "width": 175.98828125,
-      // "height": 156.90234375,
-      // "angle": 0,
-      // "strokeColor": "#1e1e1e",
-      // "backgroundColor": "transparent",
-      // "fillStyle": "solid",
-      // "strokeWidth": 2,
-      // "strokeStyle": "solid",
-      // "roughness": 0,
-      // "opacity": 100,
-      // "groupIds": [],
-      // "frameId": null,
-      // "index": "a0",
-      // "roundness": {
-      //     "type": 3
-      // },
-      // "seed": 1943070669,
-      // "version": 188,
-      // "versionNonce": 657353517,
-      // "isDeleted": false,
-      // "boundElements": null,
-      // "updated": 1749946352449,
-      // "link": null,
-      // "locked": false
-      // },
     
-    // Merge default app state for precise drawing with user's initialData
-    const mergedInitialData = {
-      ...initialData,
-      appState: {
-        currentItemRoughness: 0, // 0 = precise/architect style
-        currentItemStrokeColor: "#6c757d", // Default line color to mid gray
-        currentItemFontSize: 40, // Double the standard font size (20px -> 40px)
-        viewBackgroundColor: "#0000",
-        zoom: { value: 0.35 }, // Set zoom to 35% for double-sized tiles
-        scrollX: -300, // Center horizontally for larger tiles  
-        scrollY: 0, // Position tabs properly on screen
-        ...initialData.appState
-      }
-    }
-    
-    const props = {
+    const element = React.createElement(ExcalidrawReact, {
       initialData: mergedInitialData,
       onChange: thottle((elements, appState, files) => {
         // Update zoom level for CSS custom property
@@ -225,7 +143,13 @@
         console.log('onChange', elements, appState)
       }, 200),
       onPointerUpdate,
+      excalidrawAPI: (api) => {
+        if (excalidrawAPI === null) {
+          excalidrawAPI = api
+        }
+      },
       UIOptions,
+      renderTopRightUI: null,
       viewModeEnabled,
       zenModeEnabled,
       gridModeEnabled,
@@ -236,7 +160,6 @@
       handleKeyboardGlobally,
       validateEmbeddable: true, // Disable embed validation true means dont validate, false is enabled validation, do not change.
       renderEmbeddable: (element, appState) => {
-        // Custom render using React wrapper for Svelte ControlledFrame
         const link = element.link
         if (!link) {
             console.log('no link', element)
@@ -244,49 +167,24 @@
         }
         
         return React.createElement(FrameWrapper, {
-          tabs,
           element,
           onFrameFocus,
           onFrameBlur,
           getEnabledUserMods
         })
-      },
-      ...restProps
-    }
-    
-    if (renderTopRightUI) {
-      props.renderTopRightUI = renderTopRightUI
-    }
-    
-    if (excalidrawAPI === null) {
-      props.excalidrawAPI = (api) => {
-        excalidrawAPI = api
       }
-    }
-    
-    const element = React.createElement(ExcalidrawReact, props)
+    })
     root.render(element)
   }
-  
-  // $effect(() => {
-  //   // Re-render when props change
-  //   if (root) {
-  //     renderExcalidraw()
-  //   }
-  // })
 
   $effect(() => {
-    // excalidrawAPI?.updateScene(mergedInitialData)
+    excalidrawAPI?.updateScene(mergedInitialData)
   })
   
   onMount(() => {
     root = ReactDOM.createRoot(container)
     renderExcalidraw()
   })
-  
-  export function getExcalidrawAPI () {
-    return excalidrawAPI
-  }
 
   let loaded = $state(false)
   setTimeout(() => {
@@ -309,7 +207,7 @@
   bind:this={container} 
   class="excalidraw-container"
   class:loaded={loaded}
-  style="width: {width}; height: {height}; --excalidraw-zoom: {currentZoom};"
+  style="width: 100%; height: 100%; --excalidraw-zoom: {currentZoom};"
 ></div>
 
 <style>
@@ -345,6 +243,11 @@
         transition: opacity 0.2s ease-in-out 0.1s;
     }
 
+    :global(.excalidraw__embeddable-container) {
+      border-radius: 8px; 
+      /* --embeddable-radius: */
+      border: 1px solid #bababa;
+    }
 
     :global(.excalidraw__embeddable-container.is-hovered::after) {
         content: '↗︎';
@@ -455,3 +358,35 @@
     --color-muted-background-darker: #101010;
   }
 </style>
+
+
+<!-- // For shapes:
+// {
+// "id": "BIU3Ng9qVuSrm_gBelQ4v",
+// "type": "rectangle",
+// "x": 191.38671875,
+// "y": 157.23046875,
+// "width": 175.98828125,
+// "height": 156.90234375,
+// "angle": 0,
+// "strokeColor": "#1e1e1e",
+// "backgroundColor": "transparent",
+// "fillStyle": "solid",
+// "strokeWidth": 2,
+// "strokeStyle": "solid",
+// "roughness": 0,
+// "opacity": 100,
+// "groupIds": [],
+// "frameId": null,
+// "index": "a0",
+// "roundness": {
+//     "type": 3
+// },
+// "seed": 1943070669,
+// "version": 188,
+// "versionNonce": 657353517,
+// "isDeleted": false,
+// "boundElements": null,
+// "updated": 1749946352449,
+// "link": null,
+// "locked": false -->

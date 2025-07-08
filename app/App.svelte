@@ -132,7 +132,7 @@
     }
 
     // Load user mods from localStorage
-    async function loadUserMods() {
+    async function loadPreferences() {
         try {
             const savedMods = localStorage.getItem('userMods')
             if (savedMods) {
@@ -151,6 +151,17 @@
             const savedDevMode = localStorage.getItem('devModeEnabled')
             if (savedDevMode !== null) {
                 devModeEnabled = savedDevMode === 'true'
+            }
+
+            // Load view mode settings
+            const savedViewMode = localStorage.getItem('viewMode')
+            if (savedViewMode !== null) {
+                viewMode = savedViewMode
+            }
+
+            const savedLastUsedViewMode = localStorage.getItem('lastUsedViewMode')
+            if (savedLastUsedViewMode !== null) {
+                lastUsedViewMode = savedLastUsedViewMode
             }
         } catch (error) {
             console.error('Error loading user mods:', error)
@@ -322,7 +333,7 @@
         if (tabs.length > 0 && data.spaceMeta.activeTab) {
             const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
-                const frame = activeTab.frame
+                const frame = data.frames[activeTab.id]?.frame
                 
                 if (frame && frame.setZoom) {
                     frame.setZoom(1.0).then(() => {
@@ -374,10 +385,12 @@
         }
         
         // // Immediate scroll for user interaction
-        // tab.frame?.scrollIntoView({ 
+        // tab frame?.scrollIntoView({ 
         //     behavior: isWindowResizing ? 'auto' : 'smooth' 
         // })
     }
+
+    let tabButtons = $state({})
 
     // Effect to handle scrolling to active tab when it changes or when sidebars are toggled
     $effect(() => {
@@ -389,6 +402,7 @@
             return
         }
         
+        const activeFrameWrapper = data.frames[activeTab.id]?.wrapper
         // Don't scroll if tab change was caused by scrolling
         // if (tabChangeFromScroll) {
         //     return
@@ -400,8 +414,8 @@
         // Only scroll frame into view if tab change was NOT caused by scrolling
         if (!tabChangeFromScroll) {
             setTimeout(() => {
-                if (activeTab.wrapper) {
-                    activeTab.wrapper.scrollIntoView({ 
+                if (activeFrameWrapper) {
+                    activeFrameWrapper.scrollIntoView({ 
                         behavior: isWindowResizing ? 'auto' : 'smooth' 
                     })
                 } else {
@@ -411,8 +425,8 @@
         }
         
         setTimeout(() => {
-            if (activeTab.tabButton) {
-                activeTab.tabButton.scrollIntoView({
+            if (tabButtons[activeTab.id]) {
+                tabButtons[activeTab.id].scrollIntoView({
                     behavior: isWindowResizing ? 'auto' : 'smooth',
                     inline: 'nearest',
                     block: 'nearest'
@@ -443,17 +457,19 @@
              // Find the active tab in unpinned tabs
             const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
+                const activeFrameWrapper = data.frames[activeTab.id]?.wrapper
                 // Scroll the active unpinned tab into view after pinned tabs layout change
                 setTimeout(() => {
-                    if (activeTab.wrapper) {
-                        activeTab.wrapper.scrollIntoView({ 
+                    if (activeFrameWrapper) {
+                        activeFrameWrapper.scrollIntoView({ 
                             behavior: isWindowResizing ? 'auto' : 'smooth' 
                         })
                     } else {
                         // If no specific active tab, scroll to the beginning of unpinned section
                         const firstUnpinnedTab = unpinnedTabs[0]
-                        if (firstUnpinnedTab?.wrapper) {
-                            firstUnpinnedTab.wrapper.scrollIntoView({ 
+                        const wrapper = data.frames[firstUnpinnedTab.id]?.wrapper
+                        if (wrapper) {
+                            wrapper.scrollIntoView({ 
                                 behavior: isWindowResizing ? 'auto' : 'smooth' 
                             })
                         }
@@ -565,7 +581,7 @@
     }
 
     function reloadTab (tab) {
-        const frame = tab.frame
+        const frame = data.frames[tab.id]?.frame
         if (frame && typeof frame.reload === 'function') {
             frame.reload()
         } else if (frame) {
@@ -585,7 +601,7 @@
         if (data.spaceMeta.activeTab) {
             const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
-                const frame = activeTab.frame
+                const frame = data.frames[activeTab.id]?.frame
                 frame.back?.()
                 // if (frame && typeof frame.back === 'function') {
                 //     // Check if the frame can go back
@@ -614,7 +630,7 @@
         if (data.spaceMeta.activeTab) {
             const activeTab = data.spaceMeta.activeTab
             if (activeTab) {
-                const frame = activeTab.frame
+                const frame = data.frames[activeTab.id]?.frame
                 if (frame && typeof frame.forward === 'function') {
                     frame.forward()
                 }
@@ -693,7 +709,7 @@
             const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
             if (tabIndex !== -1) {
                 space.tabs[tabIndex].muted = !space.tabs[tabIndex].muted
-                const frame = tab.frame
+                const frame = data.frames[tab.id]?.frame
                 if (frame && typeof frame.setAudioMuted === 'function') {
                     frame.setAudioMuted(space.tabs[tabIndex].muted)
                 }
@@ -837,7 +853,7 @@
 
     async function captureTabScreenshot(tab, frame = null) {
         if (!frame) {
-            frame = tab.frame
+            frame = data.frames[tab.id]?.frame
         }
         if (!frame) {
             console.log('Frame not found for tab:', tab.id)
@@ -1118,7 +1134,7 @@
                 if (hoveredTabElement) {
                     // Find the tab by checking all tab arrays (leftPinned, regular, rightPinned)
                     const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => !tab.pinned), ...rightPinnedTabs]
-                    const matchingTab = allTabs.find(tab => tab.tabButton === hoveredTabElement)
+                    const matchingTab = allTabs.find(tab => tabButtons[tab.id] === hoveredTabElement)
                     isStillHovering = matchingTab?.id === hoveredTab.id
                 }
             }
@@ -1177,8 +1193,10 @@
 
         if (viewMode !== 'default') {
             lastUsedViewMode = viewMode
+            localStorage.setItem('lastUsedViewMode', lastUsedViewMode)
         }
         viewMode = mode
+        localStorage.setItem('viewMode', viewMode)
     }
     
     function toggleViewMode() {
@@ -1191,8 +1209,10 @@
             viewMode = lastUsedViewMode
         } else {
             lastUsedViewMode = viewMode
+            localStorage.setItem('lastUsedViewMode', lastUsedViewMode)
             viewMode = 'default'
         }
+        localStorage.setItem('viewMode', viewMode)
     }
     
     function getViewModeIcon(mode) {
@@ -1551,7 +1571,7 @@
 
     // Load settings when component mounts
     $effect(() => {
-        loadUserMods().catch(error => {
+        loadPreferences().catch(error => {
             console.error('Failed to load user mods:', error)
         })
         
@@ -2062,7 +2082,7 @@
             {#each leftPinnedTabs as tab, i (tab.id)}
                 {#if tab.type !== 'divider'}
                     <li 
-                        bind:this={tab.tabButton}
+                        bind:this={tabButtons[tab.id]}
                         class="tab-container" 
                         class:active={tab.id === data.spaceMeta.activeTab?.id} 
                         class:hovered={tab.id === hoveredTab?.id}
@@ -2113,7 +2133,7 @@
                     </li>
                 {:else}
                     <li 
-                        bind:this={tab.tabButton}
+                        bind:this={tabButtons[tab.id]}
                         class="tab-container" 
                         class:active={tab.id === data.spaceMeta.activeTab?.id} 
                         class:hovered={tab.id === hoveredTab?.id}
@@ -2160,7 +2180,7 @@
             {#each rightPinnedTabs as tab, i (tab.id)}
                 {#if tab.type !== 'divider'}
                     <li 
-                        bind:this={tab.tabButton}
+                        bind:this={tabButtons[tab.id]}
                         class="tab-container" 
                         class:active={tab.id === data.spaceMeta.activeTab?.id} 
                         class:hovered={tab.id === hoveredTab?.id}
@@ -2601,8 +2621,8 @@
                              if (hoveredTabElement) {
                                  // Find the tab by checking all tab arrays (leftPinned, regular, rightPinned)
                                  const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => !tab.pinned), ...rightPinnedTabs]
-                                 const matchingTab = allTabs.find(tab => tab.tabButton === hoveredTabElement)
-                                 shouldKeepOpen = matchingTab?.id === hoveredTab.id
+                                 const matchingTab = allTabs.find(tab => tabButtons[tab.id] === hoveredTabElement)
+                                 shouldKeepOpen = matchingTab?.id === hoveredTab?.id
                              }
                          }
                          
@@ -2716,7 +2736,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
      onscroll={handleScroll} 
      style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
     {#if viewMode === 'canvas'}
-        <Excalidraw tabs={tabs} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
+        <Excalidraw onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
     {:else if viewMode === 'reading'}
         {#each tabs as tab, tabIndex (tab.id)}
                 {#key userModsHash}
@@ -2727,7 +2747,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                             </div>
                         {/key}
                         
-                        <Frame {tab} {tabs} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame tabId={tab.id} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/key}
         {/each}
@@ -2742,7 +2762,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                                 </div>
                             {/key}
                             
-                            <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                            <Frame tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                         </div>
                     {/if}
                 {/key}

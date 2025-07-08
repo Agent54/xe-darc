@@ -1,6 +1,7 @@
 <script>
     import { Canvas } from '@threlte/core'
     import Scene from './InteractiveLineScene.svelte'
+    import data from '../data.svelte.js'
     // import { sandbox } from './sandbox.js'
     
     let { tab, isActive = false } = $props()
@@ -403,14 +404,14 @@
         
         try {
             let url = new URL(inputValue)
-            tab.url = url.href
+            data.navigate(tab.id, url.href)
         } catch {
             // Not a valid URL, check for Kagi prefix or use default search engine
             if (inputValue.toLowerCase().startsWith('k ')) {
                 // Use Kagi search, remove the "k " prefix
                 let searchUrl = new URL('https://kagi.com/search')
                 searchUrl.searchParams.set('q', inputValue.slice(2))
-                tab.url = searchUrl.href
+                data.navigate(tab.id, searchUrl.href)
             } else {
                 // Use default search engine from settings
                 const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
@@ -425,7 +426,7 @@
                         if (customUrl) {
                             try {
                                 searchUrl = new URL(customUrl + encodeURIComponent(inputValue))
-                                tab.url = searchUrl.href
+                                data.navigate(tab.id, searchUrl.href)
                                 return
                             } catch {
                                 // Fallback to Google if custom URL is invalid
@@ -441,7 +442,7 @@
                 }
                 
                 searchUrl.searchParams.set('q', inputValue)
-                tab.url = searchUrl.href
+                data.navigate(tab.id, searchUrl.href)
             }
         }
     }
@@ -567,8 +568,9 @@
 
     $effect(() => {
         if (tab.shouldFocus) {
-            tab.wrapper?.scrollIntoView({ behavior: 'smooth' })
-            tab.tabButton?.scrollIntoView({ behavior: 'smooth' })
+            // if its brokenb add this in app shell
+            // data.frames[tab.id]?.wrapper?.scrollIntoView({ behavior: 'smooth' })
+            // tabButtons[tab.id]?.scrollIntoView({ behavior: 'smooth' })
             
             // Focus the input element with a small delay to ensure DOM is ready
             setTimeout(() => {
@@ -597,8 +599,6 @@
 <div class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
     <div class="content-container relative pt-[15vh] w-full">
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
-            
-            <!-- 3D Scene Container - positioned above input -->
             <div class="threlte-container relative w-full h-64 pointer-events-none" style="filter: blur({blur}px);" class:visible={loaded}>
                 {#if isActive}
                     <Canvas>
@@ -806,7 +806,7 @@
         animation: spin 1s linear infinite;
     }
 
-    .ai-badge {
+    /* .ai-badge {
         font-family: 'SF Mono', Consolas, monospace;
         font-weight: 600;
         letter-spacing: 0.5px;
@@ -829,7 +829,7 @@
     }
     .text-red-400 {
         color: rgb(248, 113, 113);
-    }
+    } */
 
     .completions-dropdown {
         margin-top: 75px;

@@ -3,11 +3,11 @@
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
     import { origin } from '../lib/utils.js'
+    import data from '../data.svelte.js'
 
     let {
         style = '',
-        tab, 
-        tabs,
+        tabId,
         headerPartOfMain,
         isScrolling,
         captureTabScreenshot,
@@ -17,6 +17,8 @@
         requestedResources = [],
         statusLightsEnabled = false,
     } = $props()
+
+    const tab = $derived(data.docs[tabId])
 
     // see https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/controlled_frame/controlled_frame_permissions_unittest.cc;l=53 for supported permissions 
 
@@ -109,6 +111,7 @@
         if (!oauthPopup) return
 
         const { parentTab } = oauthPopup
+        const parentFrame = data.frames[parentTab.id]?.frame
         
         switch (eventType) {
             case 'consolemessage':
@@ -120,8 +123,8 @@
                         console.log('[OAuth] Received message from popup:', data)
                         
                         // Forward the message to the parent frame's content window
-                        if (parentTab.frame && parentTab.frame.contentWindow) {
-                            parentTab.frame.contentWindow.postMessage(data.message, data.targetOrigin || '*')
+                        if (parentFrame && parentFrame.contentWindow) {
+                            parentFrame.contentWindow.postMessage(data.message, data.targetOrigin || '*')
                         }
                         
                         // Also dispatch as a custom event that the parent page can listen for
@@ -277,19 +280,26 @@
         if (tab.shouldFocus) {
             tab.shouldFocus = false
             setTimeout(() => {
-                tab.wrapper.scrollIntoView({ behavior: 'smooth' })
-                if (tab.tabButton) {
-                    tab.tabButton.scrollIntoView({ behavior: 'smooth' })
+                data.frames[tab.id]?.wrapper?.scrollIntoView({ behavior: 'smooth' })
+                if (tabButtons[tab.id]) {
+                    tabButtons[tab.id].scrollIntoView({ behavior: 'smooth' })
                 }
             }, 100)
         }
     })  
     //TODo clear daata support
+
+    let iframeFrame = $state(null)
+    let frameWrapper = $state(null)
+
+    $effect(() => {
+        data.frames[tab.id] ??= { frame: iframeFrame, wrapper: frameWrapper }
+    })
 </script>
 
 {#if tab.hibernated}
     <div 
-        bind:this={tab.wrapper}
+        bind:this={frameWrapper}
         transition:fade={{duration: 150}}
         style={style}
         class="frame hibernated-frame"
@@ -317,8 +327,7 @@
         <ControlledFrame
             {style}
             {isScrolling}
-            {tab}
-            {tabs}
+            {tabId}
             {headerPartOfMain}
             {captureTabScreenshot}
             {onFrameFocus}
@@ -376,21 +385,21 @@
             <iframe
                 style={style}
                 transition:fade={{duration: 150}}
-                bind:this={tab.frame}
+                bind:this={iframeFrame}
                 src={tab.url}
                 class:window-controls-overlay={headerPartOfMain}
                 class:no-pointer-events={isScrolling}
                 id="tab_{tab.id}"
                 class="frame"
                 title="fallback-iframe"
-
-                sandbox="allow-scripts allow-forms"
-                csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
-                allow="accelerometer 'none'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'none'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-create 'self'; publickey-credentials-get 'self'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'"
                 credentialless={true}
                 referrerpolicy="strict-origin-when-cross-origin"
                 loading="lazy"
             ></iframe>
+
+            <!--  sandbox="allow-scripts allow-forms"
+                csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
+                allow="accelerometer 'none'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'none'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-create 'self'; publickey-credentials-get 'self'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'" -->
             
             <!-- Link preview for iframe fallback -->
             {#if linkPreviewVisible && hoveredLink}
@@ -433,7 +442,7 @@
         <!-- {:else}
             <div 
                 transition:fade={{duration: 150}}
-                bind:this={tab.frame}
+                bind:this={frame}
                 class:window-controls-overlay={headerPartOfMain}
                 class:no-pointer-events={isScrolling}
                 id="tab_{tab.id}"

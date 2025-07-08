@@ -1,0 +1,26 @@
+name: darc
+services:
+  darc:
+    restart: always
+    build:
+      context: .
+    ports:
+      - 5193
+      # - name: main
+      #   target: 8086
+      #   app_protocol: http
+      #   published: "80"
+      #   mode: host # or ingress for load balanced
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /app
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+        - action: rebuild
+          path: ./Dockerfile
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock
