@@ -33,9 +33,9 @@ const projectColors = [
 PouchDB.plugin(findPlugin)
 const db = new PouchDB('darc', { adapter: 'idb' })
 
-const sortOrder = ['archived', 'spaceId', 'type', 'order']
+const sortOrder = ['archive', 'spaceId', 'type', 'order']
 
-const docs = $state({})
+const docs = {}
 
 db.bulkDocs(bootstrap).then(async (res) => {
     db.createIndex({
@@ -102,12 +102,14 @@ let initialLoad = true
 async function refresh(spaceId) {
     const { docs: newDocs } = await db.find({
         selector: {
-            archived: { $lt: true },
+            archive: { $lt: 'deleted' },
             spaceId: spaceId ? spaceId : { $exists: true },
         },
         fields: initialLoad ? undefined : ['_id'],
         sort: sortOrder.map(key => ({ [key] : 'asc' }))
     }).catch(err => console.error(err))
+
+    console.log({newDocs})
 
     if (spaceId) {
         spaces[spaceId] ??= {}
@@ -122,7 +124,7 @@ async function refresh(spaceId) {
         } else {
             doc = docs[refreshDoc._id]
         }
-        
+
         if (doc.type === 'space') {
             if (!spaceMeta.activeSpace) {
                 spaceMeta.activeSpace = doc._id
@@ -142,7 +144,16 @@ async function refresh(spaceId) {
             if (!spaces[doc.spaceId].tabs) {
                 spaces[doc.spaceId].tabs = []
             }
-            spaces[doc.spaceId].tabs.push(doc)
+
+            if (doc.archive) {
+                console.log(doc)
+                if (doc.archive === 'closed') {
+                    closedTabs.push(doc)
+                }
+            } else {
+                spaces[doc.spaceId].tabs.push(doc)
+            }
+            
 
             if (!spaceMeta.activeTab && doc.spaceId === spaceMeta.activeSpace) {
                 spaceMeta.activeTab = doc
@@ -330,8 +341,14 @@ export default {
 
     closeTab: (spaceId, tabId) => {
         const doc = docs[tabId]
-        doc.closed = true
-        db.put(doc)
+       
+        db.put({
+            ...doc,
+            closed: true, // legacy
+            archive: 'closed',
+            frame: undefined,
+            wrapper: undefined
+        })
         // const space = spaces[spaceId]
         // if (!space || !space.tabs) {
         //     return { success: false, wasLastTab: false }
@@ -364,6 +381,24 @@ export default {
     },
 
     clearClosedTabs: () => {
+        // Update each closed tab to be marked as deleted
+        const docsToUpdate = closedTabs.map(tab => ({
+            ...tab,
+            deleted: true,
+            archive: 'deleted',
+            frame: undefined,
+            wrapper: undefined
+        }))
+        
+        if (docsToUpdate.length > 0) {
+            db.bulkDocs(docsToUpdate).then((res) => {
+                console.log('Closed tabs marked as deleted:', res)
+            }).catch((err) => {
+                console.error('Failed to delete closed tabs:', err)
+            })
+        }
+        
+        // Clear the closedTabs array
         closedTabs.length = 0
     },
 

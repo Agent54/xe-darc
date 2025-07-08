@@ -476,7 +476,7 @@
         
         // Create placeholder for closed tab to maintain spacing (only from tab bar close button)
         // Don't create placeholder when closing the last tab since we immediately create a new one
-        if (createPlaceholder && !result.wasLastTab) {
+        if (createPlaceholder) {
             closedTabPlaceholderCount++
         }
         

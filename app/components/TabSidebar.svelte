@@ -49,7 +49,7 @@
         if (spacesListRef && data.spaceMeta.activeSpace) {
             const targetButton = spacesListRef.querySelector(`[data-space-id="${data.spaceMeta.activeSpace}"]`)
             if (targetButton) {
-                targetButton.scrollIntoView({ behavior: 'smooth', inline: 'center' })
+                targetButton.scrollIntoView({ behavior: 'smooth', inline: 'nearest' })
             }
         }
     }
@@ -79,7 +79,6 @@
             previousSpaceIndex = data.spaceMeta.spaceOrder.indexOf(spaceId)
             isManualScroll = true
             scrollToCurrentSpace('smooth')
-            scrollActiveSpaceIntoView()
             setTimeout(() => { isManualScroll = false }, 300)
         }
     }
@@ -98,7 +97,8 @@
         
         const scrollLeft = tabListRef.scrollLeft
         const containerWidth = tabListRef.clientWidth
-        const newIndex = Math.round(scrollLeft / containerWidth)
+        const spaceWidth = containerWidth + 20
+        const newIndex = Math.floor((scrollLeft + spaceWidth / 2) / spaceWidth)
         
         if (newIndex !== data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace) && newIndex >= 0 && newIndex < data.spaceMeta.spaceOrder.length) {
             if (scrollActiveSpaceTimeout) {
@@ -109,7 +109,8 @@
                 // Double-check that we're still on the same space after the delay
                 const currentScrollLeft = tabListRef.scrollLeft
                 const currentContainerWidth = tabListRef.clientWidth
-                const currentIndex = Math.round(currentScrollLeft / currentContainerWidth)
+                const currentSpaceWidth = currentContainerWidth + 20
+                const currentIndex = Math.floor((currentScrollLeft + currentSpaceWidth / 2) / currentSpaceWidth)
                 
                 if (currentIndex === newIndex && currentIndex >= 0 && currentIndex < data.spaceMeta.spaceOrder.length) {
                     isManualScroll = true
@@ -242,7 +243,7 @@
 
     // Watch for active space changes and scroll space button into view
     $effect(() => {
-        if (data.spaceMeta.activeSpace && spacesListRef && !isManualScroll) {
+        if (data.spaceMeta.activeSpace && spacesListRef) {
             // Small delay to ensure DOM is updated
             setTimeout(() => {
                 scrollActiveSpaceIntoView()
@@ -367,9 +368,9 @@
                                         oncontextmenu={(e) => e.preventDefault()}
                                         aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
                        {#if data.spaces[spaceId].glyph}
-                            <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.3)'}">{@html data.spaces[spaceId].glyph}</span>
+                            <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
                         {:else}
-                            <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.3)'}"></span>
+                            <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>
                         {/if}
                                 </button>
                             </Tooltip>
@@ -691,7 +692,7 @@
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.7);
         display: flex;
         align-items: center;
         justify-content: center;

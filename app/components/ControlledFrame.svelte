@@ -1321,8 +1321,8 @@ document.addEventListener('input', function(event) {
             } else if (message === 'iwa:blur') {
                 onFrameBlur()
             } else if (message.startsWith('iwa:close-tab:')) {
-                // Extract tab ID from message
-                const tabId = message.split(':')[2]
+                // Extract tab ID from message - handle colons in tab ID
+                const tabId = message.substring('iwa:close-tab:'.length)
                 console.log(`Controlled frame ${tabId} requested tab close`)
                 
                 // Dispatch custom event to app shell to close this tab
@@ -1333,8 +1333,8 @@ document.addEventListener('input', function(event) {
                     }
                 }))
             } else if (message.startsWith('iwa:new-tab:')) {
-                // Extract tab ID from message  
-                const tabId = message.split(':')[2]
+                // Extract tab ID from message - handle colons in tab ID
+                const tabId = message.substring('iwa:new-tab:'.length)
                 console.log(`Controlled frame ${tabId} requested new tab`)
                 
                 // Dispatch custom event to app shell to open new tab
@@ -1345,36 +1345,52 @@ document.addEventListener('input', function(event) {
                     }
                 }))
             } else if (message.startsWith('iwa:link-enter:')) {
-                const parts = message.split(':')
-                const tabId = parts[2]
-                try {
-                    const linkData = JSON.parse(parts.slice(3).join(':'))
-                    
-                    if (tabId === tab.id && linkData.href) {
-                        hoveredLink = linkData
-                        linkPreviewVisible = true
+                const prefix = 'iwa:link-enter:'
+                const remainingMessage = message.substring(prefix.length)
+                
+                // Find the tab ID by looking for our known tab.id, then extract data after it
+                const tabIdPattern = tab.id + ':'
+                const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
+                
+                if (tabIdIndex === 0) {
+                    const tabId = tab.id
+                    try {
+                        const dataPayload = remainingMessage.substring(tabIdPattern.length)
+                        const linkData = JSON.parse(dataPayload)
                         
-                        if (linkPreviewTimeout) {
-                            clearTimeout(linkPreviewTimeout)
-                            linkPreviewTimeout = null
-                        }
+                        if (linkData.href) {
+                            hoveredLink = linkData
+                            linkPreviewVisible = true
+                            
+                            if (linkPreviewTimeout) {
+                                clearTimeout(linkPreviewTimeout)
+                                linkPreviewTimeout = null
+                            }
 
-                        linkPreviewTimeout = setTimeout(() => {
-                            linkPreviewVisible = false
-                            hoveredLink = null
-                            linkPreviewTimeout = null
-                        }, 5000)
+                            linkPreviewTimeout = setTimeout(() => {
+                                linkPreviewVisible = false
+                                hoveredLink = null
+                                linkPreviewTimeout = null
+                            }, 5000)
+                        }
+                    } catch (error) {
+                        console.error('Failed to parse link enter data:', error)
                     }
-                } catch (error) {
-                    console.error('Failed to parse link enter data:', error)
                 }
             } else if (message.startsWith('iwa:link-leave:')) {
-                const parts = message.split(':')
-                const tabId = parts[2]
-                try {
-                    const linkData = JSON.parse(parts.slice(3).join(':'))
-                    
-                    if (tabId === tab.id) {
+                const prefix = 'iwa:link-leave:'
+                const remainingMessage = message.substring(prefix.length)
+                
+                // Find the tab ID by looking for our known tab.id, then extract data after it
+                const tabIdPattern = tab.id + ':'
+                const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
+                
+                if (tabIdIndex === 0) {
+                    const tabId = tab.id
+                    try {
+                        const dataPayload = remainingMessage.substring(tabIdPattern.length)
+                        const linkData = JSON.parse(dataPayload)
+                        
                         linkPreviewVisible = false
                         hoveredLink = null
 
@@ -1382,35 +1398,51 @@ document.addEventListener('input', function(event) {
                             clearTimeout(linkPreviewTimeout)
                             linkPreviewTimeout = null
                         }
+                    } catch (error) {
+                        console.error('Failed to parse link leave data:', error)
                     }
-                } catch (error) {
-                    console.error('Failed to parse link leave data:', error)
                 }
             } else if (message.startsWith('iwa:input-text:')) {
                 // Parse input text event
-                const parts = message.split(':')
-                const tabId = parts[2]
-                try {
-                    const inputData = JSON.parse(parts.slice(3).join(':'))
-                    // console.log(`[Tab ${tabId}] Input text:`, inputData)
-                    
-                    // Show input diff if it's for this tab and has meaningful text
-                    if (tabId === tab.id && inputData.text && inputData.text.length > 3) {
-                        showInputDiff(inputData)
+                const prefix = 'iwa:input-text:'
+                const remainingMessage = message.substring(prefix.length)
+                
+                // Find the tab ID by looking for our known tab.id, then extract data after it
+                const tabIdPattern = tab.id + ':'
+                const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
+                
+                if (tabIdIndex === 0) {
+                    const tabId = tab.id
+                    try {
+                        const dataPayload = remainingMessage.substring(tabIdPattern.length)
+                        const inputData = JSON.parse(dataPayload)
+                        // console.log(`[Tab ${tabId}] Input text:`, inputData)
+                        
+                        // Show input diff if it has meaningful text
+                        if (inputData.text && inputData.text.length > 3) {
+                            showInputDiff(inputData)
+                        }
+                    } catch (error) {
+                        console.error('Failed to parse input text data:', error)
                     }
-                } catch (error) {
-                    console.error('Failed to parse input text data:', error)
                 }
             } else if (message.startsWith('iwa:zoom:')) {
                 // Parse zoom event
-                const parts = message.split(':')
-                const tabId = parts[2]
-                const zoomDirection = parts[3]
+                const prefix = 'iwa:zoom:'
+                const remainingMessage = message.substring(prefix.length)
                 
-                console.log(`[Tab ${tabId}] Zoom direction:`, zoomDirection)
+                // Find the tab ID by looking for our known tab.id, then extract zoom direction after it
+                const tabIdPattern = tab.id + ':'
+                const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
-                // Handle zoom if it's for this tab
-                if (tabId === tab.id && frame.setZoom) {
+                if (tabIdIndex === 0) {
+                    const tabId = tab.id
+                    const zoomDirection = remainingMessage.substring(tabIdPattern.length)
+                    
+                    console.log(`[Tab ${tabId}] Zoom direction:`, zoomDirection)
+                    
+                    // Handle zoom if frame supports it
+                    if (frame.setZoom) {
                     // Get current zoom level or default to 1.0
                     frame.getZoom?.().then((currentZoom) => {
                         let newZoom = currentZoom || 1.0
@@ -1425,64 +1457,83 @@ document.addEventListener('input', function(event) {
                         // Set the new zoom level
                         frame.setZoom(newZoom).then(() => {
                             console.log(`[Tab ${tabId}] Zoom set to:`, Math.round(newZoom * 100) + '%')
-                        }).catch((error) => {
-                            console.error(`[Tab ${tabId}] Failed to set zoom:`, error)
+                            }).catch((error) => {
+                                console.error(`[Tab ${tabId}] Failed to set zoom:`, error)
+                            })
+                        }).catch(() => {
+                            // Fallback if getZoom fails - assume current zoom is 1.0
+                            let newZoom = 1.0
+                            if (zoomDirection === 'in') {
+                                newZoom = 1.05
+                            } else if (zoomDirection === 'out') {
+                                newZoom = 0.95
+                            }
+                            
+                            frame.setZoom(newZoom).then(() => {
+                                console.log(`[Tab ${tabId}] Zoom set to:`, Math.round(newZoom * 100) + '%')
+                            }).catch((error) => {
+                                console.error(`[Tab ${tabId}] Failed to set zoom:`, error)
+                            })
                         })
-                                         }).catch(() => {
-                         // Fallback if getZoom fails - assume current zoom is 1.0
-                         let newZoom = 1.0
-                         if (zoomDirection === 'in') {
-                             newZoom = 1.05
-                         } else if (zoomDirection === 'out') {
-                             newZoom = 0.95
-                         }
-                        
-                        frame.setZoom(newZoom).then(() => {
-                            console.log(`[Tab ${tabId}] Zoom set to:`, Math.round(newZoom * 100) + '%')
-                        }).catch((error) => {
-                            console.error(`[Tab ${tabId}] Failed to set zoom:`, error)
-                        })
-                    })
-                } else if (tabId === tab.id && !frame.setZoom) {
-                    console.warn(`[Tab ${tabId}] setZoom API not available on this frame`)
+                    } else {
+                        console.warn(`[Tab ${tabId}] setZoom API not available on this frame`)
+                    }
                 }
             } else if (message.startsWith('iwa:dragdrop:')) {
                 // Parse drag and drop event from controlled frame
-                const parts = message.split(':')
-                const tabId = parts[2]
-                try {
-                    const eventData = JSON.parse(parts.slice(3).join(':'))
-                    console.group(`🎯 [CONTROLLED-FRAME] ${eventData.type.toUpperCase()} in tab ${tabId}`)
-                    console.log('📍 Frame Event Details:', eventData)
-                    console.log('🖼️ Frame ID:', tabId)
-                    console.groupEnd()
-                } catch (error) {
-                    console.error('Failed to parse drag/drop event data:', error)
+                const prefix = 'iwa:dragdrop:'
+                const remainingMessage = message.substring(prefix.length)
+                
+                // Find the tab ID by looking for our known tab.id, then extract data after it
+                const tabIdPattern = tab.id + ':'
+                const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
+                
+                if (tabIdIndex === 0) {
+                    const tabId = tab.id
+                    try {
+                        const dataPayload = remainingMessage.substring(tabIdPattern.length)
+                        const eventData = JSON.parse(dataPayload)
+                        console.group(`🎯 [CONTROLLED-FRAME] ${eventData.type.toUpperCase()} in tab ${tabId}`)
+                        console.log('📍 Frame Event Details:', eventData)
+                        console.log('🖼️ Frame ID:', tabId)
+                        console.groupEnd()
+                    } catch (error) {
+                        console.error('Failed to parse drag/drop event data:', error)
+                    }
                 }
             } else if (message.startsWith('iwa:dragdrop-data:')) {
                 // Parse additional drag and drop data from controlled frame
-                const parts = message.split(':')
-                const tabId = parts[2]
-                try {
-                    const additionalData = JSON.parse(parts.slice(3).join(':'))
-                    console.group(`📋 [CONTROLLED-FRAME] Additional Drop Data in tab ${tabId}`)
-                    console.log('📁 Files:', additionalData.files)
-                    console.log('📝 Text Data:', additionalData.textData)
-                    console.groupEnd()
-                } catch (error) {
-                    console.error('Failed to parse additional drag/drop data:', error)
+                const prefix = 'iwa:dragdrop-data:'
+                const remainingMessage = message.substring(prefix.length)
+                
+                // Find the tab ID by looking for our known tab.id, then extract data after it
+                const tabIdPattern = tab.id + ':'
+                const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
+                
+                if (tabIdIndex === 0) {
+                    const tabId = tab.id
+                    try {
+                        const dataPayload = remainingMessage.substring(tabIdPattern.length)
+                        const additionalData = JSON.parse(dataPayload)
+                        console.group(`📋 [CONTROLLED-FRAME] Additional Drop Data in tab ${tabId}`)
+                        console.log('📁 Files:', additionalData.files)
+                        console.log('📝 Text Data:', additionalData.textData)
+                        console.groupEnd()
+                    } catch (error) {
+                        console.error('Failed to parse additional drag/drop data:', error)
+                    }
                 }
             } else if (message.startsWith('iwa:mousedown:')) {
-                // Handle mousedown from controlled frame
-                const tabId = message.split(':')[2]
+                // Handle mousedown from controlled frame - handle colons in tab ID
+                const tabId = message.substring('iwa:mousedown:'.length)
                 
                 // Dispatch mousedown event to parent app
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
                     detail: { tabId: tabId }
                 }))
             } else if (message.startsWith('iwa:mouseup:')) {
-                // Handle mouseup from controlled frame
-                const tabId = message.split(':')[2]
+                // Handle mouseup from controlled frame - handle colons in tab ID
+                const tabId = message.substring('iwa:mouseup:'.length)
                 
                 // Dispatch mouseup event to parent app
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
