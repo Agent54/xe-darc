@@ -6,36 +6,14 @@ import testData from './test-data.js'
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
 
-const projectColors = [
-    { name: "Magenta", color: "#b800bb" },
-    { name: "Yellow", color: "#ffc100" },
-    { name: "Green Apple", color: "#71be00" },
-    { name: "Turquoise", color: "#00a3d6" },
-    { name: "Red", color: "#d82b00" },
-    { name: "Grape", color: "#8100ea" },
-    { name: "Orange", color: "#ce9f00" },
-    { name: "Swamp Green", color: "#91a400" },
-    { name: "Ice Blue", color: "#74a4d7" },
-    { name: "Peach", color: "#e46642" },
-    { name: "Violet", color: "#ba6eff" },
-    { name: "Pea Green", color: "#6e7306" },
-    { name: "Tan", color: "#908675" },
-    { name: "Aquamarine", color: "#008c8d" },
-    { name: "Maroon", color: "#ac3f65" },
-    { name: "Light Gray", color: "#cccccc" },
-    { name: "Medium Gray", color: "#818182" },
-    { name: "Dark Gray", color: "#555555" },
-    { name: "Ocean Blue", color: "#155f8b" },
-    { name: "Pink", color: "#ee61f0" },
-]
-
+import { colors as projectColors } from './lib/utils.js'
 
 PouchDB.plugin(findPlugin)
 const db = new PouchDB('darc', { adapter: 'idb' })
 
 const sortOrder = ['archive', 'spaceId', 'type', 'order']
 
-const docs = {}
+const docs = $state({})
 
 db.bulkDocs(bootstrap).then(async (res) => {
     db.createIndex({
@@ -79,15 +57,40 @@ db.bulkDocs(bootstrap).then(async (res) => {
     }
 })
 
+const remote = localStorage.getItem('syncServerUrl')
+const token = localStorage.getItem('syncServerToken')
+if (remote) {
+    const [username, password] = token.split(":")
+    const replication = db.sync(remote, {
+        live: true,
+        retry: true,
+        attachments: true,
+        auth: {
+            username,
+            password
+        }
+    })
+}
+
 const closedTabs = $state([])
 const origins = $state({})
 const spaces = $state({})
 const globalPins = $state([])
 const activity = $state({})
 const resources = $state({})
+const frames = {}
+
+
+console.log('starting garbage collector')
+// garbage collect instances that are not in the tabs array every 15 minutes
+setInterval(() => {
+    Object.entries(frames).forEach(instance => {
+        console.log('inspecting for gb instance', instance)
+    })
+}, 900000)
 
 const spaceMeta = $state({
-    activeSpace: null,
+    activeSpace: localStorage.getItem('activeSpace') || null,
     spaceOrder: [],
     activeTab: null,
     config: {
@@ -123,6 +126,11 @@ async function refresh(spaceId) {
             doc = refreshDoc 
         } else {
             doc = docs[refreshDoc._id]
+        }
+
+        if (!doc) { 
+            console.warn('doc not found', refreshDoc)
+            continue
         }
 
         if (doc.type === 'space') {
@@ -195,7 +203,8 @@ db.changes({
     if (editingId !== change.id) {
         docs[change.id] = change.doc
 
-        for (const key of sortOrder) {
+        // fixme: deep comp
+        for (const key of ['canvas', 'pinned', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
                 if (change.doc.spaceId && change.doc.type !== 'space') {
                     refresh(change.doc.spaceId)
@@ -233,7 +242,6 @@ function activate(tabId) {
 }
 
 $effect.root(() => {
-    // Initialize with sample data if no activeSpace is set
     $effect(() => {
         if (!spaceMeta.activeSpace && Object.keys(spaces).length > 0) {
             // Set the first space as active
@@ -245,6 +253,13 @@ $effect.root(() => {
             if (firstSpace?.tabs?.length > 0) {
                 spaceMeta.activeTab = firstSpace.tabs[0]
             }
+        }
+    })
+
+    // Save active space to localStorage whenever it changes
+    $effect(() => {
+        if (spaceMeta.activeSpace) {
+            localStorage.setItem('activeSpace', spaceMeta.activeSpace)
         }
     })
 })
@@ -264,6 +279,8 @@ export default {
     spaces,
     activity,
     resources,
+    docs,
+    frames,
 
     activate,
     loadSampleData,
@@ -322,8 +339,35 @@ export default {
     editSpace: (spaceId, data) => {
         spaces[spaceId] = data
     },
+
+    pin({ tabId, pinned }) {
+        const tab = docs[tabId]
+        db.put({
+            ...tab,
+            pinned
+        })
+    },
+
+    navigate(tabId, url) {
+        const tab = docs[tabId]
+        db.put({
+            ...tab,
+            url
+        })
+        db.put({
+            _id: `darc:activity_${crypto.randomUUID()}`,
+            type: 'activity',
+            action: 'visit',
+            tabId: tab.id,
+            spaceId: tab.spaceId,
+            url,
+            title: url.split('/').pop(),
+            favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64`,
+            created: Date.now()
+        })
+    },
     
-    newTab: (spaceId) => {
+    newTab: (spaceId, { url, title, opener } = {}) => {
         const _id = `darc:tab_${crypto.randomUUID()}`
 
         const tab = {
@@ -331,23 +375,52 @@ export default {
             id: _id,
             type: 'tab',
             spaceId,
-            url: 'about:newtab',
-            title: 'New Tab',
-            order: Date.now()
+            favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64` : undefined,
+            url: url || 'about:newtab',
+            title: url ? title : 'New Tab',
+            order: Date.now(),
+            opener
         }
         
         db.put(tab)
     },
 
+    updateTab: (tabId, { canvas } = {}) => {
+        const tab = docs[tabId]
+       
+        let newProps = {}
+        if (canvas) {
+            canvas = { ...(tab.canvas || {}), ...canvas }
+            newProps.canvas = canvas
+        }
+
+        db.put({
+            ...tab,
+            ...newProps
+        })
+    },
+
     closeTab: (spaceId, tabId) => {
-        const doc = docs[tabId]
+        const tab = docs[tabId]
        
         db.put({
-            ...doc,
+            ...tab,
             closed: true, // legacy
             archive: 'closed',
             frame: undefined,
             wrapper: undefined
+        })
+
+        db.put({
+            _id: `darc:activity_${crypto.randomUUID()}`,
+            tabId: tab.id,
+            spaceId: tab.spaceId,
+            type: 'activity',
+            action: 'close',
+            url: tab.url,
+            title: tab.title,
+            favicon: tab.favicon,
+            created: Date.now()
         })
         // const space = spaces[spaceId]
         // if (!space || !space.tabs) {
@@ -385,9 +458,7 @@ export default {
         const docsToUpdate = closedTabs.map(tab => ({
             ...tab,
             deleted: true,
-            archive: 'deleted',
-            frame: undefined,
-            wrapper: undefined
+            archive: 'deleted'
         }))
         
         if (docsToUpdate.length > 0) {

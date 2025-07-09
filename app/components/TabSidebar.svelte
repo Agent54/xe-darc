@@ -367,7 +367,7 @@
                                         onmousedown={(e) => handleSpaceClick(e, spaceId)}
                                         oncontextmenu={(e) => e.preventDefault()}
                                         aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
-                       {#if data.spaces[spaceId].glyph}
+                       {#if data.spaces[spaceId]?.glyph}
                             <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
                         {:else}
                             <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>

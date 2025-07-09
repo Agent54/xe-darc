@@ -1,134 +1,209 @@
 <script>
-  import { onMount, mount, unmount } from 'svelte'
+  import { onMount } from 'svelte'
   import React from 'react'
   import ReactDOM from 'react-dom/client'
   import { Excalidraw as ExcalidrawReact } from '@excalidraw/excalidraw'
   import '@excalidraw/excalidraw/index.css'
-  import Frame from './Frame.svelte'
+  import FrameWrapper from './ReactFrameWrapper.js'
   import { thottle } from '../lib/utils'
+  import data from '../data.svelte.js'
+  import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 
-  // Create a React component that mounts the Svelte ControlledFrame
-  class FrameWrapper extends React.Component {
-    constructor(props) {
-      super(props)
-      this.containerRef = React.createRef()
-      this.frameInstance = null
-    }
-    
-    componentDidMount() {
-      if (this.containerRef.current) {  
-        // Mount the Svelte ControlledFrame component using Svelte 5 syntax
-        const currentTab = this.props.tabs.find(tab => tab.id === this.props.element.id)
-        this.frameInstance = mount(Frame, {
-          target: this.containerRef.current,
-          props: {
-            style: 'width: 100%; height: 100%;',
-            tab: currentTab,
-            tabs: this.props.tabs,
-            headerPartOfMain: false,
-            isScrolling: false,
-            captureTabScreenshot: () => {},
-            onFrameFocus: () => this.props.onFrameFocus(currentTab),
-            onFrameBlur: this.props.onFrameBlur || (() => {}),
-            userMods: this.props.getEnabledUserMods(this.props.tabs[0])
-          }
-        })
-      }
-    }
-    
-    async componentWillUnmount() {
-      if (this.frameInstance) {
-        await unmount(this.frameInstance, { outro: true })
-      }
-    }
-    
-    render() {
-      return React.createElement('div', {
-        ref: this.containerRef,
-        style: {
-          width: '100%',
-          height: '100%',
-          position: 'relative'
-        }
-      })
-    }
+  let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs.filter(tab => !tab.pinned)) || []))
+  
+  function saveViewState(spaceId, scrollX, scrollY, zoom) {
+    if (!spaceId) return
+    const key = `excalidraw-view-${spaceId}`
+    const viewState = { scrollX, scrollY, zoom }
+    localStorage.setItem(key, JSON.stringify(viewState))
   }
 
-  function tabsToElements (tabs) {
-      return tabs.map((tab, index) => {
-            // Arrange tabs in 5-column grid layout, centered on canvas
-            const tabWidth = 600
-            const tabHeight = 400  
-            const columnSpacing = 80
-            const rowSpacing = 160
-            
-            const columnsPerRow = 5
-            // const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
-            
-            const row = Math.floor(index / columnsPerRow)
-            const col = index % columnsPerRow
-            
-            // Position tabs starting from top-left with positive coordinates
-            const startX = 200
-            const startY = 200
-            
-            const x = startX + (col * (tabWidth + columnSpacing))  
-            const y = startY + (row * (tabHeight + rowSpacing))
-            
-            return {
-                "id": tab.id,
-                "type": "embeddable",
-                
-                "x": x,
-                "y": y,
-                "width": tabWidth,
-                "height": tabHeight,
-                "angle": tab.angle || 0,
-                
-                "strokeColor": "none",
-                "backgroundColor": "none",
-                "fillStyle": "solid",
-                "strokeWidth": 2,
-                "strokeStyle": "solid",
-                "roughness": 0,
-                "opacity": 100,
-                "groupIds": [],
-                "frameId": null,
-                "index": "a2",
-                "roundness": {
-                    "type": 4
-                },
-                "seed": 1218149059,
-                "version": 104,
-                "versionNonce": 1873698765,
-                "isDeleted": tab.closed,
-                "boundElements": null,
-                "updated": 1749946396932,
-                "link": tab.url,
-                "locked": false
-            }
-        })
+  function loadViewState(spaceId) {
+    if (!spaceId) return null
+    const key = `excalidraw-view-${spaceId}`
+    const saved = localStorage.getItem(key)
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch (e) {
+        console.error('Failed to parse saved view state:', e)
+        return null
+      }
     }
+    return null
+  }
 
+  const versions = new Map()
+
+  let elements = $derived.by(() => {
+    const elems = {}
+    const arrows = []
+    const tabWidth = 1000
+    const tabHeight = 700  
+    const columnSpacing = 80
+    const rowSpacing = 160
+
+    tabs.forEach((tab, index) => {
+      const columnsPerRow = 5
+      // const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
+
+      const canvasData = tab.canvas?.[data.spaceMeta.activeSpace]
+      let width
+      let height 
+      let x
+      let y
+      if (canvasData) {
+        x = canvasData.x
+        y = canvasData.y
+        width = canvasData.width
+        height = canvasData.height
+      } else {
+        const row = Math.floor(index / columnsPerRow)
+        const col = index % columnsPerRow
+        
+        const startX = 200
+        const startY = 200
+        
+        x = startX + (col * (tabWidth + columnSpacing))  
+        y = startY + (row * (tabHeight + rowSpacing))
+        data.updateTab(tab.id, { canvas: { [data.spaceMeta.activeSpace]: { x, y, width, height } } })
+      }
+
+      versions.set(tab.id, 1)
+      
+      elems[tab.id] = {
+          "id": tab.id,
+          "type": "embeddable",
+          
+          "x": x,
+          "y": y,
+          "width": width || tabWidth,
+          "height": height || tabHeight,
+          "angle": tab.angle || 0,
+          
+          "strokeColor": "none",
+          "backgroundColor": "none",
+          "fillStyle": "solid",
+          "strokeWidth": 2,
+          "strokeStyle": "solid",
+          "roughness": 0,
+          "opacity": 100,
+          "groupIds": [],
+          "frameId": null,
+          "index": "a2",
+          "roundness": {
+              "type": 3
+          },
+          "seed": 1218149059,
+          "version": 1,
+          "versionNonce": 1873698765,
+          "isDeleted": tab.closed,
+          "boundElements": null,
+          "updated": tab.modified || Date.now(),
+          "link": tab.url,
+          "locked": false
+      }
+
+      if (tab.opener) {
+        // arrows.push({
+        //     "id": "opener:" + tab.id,
+        //     "type": "arrow",
+        //     // "x": 3365.8187378196412,
+        //     // "y": 259.1689134737774,
+        //     "strokeColor": "#6c757d",
+        //     "backgroundColor": "transparent",
+        //     "fillStyle": "solid",
+        //     "strokeWidth": 5,
+        //     "strokeStyle": "solid",
+        //     "roughness": 0,
+        //     "opacity": 100,
+        //     "groupIds": [],
+        //     "frameId": null,
+        //     // label: {
+        //     //   text: "W!",
+        //     // },
+        //     "roundness": {
+        //         "type": 2
+        //     },
+        //     "seed": 558669987,
+        //     "version": 104,
+        //     "versionNonce": 129937571,
+        //     "isDeleted": false,
+        //     // "boundElements": null,
+        //     "updated": Date.now(),
+        //     "link": null,
+        //     "locked": false,
+        //     "points": [
+        //         [
+        //             0,
+        //             0
+        //         ],
+        //         // [
+        //         //     1593.6763340305283,
+        //         //     479.6479390634465
+        //         // ]
+        //     ],
+        //     "lastCommittedPoint": null,
+        //     // start: { id: tab.opener },
+        //     // end: { id: tab.id },
+        //     "startBinding": {
+        //         "elementId": tab.opener,
+        //         "focus": -0.8789630348629817,
+        //         "gap": 8.425658980278058
+        //     },
+        //     "endBinding": {
+        //         "elementId": tab.id,
+        //         "focus": 0.3518163611168617,
+        //         "gap": 6.8672376511322
+        //     },
+        //     "startArrowhead": null,
+        //     "endArrowhead": "arrow",
+        //     // "elbowed": false
+        // })
+      }
+    })
+
+    arrows.forEach(arrow => {
+      if (!elems[arrow.startBinding.elementId]) {
+        return
+      }
+      arrow.x = elems[arrow.startBinding.elementId].x + tabWidth
+      arrow.y = elems[arrow.startBinding.elementId].y
+
+      arrow.points.push([
+        elems[arrow.endBinding.elementId].x, elems[arrow.endBinding.elementId].y
+      ])
+    })
+    return [...Object.values(elems), ...(arrows)] // convertToExcalidrawElements
+  })
   
+  let savedState
+  let excalidrawData = $derived({
+    "type": "excalidraw",
+    "version": 2,
+    "source": "isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac",
+    elements,
+    "files": {},
+    appState: (() => {
+      // Load saved view state from localStorage
+      savedState = loadViewState(data.spaceMeta.activeSpace)
+      
+      return {
+        currentItemRoughness: 0, // 0 = precise/architect style
+        currentItemStrokeColor: "#6c757d", // Default line color to mid gray
+        currentItemFontSize: 40, // Double the standard font size (20px -> 40px)
+        viewBackgroundColor: "#0000",
+        gridSize: 20,
+        gridStep: 5,
+        gridModeEnabled: false,
+        zoom: { value: savedState?.zoom ?? 0.35 }, // Use saved zoom or default to 35%
+        scrollX: savedState?.scrollX ?? -100, // Use saved scrollX or default
+        scrollY: savedState?.scrollY ?? 0 // Use saved scrollY or default
+      }
+    })()
+  })
+
   let {
-    tabs = [],
-    initialData = {
-        "type": "excalidraw",
-        "version": 2,
-        "source": "isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac",
-        "elements": tabsToElements(tabs),
-        "appState": {
-            "gridSize": 20,
-            "gridStep": 5,
-            "gridModeEnabled": false,
-            "viewBackgroundColor": "#0000",
-            "zoom": { "value": 0.35 },
-            "scrollX": -100,
-            "scrollY": 0
-        },
-        "files": {}
-        },
     onChange = (e) => {},
     onPointerUpdate = () => {},
     UIOptions = {
@@ -142,101 +217,75 @@
         clearCanvas: false
       }
     },
-    renderTopRightUI = null,
-    viewModeEnabled = false,
-    zenModeEnabled = true,
-    gridModeEnabled = false,
-    theme = 'light',
-    langCode = 'en',
-    autoFocus = true,
-    detectScroll = true,
-    handleKeyboardGlobally = false,
-    width = '100%',
-    height = '100%',
     onFrameFocus = () => {},
     onFrameBlur = () => {},
     getEnabledUserMods = () => { return { css: [], js: [] } },
-    ...restProps
+    controlledFrameSupported
   } = $props()
   
   let container
   let root
   let excalidrawAPI = $state(null)
-  let currentZoom = $state(initialData?.appState?.zoom?.value || 0.35)
-  
-  function renderExcalidraw () {
-    if (!container || !root) return
+  let currentZoom = $derived(excalidrawData?.appState?.zoom?.value || 0.35)
 
-      // For shapes:
-      // {
-      // "id": "BIU3Ng9qVuSrm_gBelQ4v",
-      // "type": "rectangle",
-      // "x": 191.38671875,
-      // "y": 157.23046875,
-      // "width": 175.98828125,
-      // "height": 156.90234375,
-      // "angle": 0,
-      // "strokeColor": "#1e1e1e",
-      // "backgroundColor": "transparent",
-      // "fillStyle": "solid",
-      // "strokeWidth": 2,
-      // "strokeStyle": "solid",
-      // "roughness": 0,
-      // "opacity": 100,
-      // "groupIds": [],
-      // "frameId": null,
-      // "index": "a0",
-      // "roundness": {
-      //     "type": 3
-      // },
-      // "seed": 1943070669,
-      // "version": 188,
-      // "versionNonce": 657353517,
-      // "isDeleted": false,
-      // "boundElements": null,
-      // "updated": 1749946352449,
-      // "link": null,
-      // "locked": false
-      // },
-    
-    // Merge default app state for precise drawing with user's initialData
-    const mergedInitialData = {
-      ...initialData,
-      appState: {
-        currentItemRoughness: 0, // 0 = precise/architect style
-        currentItemStrokeColor: "#6c757d", // Default line color to mid gray
-        currentItemFontSize: 40, // Double the standard font size (20px -> 40px)
-        viewBackgroundColor: "#0000",
-        zoom: { value: 0.35 }, // Set zoom to 35% for double-sized tiles
-        scrollX: -300, // Center horizontally for larger tiles  
-        scrollY: 0, // Position tabs properly on screen
-        ...initialData.appState
-      }
-    }
-    
-    const props = {
-      initialData: mergedInitialData,
+  $effect(() => {
+    excalidrawAPI?.updateScene(excalidrawData)
+  })
+  
+  onMount(() => {
+    root = ReactDOM.createRoot(container)
+    const element = React.createElement(ExcalidrawReact, {
+      initialData: excalidrawData,
       onChange: thottle((elements, appState, files) => {
         // Update zoom level for CSS custom property
         if (appState?.zoom?.value !== undefined) {
           currentZoom = appState.zoom.value
         }
+        
+        // Save view state to localStorage
+        if (appState?.scrollX !== undefined && appState?.scrollY !== undefined && appState?.zoom?.value !== undefined) {
+          if (savedState?.scrollX !== appState.scrollX || savedState?.scrollY !== appState.scrollY || savedState?.zoom?.value !== appState.zoom.value) {
+            saveViewState(data.spaceMeta.activeSpace, appState.scrollX, appState.scrollY, appState.zoom.value)
+          }
+        }
+
+        for (const elem of elements) {
+          if (elem.isDeleted) {
+            data.closeTab(data.spaceMeta.activeSpace, elem.id)
+            continue
+          }
+          const version = versions.get(elem.id)
+          if (version && elem.version !== version) {
+            const elemCanvData = data.docs[elem.id]?.canvas?.[data.spaceMeta.activeSpace]
+            if (!elemCanvData || elemCanvData.x !== elem.x || elemCanvData.y !== elem.y || elemCanvData.width !== elem.width || elemCanvData.height !== elem.height) {
+              data.updateTab(elem.id, { canvas: { [data.spaceMeta.activeSpace]: { x: elem.x, y: elem.y, width: elem.width, height: elem.height } } })
+            } else {
+              versions.set(elem.id, elem.version)
+            }
+          }
+        }
+
         onChange(elements, appState, files)
         console.log('onChange', elements, appState)
-      }, 200),
+      }, 1000),
       onPointerUpdate,
+      excalidrawAPI: (api) => {
+        if (excalidrawAPI === null) {
+          excalidrawAPI = api
+        }
+      },
       UIOptions,
-      viewModeEnabled,
-      zenModeEnabled,
-      gridModeEnabled,
-      theme,
-      langCode,
-      autoFocus,
-      detectScroll,
-      handleKeyboardGlobally,
+      renderTopRightUI: null,
+      viewModeEnabled: false,
+      zenModeEnabled: true,
+      gridModeEnabled: false,
+      theme: 'light',
+      langCode: 'en',
+      autoFocus: true,
+      detectScroll: true,
+      handleKeyboardGlobally: false,
       validateEmbeddable: true, // Disable embed validation true means dont validate, false is enabled validation, do not change.
       renderEmbeddable: (element, appState) => {
-        // Custom render using React wrapper for Svelte ControlledFrame
         const link = element.link
         if (!link) {
             console.log('no link', element)
@@ -244,49 +293,16 @@
         }
         
         return React.createElement(FrameWrapper, {
-          tabs,
           element,
+          controlledFrameSupported,
           onFrameFocus,
           onFrameBlur,
           getEnabledUserMods
         })
-      },
-      ...restProps
-    }
-    
-    if (renderTopRightUI) {
-      props.renderTopRightUI = renderTopRightUI
-    }
-    
-    if (excalidrawAPI === null) {
-      props.excalidrawAPI = (api) => {
-        excalidrawAPI = api
       }
-    }
-    
-    const element = React.createElement(ExcalidrawReact, props)
+    })
     root.render(element)
-  }
-  
-  // $effect(() => {
-  //   // Re-render when props change
-  //   if (root) {
-  //     renderExcalidraw()
-  //   }
-  // })
-
-  $effect(() => {
-    // excalidrawAPI?.updateScene(mergedInitialData)
   })
-  
-  onMount(() => {
-    root = ReactDOM.createRoot(container)
-    renderExcalidraw()
-  })
-  
-  export function getExcalidrawAPI () {
-    return excalidrawAPI
-  }
 
   let loaded = $state(false)
   setTimeout(() => {
@@ -309,7 +325,7 @@
   bind:this={container} 
   class="excalidraw-container"
   class:loaded={loaded}
-  style="width: {width}; height: {height}; --excalidraw-zoom: {currentZoom};"
+  style="width: 100%; height: 100%; --excalidraw-zoom: {currentZoom};"
 ></div>
 
 <style>
@@ -345,6 +361,10 @@
         transition: opacity 0.2s ease-in-out 0.1s;
     }
 
+    :global(.excalidraw__embeddable-container) {
+      border-radius: var(--embeddable-radius, 8px); 
+      border: 1px solid #bababa;
+    }
 
     :global(.excalidraw__embeddable-container.is-hovered::after) {
         content: '↗︎';
@@ -455,3 +475,80 @@
     --color-muted-background-darker: #101010;
   }
 </style>
+
+
+<!-- // For shapes:
+// {
+// "id": "BIU3Ng9qVuSrm_gBelQ4v",
+// "type": "rectangle",
+// "x": 191.38671875,
+// "y": 157.23046875,
+// "width": 175.98828125,
+// "height": 156.90234375,
+// "angle": 0,
+// "strokeColor": "#1e1e1e",
+// "backgroundColor": "transparent",
+// "fillStyle": "solid",
+// "strokeWidth": 2,
+// "strokeStyle": "solid",
+// "roughness": 0,
+// "opacity": 100,
+// "groupIds": [],
+// "frameId": null,
+// "index": "a0",
+// "roundness": {
+//     "type": 3
+// },
+// "seed": 1943070669,
+// "version": 188,
+// "versionNonce": 657353517,
+// "isDeleted": false,
+// "boundElements": null,
+// "updated": 1749946352449,
+// "link": null,
+// "locked": false
+
+// console.log(convertToExcalidrawElements([{
+  //         type: "rectangle",
+  //         id: 'a',
+  //         x: 50,
+  //         y: 250,
+  //         width: 200,
+  //         height: 100,
+  //         backgroundColor: "#c0eb75",
+  //         strokeWidth: 2,
+  //       },
+  //       {
+  //         id: 'b',
+  //         type: "ellipse",
+  //         x: 300,
+  //         y: 250,
+  //         width: 200,
+  //         height: 100,
+  //         backgroundColor: "#ffc9c9",
+  //         strokeStyle: "dotted",
+  //         fillStyle: "solid",
+  //         strokeWidth: 2,
+  //       },
+  //       {
+  //         id: 'c',
+  //         type: "diamond",
+  //         x: 550,
+  //         y: 250,
+  //         width: 200,
+  //         height: 100,
+  //         backgroundColor: "#a5d8ff",
+  //         strokeColor: "#1971c2",
+  //         strokeStyle: "dashed",
+  //         fillStyle: "cross-hatch",
+  //         strokeWidth: 2,
+  //       },
+  //       {
+  //         "id": "opener:a:b",
+  //         "type": "arrow",
+  //         x: 50,
+  //         y: 250,
+  //         start: { id: 'a' },
+  //         end: { id: 'b' }
+  //       }
+  // ])) -->

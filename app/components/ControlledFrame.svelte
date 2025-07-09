@@ -1,15 +1,3 @@
-<script module>
-    window.instances = new Map()
-
-    console.log('starting garbage collector')
-    // garbage collect instances that are not in the tabs array every 15 minutes
-    setInterval(() => {
-        window.instances.forEach(instance => {
-            console.log('inspecting for gb instance', instance)
-        })
-    }, 900000)
-</script>
-
 <script>
     import data from '../data.svelte.js'
     import { untrack, onDestroy } from 'svelte'
@@ -20,9 +8,8 @@
     // import { fade } from 'svelte/transition'
 
     let {
+        tabId,
         style = '',
-        tab, 
-        tabs,
         headerPartOfMain,
         isScrolling,
         captureTabScreenshot,
@@ -39,6 +26,8 @@
         inputDiffTimeout = $bindable(),
         inputDiffData = $bindable(),
     } = $props()
+
+    let tab = $derived(data.docs[tabId])
 
     let anchor = $state(null)
 
@@ -173,10 +162,10 @@
                 } else if (tab.url.startsWith('about:')) {
                     tab.title = tab.url.charAt(6).toUpperCase() + tab.url.slice(7)
                 } else {
-                    // For regular URLs, extract hostname as fallback title
+                    // For regular URLs, extract origin as fallback title
                     try {
                         const urlObj = new URL(tab.url)
-                        tab.title = urlObj.hostname || tab.url
+                        tab.title = urlObj.origin || tab.url
                     } catch {
                         tab.title = tab.url
                     }
@@ -386,7 +375,7 @@
 
     // Reload the current tab
     function reloadTab(tab) {
-        const frame = tab.frame
+        const frame = data.frames[tab.id]?.frame
         if (frame) {
             console.log(`🔄 User initiated reload for tab ${tab.id}`)
             clearNetworkError(tab)
@@ -559,19 +548,7 @@
         if (isOAuthPopup && controlledFrameSupported) {
             handleOAuthPopup(tab, e)
         } else {
-            // Regular new window - create a new tab
-            tabs.push({ 
-                id: crypto.randomUUID(),
-                url: e.targetUrl, 
-                title: e.title, 
-                favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.targetUrl}&size=64`,
-                audioPlaying: false,
-                screenshot: null,
-                pinned: false,
-                muted: false,
-                loading: false
-            })
-            
+            data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title, opener: tab.id })         
         }
     }
 
@@ -591,7 +568,7 @@
 
     async function updateTabMeta(tab, frame = null) {
         if (!frame) {
-            frame = tab.frame
+            frame = data.frames[tab.id]?.frame
         }
         if (!frame) return
 
@@ -627,7 +604,7 @@
                 if (url) {
                     try {
                         const urlObj = new URL(url)
-                        tab.title = urlObj.hostname || url
+                        tab.title = urlObj.origin || url
                     } catch {
                         tab.title = url
                     }
@@ -1677,12 +1654,19 @@ document.addEventListener('input', function(event) {
      // user initiated clear data options clearData(options, types)
 
     let attached = false
+    let frameWrapper = $state(null)
+    let retry = $state(0)
     $effect(() => {
-        if (!anchor || !tab.wrapper) { 
+        if (retry > 10) {
+            console.error('retry error')
+            return
+        }
+
+        if (!anchor || !frameWrapper) { 
             return
         }
         
-        let controlledFrame = instances.get(tab.id)
+        let controlledFrame = data.frames[tab.id]?.frame
         
         // If current URL is about:newtab, don't create/use controlled frame
         // if (isNewTabUrl(initialUrl)) {
@@ -1704,8 +1688,8 @@ document.addEventListener('input', function(event) {
         let addNode = false
         if (!controlledFrame) {
             controlledFrame = document.createElement('controlledframe')
-            tab.frame = controlledFrame
-            instances.set(tab.id, controlledFrame)
+
+            data.frames[tab.id] = { frame: controlledFrame, wrapper: frameWrapper }
             addNode = true
 
             controlledFrame.classList.add('frame-instance')
@@ -1756,22 +1740,29 @@ document.addEventListener('input', function(event) {
         console.log('controlledFrame', controlledFrame, { attached, initialUrl, addNode })
        
         if (addNode) {
-            tab.wrapper.insertBefore(controlledFrame, anchor)
+            frameWrapper.insertBefore(controlledFrame, anchor)
             attached = true
         }
 
         if (!attached) {
-            tab.wrapper.moveBefore(controlledFrame, anchor)
-            attached = true
+            try {
+                frameWrapper.moveBefore(controlledFrame, anchor)
+                attached = true
+            } catch (err) {
+                console.error(err)
+                delete data.frames[tab.id]
+                setTimeout(() => {
+                    retry = retry + 1
+                }, 10)
+            }
         }
     })
 
     let detached = false
     onDestroy(() => {
-        console.log('ondestro', { tab, instances, detached })
+        // console.log('ondestro', { tab, detached })
         if (tab?.id && !detached && !tab.hibernated) {
-            tab.frame = null
-            instances.delete(tab.id)
+            delete data.frames[tab.id]
         }
         
         // Clean up LED indicator timeouts
@@ -1788,14 +1779,13 @@ document.addEventListener('input', function(event) {
     
     function detach () {
         if (!tab?._id || tab.hibernated) {
-            tab.frame = null
-            instances.delete(tab.id)
+            delete data.frames[tab.id]
             return {
                 duration: 0
             }
         }
         
-        let controlledFrame = instances.get(tab.id)
+        let controlledFrame = data.frames[tab.id]?.frame
 
         if (controlledFrame) {
             const backgroundFrames = document.getElementById('backgroundFrames')
@@ -1814,7 +1804,7 @@ document.addEventListener('input', function(event) {
     <div
         out:detach|global
         style={style}
-        bind:this={tab.wrapper} 
+        bind:this={frameWrapper} 
         
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
