@@ -45,3 +45,26 @@ export function origin(url) {
     return 'unknown'
   }
 }
+
+export const colors = [
+  { name: "Magenta", color: "#b800bb" },
+  { name: "Yellow", color: "#ffc100" },
+  { name: "Green Apple", color: "#71be00" },
+  { name: "Turquoise", color: "#00a3d6" },
+  { name: "Red", color: "#d82b00" },
+  { name: "Grape", color: "#8100ea" },
+  { name: "Orange", color: "#ce9f00" },
+  { name: "Swamp Green", color: "#91a400" },
+  { name: "Ice Blue", color: "#74a4d7" },
+  { name: "Peach", color: "#e46642" },
+  { name: "Violet", color: "#ba6eff" },
+  { name: "Pea Green", color: "#6e7306" },
+  { name: "Tan", color: "#908675" },
+  { name: "Aquamarine", color: "#008c8d" },
+  { name: "Maroon", color: "#ac3f65" },
+  { name: "Light Gray", color: "#cccccc" },
+  { name: "Medium Gray", color: "#818182" },
+  { name: "Dark Gray", color: "#555555" },
+  { name: "Ocean Blue", color: "#155f8b" },
+  { name: "Pink", color: "#ee61f0" },
+]

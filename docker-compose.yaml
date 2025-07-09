@@ -1,5 +1,24 @@
 name: darc
 services:
+  proxy:
+    restart: always
+    build:
+      context: ./workerd
+    ports:
+      # - "9229:9229"
+      - name: main
+        target: 5196
+        app_protocol: http
+        # host_ip: 127.0.0.1
+        published: "5196"
+        mode: host # or ingress for load balanced
+    develop:
+      watch:
+        - action: sync
+          path: ./workerd
+          target: /workspace/
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
   darc:
     restart: always
     build:
@@ -11,7 +30,11 @@ services:
       #   app_protocol: http
       #   published: "80"
       #   mode: host # or ingress for load balanced
+    deploy:
+      mode: replicated
+      replicas: 3
     develop:
+      replicas: 3
       watch:
         - action: sync
           path: .

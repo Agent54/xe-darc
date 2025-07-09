@@ -16,6 +16,7 @@
         userMods = { css: [], js: [] },
         requestedResources = [],
         statusLightsEnabled = false,
+        controlledFrameSupported = false,
     } = $props()
 
     const tab = $derived(data.docs[tabId])
@@ -58,47 +59,6 @@
             return false
         }
     })
-
-    
-    // Proper detection of ControlledFrame API support
-    function isControlledFrameSupported() {
-        // Method 1: Check if the custom element is defined
-        if (typeof customElements !== 'undefined' && customElements.get('controlledframe')) {
-            console.log('✅ ControlledFrame API detected via customElements.get()')
-            return true
-        }
-        
-        // Method 2: Check if the global constructor exists
-        if (typeof window.HTMLControlledFrameElement !== 'undefined') {
-            console.log('✅ ControlledFrame API detected via HTMLControlledFrameElement constructor')
-            return true
-        }
-        
-        // Method 3: Try to create element and check for API methods
-        try {
-            const testElement = document.createElement('controlledframe')
-            const hasApiMethods = typeof testElement.setZoomMode === 'function' || 
-                                 typeof testElement.back === 'function' ||
-                                 typeof testElement.forward === 'function'
-            if (hasApiMethods) {
-                console.log('✅ ControlledFrame API detected via element methods')
-                return true
-            }
-        } catch (error) {
-            console.log('❌ ControlledFrame element creation failed:', error)
-        }
-        
-        console.log('❌ ControlledFrame API not available - falling back to iframe')
-        console.log('💡 To enable ControlledFrame API:')
-        console.log('   1. Ensure you\'re running in an Isolated Web App (IWA)')
-        console.log('   2. Add "controlled-frame" permission to your manifest.json')
-        console.log('   3. Run Chrome with --enable-features=IsolatedWebApps,IsolatedWebAppControlledFrame')
-        console.log('   4. Or enable chrome://flags/#isolated-web-app-controlled-frame')
-        
-        return false
-    }
-
-    let controlledFrameSupported = $state(isControlledFrameSupported())
 
     // Close OAuth popup
     function closeOAuthPopup() {

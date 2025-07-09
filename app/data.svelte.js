@@ -6,29 +6,7 @@ import testData from './test-data.js'
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
 
-const projectColors = [
-    { name: "Magenta", color: "#b800bb" },
-    { name: "Yellow", color: "#ffc100" },
-    { name: "Green Apple", color: "#71be00" },
-    { name: "Turquoise", color: "#00a3d6" },
-    { name: "Red", color: "#d82b00" },
-    { name: "Grape", color: "#8100ea" },
-    { name: "Orange", color: "#ce9f00" },
-    { name: "Swamp Green", color: "#91a400" },
-    { name: "Ice Blue", color: "#74a4d7" },
-    { name: "Peach", color: "#e46642" },
-    { name: "Violet", color: "#ba6eff" },
-    { name: "Pea Green", color: "#6e7306" },
-    { name: "Tan", color: "#908675" },
-    { name: "Aquamarine", color: "#008c8d" },
-    { name: "Maroon", color: "#ac3f65" },
-    { name: "Light Gray", color: "#cccccc" },
-    { name: "Medium Gray", color: "#818182" },
-    { name: "Dark Gray", color: "#555555" },
-    { name: "Ocean Blue", color: "#155f8b" },
-    { name: "Pink", color: "#ee61f0" },
-]
-
+import { colors as projectColors } from './lib/utils.js'
 
 PouchDB.plugin(findPlugin)
 const db = new PouchDB('darc', { adapter: 'idb' })
@@ -78,6 +56,21 @@ db.bulkDocs(bootstrap).then(async (res) => {
         }
     }
 })
+
+const remote = localStorage.getItem('syncServerUrl')
+const token = localStorage.getItem('syncServerToken')
+if (remote) {
+    const [username, password] = token.split(":")
+    const replication = db.sync(remote, {
+        live: true,
+        retry: true,
+        attachments: true,
+        auth: {
+            username,
+            password
+        }
+    })
+}
 
 const closedTabs = $state([])
 const origins = $state({})
@@ -210,7 +203,8 @@ db.changes({
     if (editingId !== change.id) {
         docs[change.id] = change.doc
 
-        for (const key of sortOrder) {
+        // fixme: deep comp
+        for (const key of ['canvas', 'pinned', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
                 if (change.doc.spaceId && change.doc.type !== 'space') {
                     refresh(change.doc.spaceId)
@@ -346,6 +340,14 @@ export default {
         spaces[spaceId] = data
     },
 
+    pin({ tabId, pinned }) {
+        const tab = docs[tabId]
+        db.put({
+            ...tab,
+            pinned
+        })
+    },
+
     navigate(tabId, url) {
         const tab = docs[tabId]
         db.put({
@@ -365,7 +367,7 @@ export default {
         })
     },
     
-    newTab: (spaceId, {url, title} = {}) => {
+    newTab: (spaceId, { url, title, opener } = {}) => {
         const _id = `darc:tab_${crypto.randomUUID()}`
 
         const tab = {
@@ -376,10 +378,26 @@ export default {
             favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64` : undefined,
             url: url || 'about:newtab',
             title: url ? title : 'New Tab',
-            order: Date.now()
+            order: Date.now(),
+            opener
         }
         
         db.put(tab)
+    },
+
+    updateTab: (tabId, { canvas } = {}) => {
+        const tab = docs[tabId]
+       
+        let newProps = {}
+        if (canvas) {
+            canvas = { ...(tab.canvas || {}), ...canvas }
+            newProps.canvas = canvas
+        }
+
+        db.put({
+            ...tab,
+            ...newProps
+        })
     },
 
     closeTab: (spaceId, tabId) => {

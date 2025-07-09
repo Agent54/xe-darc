@@ -162,10 +162,10 @@
                 } else if (tab.url.startsWith('about:')) {
                     tab.title = tab.url.charAt(6).toUpperCase() + tab.url.slice(7)
                 } else {
-                    // For regular URLs, extract hostname as fallback title
+                    // For regular URLs, extract origin as fallback title
                     try {
                         const urlObj = new URL(tab.url)
-                        tab.title = urlObj.hostname || tab.url
+                        tab.title = urlObj.origin || tab.url
                     } catch {
                         tab.title = tab.url
                     }
@@ -548,7 +548,7 @@
         if (isOAuthPopup && controlledFrameSupported) {
             handleOAuthPopup(tab, e)
         } else {
-            data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title })         
+            data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title, opener: tab.id })         
         }
     }
 
@@ -604,7 +604,7 @@
                 if (url) {
                     try {
                         const urlObj = new URL(url)
-                        tab.title = urlObj.hostname || url
+                        tab.title = urlObj.origin || url
                     } catch {
                         tab.title = url
                     }
@@ -1655,7 +1655,13 @@ document.addEventListener('input', function(event) {
 
     let attached = false
     let frameWrapper = $state(null)
+    let retry = $state(0)
     $effect(() => {
+        if (retry > 10) {
+            console.error('retry error')
+            return
+        }
+
         if (!anchor || !frameWrapper) { 
             return
         }
@@ -1739,8 +1745,16 @@ document.addEventListener('input', function(event) {
         }
 
         if (!attached) {
-            frameWrapper.moveBefore(controlledFrame, anchor)
-            attached = true
+            try {
+                frameWrapper.moveBefore(controlledFrame, anchor)
+                attached = true
+            } catch (err) {
+                console.error(err)
+                delete data.frames[tab.id]
+                setTimeout(() => {
+                    retry = retry + 1
+                }, 10)
+            }
         }
     })
 

@@ -1,0 +1,260 @@
+[
+    {
+        "Id": "8529e3f36b0b7f5c659fe9b299febd67b1ea5ce9af9cf1f8bf4fd12146fbc4b8",
+        "Names": [
+            "/darc-darc-4"
+        ],
+        "Image": "darc-darc",
+        "ImageID": "sha256:ebfa3f9bdd8d3bc4b9eac7fbae9df14820324c4e172984ddcf8ddf3ed98eea38",
+        "Command": "docker-entrypoint.sh /bin/sh -c 'pnpm dev'",
+        "Created": 1752068156,
+        "Ports": [
+            {
+                "IP": "0.0.0.0",
+                "PrivatePort": 5193,
+                "PublicPort": 32781,
+                "Type": "tcp"
+            },
+            {
+                "IP": "::",
+                "PrivatePort": 5193,
+                "PublicPort": 32781,
+                "Type": "tcp"
+            }
+        ],
+        "Labels": {
+            "com.docker.compose.config-hash": "917195e1e94542d62abeedc1343bee01b27c71aa9be3fc50d42d9c9e95d8606b",
+            "com.docker.compose.container-number": "4",
+            "com.docker.compose.depends_on": "",
+            "com.docker.compose.image": "sha256:ebfa3f9bdd8d3bc4b9eac7fbae9df14820324c4e172984ddcf8ddf3ed98eea38",
+            "com.docker.compose.oneoff": "False",
+            "com.docker.compose.project": "darc",
+            "com.docker.compose.project.config_files": "/Users/jan/Dev/xe/darc/docker-compose.yaml",
+            "com.docker.compose.project.working_dir": "/Users/jan/Dev/xe/darc",
+            "com.docker.compose.service": "darc",
+            "com.docker.compose.version": "2.29.7"
+        },
+        "State": "running",
+        "Status": "Up 40 minutes",
+        "HostConfig": {
+            "NetworkMode": "darc_default"
+        },
+        "NetworkSettings": {
+            "Networks": {
+                "darc_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "MacAddress": "02:42:ac:15:00:02",
+                    "DriverOpts": null,
+                    "NetworkID": "3de133f0bb1b8524480e86652a929427da73dd392b338d0be716f678f8452381",
+                    "EndpointID": "c5600f149a49dff6e69e192179edf01c3f75585325e468ca3f7f014279fe07fd",
+                    "Gateway": "172.21.0.1",
+                    "IPAddress": "172.21.0.2",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "Mounts": []
+    },
+    {
+        "Id": "afddba53a8ad11d2e1acff0d4e97a8c70fe2081685e65e7b84c537eb53ba9345",
+        "Names": [
+            "/darc-darc-5"
+        ],
+        "Image": "darc-darc",
+        "ImageID": "sha256:ebfa3f9bdd8d3bc4b9eac7fbae9df14820324c4e172984ddcf8ddf3ed98eea38",
+        "Command": "docker-entrypoint.sh /bin/sh -c 'pnpm dev'",
+        "Created": 1752068156,
+        "Ports": [
+            {
+                "IP": "0.0.0.0",
+                "PrivatePort": 5193,
+                "PublicPort": 32782,
+                "Type": "tcp"
+            },
+            {
+                "IP": "::",
+                "PrivatePort": 5193,
+                "PublicPort": 32782,
+                "Type": "tcp"
+            }
+        ],
+        "Labels": {
+            "com.docker.compose.config-hash": "917195e1e94542d62abeedc1343bee01b27c71aa9be3fc50d42d9c9e95d8606b",
+            "com.docker.compose.container-number": "5",
+            "com.docker.compose.depends_on": "",
+            "com.docker.compose.image": "sha256:ebfa3f9bdd8d3bc4b9eac7fbae9df14820324c4e172984ddcf8ddf3ed98eea38",
+            "com.docker.compose.oneoff": "False",
+            "com.docker.compose.project": "darc",
+            "com.docker.compose.project.config_files": "/Users/jan/Dev/xe/darc/docker-compose.yaml",
+            "com.docker.compose.project.working_dir": "/Users/jan/Dev/xe/darc",
+            "com.docker.compose.service": "darc",
+            "com.docker.compose.version": "2.29.7"
+        },
+        "State": "running",
+        "Status": "Up 40 minutes",
+        "HostConfig": {
+            "NetworkMode": "darc_default"
+        },
+        "NetworkSettings": {
+            "Networks": {
+                "darc_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "MacAddress": "02:42:ac:15:00:04",
+                    "DriverOpts": null,
+                    "NetworkID": "3de133f0bb1b8524480e86652a929427da73dd392b338d0be716f678f8452381",
+                    "EndpointID": "7be4d1f9bc924014c1af1ea76f32aa5cfea2d1993495dca5f8e8332b9f5dfdce",
+                    "Gateway": "172.21.0.1",
+                    "IPAddress": "172.21.0.4",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "Mounts": []
+    },
+    {
+        "Id": "70a642bb7061e44de1a761d8d9bac69d8005e20fddfdd1c3c5300e25e7c6dfe6",
+        "Names": [
+            "/darc-darc-3"
+        ],
+        "Image": "darc-darc",
+        "ImageID": "sha256:ebfa3f9bdd8d3bc4b9eac7fbae9df14820324c4e172984ddcf8ddf3ed98eea38",
+        "Command": "docker-entrypoint.sh /bin/sh -c 'pnpm dev'",
+        "Created": 1752067925,
+        "Ports": [
+            {
+                "IP": "0.0.0.0",
+                "PrivatePort": 5193,
+                "PublicPort": 32783,
+                "Type": "tcp"
+            },
+            {
+                "IP": "::",
+                "PrivatePort": 5193,
+                "PublicPort": 32783,
+                "Type": "tcp"
+            }
+        ],
+        "Labels": {
+            "com.docker.compose.config-hash": "917195e1e94542d62abeedc1343bee01b27c71aa9be3fc50d42d9c9e95d8606b",
+            "com.docker.compose.container-number": "3",
+            "com.docker.compose.depends_on": "",
+            "com.docker.compose.image": "sha256:ebfa3f9bdd8d3bc4b9eac7fbae9df14820324c4e172984ddcf8ddf3ed98eea38",
+            "com.docker.compose.oneoff": "False",
+            "com.docker.compose.project": "darc",
+            "com.docker.compose.project.config_files": "/Users/jan/Dev/xe/darc/docker-compose.yaml",
+            "com.docker.compose.project.working_dir": "/Users/jan/Dev/xe/darc",
+            "com.docker.compose.replace": "c75cc293d8f919a81d42596275a924db7eb398d19bdb4884600b5cae5825892c",
+            "com.docker.compose.service": "darc",
+            "com.docker.compose.version": "2.29.7"
+        },
+        "State": "running",
+        "Status": "Up 40 minutes",
+        "HostConfig": {
+            "NetworkMode": "darc_default"
+        },
+        "NetworkSettings": {
+            "Networks": {
+                "darc_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "MacAddress": "02:42:ac:15:00:05",
+                    "DriverOpts": null,
+                    "NetworkID": "3de133f0bb1b8524480e86652a929427da73dd392b338d0be716f678f8452381",
+                    "EndpointID": "b65bf86dd914d094fc683e835c7adc3ad9a475af98b0efb34751faa9eeef9e9a",
+                    "Gateway": "172.21.0.1",
+                    "IPAddress": "172.21.0.5",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "Mounts": []
+    },
+    {
+        "Id": "50c9d3e3d9168c087692f7694d90198b2aa74b0fbad1d3dd4c71df7cd8b0528e",
+        "Names": [
+            "/darc-proxy-1"
+        ],
+        "Image": "darc-proxy",
+        "ImageID": "sha256:fe0cfa45004833323ee93c5496eb35ad214916dea05c78f274ab0a2e1a2d73c2",
+        "Command": "/bin/sh -c 'pnpm dev'",
+        "Created": 1752060049,
+        "Ports": [
+            {
+                "IP": "0.0.0.0",
+                "PrivatePort": 80,
+                "PublicPort": 5196,
+                "Type": "tcp"
+            },
+            {
+                "IP": "::",
+                "PrivatePort": 80,
+                "PublicPort": 5196,
+                "Type": "tcp"
+            }
+        ],
+        "Labels": {
+            "com.docker.compose.config-hash": "a22088fabc5b3b1bd86e1ac51cbac59005d8d281634579dbd907dfdeb49e5585",
+            "com.docker.compose.container-number": "1",
+            "com.docker.compose.depends_on": "",
+            "com.docker.compose.image": "sha256:fe0cfa45004833323ee93c5496eb35ad214916dea05c78f274ab0a2e1a2d73c2",
+            "com.docker.compose.oneoff": "False",
+            "com.docker.compose.project": "darc",
+            "com.docker.compose.project.config_files": "/Users/jan/Dev/xe/darc/docker-compose.yaml",
+            "com.docker.compose.project.working_dir": "/Users/jan/Dev/xe/darc",
+            "com.docker.compose.service": "proxy",
+            "com.docker.compose.version": "2.29.7"
+        },
+        "State": "running",
+        "Status": "Up 40 minutes",
+        "HostConfig": {
+            "NetworkMode": "darc_default"
+        },
+        "NetworkSettings": {
+            "Networks": {
+                "darc_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "MacAddress": "02:42:ac:15:00:03",
+                    "DriverOpts": null,
+                    "NetworkID": "3de133f0bb1b8524480e86652a929427da73dd392b338d0be716f678f8452381",
+                    "EndpointID": "c8985d4e7f941cf74072ee3a7f53cd4c5d7b3a374c2dbb8568697fd9103f9849",
+                    "Gateway": "172.21.0.1",
+                    "IPAddress": "172.21.0.3",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/var/run/docker.sock",
+                "Destination": "/var/run/docker.sock",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+        ]
+    }
+]

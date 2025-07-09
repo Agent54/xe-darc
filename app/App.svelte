@@ -14,6 +14,49 @@
     import { onMount, untrack } from 'svelte'
     import data from './data.svelte.js'
     import { origin } from './lib/utils.js'
+    import { colors } from './lib/utils.js'
+
+    // Proper detection of ControlledFrame API support
+    function isControlledFrameSupported() {
+        // Method 1: Check if the custom element is defined
+        if (typeof customElements !== 'undefined' && customElements.get('controlledframe')) {
+            console.log('✅ ControlledFrame API detected via customElements.get()')
+            return true
+        }
+        
+        // Method 2: Check if the global constructor exists
+        if (typeof window.HTMLControlledFrameElement !== 'undefined') {
+            console.log('✅ ControlledFrame API detected via HTMLControlledFrameElement constructor')
+            return true
+        }
+        
+        // Method 3: Try to create element and check for API methods
+        try {
+            const testElement = document.createElement('controlledframe')
+            const hasApiMethods = typeof testElement.setZoomMode === 'function' || 
+                                 typeof testElement.back === 'function' ||
+                                 typeof testElement.forward === 'function'
+            if (hasApiMethods) {
+                console.log('✅ ControlledFrame API detected via element methods')
+                return true
+            }
+        } catch (error) {
+            console.log('❌ ControlledFrame element creation failed:', error)
+        }
+        
+        console.log('❌ ControlledFrame API not available - falling back to iframe')
+        console.log('💡 To enable ControlledFrame API:')
+        console.log('   1. Ensure you\'re running in an Isolated Web App (IWA)')
+        console.log('   2. Add "controlled-frame" permission to your manifest.json')
+        console.log('   3. Run Chrome with --enable-features=IsolatedWebApps,IsolatedWebAppControlledFrame')
+        console.log('   4. Or enable chrome://flags/#isolated-web-app-controlled-frame')
+        
+        return false
+    }
+
+    let controlledFrameSupported = $state(isControlledFrameSupported())
+    let fallbackColor = $state(null)
+    let fallbackColorName = $state(null)
 
     const requestedResources = $state([])
 
@@ -651,52 +694,55 @@
         if (!data.spaceMeta.activeSpace || !tab) return
         
         // Find the tab in the current space and toggle its pinned state
-        const space = data.spaces[data.spaceMeta.activeSpace]
-        if (space && space.tabs) {
-            const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-            if (tabIndex !== -1) {
-                space.tabs[tabIndex].pinned = space.tabs[tabIndex].pinned ? null : 'left'
-            }
-        }
+        // const space = data.spaces[data.spaceMeta.activeSpace]
+        // if (space && space.tabs) {
+        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
+        //     if (tabIndex !== -1) {
+        //         space.tabs[tabIndex].pinned = space.tabs[tabIndex].pinned ? null : 'left'
+        //     }
+        // }
+        data.pin({ tabId: tab.id, pinned: tab.pinned ? null : 'left' })
         hideContextMenu()
     }
 
     function pinTabLeft(tab) {
         if (!data.spaceMeta.activeSpace || !tab) return
         
-        const space = data.spaces[data.spaceMeta.activeSpace]
-        if (space && space.tabs) {
-            const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-            if (tabIndex !== -1) {
-                space.tabs[tabIndex].pinned = 'left'
-            }
-        }
+        // const space = data.spaces[data.spaceMeta.activeSpace]
+        // if (space && space.tabs) {
+        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
+        //     if (tabIndex !== -1) {
+        //         space.tabs[tabIndex].pinned = 'left'
+        //     }
+        // }
+        data.pin({ tabId: tab.id, pinned: 'left' })
         hideContextMenu()
     }
 
     function pinTabRight(tab) {
-        if (!data.spaceMeta.activeSpace || !tab) return
+        // if (!data.spaceMeta.activeSpace || !tab) return
         
-        const space = data.spaces[data.spaceMeta.activeSpace]
-        if (space && space.tabs) {
-            const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-            if (tabIndex !== -1) {
-                space.tabs[tabIndex].pinned = 'right'
-            }
-        }
-                hideContextMenu()
+        // const space = data.spaces[data.spaceMeta.activeSpace]
+        // if (space && space.tabs) {
+        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
+        //     if (tabIndex !== -1) {
+        //         space.tabs[tabIndex].pinned = 'right'
+        //     }
+        // }
+        data.pin({ tabId: tab.id, pinned: 'right' })
+        hideContextMenu()
     }
 
     function unpinTab(tab) {
-        if (!data.spaceMeta.activeSpace || !tab) return
-        
-        const space = data.spaces[data.spaceMeta.activeSpace]
-        if (space && space.tabs) {
-            const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-            if (tabIndex !== -1) {
-                space.tabs[tabIndex].pinned = null
-            }
-        }
+        // if (!data.spaceMeta.activeSpace || !tab) return
+        // const space = data.spaces[data.spaceMeta.activeSpace]
+        // if (space && space.tabs) {
+        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
+        //     if (tabIndex !== -1) {
+        //         space.tabs[tabIndex].pinned = null
+        //     }
+        // }
+        data.pin({ tabId: tab.id, pinned: null })
         hideContextMenu()
     }
 
@@ -1005,93 +1051,93 @@
         }, 250)
     }
 
-    function handleTrashItemMouseEnter(tab, event) {
-        if (hoverTimeout) {
-            clearTimeout(hoverTimeout)
-            hoverTimeout = null
-        }
+    // function handleTrashItemMouseEnter(tab, event) {
+    //     if (hoverTimeout) {
+    //         clearTimeout(hoverTimeout)
+    //         hoverTimeout = null
+    //     }
         
-        // Use longer delay initially, shorter delay if recently active
-        const delay = hovercardRecentlyActive ? 200 : 800
+    //     // Use longer delay initially, shorter delay if recently active
+    //     const delay = hovercardRecentlyActive ? 200 : 800
         
-        hoverTimeout = setTimeout(() => {
-            const trashItem = event.target.closest('.trash-menu-item')
-            const rect = trashItem.getBoundingClientRect()
+    //     hoverTimeout = setTimeout(() => {
+    //         const trashItem = event.target.closest('.trash-menu-item')
+    //         const rect = trashItem.getBoundingClientRect()
             
-            // Calculate better positioning
-            const hovercardWidth = 320 // hovercard width from CSS
-            const hovercardHeight = 180 + 60 // screenshot height + info padding
+    //         // Calculate better positioning
+    //         const hovercardWidth = 320 // hovercard width from CSS
+    //         const hovercardHeight = 180 + 60 // screenshot height + info padding
             
-            // Position to the left of the trash menu with some margin
-            let x = rect.left - hovercardWidth - 20
-            let y = rect.top + rect.height / 2
+    //         // Position to the left of the trash menu with some margin
+    //         let x = rect.left - hovercardWidth - 20
+    //         let y = rect.top + rect.height / 2
             
-            // Ensure hovercard doesn't go off screen on the left
-            if (x < 10) {
-                x = rect.right + 20 // Position to the right if needed
-            }
+    //         // Ensure hovercard doesn't go off screen on the left
+    //         if (x < 10) {
+    //             x = rect.right + 20 // Position to the right if needed
+    //         }
             
-            // Ensure hovercard doesn't go off screen at the top
-            if (y - hovercardHeight / 2 < 10) {
-                y = hovercardHeight / 2 + 10
-            }
+    //         // Ensure hovercard doesn't go off screen at the top
+    //         if (y - hovercardHeight / 2 < 10) {
+    //             y = hovercardHeight / 2 + 10
+    //         }
             
-            // Ensure hovercard doesn't go off screen at the bottom
-            const maxY = window.innerHeight - hovercardHeight / 2 - 10
-            if (y > maxY) {
-                y = maxY
-            }
+    //         // Ensure hovercard doesn't go off screen at the bottom
+    //         const maxY = window.innerHeight - hovercardHeight / 2 - 10
+    //         if (y > maxY) {
+    //             y = maxY
+    //         }
             
-            hovercardPosition = { x, y }
+    //         hovercardPosition = { x, y }
             
-            isTrashItemHover = true
-            hoveredTab = tab
-            hovercardShowTime = Date.now()
-            if (!tab.screenshot) {
-                captureTabScreenshot(tab)
-            }
+    //         isTrashItemHover = true
+    //         hoveredTab = tab
+    //         hovercardShowTime = Date.now()
+    //         if (!tab.screenshot) {
+    //             captureTabScreenshot(tab)
+    //         }
             
-            // Mark hovercards as recently active
-            hovercardRecentlyActive = true
+    //         // Mark hovercards as recently active
+    //         hovercardRecentlyActive = true
             
-            // Reset the "recently active" state after 3 seconds of no hover activity
-            if (hovercardResetTimer) {
-                clearTimeout(hovercardResetTimer)
-            }
-            hovercardResetTimer = setTimeout(() => {
-                hovercardRecentlyActive = false
-            }, 3000)
+    //         // Reset the "recently active" state after 3 seconds of no hover activity
+    //         if (hovercardResetTimer) {
+    //             clearTimeout(hovercardResetTimer)
+    //         }
+    //         hovercardResetTimer = setTimeout(() => {
+    //             hovercardRecentlyActive = false
+    //         }, 3000)
             
-            // Start checking cursor position
-            startHovercardPositionCheck()
-        }, delay)
-    }
+    //         // Start checking cursor position
+    //         startHovercardPositionCheck()
+    //     }, delay)
+    // }
 
-    function handleTrashItemMouseLeave() {
-        if (hoverTimeout) {
-            clearTimeout(hoverTimeout)
-            hoverTimeout = null
-        }
+    // function handleTrashItemMouseLeave() {
+    //     if (hoverTimeout) {
+    //         clearTimeout(hoverTimeout)
+    //         hoverTimeout = null
+    //     }
         
-        setTimeout(() => {
-            // Don't hide if hovercard was just shown (prevent flicker during animation)
-            if (hovercardShowTime && Date.now() - hovercardShowTime < 300) {
-                return
-            }
+    //     setTimeout(() => {
+    //         // Don't hide if hovercard was just shown (prevent flicker during animation)
+    //         if (hovercardShowTime && Date.now() - hovercardShowTime < 300) {
+    //             return
+    //         }
             
-            // Only close if not hovering over hovercard
-            const mouseX = window.mouseX || 0
-            const mouseY = window.mouseY || 0
-            const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+    //         // Only close if not hovering over hovercard
+    //         const mouseX = window.mouseX || 0
+    //         const mouseY = window.mouseY || 0
+    //         const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
             
-            if (!elementUnderCursor?.closest('.tab-hovercard')) {
-                hoveredTab = null
-                isTrashItemHover = false
-                hovercardShowTime = null
-                stopHovercardPositionCheck()
-            }
-        }, 250)
-    }
+    //         if (!elementUnderCursor?.closest('.tab-hovercard')) {
+    //             hoveredTab = null
+    //             isTrashItemHover = false
+    //             hovercardShowTime = null
+    //             stopHovercardPositionCheck()
+    //         }
+    //     }, 250)
+    // }
 
     function startHovercardPositionCheck() {
         stopHovercardPositionCheck() // Clear any existing interval
@@ -1575,6 +1621,9 @@
             console.error('Failed to load user mods:', error)
         })
         
+        // Setup fallback color for non-ControlledFrame environments
+        setupFallbackColor()
+        
         // Check for encrypted sync token authentication
         setTimeout(() => {
             checkSyncTokenAuth().catch(error => {
@@ -1810,6 +1859,33 @@
             return 'about:newtab'
         }
         return url
+    }
+
+    function setupFallbackColor() {
+        if (!controlledFrameSupported) {
+            const storedColorData = localStorage.getItem('darc-dev-color')
+            if (storedColorData) {
+                try {
+                    const colorData = JSON.parse(storedColorData)
+                    fallbackColor = colorData.color
+                    fallbackColorName = colorData.name
+                } catch (error) {
+                    // Handle old format or corrupted data
+                    const randomIndex = Math.floor(Math.random() * colors.length)
+                    const selectedColorData = colors[randomIndex]
+                    fallbackColor = selectedColorData.color
+                    fallbackColorName = selectedColorData.name
+                    localStorage.setItem('darc-dev-color', JSON.stringify(selectedColorData))
+                }
+            } else {
+                // Pick a random color from the colors array
+                const randomIndex = Math.floor(Math.random() * colors.length)
+                const selectedColorData = colors[randomIndex]
+                fallbackColor = selectedColorData.color
+                fallbackColorName = selectedColorData.name
+                localStorage.setItem('darc-dev-color', JSON.stringify(selectedColorData))
+            }
+        }
     }
 
     // reserved for possibly handling only closed tabs from current tab group in future do not remove or switch to data.closedTabs
@@ -2580,6 +2656,12 @@
     {/if}
 </header>
 
+{#if !controlledFrameSupported && fallbackColor}
+    <div class="dev-color-badge" style="background-color: {fallbackColor};" title="Fallback Mode - ControlledFrame API not available">
+        <span class="dev-color-text">{fallbackColorName}</span>
+    </div>
+{/if}
+
 {#if focusModeEnabled && contentAreaScrimActive}
     <div class="content-area-scrim"
          role="button"
@@ -2719,7 +2801,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                         </div>
                     {/key}
                     
-                    <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    <Frame tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                 </div>
             {/if}
         {/key}
@@ -2736,7 +2818,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
      onscroll={handleScroll} 
      style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
     {#if viewMode === 'canvas'}
-        <Excalidraw onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
+        <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
     {:else if viewMode === 'reading'}
         {#each tabs as tab, tabIndex (tab.id)}
                 {#key userModsHash}
@@ -2747,7 +2829,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                             </div>
                         {/key}
                         
-                        <Frame tabId={tab.id} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame tabId={tab.id} {controlledFrameSupported} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/key}
         {/each}
@@ -2762,7 +2844,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                                 </div>
                             {/key}
                             
-                            <Frame tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                            <Frame {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                         </div>
                     {/if}
                 {/key}
@@ -2787,7 +2869,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                         </div>
                     {/key}
                     
-                    <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    <Frame tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                 </div>
             {/if}
         {/key}
@@ -2873,10 +2955,32 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
     </div>
 {/if}
 
-<div id="backgroundFrames">
-    <div id="anchorFrame"></div>
-</div>
-
 <style>
     @import "app.css";
+    
+    .dev-color-badge {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        width: 75px;
+        height: 20px;
+        border-radius: 8px;
+        z-index: 9999;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(2px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .dev-color-text {
+        font-size: 10px;
+        font-weight: 500;
+        color: white;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 </style>
