@@ -11,78 +11,63 @@
   let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || []))
 
   let elements = $derived(tabs.map((tab, index) => {
-        const tabWidth = 1000
-        const tabHeight = 700  
-        const columnSpacing = 80
-        const rowSpacing = 160
-        
-        const columnsPerRow = 5
-        // const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
-        
-        const row = Math.floor(index / columnsPerRow)
-        const col = index % columnsPerRow
-        
-        const startX = 200
-        const startY = 200
-        
-        const x = startX + (col * (tabWidth + columnSpacing))  
-        const y = startY + (row * (tabHeight + rowSpacing))
-        
-        return {
-            "id": tab.id,
-            "type": "embeddable",
-            
-            "x": x,
-            "y": y,
-            "width": tabWidth,
-            "height": tabHeight,
-            "angle": tab.angle || 0,
-            
-            "strokeColor": "none",
-            "backgroundColor": "none",
-            "fillStyle": "solid",
-            "strokeWidth": 2,
-            "strokeStyle": "solid",
-            "roughness": 0,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "index": "a2",
-            "roundness": {
-                "type": 4
-            },
-            "seed": 1218149059,
-            "version": 104,
-            "versionNonce": 1873698765,
-            "isDeleted": tab.closed,
-            "boundElements": null,
-            "updated": 1749946396932,
-            "link": tab.url,
-            "locked": false
-        }
-    }))
-
-  let initialData = $derived({
-        "type": "excalidraw",
-        "version": 2,
-        "source": "isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac",
-        elements,
-        "appState": {
-            "gridSize": 20,
-            "gridStep": 5,
-            "gridModeEnabled": false,
-            "viewBackgroundColor": "#0000",
-            "zoom": { "value": 0.3 },
-            "scrollX": -100,
-            "scrollY": 0
-        },
-        "files": {}
-  })
-
+      const tabWidth = 1000
+      const tabHeight = 700  
+      const columnSpacing = 80
+      const rowSpacing = 160
       
-  // Merge default app state for precise drawing with user's initialData
-  let mergedInitialData = $derived({
-    ...initialData,
+      const columnsPerRow = 5
+      // const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
+      
+      const row = Math.floor(index / columnsPerRow)
+      const col = index % columnsPerRow
+      
+      const startX = 200
+      const startY = 200
+      
+      const x = startX + (col * (tabWidth + columnSpacing))  
+      const y = startY + (row * (tabHeight + rowSpacing))
+      
+      return {
+          "id": tab.id,
+          "type": "embeddable",
+          
+          "x": x,
+          "y": y,
+          "width": tabWidth,
+          "height": tabHeight,
+          "angle": tab.angle || 0,
+          
+          "strokeColor": "none",
+          "backgroundColor": "none",
+          "fillStyle": "solid",
+          "strokeWidth": 2,
+          "strokeStyle": "solid",
+          "roughness": 0,
+          "opacity": 100,
+          "groupIds": [],
+          "frameId": null,
+          "index": "a2",
+          "roundness": {
+              "type": 4
+          },
+          "seed": 1218149059,
+          "version": 104,
+          "versionNonce": 1873698765,
+          "isDeleted": tab.closed,
+          "boundElements": null,
+          "updated": 1749946396932,
+          "link": tab.url,
+          "locked": false
+      }
+  }))
+      
+  let excalidrawData = $derived({
+    "type": "excalidraw",
+    "version": 2,
+    "source": "isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac",
+    elements,
+    "files": {},
     appState: {
       currentItemRoughness: 0, // 0 = precise/architect style
       currentItemStrokeColor: "#6c757d", // Default line color to mid gray
@@ -91,7 +76,13 @@
       zoom: { value: 0.35 }, // Set zoom to 35% for double-sized tiles
       scrollX: -300, // Center horizontally for larger tiles  
       scrollY: 0, // Position tabs properly on screen
-      ...initialData.appState
+      "gridSize": 20,
+      "gridStep": 5,
+      "gridModeEnabled": false,
+      "viewBackgroundColor": "#0000",
+      "zoom": { "value": 0.3 },
+      "scrollX": -100,
+      "scrollY": 0
     }
   })
 
@@ -109,16 +100,6 @@
         clearCanvas: false
       }
     },
-    viewModeEnabled = false,
-    zenModeEnabled = true,
-    gridModeEnabled = false,
-    theme = 'light',
-    langCode = 'en',
-    autoFocus = true,
-    detectScroll = true,
-    handleKeyboardGlobally = false,
-    width = '100%',
-    height = '100%',
     onFrameFocus = () => {},
     onFrameBlur = () => {},
     getEnabledUserMods = () => { return { css: [], js: [] } },
@@ -127,13 +108,16 @@
   let container
   let root
   let excalidrawAPI = $state(null)
-  let currentZoom = $state(initialData?.appState?.zoom?.value || 0.35)
+  let currentZoom = $state(excalidrawData?.appState?.zoom?.value || 0.35)
+
+  $effect(() => {
+    excalidrawAPI?.updateScene(excalidrawData)
+  })
   
-  function renderExcalidraw () {
-    if (!container || !root) return
-    
+  onMount(() => {
+    root = ReactDOM.createRoot(container)
     const element = React.createElement(ExcalidrawReact, {
-      initialData: mergedInitialData,
+      initialData: excalidrawData,
       onChange: thottle((elements, appState, files) => {
         // Update zoom level for CSS custom property
         if (appState?.zoom?.value !== undefined) {
@@ -150,14 +134,14 @@
       },
       UIOptions,
       renderTopRightUI: null,
-      viewModeEnabled,
-      zenModeEnabled,
-      gridModeEnabled,
-      theme,
-      langCode,
-      autoFocus,
-      detectScroll,
-      handleKeyboardGlobally,
+      viewModeEnabled: false,
+      zenModeEnabled: true,
+      gridModeEnabled: false,
+      theme: 'light',
+      langCode: 'en',
+      autoFocus: true,
+      detectScroll: true,
+      handleKeyboardGlobally: false,
       validateEmbeddable: true, // Disable embed validation true means dont validate, false is enabled validation, do not change.
       renderEmbeddable: (element, appState) => {
         const link = element.link
@@ -175,15 +159,6 @@
       }
     })
     root.render(element)
-  }
-
-  $effect(() => {
-    excalidrawAPI?.updateScene(mergedInitialData)
-  })
-  
-  onMount(() => {
-    root = ReactDOM.createRoot(container)
-    renderExcalidraw()
   })
 
   let loaded = $state(false)

@@ -135,6 +135,11 @@ async function refresh(spaceId) {
             doc = docs[refreshDoc._id]
         }
 
+        if (!doc) { 
+            console.warn('doc not found', refreshDoc)
+            continue
+        }
+
         if (doc.type === 'space') {
             if (!spaceMeta.activeSpace) {
                 spaceMeta.activeSpace = doc._id

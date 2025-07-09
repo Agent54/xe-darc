@@ -20,7 +20,7 @@ export default  class FrameWrapper extends React.Component {
             headerPartOfMain: false,
             isScrolling: false,
             captureTabScreenshot: () => {},
-            onFrameFocus: () => this.props.onFrameFocus(currentTab),
+            onFrameFocus: () => this.props.onFrameFocus(this.props.element.id),
             onFrameBlur: this.props.onFrameBlur || (() => {}),
            //  userMods: this.props.getEnabledUserMods(this.props.tabs[0])
           }

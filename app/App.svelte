@@ -1296,15 +1296,15 @@
         isWindowBackground = !shouldBeActive
     }
     
-    function handleFrameFocus(focusedTab) {
+    function handleFrameFocus(focusedTabId) {
         controlledFrameHasFocus = true
         updateWindowFocusState()
         
         // Make the focused tab active
-        if (focusedTab) {
+        if (focusedTabId) {
             // Set the active tab using the data store function
-            if (focusedTab.id !== data.spaceMeta.activeTab?.id) {
-                data.activate(focusedTab.id)
+            if (focusedTabId !== data.spaceMeta.activeTab?.id) {
+                data.activate(focusedTabId)
             }
         }
     }
@@ -2719,7 +2719,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                         </div>
                     {/key}
                     
-                    <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                 </div>
             {/if}
         {/key}
@@ -2728,7 +2728,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
 
 <div class="controlled-frame-container browser-frame" 
      class:window-controls-overlay={headerPartOfMain} 
-     class:scrolling={isScrolling} 
+     class:scrolling={isScrolling}
      class:sidebar-open={openSidebars.size > 0}
      class:no-transitions={isWindowResizing}
      class:has-left-pins={leftPinnedTabs.length > 0}
@@ -2747,7 +2747,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                             </div>
                         {/key}
                         
-                        <Frame tabId={tab.id} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame tabId={tab.id} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/key}
         {/each}
@@ -2762,7 +2762,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                                 </div>
                             {/key}
                             
-                            <Frame tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                            <Frame tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                         </div>
                     {/if}
                 {/key}
@@ -2787,7 +2787,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                         </div>
                     {/key}
                     
-                    <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    <Frame {tab} {tabs} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                 </div>
             {/if}
         {/key}
