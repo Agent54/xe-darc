@@ -112,7 +112,8 @@
             selectedTarget,
             selectedModel,
             timestamp: new Date().toISOString(),
-            status: 'queued' // queued, processing, completed
+            status: 'queued', // queued, processing, completed
+            paused: false // Add paused state for individual items
         }
         
         messageQueue = [...messageQueue, queueItem]
@@ -133,14 +134,26 @@
         isProcessing = true
         
         while (messageQueue.length > 0 && !queuePaused) {
-            const queueItem = messageQueue[0]
+            // Find first unpaused item
+            const queueIndex = messageQueue.findIndex(item => item.status === 'queued' && !item.paused)
+            if (queueIndex === -1) {
+                // No unpaused items, wait or break
+                break
+            }
+            
+            const queueItem = messageQueue[queueIndex]
             queueItem.status = 'processing'
             messageQueue = [...messageQueue]
             
-            await processMessage(queueItem)
+            const processingResult = await processMessage(queueItem)
             
-            // Remove processed item from queue
-            messageQueue = messageQueue.slice(1)
+            // Remove processed item from queue (regardless of result)
+            messageQueue = messageQueue.filter(item => item.id !== queueItem.id)
+            
+            // If processing was cancelled, break
+            if (!processingResult) {
+                break
+            }
         }
         
         isProcessing = false
@@ -222,9 +235,9 @@
                 }]
             }
 
-            // Simulate processing delay
+            // Simulate processing delay (reduced from 5000ms to 2000ms)
             await new Promise(resolve => {
-                currentTimeout = setTimeout(resolve, 5000)
+                currentTimeout = setTimeout(resolve, 2000)
             })
             
             const mockResponse = `I understand you want to work with "${queueItem.userMessage}". Based on the context from ${selectedTargetObj?.name || 'the selected target'}, here's what I can help with.`
@@ -239,7 +252,10 @@
             
             // Update chat timestamp to bump to top
             updateCurrentChatTimestamp()
+            
+            return true // Processing completed successfully
         } catch (error) {
+            console.error('Agent processing error:', error)
             const errorMessageId = (Date.now() + 2).toString()
             chatHistory = [...chatHistory, {
                 id: errorMessageId,
@@ -247,6 +263,8 @@
                 content: 'Sorry, I encountered an error. Please try again.',
                 timestamp: new Date().toISOString()
             }]
+            
+            return true // Error handled, continue processing
         } finally {
             currentTimeout = null
         }
@@ -268,6 +286,26 @@
 
     function pauseQueue() {
         queuePaused = true
+        // Don't interrupt current task, just pause queue processing
+        
+        // Re-focus the input
+        const input = document.querySelector('.agent-conversation-input')
+        if (input) input.focus()
+    }
+
+    function resumeQueue() {
+        queuePaused = false
+        if (messageQueue.length > 0) {
+            processQueue()
+        }
+        
+        // Re-focus the input
+        const input = document.querySelector('.agent-conversation-input')
+        if (input) input.focus()
+    }
+
+    function stopCurrentTask() {
+        // Only stop the current active task, don't clear queue
         if (currentTimeout) {
             clearTimeout(currentTimeout)
             currentTimeout = null
@@ -282,18 +320,38 @@
             resetMarkdown()
         }
         
+        // Stop the current processing
         isProcessing = false
-    }
-
-    function resumeQueue() {
-        queuePaused = false
-        if (messageQueue.length > 0) {
-            processQueue()
-        }
         
         // Re-focus the input
         const input = document.querySelector('.agent-conversation-input')
         if (input) input.focus()
+    }
+
+    function pauseQueueItem(itemId) {
+        const item = messageQueue.find(q => q.id === itemId)
+        if (item && item.status === 'queued') {
+            item.paused = true
+            messageQueue = [...messageQueue]
+        }
+    }
+
+    function resumeQueueItem(itemId) {
+        const item = messageQueue.find(q => q.id === itemId)
+        if (item && item.status === 'queued') {
+            item.paused = false
+            messageQueue = [...messageQueue]
+            
+            // If queue isn't paused and we're not processing, start processing
+            if (!queuePaused && !isProcessing) {
+                processQueue()
+            }
+        }
+    }
+
+    function stopQueueItem(itemId) {
+        // Remove item from queue
+        messageQueue = messageQueue.filter(q => q.id !== itemId)
     }
 
     function stopProcessing() {
@@ -586,7 +644,7 @@ The current system demonstrates strong performance and security characteristics.
         let remaining = testMarkdown
         
         while (remaining.length > 0) {
-            const chunkLength = Math.floor(Math.random() * 21) + 20 // Random 20-40 chars
+            const chunkLength = Math.floor(Math.random() * 55) + 65
             const chunk = remaining.substring(0, chunkLength)
             chunks.push(chunk)
             remaining = remaining.substring(chunkLength)
@@ -629,7 +687,7 @@ The current system demonstrates strong performance and security characteristics.
         }
         
         // Start streaming after a brief delay
-        setTimeout(streamNextChunk, 500)
+        setTimeout(streamNextChunk, 700)
     }
 
     onMount(() => {
@@ -946,32 +1004,39 @@ The current system demonstrates strong performance and security characteristics.
                                 <span></span>
                             </div>
                         </div>
-                        <div class="agent-stop-controls">
-                            <button class="agent-stop-button" onmousedown={stopProcessing} title="Stop Current & Clear Queue">
+                        <div class="agent-current-task-controls">
+                            <button class="agent-stop-button" onmousedown={stopCurrentTask} title="Stop Current Task">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
                                 </svg>
                             </button>
-                            {#if queuePaused}
-                                <button class="agent-queue-btn" onmousedown={resumeQueue} title="Resume Queue">
-                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-                                    </svg>
-                                </button>
-                            {:else}
-                                <button class="agent-queue-btn" onmousedown={pauseQueue} title="Pause Queue">
-                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
-                                    </svg>
-                                </button>
-                            {/if}
                         </div>
                     </div>
                 {/if}
                 
+                {#if messageQueue.length > 0}
+                    <div class="agent-global-controls">
+                        {#if queuePaused}
+                            <button class="agent-queue-btn" onmousedown={resumeQueue} title="Resume Queue">
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                                </svg>
+                            </button>
+                        {:else}
+                            <button class="agent-queue-btn" onmousedown={pauseQueue} title="Pause Queue">
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                                </svg>
+                            </button>
+                        {/if}
+                    </div>
+                {/if}
+                
+
+                
                 {#if messageQueue.filter(item => item.status === 'queued').length > 0}
                     {#each messageQueue.filter(item => item.status === 'queued') as queueItem, index}
-                        <div class="agent-chat-message user queued">
+                        <div class="agent-chat-message user queued" class:paused={queueItem.paused}>
                             <div class="agent-chat-message-content">
                                 <div class="agent-message-text">
                                     {queueItem.userMessage}
@@ -979,7 +1044,27 @@ The current system demonstrates strong performance and security characteristics.
                             </div>
                             <div class="agent-chat-message-time-row">
                                 <div class="agent-chat-message-time">
-                                    Queued #{index + 1}
+                                    Queued #{index + 1} {queueItem.paused ? '(Paused)' : ''}
+                                </div>
+                                <div class="agent-queue-item-controls">
+                                    {#if queueItem.paused}
+                                        <button class="agent-queue-item-btn play" onmousedown={() => resumeQueueItem(queueItem.id)} title="Resume this item">
+                                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                                            </svg>
+                                        </button>
+                                    {:else}
+                                        <button class="agent-queue-item-btn pause" onmousedown={() => pauseQueueItem(queueItem.id)} title="Pause this item">
+                                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                                            </svg>
+                                        </button>
+                                    {/if}
+                                    <button class="agent-queue-item-btn stop" onmousedown={() => stopQueueItem(queueItem.id)} title="Remove this item">
+                                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -995,7 +1080,7 @@ The current system demonstrates strong performance and security characteristics.
                         class="agent-conversation-input" 
                         bind:value={conversation}
                         onkeydown={handleKeyDown}
-                        placeholder="Ask me anything about this {viewMode === 'canvas' ? 'space' : 'tab'}..."
+                        placeholder="We can do anything..."
                         rows="3"
                     ></textarea>
                     <button 
@@ -1046,6 +1131,18 @@ The current system demonstrates strong performance and security characteristics.
         border-bottom: 1px solid rgba(255, 255, 255, 0.04);
         margin: 0 0 12px 0;
         top: 0px;
+    }
+
+    .agent-sticky-header::after {
+        content: '';
+        position: absolute;
+        bottom: -12px;
+        left: 0;
+        right: 0;
+        height: 12px;
+        background: linear-gradient(to bottom, rgba(0, 0, 0, 0.95), transparent);
+        pointer-events: none;
+        z-index: 11;
     }
 
     .agent-header-row {
@@ -1238,6 +1335,7 @@ The current system demonstrates strong performance and security characteristics.
         display: flex;
         flex-direction: column;
         gap: 12px;
+        scroll-behavior: smooth;
     }
 
     .agent-chat-scroll-padding {
@@ -1422,6 +1520,27 @@ The current system demonstrates strong performance and security characteristics.
         opacity: 0.6;
     }
 
+    .agent-chat-message.paused {
+        opacity: 0.4;
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .agent-current-task-controls {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+        padding-left: 12px;
+    }
+
+    .agent-global-controls {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+        margin: 8px 0;
+    }
+
+
+
     .agent-queue-btn {
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1436,6 +1555,30 @@ The current system demonstrates strong performance and security characteristics.
     }
 
     .agent-queue-btn:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .agent-queue-item-controls {
+        display: flex;
+        gap: 4px;
+    }
+
+    .agent-queue-item-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 3px;
+        padding: 2px;
+        color: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .agent-queue-item-btn:hover {
         background: rgba(255, 255, 255, 0.08);
         border-color: rgba(255, 255, 255, 0.12);
         color: rgba(255, 255, 255, 0.9);
@@ -1737,6 +1880,18 @@ The current system demonstrates strong performance and security characteristics.
         width: 100%;
         margin: 16px 0;
         align-items: flex-start;
+        animation: messageSlideIn 0.3s ease-out;
+    }
+
+    @keyframes messageSlideIn {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
     .agent-markdown-content {
@@ -1753,7 +1908,35 @@ The current system demonstrates strong performance and security characteristics.
         overflow-y: auto;
         max-height: 600px;
         font-size: 12px;
+        transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        min-height: 40px;
     }
+
+    /* .agent-markdown-content::before {
+        content: '';
+        position: sticky;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 12px;
+        margin: -12px -12px 0 -12px;
+        background: linear-gradient(to bottom, rgba(0, 0, 0, 0.4), transparent);
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    .agent-markdown-content::after {
+        content: '';
+        position: sticky;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 12px;
+        margin: 0 -12px -12px -12px;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.4), transparent);
+        pointer-events: none;
+        z-index: 1;
+    } */
 
     .agent-markdown-streaming {
         position: relative;
@@ -1762,19 +1945,34 @@ The current system demonstrates strong performance and security characteristics.
         font-size: 12px;
         line-height: 1.5;
         color: rgba(255, 255, 255, 0.95);
+        transform-origin: top left;
+        animation: smoothExpand 0.3s ease-out;
+    }
+
+    @keyframes smoothExpand {
+        from {
+            transform: scaleY(0.98);
+        }
+        to {
+            transform: scaleY(1);
+        }
     }
 
     .agent-markdown-chunk {
         opacity: 0;
+        transform: translateY(4px);
         animation: fadeInChunk 0.4s ease-out forwards;
+        display: inline;
     }
 
     @keyframes fadeInChunk {
         from {
             opacity: 0;
+            transform: translateY(4px);
         }
         to {
             opacity: 1;
+            transform: translateY(0);
         }
     }
 

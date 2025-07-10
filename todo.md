@@ -461,3 +461,9 @@ sub agent threads with killing and process monitoring
 
 
 floating mode for agent sidebar?
+
+
+dropdown inside controlled frame broken!!
+
+
+fix scrolling tabs in sidebar on activating space, fix missing space title
