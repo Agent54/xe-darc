@@ -454,3 +454,10 @@ selection of prompt library
 
 download/screenshot apps
 
+multiselect on canvas etc for context to agent chat feature
+
+sub agent threads with killing and process monitoring
+
+
+
+floating mode for agent sidebar?

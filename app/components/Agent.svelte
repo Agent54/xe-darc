@@ -2,6 +2,7 @@
     import { onMount } from 'svelte'
     import RightSidebar from './RightSidebar.svelte'
     import data from '../data.svelte.js'
+    import { micromark } from 'micromark'
 
     let { 
         onClose, 
@@ -23,6 +24,35 @@
     let hoveredMessageId = $state(null)
     let currentTimeout = null
     let cardCycleIndex = $state(0)
+    let streamingMarkdown = $state(null)
+    let currentStreamingMessage = $state(null)
+    let messageQueue = $state([])
+    let queuePaused = $state(false)
+    let chatHistoryList = $state([])
+    let editingMessageId = $state(null)
+    let editingContent = $state('')
+    let markdownChunks = $state([])
+    let isMarkdownStreaming = $state(false)
+
+    // Streaming markdown functions
+    let markdownBuffer = $state('')
+
+    function addMarkdownChunk(chunk) {
+        markdownBuffer += chunk
+        try {
+            return micromark(markdownBuffer)
+        } catch (error) {
+            return markdownBuffer
+        }
+    }
+    
+    function finalizeMarkdown() {
+        return micromark(markdownBuffer)
+    }
+    
+    function resetMarkdown() {
+        markdownBuffer = ''
+    }
 
     // Get available targets with actual names in brackets
     let availableTargets = $derived.by(() => {
@@ -70,28 +100,69 @@
     }
 
     async function sendMessage() {
-        if (!conversation.trim() || isProcessing) return
+        if (!conversation.trim()) return
 
         const userMessage = conversation.trim()
         conversation = ''
-        isProcessing = true
 
+        // Add message to queue
+        const queueItem = {
+            id: Date.now().toString(),
+            userMessage,
+            selectedTarget,
+            selectedModel,
+            timestamp: new Date().toISOString(),
+            status: 'queued' // queued, processing, completed
+        }
+        
+        messageQueue = [...messageQueue, queueItem]
+        
+        // Process queue if not already processing
+        if (!isProcessing) {
+            processQueue()
+        }
+        
+        // Re-focus input
+        const input = document.querySelector('.agent-conversation-input')
+        if (input) input.focus()
+    }
+
+    async function processQueue() {
+        if (queuePaused || messageQueue.length === 0) return
+        
+        isProcessing = true
+        
+        while (messageQueue.length > 0 && !queuePaused) {
+            const queueItem = messageQueue[0]
+            queueItem.status = 'processing'
+            messageQueue = [...messageQueue]
+            
+            await processMessage(queueItem)
+            
+            // Remove processed item from queue
+            messageQueue = messageQueue.slice(1)
+        }
+        
+        isProcessing = false
+    }
+
+    async function processMessage(queueItem) {
         // Add user message to history
-        const messageId = Date.now().toString()
+        const messageId = queueItem.id
         chatHistory = [...chatHistory, {
             id: messageId,
             role: 'user',
-            content: userMessage,
-            timestamp: new Date().toISOString()
+            content: queueItem.userMessage,
+            timestamp: queueItem.timestamp
         }]
 
         try {
             // Add info cards showing what the agent is accessing/doing
-            const selectedTargetObj = availableTargets.find(t => t.id === selectedTarget)
+            const selectedTargetObj = availableTargets.find(t => t.id === queueItem.selectedTarget)
             const infoCards = []
             
             // Show context access
-            if (selectedTarget === 'current-tab' && currentTab) {
+            if (queueItem.selectedTarget === 'current-tab' && currentTab) {
                 infoCards.push({
                     type: 'context',
                     action: 'read-tab',
@@ -100,7 +171,7 @@
                     url: currentTab.url,
                     favicon: currentTab.favicon || null
                 })
-            } else if (selectedTarget === 'current-space') {
+            } else if (queueItem.selectedTarget === 'current-space') {
                 const spaceName = data.spaceMeta.activeSpace ? (data.spaces[data.spaceMeta.activeSpace]?.name || 'Unnamed Space') : 'No active space'
                 const tabCount = data.spaces[data.spaceMeta.activeSpace]?.tabs?.length || 0
                 infoCards.push({
@@ -110,7 +181,7 @@
                     title: spaceName,
                     details: `${tabCount} tabs`
                 })
-            } else if (selectedTarget === 'all-spaces') {
+            } else if (queueItem.selectedTarget === 'all-spaces') {
                 infoCards.push({
                     type: 'context',
                     action: 'read-all-spaces',
@@ -156,7 +227,7 @@
                 currentTimeout = setTimeout(resolve, 5000)
             })
             
-            const mockResponse = `I understand you want to work with "${userMessage}". Based on the context from ${selectedTargetObj?.name || 'the selected target'}, here's what I can help with.`
+            const mockResponse = `I understand you want to work with "${queueItem.userMessage}". Based on the context from ${selectedTargetObj?.name || 'the selected target'}, here's what I can help with.`
             
             const assistantMessageId = (Date.now() + 1).toString()
             chatHistory = [...chatHistory, {
@@ -165,6 +236,9 @@
                 content: mockResponse,
                 timestamp: new Date().toISOString()
             }]
+            
+            // Update chat timestamp to bump to top
+            updateCurrentChatTimestamp()
         } catch (error) {
             const errorMessageId = (Date.now() + 2).toString()
             chatHistory = [...chatHistory, {
@@ -174,33 +248,174 @@
                 timestamp: new Date().toISOString()
             }]
         } finally {
-            isProcessing = false
             currentTimeout = null
-            // Re-focus the input after sending - reduced delay
-            const input = document.querySelector('.agent-conversation-input')
-            if (input) input.focus()
         }
     }
 
     function clearHistory() {
+        // Save current chat to history before clearing
+        saveChatHistory()
+        
         chatHistory = []
+        currentStreamingMessage = null
+        resetMarkdown()
+        markdownChunks = []
+        isMarkdownStreaming = false
+        messageQueue = []
+        queuePaused = false
+        currentChatId = null
     }
 
-    function stopProcessing() {
+    function pauseQueue() {
+        queuePaused = true
         if (currentTimeout) {
             clearTimeout(currentTimeout)
             currentTimeout = null
         }
+        
+        // If we're streaming markdown, finalize it
+        if (currentStreamingMessage && markdownBuffer) {
+            currentStreamingMessage.streaming = false
+            currentStreamingMessage.content = finalizeMarkdown()
+            chatHistory = [...chatHistory]
+            currentStreamingMessage = null
+            resetMarkdown()
+        }
+        
         isProcessing = false
+    }
+
+    function resumeQueue() {
+        queuePaused = false
+        if (messageQueue.length > 0) {
+            processQueue()
+        }
+        
         // Re-focus the input
         const input = document.querySelector('.agent-conversation-input')
         if (input) input.focus()
     }
 
+    function stopProcessing() {
+        pauseQueue()
+        messageQueue = []
+        
+        // Re-focus the input
+        const input = document.querySelector('.agent-conversation-input')
+        if (input) input.focus()
+    }
+
+    function editMessage(messageId) {
+        const message = chatHistory.find(m => m.id === messageId)
+        if (message && message.role === 'user') {
+            editingMessageId = messageId
+            editingContent = message.content
+        }
+    }
+
+    function saveMessageEdit(messageId) {
+        const messageIndex = chatHistory.findIndex(m => m.id === messageId)
+        if (messageIndex !== -1) {
+            chatHistory[messageIndex].content = editingContent
+            chatHistory = [...chatHistory]
+        }
+        editingMessageId = null
+        editingContent = ''
+    }
+
+    function cancelMessageEdit() {
+        editingMessageId = null
+        editingContent = ''
+    }
+
+    function saveChatHistory() {
+        if (chatHistory.length > 0) {
+            const historyItem = {
+                id: Date.now().toString(),
+                timestamp: new Date().toISOString(),
+                title: generateHistoryTitle(),
+                messages: [...chatHistory]
+            }
+            chatHistoryList = [...chatHistoryList, historyItem]
+            
+            // Save to localStorage
+            localStorage.setItem('agent-chat-history', JSON.stringify(chatHistoryList))
+        }
+    }
+
+    function updateCurrentChatTimestamp() {
+        if (currentChatId && chatHistory.length > 0) {
+            const index = chatHistoryList.findIndex(h => h.id === currentChatId)
+            if (index !== -1) {
+                chatHistoryList[index].timestamp = new Date().toISOString()
+                chatHistoryList[index].messages = [...chatHistory]
+                // Move to front
+                const item = chatHistoryList.splice(index, 1)[0]
+                chatHistoryList = [item, ...chatHistoryList]
+                localStorage.setItem('agent-chat-history', JSON.stringify(chatHistoryList))
+            }
+        }
+    }
+
+    let currentChatId = $state(null)
+    let sortedHistoryList = $derived.by(() => {
+        const sorted = [...chatHistoryList].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        
+        // Add current chat at top if it exists
+        if (chatHistory.length > 0) {
+            const currentChat = {
+                id: currentChatId || 'current',
+                timestamp: new Date().toISOString(),
+                title: generateHistoryTitle() + ' (current)',
+                messages: [...chatHistory],
+                isCurrent: true
+            }
+            return [currentChat, ...sorted.filter(h => h.id !== currentChatId)]
+        }
+        
+        return sorted
+    })
+
+    function generateHistoryTitle() {
+        const firstUserMessage = chatHistory.find(m => m.role === 'user')
+        if (firstUserMessage) {
+            return firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '')
+        }
+        return 'Chat conversation'
+    }
+
+    function loadChatHistory(historyId) {
+        if (historyId === 'current' || historyId === currentChatId) {
+            // Already current chat, do nothing
+            return
+        }
+        
+        const historyItem = chatHistoryList.find(h => h.id === historyId)
+        if (historyItem) {
+            // Save current chat before switching
+            if (chatHistory.length > 0 && !currentChatId) {
+                saveChatHistory()
+            }
+            
+            chatHistory = [...historyItem.messages]
+            currentChatId = historyId
+            markdownChunks = []
+            isMarkdownStreaming = false
+        }
+    }
+
+    function deleteChatHistory(historyId) {
+        chatHistoryList = chatHistoryList.filter(h => h.id !== historyId)
+        localStorage.setItem('agent-chat-history', JSON.stringify(chatHistoryList))
+    }
+
     function copyMessage(messageId) {
         const message = chatHistory.find(m => m.id === messageId)
         if (message) {
-            navigator.clipboard.writeText(message.content)
+            // For markdown messages, copy the raw content instead of HTML
+            const contentToCopy = message.role === 'assistant-markdown' ? 
+                (message.rawContent || message.content) : message.content
+            navigator.clipboard.writeText(contentToCopy)
         }
     }
 
@@ -217,7 +432,8 @@
     function handleActionButton(action) {
         switch (action) {
             case 'search':
-                conversation = conversation || 'search for '
+                // Generate test markdown document
+                generateTestMarkdownDocument()
                 break
             case 'ask':
                 conversation = conversation || 'ask about '
@@ -241,11 +457,196 @@
         if (input) input.focus()
     }
 
+    async function generateTestMarkdownDocument() {
+        if (isProcessing) return
+        
+        isProcessing = true
+        const messageId = Date.now().toString()
+        
+        // Add user message
+        chatHistory = [...chatHistory, {
+            id: messageId,
+            role: 'user',
+            content: 'Generate a test markdown document',
+            timestamp: new Date().toISOString()
+        }]
+        
+        // Add streaming markdown message
+        const markdownMessageId = (Date.now() + 1).toString()
+        currentStreamingMessage = {
+            id: markdownMessageId,
+            role: 'assistant-markdown',
+            content: '',
+            rawContent: '',
+            timestamp: new Date().toISOString(),
+            streaming: true
+        }
+        
+        chatHistory = [...chatHistory, currentStreamingMessage]
+        
+        // Initialize streaming
+        markdownChunks = []
+        isMarkdownStreaming = true
+        resetMarkdown()
+        
+        // Test markdown document
+        const testMarkdown = `# Comprehensive Analysis Report
+
+## Executive Summary
+
+This document provides a detailed analysis of the current system architecture and recommendations for future improvements. The analysis covers performance metrics, security considerations, and scalability patterns.
+
+### Key Findings
+
+- **Performance**: Current response times average 120ms
+- **Security**: All endpoints properly authenticated  
+- **Scalability**: System can handle 10,000 concurrent users
+- **Reliability**: 99.97% uptime achieved
+
+## Technical Architecture
+
+### Current Stack
+
+The system is built using modern web technologies:
+
+\`\`\`javascript
+// Example configuration
+const config = {
+    database: 'postgresql',
+    cache: 'redis',
+    framework: 'svelte',
+    deployment: 'docker'
+}
+\`\`\`
+
+### Database Schema
+
+| Table | Records | Growth Rate |
+|-------|---------|-------------|
+| Users | 50,000 | 5% monthly |
+| Sessions | 2.3M | 15% monthly |
+| Analytics | 890K | 25% monthly |
+
+## Performance Metrics
+
+### Response Times
+- **API Endpoints**: 95ms average
+- **Database Queries**: 15ms average  
+- **Cache Hit Rate**: 87%
+
+### Load Testing Results
+
+We conducted comprehensive load testing with the following results:
+
+1. **Baseline Performance**: 1000 req/sec
+2. **Peak Load**: 5000 req/sec sustained
+3. **Breaking Point**: 8500 req/sec
+
+## Security Assessment
+
+### Authentication
+- Multi-factor authentication implemented
+- JWT tokens with 15-minute expiration
+- Rate limiting: 100 requests per minute
+
+### Data Protection
+- All data encrypted at rest using AES-256
+- TLS 1.3 for data in transit
+- Regular security audits performed
+
+## Recommendations
+
+### Short Term (Next 3 months)
+1. **Optimize database queries** - Reduce average query time by 30%
+2. **Implement CDN** - Improve global response times
+3. **Add monitoring** - Enhanced observability with Datadog
+
+### Long Term (Next 12 months)
+1. **Microservices migration** - Break monolith into services
+2. **Auto-scaling** - Implement Kubernetes horizontal scaling
+3. **Multi-region deployment** - Add redundancy across regions
+
+## Conclusion
+
+The current system demonstrates strong performance and security characteristics. With the recommended improvements, we can achieve:
+
+- 50% faster response times
+- 99.99% uptime SLA
+- Support for 100,000 concurrent users
+- Enhanced security posture
+
+> **Note**: All metrics are based on production data from the last 6 months. Implementation timeline depends on resource allocation and business priorities.
+
+---
+
+*Report generated on ${new Date().toLocaleDateString()}*`
+
+        // Split into small random-length chunks (20-40 chars)
+        const chunks = []
+        let remaining = testMarkdown
+        
+        while (remaining.length > 0) {
+            const chunkLength = Math.floor(Math.random() * 21) + 20 // Random 20-40 chars
+            const chunk = remaining.substring(0, chunkLength)
+            chunks.push(chunk)
+            remaining = remaining.substring(chunkLength)
+        }
+        
+        // Stream the chunks
+        let chunkIndex = 0
+        
+        const streamNextChunk = () => {
+            if (chunkIndex < chunks.length) {
+                const chunk = chunks[chunkIndex]
+                
+                // Add to chunks array for streaming display
+                markdownChunks = [...markdownChunks, chunk]
+                
+                // Update raw content for copying
+                currentStreamingMessage.rawContent += chunk
+                
+                // Trigger reactivity
+                chatHistory = [...chatHistory]
+                
+                chunkIndex++
+                
+                // Schedule next chunk
+                currentTimeout = setTimeout(streamNextChunk, 50) // 50ms delay between chunks
+            } else {
+                // Streaming complete
+                isMarkdownStreaming = false
+                currentStreamingMessage.streaming = false
+                currentStreamingMessage.content = micromark(currentStreamingMessage.rawContent)
+                chatHistory = [...chatHistory]
+                
+                isProcessing = false
+                currentTimeout = null
+                
+                // Re-focus input
+                const input = document.querySelector('.agent-conversation-input')
+                if (input) input.focus()
+            }
+        }
+        
+        // Start streaming after a brief delay
+        setTimeout(streamNextChunk, 500)
+    }
+
     onMount(() => {
         // Auto-focus the input when sidebar opens
         const input = document.querySelector('.agent-conversation-input')
         if (input) {
             setTimeout(() => input.focus(), 100)
+        }
+        
+        // Load chat history from localStorage
+        const savedHistory = localStorage.getItem('agent-chat-history')
+        if (savedHistory) {
+            try {
+                chatHistoryList = JSON.parse(savedHistory)
+            } catch (error) {
+                console.error('Failed to load chat history:', error)
+            }
         }
     })
 </script>
@@ -254,7 +655,44 @@
 
 <RightSidebar title="Agent" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity}>
     {#snippet children()}
-        <div class="agent-header">
+        <div class="agent-sticky-header">
+            <div class="agent-header-row">
+                <div class="agent-history-dropdown">
+                    <button class="agent-history-button" title="Chat History">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                        History
+                    </button>
+                    <div class="agent-history-dropdown-content">
+                        {#if sortedHistoryList.length > 0}
+                            {#each sortedHistoryList as historyItem}
+                                <div class="agent-history-item" data-current={historyItem.isCurrent}>
+                                    <div class="agent-history-item-main" onmousedown={() => loadChatHistory(historyItem.id)}>
+                                        <div class="agent-history-item-title">{historyItem.title}</div>
+                                        <div class="agent-history-item-time">{new Date(historyItem.timestamp).toLocaleString()}</div>
+                                    </div>
+                                    {#if !historyItem.isCurrent}
+                                        <button class="agent-history-item-delete" onmousedown={() => deleteChatHistory(historyItem.id)} title="Delete">
+                                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    {/if}
+                                </div>
+                            {/each}
+                        {:else}
+                            <div class="agent-history-empty">No chat history yet</div>
+                        {/if}
+                    </div>
+                </div>
+                
+                <select class="agent-model-select" bind:value={selectedModel}>
+                    <option value="claude-sonnet">Claude Sonnet</option>
+                    <option value="openai-o3">OpenAI O3</option>
+                </select>
+            </div>
+            
             <div class="agent-target-selector">
                 <div class="agent-selector-row">
                     <label class="agent-context-label">Context:</label>
@@ -268,7 +706,7 @@
         </div>
 
         <div class="agent-chat-container">
-            {#if chatHistory.length > 0}
+            {#if chatHistory.length > 0 || messageQueue.length > 0}
                 <div class="agent-chat-history">
                     {#each chatHistory as message}
                     {#if message.role === 'info-cards'}
@@ -405,13 +843,71 @@
                                 </div>
                             {/each}
                         </div>
+                    {:else if message.role === 'assistant-markdown'}
+                        <div class="agent-markdown-message" 
+                             role="group"
+                             onmouseenter={() => hoveredMessageId = message.id} 
+                             onmouseleave={() => hoveredMessageId = null}>
+                            <div class="agent-markdown-content">
+                                {#if message.streaming}
+                                    <div class="agent-markdown-streaming">
+                                        {#each markdownChunks as chunk, index}
+                                            <span class="agent-markdown-chunk" style="animation-delay: {index * 0.05}s">{chunk}</span>
+                                        {/each}
+                                    </div>
+                                {:else}
+                                    <div class="agent-markdown-final">
+                                        {@html message.content}
+                                    </div>
+                                {/if}
+                            </div>
+                            <div class="agent-markdown-time-row">
+                                <div class="agent-chat-message-time">
+                                    {new Date(message.timestamp).toLocaleTimeString()}
+                                </div>
+                                <div class="agent-message-actions" class:visible={hoveredMessageId === message.id}>
+                                    <button class="agent-action-btn" onclick={() => thumbsUp(message.id)} title="Good response" aria-label="Good response">
+                                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m10.598-9.75H14.25M5.904 18.5c.083.205.173.405.27.602.197.4-.078.898-.523.898h-.908c-.889 0-1.713-.518-1.972-1.368a12 12 0 0 1-.521-3.507c0-1.553.295-3.036.831-4.398C3.387 9.953 4.167 9.5 5.904 9.5h1.053c.472 0 .745.556.5.96a8.958 8.958 0 0 0-1.302 4.665c0 1.194.232 2.333.654 3.375Z" />
+                                        </svg>
+                                    </button>
+                                    <button class="agent-action-btn" onclick={() => thumbsDown(message.id)} title="Poor response" aria-label="Poor response">
+                                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.498 15.25H4.372c-1.026 0-1.945-.694-2.054-1.715a12.137 12.137 0 0 1-.068-1.285c0-2.848.992-5.464 2.649-7.521C5.287 4.247 5.886 4 6.504 4h4.016a4.5 4.5 0 0 1 1.423.23l3.114 1.04a4.5 4.5 0 0 0 1.423.23h1.294M7.498 15.25c.618 0 .991.724.725 1.282A7.997 7.997 0 0 0 7.5 19.75 2.25 2.25 0 0 0 9.75 22a.75.75 0 0 0 .75-.75v-.633c0-.573.11-1.14.322-1.672.304-.76.93-1.33 1.653-1.715a9.04 9.04 0 0 0 2.86-2.4c.498-.634 1.226-1.08 2.032-1.08h.384m-10.253 1.5H9.7m8.075-9.75c.01.05.027.1.05.148.593 1.2.925 2.55.925 3.977 0 1.487-.36 2.89-.999 4.125m.023-8.25c-.076-.365.183-.75.575-.75h.908c.889 0 1.713.518 1.972 1.368.339 1.11.521 2.287.521 3.507 0 1.553-.295 3.036-.831 4.398-.306.774-1.086 1.227-2.824 1.227h-1.053c-.472 0-.745-.556-.5-.960a8.95 8.95 0 0 0 1.302-4.665c0-1.194-.232-2.333-.654-3.375Z" />
+                                        </svg>
+                                    </button>
+                                    <button class="agent-action-btn" onclick={() => copyMessage(message.id)} title="Copy message" aria-label="Copy message">
+                                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     {:else}
                         <div class="agent-chat-message" class:user={message.role === 'user'} class:assistant={message.role === 'assistant'} class:error={message.role === 'error'} 
                              role="group"
                              onmouseenter={() => hoveredMessageId = message.id} 
                              onmouseleave={() => hoveredMessageId = null}>
                             <div class="agent-chat-message-content">
-                                {message.content}
+                                {#if editingMessageId === message.id}
+                                    <div class="agent-edit-container">
+                                        <textarea 
+                                            class="agent-edit-input"
+                                            bind:value={editingContent}
+                                            placeholder="Edit your message..."
+                                            rows="3"
+                                        ></textarea>
+                                        <div class="agent-edit-actions">
+                                            <button class="agent-edit-btn save" onmousedown={() => saveMessageEdit(message.id)}>Save</button>
+                                            <button class="agent-edit-btn cancel" onmousedown={cancelMessageEdit}>Cancel</button>
+                                        </div>
+                                    </div>
+                                {:else}
+                                    <div class="agent-message-text" class:editable={message.role === 'user'} onclick={() => message.role === 'user' ? editMessage(message.id) : null}>
+                                        {message.content}
+                                    </div>
+                                {/if}
                             </div>
                             <div class="agent-chat-message-time-row">
                                 <div class="agent-chat-message-time">
@@ -450,26 +946,50 @@
                                 <span></span>
                             </div>
                         </div>
+                        <div class="agent-stop-controls">
+                            <button class="agent-stop-button" onmousedown={stopProcessing} title="Stop Current & Clear Queue">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
+                                </svg>
+                            </button>
+                            {#if queuePaused}
+                                <button class="agent-queue-btn" onmousedown={resumeQueue} title="Resume Queue">
+                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                                    </svg>
+                                </button>
+                            {:else}
+                                <button class="agent-queue-btn" onmousedown={pauseQueue} title="Pause Queue">
+                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                                    </svg>
+                                </button>
+                            {/if}
+                        </div>
                     </div>
+                {/if}
+                
+                {#if messageQueue.filter(item => item.status === 'queued').length > 0}
+                    {#each messageQueue.filter(item => item.status === 'queued') as queueItem, index}
+                        <div class="agent-chat-message user queued">
+                            <div class="agent-chat-message-content">
+                                <div class="agent-message-text">
+                                    {queueItem.userMessage}
+                                </div>
+                            </div>
+                            <div class="agent-chat-message-time-row">
+                                <div class="agent-chat-message-time">
+                                    Queued #{index + 1}
+                                </div>
+                            </div>
+                        </div>
+                    {/each}
                 {/if}
                 
                 </div>
             {/if}
             
             <div class="agent-chat-input-container">
-                {#if isProcessing}
-                    <div class="agent-stop-button-container">
-                        <button 
-                            class="agent-stop-button" 
-                            onmouseup={stopProcessing}
-                            title="Stop"
-                            aria-label="Stop">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z" />
-                            </svg>
-                        </button>
-                    </div>
-                {/if}
                 <div class="agent-textarea-container">
                     <textarea 
                         class="agent-conversation-input" 
@@ -481,21 +1001,13 @@
                     <button 
                         class="agent-send-button" 
                         onmouseup={sendMessage}
-                        disabled={!conversation.trim() || isProcessing}
+                        disabled={!conversation.trim()}
                         title="Send (Enter)"
                         aria-label="Send (Enter)">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
                         </svg>
                     </button>
-                </div>
-                
-                <div class="agent-model-selector">
-                    <label class="agent-model-label">Model:</label>
-                    <select class="agent-model-select" bind:value={selectedModel}>
-                        <option value="claude-sonnet">Claude Sonnet</option>
-                        <option value="openai-o3">OpenAI O3</option>
-                    </select>
                 </div>
                 
                 <div class="agent-action-buttons">
@@ -512,7 +1024,7 @@
         {#if chatHistory.length > 0}
             <div class="agent-chat-actions">
                 <button class="agent-clear-button" onmouseup={clearHistory}>
-                    Clear
+                    New
                 </button>
             </div>
         {/if}
@@ -525,9 +1037,146 @@
 </RightSidebar>
 
 <style>
-    .agent-header {
-        padding: 0 0 12px 0;
+    .agent-sticky-header {
+        position: sticky;
+        background: rgba(0, 0, 0, 0.95);
+        backdrop-filter: blur(10px);
+        z-index: 10;
+        padding: 16px 0 12px 0;
         border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        margin: 0 0 12px 0;
+        top: 0px;
+    }
+
+    .agent-header-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .agent-history-dropdown {
+        position: relative;
+        display: inline-block;
+        flex: 1;
+    }
+
+    .agent-history-button {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 4px;
+        padding: 6px 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+    }
+
+    .agent-history-button:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .agent-history-dropdown-content {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 4px 0;
+        z-index: 1000;
+        max-height: 300px;
+        overflow-y: auto;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        backdrop-filter: blur(10px);
+        min-width: 280px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .agent-history-dropdown:hover .agent-history-dropdown-content {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .agent-history-item {
+        display: flex;
+        align-items: center;
+        padding: 6px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .agent-history-item:last-child {
+        border-bottom: none;
+    }
+
+    .agent-history-item[data-current="true"] {
+        background: rgba(255, 255, 255, 0.06);
+        border-left: 2px solid rgba(255, 255, 255, 0.3);
+        margin: 2px 4px;
+    }
+
+
+
+    .agent-history-item-main {
+        flex: 1;
+        cursor: pointer;
+        padding: 4px 6px;
+        border-radius: 4px;
+        transition: background 0.2s ease;
+        min-width: 0;
+    }
+
+    .agent-history-item-main:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .agent-history-item-title {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 2px;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .agent-history-item-time {
+        font-size: 9px;
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .agent-history-item-delete {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.5);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 2px;
+        transition: all 0.2s ease;
+        margin-left: 6px;
+        flex-shrink: 0;
+    }
+
+    .agent-history-item-delete:hover {
+        background: rgba(239, 68, 68, 0.2);
+        color: rgba(239, 68, 68, 0.9);
+    }
+
+    .agent-history-empty {
+        padding: 16px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 11px;
     }
 
     .agent-target-selector {
@@ -592,7 +1241,7 @@
     }
 
     .agent-chat-scroll-padding {
-        height: 80vh;
+        height: calc(100vh - 429px);
         flex-shrink: 0;
     }
 
@@ -646,6 +1295,7 @@
         color: rgba(255, 255, 255, 0.5);
         padding: 0 4px;
         flex-shrink: 0;
+        padding-top: 2px;
     }
 
     .agent-message-actions {
@@ -718,21 +1368,6 @@
         gap: 12px;
     }
 
-    .agent-model-selector {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .agent-model-label {
-        font-size: 10px;
-        font-weight: 500;
-        color: rgba(255, 255, 255, 0.5);
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        flex-shrink: 0;
-    }
-
     .agent-model-select {
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.06);
@@ -743,6 +1378,7 @@
         cursor: pointer;
         transition: all 0.2s ease;
         flex: 1;
+        max-width: 140px;
     }
 
     .agent-model-select:hover {
@@ -754,6 +1390,130 @@
         outline: none;
         background: rgba(255, 255, 255, 0.08);
         border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .agent-stop-controls {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+        padding-left: 12px;
+    }
+
+    .agent-stop-button {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: 4px;
+        padding: 6px;
+        color: rgba(239, 68, 68, 0.9);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .agent-stop-button:hover {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: rgba(239, 68, 68, 0.4);
+        color: rgba(239, 68, 68, 1);
+    }
+
+    .agent-chat-message[class*="queued"] {
+        opacity: 0.6;
+    }
+
+    .agent-queue-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 3px;
+        padding: 4px;
+        color: rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .agent-queue-btn:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+
+
+    .agent-edit-container {
+        width: 100%;
+    }
+
+    .agent-edit-input {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        padding: 8px;
+        color: white;
+        font-size: 14px;
+        font-family: inherit;
+        resize: vertical;
+        min-height: 60px;
+        max-height: 200px;
+        transition: all 0.2s ease;
+    }
+
+    .agent-edit-input:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .agent-edit-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .agent-edit-btn {
+        padding: 4px 12px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+    }
+
+    .agent-edit-btn.save {
+        background: rgba(34, 197, 94, 0.2);
+        color: rgba(34, 197, 94, 0.9);
+        border-color: rgba(34, 197, 94, 0.3);
+    }
+
+    .agent-edit-btn.save:hover {
+        background: rgba(34, 197, 94, 0.3);
+        border-color: rgba(34, 197, 94, 0.5);
+    }
+
+    .agent-edit-btn.cancel {
+        background: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.7);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .agent-edit-btn.cancel:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .agent-message-text.editable {
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        transition: background 0.2s ease;
+    }
+
+    .agent-message-text.editable:hover {
+        background: rgba(255, 255, 255, 0.05);
     }
 
     .agent-textarea-container {
@@ -969,5 +1729,197 @@
         background: rgba(255, 255, 255, 0.08);
         color: rgba(255, 255, 255, 0.9);
         border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .agent-markdown-message {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        margin: 16px 0;
+        align-items: flex-start;
+    }
+
+    .agent-markdown-content {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 6px;
+        padding: 12px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.5;
+        color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        position: relative;
+        overflow-y: auto;
+        max-height: 600px;
+        font-size: 12px;
+    }
+
+    .agent-markdown-streaming {
+        position: relative;
+        white-space: pre-wrap;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .agent-markdown-chunk {
+        opacity: 0;
+        animation: fadeInChunk 0.4s ease-out forwards;
+    }
+
+    @keyframes fadeInChunk {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    .agent-markdown-final {
+        transition: opacity 0.8s ease-in-out;
+    }
+
+    .agent-markdown-time-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        justify-content: space-between;
+        width: 100%;
+        margin-top: 8px;
+    }
+
+    /* Markdown Content Styling */
+    .agent-markdown-content :global(h1) {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 0 0 10px 0;
+        color: rgba(255, 255, 255, 0.98);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 4px;
+    }
+
+    .agent-markdown-content :global(h2) {
+        font-size: 14px;
+        font-weight: 500;
+        margin: 16px 0 8px 0;
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .agent-markdown-content :global(h3) {
+        font-size: 13px;
+        font-weight: 500;
+        margin: 12px 0 6px 0;
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .agent-markdown-content :global(p) {
+        margin: 0 0 8px 0;
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 12px;
+    }
+
+    .agent-markdown-content :global(ul),
+    .agent-markdown-content :global(ol) {
+        margin: 0 0 8px 0;
+        padding-left: 16px;
+        font-size: 12px;
+    }
+
+    .agent-markdown-content :global(li) {
+        margin: 2px 0;
+        color: rgba(255, 255, 255, 0.85);
+    }
+
+    .agent-markdown-content :global(strong) {
+        color: rgba(255, 255, 255, 0.95);
+        font-weight: 600;
+    }
+
+    .agent-markdown-content :global(em) {
+        color: rgba(255, 255, 255, 0.9);
+        font-style: italic;
+    }
+
+    .agent-markdown-content :global(code) {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 3px;
+        padding: 1px 4px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .agent-markdown-content :global(pre) {
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        padding: 10px;
+        margin: 8px 0;
+        overflow-x: auto;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 10px;
+        line-height: 1.4;
+    }
+
+    .agent-markdown-content :global(pre code) {
+        background: none;
+        border: none;
+        padding: 0;
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .agent-markdown-content :global(table) {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8px 0;
+        font-size: 11px;
+    }
+
+    .agent-markdown-content :global(th),
+    .agent-markdown-content :global(td) {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 4px 8px;
+        text-align: left;
+    }
+
+    .agent-markdown-content :global(th) {
+        background: rgba(255, 255, 255, 0.05);
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .agent-markdown-content :global(td) {
+        color: rgba(255, 255, 255, 0.85);
+    }
+
+    .agent-markdown-content :global(blockquote) {
+        border-left: 3px solid rgba(255, 255, 255, 0.2);
+        padding-left: 12px;
+        margin: 8px 0;
+        color: rgba(255, 255, 255, 0.8);
+        font-style: italic;
+        font-size: 11px;
+    }
+
+    .agent-markdown-content :global(hr) {
+        border: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        margin: 16px 0;
+    }
+
+    .agent-markdown-content :global(a) {
+        color: rgba(59, 130, 246, 0.9);
+        text-decoration: none;
+        border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+        transition: all 0.2s ease;
+    }
+
+    .agent-markdown-content :global(a:hover) {
+        color: rgba(59, 130, 246, 1);
+        border-bottom-color: rgba(59, 130, 246, 0.8);
     }
 </style> 

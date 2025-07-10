@@ -1816,7 +1816,8 @@ ul::-webkit-scrollbar {
 }
 
 .sidebar-panel {
-    width: var(--sidebar-width, 330px);
+    /* todo: width: var(--sidebar-width, 330px); */
+    width: 330px;
     height: 100%;
     flex-shrink: 0;
     position: relative;
