@@ -444,3 +444,10 @@ show visit state and open tabs in link previews, on long hover, show link previe
 Error code: RESULT_CODE_KILLED_BAD_MESSAGE
 
 toggle side pins
+
+
+stop and send / queu replies
+
+memory interactions
+
+selection of prompt library

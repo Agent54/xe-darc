@@ -6,6 +6,7 @@
     import Settings from './components/Settings.svelte'
     import UserMods from './components/UserMods.svelte'
     import Activity from './components/Activity.svelte'
+    import AIAgent from './components/AIAgent.svelte'
     import Excalidraw from './components/Excalidraw.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
@@ -1440,9 +1441,23 @@
         openSidebars = new Set(openSidebars)
     }
 
+    function toggleAIAgentSidebar() {
+        if (openSidebars.has('aiAgent')) {
+            openSidebars.delete('aiAgent')
+        } else {
+            openSidebars.add('aiAgent')
+        }
+        openSidebars = new Set(openSidebars) // trigger reactivity
+    }
+
+    function closeAIAgentSidebar() {
+        openSidebars.delete('aiAgent')
+        openSidebars = new Set(openSidebars)
+    }
+
     function switchToResources() {
         if (!openSidebars.has('resources')) {
-            if (openSidebars.has('settings') || openSidebars.has('userMods') || openSidebars.has('activity')) {
+            if (openSidebars.has('settings') || openSidebars.has('userMods') || openSidebars.has('activity') || openSidebars.has('aiAgent')) {
                 isSwitchingSidebars = true
             }
             openSidebars.clear()
@@ -1453,7 +1468,7 @@
     
     function switchToSettings() {
         if (!openSidebars.has('settings')) {
-            if (openSidebars.has('resources') || openSidebars.has('userMods') || openSidebars.has('activity')) {
+            if (openSidebars.has('resources') || openSidebars.has('userMods') || openSidebars.has('activity') || openSidebars.has('aiAgent')) {
                 isSwitchingSidebars = true
             }
             openSidebars.clear()
@@ -1464,7 +1479,7 @@
 
     function switchToUserMods() {
         if (!openSidebars.has('userMods')) {
-            if (openSidebars.has('resources') || openSidebars.has('settings') || openSidebars.has('activity')) {
+            if (openSidebars.has('resources') || openSidebars.has('settings') || openSidebars.has('activity') || openSidebars.has('aiAgent')) {
                 isSwitchingSidebars = true
             }
             openSidebars.clear()
@@ -1475,11 +1490,22 @@
 
     function switchToActivity() {
         if (!openSidebars.has('activity')) {
-            if (openSidebars.has('resources') || openSidebars.has('settings') || openSidebars.has('userMods')) {
+            if (openSidebars.has('resources') || openSidebars.has('settings') || openSidebars.has('userMods') || openSidebars.has('aiAgent')) {
                 isSwitchingSidebars = true
             }
             openSidebars.clear()
             openSidebars.add('activity')
+            openSidebars = new Set(openSidebars)
+        }
+    }
+
+    function switchToAIAgent() {
+        if (!openSidebars.has('aiAgent')) {
+            if (openSidebars.has('resources') || openSidebars.has('settings') || openSidebars.has('userMods') || openSidebars.has('activity')) {
+                isSwitchingSidebars = true
+            }
+            openSidebars.clear()
+            openSidebars.add('aiAgent')
             openSidebars = new Set(openSidebars)
         }
     }
@@ -2609,6 +2635,7 @@
                 <span>Mods</span>
                 {#if openSidebars.has('userMods')}<span class="checkmark">•</span>{/if}
             </div>
+
             <div class="settings-menu-item menu-item" 
                 class:active={openSidebars.has('settings')}
                 role="button"
@@ -2885,7 +2912,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
             </svg>
         </button>
         
-        <button class="sidebar-button" title="Agent" aria-label="Agent">
+        <button class="sidebar-button" title="Agent" aria-label="Agent" onmouseup={toggleAIAgentSidebar}>
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423L16.5 15.75l.394 1.183a2.25 2.25 0 0 0 1.423 1.423L19.5 18.75l-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
             </svg>
@@ -2936,6 +2963,20 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          {switchToActivity}
                          {userMods}
                          onUpdateUserMods={updateUserMods}
+                         currentTab={data.spaceMeta.activeTab} />
+            </div>
+        {/if}
+        
+        {#if openSidebars.has('aiAgent')}
+            <div class="sidebar-panel" class:new-panel={openSidebars.has('aiAgent') && !prevOpenSidebars.has('aiAgent') && !isSwitchingSidebars && !isWindowResizing}>
+                <AIAgent onClose={closeAIAgentSidebar} 
+                         {openSidebars}
+                         {switchToResources} 
+                         {switchToSettings}
+                         {switchToUserMods}
+                         {switchToActivity}
+                         {switchToAIAgent}
+                         {viewMode}
                          currentTab={data.spaceMeta.activeTab} />
             </div>
         {/if}
