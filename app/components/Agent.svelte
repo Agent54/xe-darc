@@ -34,7 +34,6 @@
     let markdownChunks = $state([])
     let isMarkdownStreaming = $state(false)
 
-    // Streaming markdown functions
     let markdownBuffer = $state('')
 
     function addMarkdownChunk(chunk) {
@@ -669,7 +668,7 @@ The current system demonstrates strong performance and security characteristics.
                 chunkIndex++
                 
                 // Schedule next chunk
-                currentTimeout = setTimeout(streamNextChunk, 50) // 50ms delay between chunks
+                currentTimeout = setTimeout(streamNextChunk, 150)
             } else {
                 // Streaming complete
                 isMarkdownStreaming = false
@@ -910,7 +909,7 @@ The current system demonstrates strong performance and security characteristics.
                                 {#if message.streaming}
                                     <div class="agent-markdown-streaming">
                                         {#each markdownChunks as chunk, index}
-                                            <span class="agent-markdown-chunk" style="animation-delay: {index * 0.05}s">{chunk}</span>
+                                            <span class="agent-markdown-chunk" style="animation-delay: {0.05}s">{chunk}</span>
                                         {/each}
                                     </div>
                                 {:else}
@@ -962,7 +961,7 @@ The current system demonstrates strong performance and security characteristics.
                                         </div>
                                     </div>
                                 {:else}
-                                    <div class="agent-message-text" class:editable={message.role === 'user'} onclick={() => message.role === 'user' ? editMessage(message.id) : null}>
+                                    <div class="agent-message-text" class:editable={message.role === 'user'} role={message.role === 'user' ? 'button' : null} onclick={() => message.role === 'user' ? editMessage(message.id) : null}>
                                         {message.content}
                                     </div>
                                 {/if}
@@ -998,32 +997,32 @@ The current system demonstrates strong performance and security characteristics.
                 {#if isProcessing}
                     <div class="agent-chat-message assistant">
                         <div class="agent-chat-message-content">
-                            <div class="agent-typing-indicator">
-                                <span></span>
-                                <span></span>
-                                <span></span>
+                            <div class="agent-typing-row">
+                                <div class="agent-typing-indicator">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                                <button class="agent-stop-button" onmousedown={stopCurrentTask} title="Stop Current Task" aria-label="Stop Current Task">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
+                                    </svg>
+                                </button>
                             </div>
-                        </div>
-                        <div class="agent-current-task-controls">
-                            <button class="agent-stop-button" onmousedown={stopCurrentTask} title="Stop Current Task">
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
-                                </svg>
-                            </button>
                         </div>
                     </div>
                 {/if}
                 
-                {#if messageQueue.length > 0}
+                {#if messageQueue.filter(item => item.status === 'queued').length > 0}
                     <div class="agent-global-controls">
                         {#if queuePaused}
-                            <button class="agent-queue-btn" onmousedown={resumeQueue} title="Resume Queue">
+                            <button class="agent-queue-btn" onmousedown={resumeQueue} title="Resume Queue" aria-label="Resume Queue">
                                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
                                 </svg>
                             </button>
                         {:else}
-                            <button class="agent-queue-btn" onmousedown={pauseQueue} title="Pause Queue">
+                            <button class="agent-queue-btn" onmousedown={pauseQueue} title="Pause Queue" aria-label="Pause Queue">
                                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
                                 </svg>
@@ -1498,22 +1497,25 @@ The current system demonstrates strong performance and security characteristics.
     }
 
     .agent-stop-button {
-        background: rgba(239, 68, 68, 0.1);
-        border: 1px solid rgba(239, 68, 68, 0.2);
+        /* background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.06); */
         border-radius: 4px;
-        padding: 6px;
-        color: rgba(239, 68, 68, 0.9);
+        padding: 4px;
+        color: rgba(255, 255, 255, 0.7);
         cursor: pointer;
         transition: all 0.2s ease;
         display: flex;
         align-items: center;
         justify-content: center;
+        flex-shrink: 0;
+        margin-left: 10px;
+        margin-right: 10px;
     }
 
     .agent-stop-button:hover {
-        background: rgba(239, 68, 68, 0.2);
-        border-color: rgba(239, 68, 68, 0.4);
-        color: rgba(239, 68, 68, 1);
+        background: rgba(239, 68, 68, 0.1);
+        border-color: rgba(239, 68, 68, 0.2);
+        color: rgba(239, 68, 68, 0.9);
     }
 
     .agent-chat-message[class*="queued"] {
@@ -1525,11 +1527,12 @@ The current system demonstrates strong performance and security characteristics.
         background: rgba(255, 255, 255, 0.02);
     }
 
-    .agent-current-task-controls {
+    .agent-typing-row {
         display: flex;
-        gap: 6px;
-        margin-top: 8px;
-        padding-left: 12px;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        margin-left: 10px;
     }
 
     .agent-global-controls {
