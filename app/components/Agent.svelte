@@ -33,6 +33,7 @@
     let editingContent = $state('')
     let markdownChunks = $state([])
     let isMarkdownStreaming = $state(false)
+    let selectedHistoryId = $state('current')
 
     let markdownBuffer = $state('')
 
@@ -86,6 +87,15 @@
             selectedTarget = 'current-space'
         } else {
             selectedTarget = 'current-tab'
+        }
+    })
+
+    // Keep selectedHistoryId in sync with current state
+    $effect(() => {
+        if (currentChatId) {
+            selectedHistoryId = currentChatId
+        } else {
+            selectedHistoryId = 'current'
         }
     })
 
@@ -270,17 +280,32 @@
     }
 
     function clearHistory() {
+        // Cancel current task and queue
+        if (currentTimeout) {
+            clearTimeout(currentTimeout)
+            currentTimeout = null
+        }
+        
+        // Stop processing and clear queue
+        isProcessing = false
+        messageQueue = []
+        queuePaused = false
+        
         // Save current chat to history before clearing
         saveChatHistory()
         
+        // Clear chat state
         chatHistory = []
         currentStreamingMessage = null
         resetMarkdown()
         markdownChunks = []
         isMarkdownStreaming = false
-        messageQueue = []
-        queuePaused = false
         currentChatId = null
+        selectedHistoryId = 'current'
+        
+        // Re-focus the input
+        const input = document.querySelector('.agent-conversation-input')
+        if (input) input.focus()
     }
 
     function pauseQueue() {
@@ -385,6 +410,18 @@
         editingContent = ''
     }
 
+
+
+    let currentChatId = $state(null)
+
+    function generateHistoryTitle() {
+        const firstUserMessage = chatHistory.find(m => m.role === 'user')
+        if (firstUserMessage) {
+            return firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '')
+        }
+        return 'Chat conversation'
+    }
+
     function saveChatHistory() {
         if (chatHistory.length > 0) {
             const historyItem = {
@@ -393,10 +430,8 @@
                 title: generateHistoryTitle(),
                 messages: [...chatHistory]
             }
-            chatHistoryList = [...chatHistoryList, historyItem]
-            
-            // Save to localStorage
-            localStorage.setItem('agent-chat-history', JSON.stringify(chatHistoryList))
+            // Add new item to the beginning for proper sorting
+            chatHistoryList = [historyItem, ...chatHistoryList]
         }
     }
 
@@ -409,36 +444,8 @@
                 // Move to front
                 const item = chatHistoryList.splice(index, 1)[0]
                 chatHistoryList = [item, ...chatHistoryList]
-                localStorage.setItem('agent-chat-history', JSON.stringify(chatHistoryList))
             }
         }
-    }
-
-    let currentChatId = $state(null)
-    let sortedHistoryList = $derived.by(() => {
-        const sorted = [...chatHistoryList].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        
-        // Add current chat at top if it exists
-        if (chatHistory.length > 0) {
-            const currentChat = {
-                id: currentChatId || 'current',
-                timestamp: new Date().toISOString(),
-                title: generateHistoryTitle() + ' (current)',
-                messages: [...chatHistory],
-                isCurrent: true
-            }
-            return [currentChat, ...sorted.filter(h => h.id !== currentChatId)]
-        }
-        
-        return sorted
-    })
-
-    function generateHistoryTitle() {
-        const firstUserMessage = chatHistory.find(m => m.role === 'user')
-        if (firstUserMessage) {
-            return firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '')
-        }
-        return 'Chat conversation'
     }
 
     function loadChatHistory(historyId) {
@@ -458,12 +465,32 @@
             currentChatId = historyId
             markdownChunks = []
             isMarkdownStreaming = false
+            selectedHistoryId = historyId
+        }
+    }
+
+    function handleHistoryChange(event) {
+        const value = event.target.value
+        if (value === 'current') {
+            // Switch to current chat
+            if (currentChatId) {
+                chatHistory = []
+                currentChatId = null
+                markdownChunks = []
+                isMarkdownStreaming = false
+            }
+        } else if (value === 'show-all') {
+            // TODO: Implement show all functionality
+            console.log('Show all history')
+            // Reset to current for now
+            selectedHistoryId = 'current'
+        } else if (value && value !== '') {
+            loadChatHistory(value)
         }
     }
 
     function deleteChatHistory(historyId) {
         chatHistoryList = chatHistoryList.filter(h => h.id !== historyId)
-        localStorage.setItem('agent-chat-history', JSON.stringify(chatHistoryList))
     }
 
     function copyMessage(messageId) {
@@ -655,19 +682,14 @@ The current system demonstrates strong performance and security characteristics.
         const streamNextChunk = () => {
             if (chunkIndex < chunks.length) {
                 const chunk = chunks[chunkIndex]
-                
-                // Add to chunks array for streaming display
+
                 markdownChunks = [...markdownChunks, chunk]
-                
-                // Update raw content for copying
                 currentStreamingMessage.rawContent += chunk
                 
-                // Trigger reactivity
                 chatHistory = [...chatHistory]
                 
                 chunkIndex++
                 
-                // Schedule next chunk
                 currentTimeout = setTimeout(streamNextChunk, 150)
             } else {
                 // Streaming complete
@@ -679,14 +701,12 @@ The current system demonstrates strong performance and security characteristics.
                 isProcessing = false
                 currentTimeout = null
                 
-                // Re-focus input
                 const input = document.querySelector('.agent-conversation-input')
                 if (input) input.focus()
             }
         }
         
-        // Start streaming after a brief delay
-        setTimeout(streamNextChunk, 700)
+        setTimeout(streamNextChunk, 300)
     }
 
     onMount(() => {
@@ -696,15 +716,8 @@ The current system demonstrates strong performance and security characteristics.
             setTimeout(() => input.focus(), 100)
         }
         
-        // Load chat history from localStorage
-        const savedHistory = localStorage.getItem('agent-chat-history')
-        if (savedHistory) {
-            try {
-                chatHistoryList = JSON.parse(savedHistory)
-            } catch (error) {
-                console.error('Failed to load chat history:', error)
-            }
-        }
+        // Initialize empty history (no localStorage persistence)
+        chatHistoryList = []
     })
 </script>
 
@@ -714,35 +727,15 @@ The current system demonstrates strong performance and security characteristics.
     {#snippet children()}
         <div class="agent-sticky-header">
             <div class="agent-header-row">
-                <div class="agent-history-dropdown">
-                    <button class="agent-history-button" title="Chat History">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
-                        History
-                    </button>
-                    <div class="agent-history-dropdown-content">
-                        {#if sortedHistoryList.length > 0}
-                            {#each sortedHistoryList as historyItem}
-                                <div class="agent-history-item" data-current={historyItem.isCurrent}>
-                                    <div class="agent-history-item-main" onmousedown={() => loadChatHistory(historyItem.id)}>
-                                        <div class="agent-history-item-title">{historyItem.title}</div>
-                                        <div class="agent-history-item-time">{new Date(historyItem.timestamp).toLocaleString()}</div>
-                                    </div>
-                                    {#if !historyItem.isCurrent}
-                                        <button class="agent-history-item-delete" onmousedown={() => deleteChatHistory(historyItem.id)} title="Delete">
-                                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    {/if}
-                                </div>
-                            {/each}
-                        {:else}
-                            <div class="agent-history-empty">No chat history yet</div>
-                        {/if}
-                    </div>
-                </div>
+                <select class="agent-model-select" bind:value={selectedHistoryId} onchange={handleHistoryChange}>
+                    <option value="current">Current chat</option>
+                    {#each chatHistoryList.slice(0, 10) as historyItem}
+                        <option value={historyItem.id}>{historyItem.title} [{new Date(historyItem.timestamp).toLocaleDateString()}]</option>
+                    {/each}
+                    {#if chatHistoryList.length > 10}
+                        <option value="show-all">Show all {chatHistoryList.length} chats...</option>
+                    {/if}
+                </select>
                 
                 <select class="agent-model-select" bind:value={selectedModel}>
                     <option value="claude-sonnet">Claude Sonnet</option>
@@ -909,7 +902,7 @@ The current system demonstrates strong performance and security characteristics.
                                 {#if message.streaming}
                                     <div class="agent-markdown-streaming">
                                         {#each markdownChunks as chunk, index}
-                                            <span class="agent-markdown-chunk" style="animation-delay: {0.05}s">{chunk}</span>
+                                            <span class="agent-markdown-chunk" style="animation-delay: {0.05}s">{@html chunk}</span>
                                         {/each}
                                     </div>
                                 {:else}
@@ -1151,6 +1144,11 @@ The current system demonstrates strong performance and security characteristics.
         margin-bottom: 12px;
     }
 
+    .agent-header-row select {
+        flex: 1;
+        min-width: 0;
+    }
+
     .agent-history-dropdown {
         position: relative;
         display: inline-block;
@@ -1184,17 +1182,18 @@ The current system demonstrates strong performance and security characteristics.
         right: 0;
         background: rgba(0, 0, 0, 0.95);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 6px;
-        padding: 4px 0;
+        border-radius: 4px;
+        padding: 4px;
         z-index: 1000;
-        max-height: 300px;
+        max-height: 320px;
         overflow-y: auto;
         opacity: 0;
         pointer-events: none;
         transition: opacity 0.2s ease;
         backdrop-filter: blur(10px);
         min-width: 280px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+        margin-top: 4px;
     }
 
     .agent-history-dropdown:hover .agent-history-dropdown-content {
@@ -1205,18 +1204,28 @@ The current system demonstrates strong performance and security characteristics.
     .agent-history-item {
         display: flex;
         align-items: center;
-        padding: 6px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 6px 8px;
+        margin: 2px 0;
+        border-radius: 3px;
+        transition: all 0.2s ease;
     }
 
-    .agent-history-item:last-child {
-        border-bottom: none;
+    .agent-history-item:hover {
+        background: rgba(255, 255, 255, 0.05);
     }
 
-    .agent-history-item[data-current="true"] {
-        background: rgba(255, 255, 255, 0.06);
-        border-left: 2px solid rgba(255, 255, 255, 0.3);
-        margin: 2px 4px;
+    .agent-history-item.current-chat {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        margin-bottom: 4px;
+    }
+
+    .agent-history-item.current-chat .agent-history-item-main {
+        cursor: default;
+    }
+
+    .agent-history-item.current-chat:hover {
+        background: rgba(255, 255, 255, 0.03);
     }
 
 
@@ -1224,43 +1233,41 @@ The current system demonstrates strong performance and security characteristics.
     .agent-history-item-main {
         flex: 1;
         cursor: pointer;
-        padding: 4px 6px;
-        border-radius: 4px;
-        transition: background 0.2s ease;
         min-width: 0;
     }
 
-    .agent-history-item-main:hover {
-        background: rgba(255, 255, 255, 0.05);
-    }
-
     .agent-history-item-title {
-        font-size: 11px;
+        font-size: 12px;
         color: rgba(255, 255, 255, 0.9);
         margin-bottom: 2px;
         line-height: 1.3;
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 1;
         -webkit-box-orient: vertical;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    .agent-history-item-time {
-        font-size: 9px;
+    .agent-history-item-meta {
+        font-size: 10px;
         color: rgba(255, 255, 255, 0.5);
     }
 
     .agent-history-item-delete {
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.5);
+        color: rgba(255, 255, 255, 0.4);
         cursor: pointer;
-        padding: 4px;
+        padding: 2px;
         border-radius: 2px;
         transition: all 0.2s ease;
-        margin-left: 6px;
+        margin-left: 8px;
         flex-shrink: 0;
+        opacity: 0;
+    }
+
+    .agent-history-item:hover .agent-history-item-delete {
+        opacity: 1;
     }
 
     .agent-history-item-delete:hover {
@@ -1273,6 +1280,30 @@ The current system demonstrates strong performance and security characteristics.
         text-align: center;
         color: rgba(255, 255, 255, 0.5);
         font-size: 11px;
+    }
+
+    .agent-history-show-all {
+        margin-top: 4px;
+        padding: 4px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .agent-show-all-button {
+        width: 100%;
+        background: transparent;
+        border: none;
+        padding: 6px 8px;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-align: left;
+        border-radius: 3px;
+    }
+
+    .agent-show-all-button:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.9);
     }
 
     .agent-target-selector {
@@ -1474,8 +1505,6 @@ The current system demonstrates strong performance and security characteristics.
         font-size: 11px;
         cursor: pointer;
         transition: all 0.2s ease;
-        flex: 1;
-        max-width: 140px;
     }
 
     .agent-model-select:hover {
@@ -1508,8 +1537,8 @@ The current system demonstrates strong performance and security characteristics.
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        margin-left: 10px;
-        margin-right: 10px;
+        margin-left: 7px;
+        margin-right: 7px;
     }
 
     .agent-stop-button:hover {
@@ -1721,8 +1750,8 @@ The current system demonstrates strong performance and security characteristics.
     }
 
     .agent-stop-button {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(255, 255, 255, 0.037);
+        border: 1px solid rgba(255, 255, 255, 0.046);
         border-radius: 4px;
         padding: 4px;
         color: rgba(255, 255, 255, 0.7);
@@ -1751,6 +1780,7 @@ The current system demonstrates strong performance and security characteristics.
 
     .agent-action-buttons {
         display: flex;
+        justify-content: space-between;
         gap: 6px;
     }
 
