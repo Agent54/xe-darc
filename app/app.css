@@ -1802,7 +1802,7 @@ ul::-webkit-scrollbar {
     position: fixed;
     top: 0;
     right: 0;
-    width: var(--sidebar-width, 320px);
+    width: var(--sidebar-width, 330px);
     /* width: calc(320px * var(--sidebar-count, 1)); */
     height: 100vh;
     z-index: 10;
@@ -1816,7 +1816,7 @@ ul::-webkit-scrollbar {
 }
 
 .sidebar-panel {
-    width: 320px;
+    width: var(--sidebar-width, 330px);
     height: 100%;
     flex-shrink: 0;
     position: relative;

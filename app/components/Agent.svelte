@@ -792,8 +792,7 @@
 
     .agent-send-button {
         position: absolute;
-        bottom: 8px;
-        right: 8px;
+
         background: transparent;
         border: none;
         border-radius: 4px;
@@ -805,6 +804,8 @@
         justify-content: center;
         transition: all 0.2s ease;
         z-index: 2;
+        bottom: 11px;
+        right: 5px;
     }
 
     .agent-stop-button-container {
@@ -845,7 +846,6 @@
     .agent-action-buttons {
         display: flex;
         gap: 6px;
-        flex-wrap: wrap;
     }
 
     .agent-quick-action {
@@ -857,7 +857,6 @@
         font-size: 11px;
         cursor: pointer;
         transition: all 0.2s ease;
-        flex-shrink: 0;
     }
 
     .agent-quick-action:hover {
@@ -884,22 +883,22 @@
     }
 
     .agent-info-card.context {
-        border-left: 3px solid rgba(59, 130, 246, 0.6);
+        border-left: 2px solid rgba(59, 130, 246, 0.45);
         background: rgba(59, 130, 246, 0.05);
     }
 
     .agent-info-card.accessed {
-        border-left: 2px solid rgba(34, 197, 94, 0.6);
+        border-left: 2px solid rgba(34, 197, 94, 0.45);
         background: rgba(34, 197, 94, 0.05);
     }
 
     .agent-info-card.modified {
-        border-left: 2px solid rgba(168, 85, 247, 0.6);
+        border-left: 2px solid rgba(168, 85, 247, 0.45);
         background: rgba(168, 85, 247, 0.05);
     }
 
     .agent-info-card.denied {
-        border-left: 2px solid rgba(239, 68, 68, 0.6);
+        border-left: 2px solid rgba(239, 68, 68, 0.45);
         background: rgba(239, 68, 68, 0.05);
     }
 
