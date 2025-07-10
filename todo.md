@@ -458,6 +458,7 @@ multiselect on canvas etc for context to agent chat feature
 
 sub agent threads with killing and process monitoring
 
+agent links / tabs that users can browse without effort and open fully or ignore. like soft tabs or temp tab folders?
 
 
 floating mode for agent sidebar?

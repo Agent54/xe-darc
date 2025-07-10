@@ -3,6 +3,7 @@
     import RightSidebar from './RightSidebar.svelte'
     import data from '../data.svelte.js'
     import { micromark } from 'micromark'
+    import { EventEmitter } from 'events'
 
     let { 
         onClose, 
