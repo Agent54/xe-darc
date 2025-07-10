@@ -2,8 +2,7 @@
     import { onMount } from 'svelte'
     import RightSidebar from './RightSidebar.svelte'
     import data from '../data.svelte.js'
-    import { micromark } from 'micromark'
-    import { EventEmitter } from 'events'
+    import * as smd from 'streaming-markdown'
 
     let { 
         onClose, 
@@ -25,34 +24,52 @@
     let hoveredMessageId = $state(null)
     let currentTimeout = null
     let cardCycleIndex = $state(0)
-    let streamingMarkdown = $state(null)
     let currentStreamingMessage = $state(null)
     let messageQueue = $state([])
     let queuePaused = $state(false)
     let chatHistoryList = $state([])
     let editingMessageId = $state(null)
     let editingContent = $state('')
-    let markdownChunks = $state([])
     let isMarkdownStreaming = $state(false)
     let selectedHistoryId = $state('current')
 
-    let markdownBuffer = $state('')
+    // Streaming markdown state
+    let streamingRenderer = $state(null)
+    let streamingParser = $state(null)
+    let streamingElement = $state(null)
 
-    function addMarkdownChunk(chunk) {
-        markdownBuffer += chunk
-        try {
-            return micromark(markdownBuffer)
-        } catch (error) {
-            return markdownBuffer
+    function initializeStreamingMarkdown(element) {
+        if (!element) return null
+        
+        const renderer = smd.default_renderer(element)
+        const parser = smd.parser(renderer)
+        
+        return { renderer, parser }
+    }
+
+    function startMarkdownStream(messageId) {
+        // Find the streaming element for this message
+        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`)
+        if (!messageElement) return null
+        
+        const contentElement = messageElement.querySelector('.agent-markdown-streaming')
+        if (!contentElement) return null
+        
+        const { renderer, parser } = initializeStreamingMarkdown(contentElement)
+        
+        return { renderer, parser, element: contentElement }
+    }
+
+    function writeMarkdownChunk(parser, chunk) {
+        if (parser) {
+            smd.parser_write(parser, chunk)
         }
     }
-    
-    function finalizeMarkdown() {
-        return micromark(markdownBuffer)
-    }
-    
-    function resetMarkdown() {
-        markdownBuffer = ''
+
+    function endMarkdownStream(parser) {
+        if (parser) {
+            smd.parser_end(parser)
+        }
     }
 
     // Get available targets with actual names in brackets
@@ -99,8 +116,6 @@
             selectedHistoryId = 'current'
         }
     })
-
-
 
     function handleKeyDown(event) {
         if (event.key === 'Enter' && !event.shiftKey) {
@@ -298,11 +313,14 @@
         // Clear chat state
         chatHistory = []
         currentStreamingMessage = null
-        resetMarkdown()
-        markdownChunks = []
         isMarkdownStreaming = false
         currentChatId = null
         selectedHistoryId = 'current'
+        
+        // Clear streaming parser
+        streamingParser = null
+        streamingRenderer = null
+        streamingElement = null
         
         // Re-focus the input
         const input = document.querySelector('.agent-conversation-input')
@@ -337,12 +355,14 @@
         }
         
         // If we're streaming markdown, finalize it
-        if (currentStreamingMessage && markdownBuffer) {
+        if (currentStreamingMessage && streamingParser) {
+            endMarkdownStream(streamingParser)
             currentStreamingMessage.streaming = false
-            currentStreamingMessage.content = finalizeMarkdown()
             chatHistory = [...chatHistory]
             currentStreamingMessage = null
-            resetMarkdown()
+            streamingParser = null
+            streamingRenderer = null
+            streamingElement = null
         }
         
         // Stop the current processing
@@ -411,8 +431,6 @@
         editingContent = ''
     }
 
-
-
     let currentChatId = $state(null)
 
     function generateHistoryTitle() {
@@ -464,7 +482,6 @@
             
             chatHistory = [...historyItem.messages]
             currentChatId = historyId
-            markdownChunks = []
             isMarkdownStreaming = false
             selectedHistoryId = historyId
         }
@@ -477,7 +494,6 @@
             if (currentChatId) {
                 chatHistory = []
                 currentChatId = null
-                markdownChunks = []
                 isMarkdownStreaming = false
             }
         } else if (value === 'show-all') {
@@ -570,9 +586,17 @@
         chatHistory = [...chatHistory, currentStreamingMessage]
         
         // Initialize streaming
-        markdownChunks = []
         isMarkdownStreaming = true
-        resetMarkdown()
+        
+        // Wait for DOM to update, then initialize streaming parser
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        const streamingSetup = startMarkdownStream(markdownMessageId)
+        if (streamingSetup) {
+            streamingParser = streamingSetup.parser
+            streamingRenderer = streamingSetup.renderer
+            streamingElement = streamingSetup.element
+        }
         
         // Test markdown document
         const testMarkdown = `# Comprehensive Analysis Report
@@ -684,30 +708,42 @@ The current system demonstrates strong performance and security characteristics.
             if (chunkIndex < chunks.length) {
                 const chunk = chunks[chunkIndex]
 
-                markdownChunks = [...markdownChunks, chunk]
+                // Add to raw content for backup
                 currentStreamingMessage.rawContent += chunk
+                
+                // Write to streaming parser
+                writeMarkdownChunk(streamingParser, chunk)
                 
                 chatHistory = [...chatHistory]
                 
                 chunkIndex++
                 
-                currentTimeout = setTimeout(streamNextChunk, 150)
+                currentTimeout = setTimeout(streamNextChunk, 300)
             } else {
                 // Streaming complete
                 isMarkdownStreaming = false
                 currentStreamingMessage.streaming = false
-                currentStreamingMessage.content = micromark(currentStreamingMessage.rawContent)
+                
+                // End the stream
+                endMarkdownStream(streamingParser)
+                
                 chatHistory = [...chatHistory]
                 
                 isProcessing = false
                 currentTimeout = null
+                
+                // Clear streaming state but keep the content
+                currentStreamingMessage = null
+                streamingParser = null
+                streamingRenderer = null
+                streamingElement = null
                 
                 const input = document.querySelector('.agent-conversation-input')
                 if (input) input.focus()
             }
         }
         
-        setTimeout(streamNextChunk, 300)
+        setTimeout(streamNextChunk, 350)
     }
 
     onMount(() => {
@@ -896,21 +932,14 @@ The current system demonstrates strong performance and security characteristics.
                         </div>
                     {:else if message.role === 'assistant-markdown'}
                         <div class="agent-markdown-message" 
+                             data-message-id={message.id}
                              role="group"
                              onmouseenter={() => hoveredMessageId = message.id} 
                              onmouseleave={() => hoveredMessageId = null}>
                             <div class="agent-markdown-content">
-                                {#if message.streaming}
-                                    <div class="agent-markdown-streaming">
-                                        {#each markdownChunks as chunk, index}
-                                            <span class="agent-markdown-chunk" style="animation-delay: {0.05}s">{@html chunk}</span>
-                                        {/each}
-                                    </div>
-                                {:else}
-                                    <div class="agent-markdown-final">
-                                        {@html message.content}
-                                    </div>
-                                {/if}
+                                <div class="agent-markdown-streaming" class:streaming={message.streaming}>
+                                    <!-- Markdown content will be inserted here by the streaming-markdown library -->
+                                </div>
                             </div>
                             <div class="agent-markdown-time-row">
                                 <div class="agent-chat-message-time">
@@ -924,7 +953,7 @@ The current system demonstrates strong performance and security characteristics.
                                     </button>
                                     <button class="agent-action-btn" onclick={() => thumbsDown(message.id)} title="Poor response" aria-label="Poor response">
                                         <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.498 15.25H4.372c-1.026 0-1.945-.694-2.054-1.715a12.137 12.137 0 0 1-.068-1.285c0-2.848.992-5.464 2.649-7.521C5.287 4.247 5.886 4 6.504 4h4.016a4.5 4.5 0 0 1 1.423.23l3.114 1.04a4.5 4.5 0 0 0 1.423.23h1.294M7.498 15.25c.618 0 .991.724.725 1.282A7.997 7.997 0 0 0 7.5 19.75 2.25 2.25 0 0 0 9.75 22a.75.75 0 0 0 .75-.75v-.633c0-.573.11-1.14.322-1.672.304-.76.93-1.33 1.653-1.715a9.04 9.04 0 0 0 2.86-2.4c.498-.634 1.226-1.08 2.032-1.08h.384m-10.253 1.5H9.7m8.075-9.75c.01.05.027.1.05.148.593 1.2.925 2.55.925 3.977 0 1.487-.36 2.89-.999 4.125m.023-8.25c-.076-.365.183-.75.575-.75h.908c.889 0 1.713.518 1.972 1.368.339 1.11.521 2.287.521 3.507 0 1.553-.295 3.036-.831 4.398-.306.774-1.086 1.227-2.824 1.227h-1.053c-.472 0-.745-.556-.5-.960a8.95 8.95 0 0 0 1.302-4.665c0-1.194-.232-2.333-.654-3.375Z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.498 15.25H4.372c-1.026 0-1.945-.694-2.054-1.715a12.137 12.137 0 0 1-.068-1.285c0-2.848.992-5.464 2.649-7.521C5.287 4.247 5.886 4 6.504 4h4.016a4.5 4.5 0 0 1 1.423.23l3.114 1.04a4.5 4.5 0 0 0 1.423.23h1.294M7.498 15.25c.618 0 .991.724.725 1.282A7.997 7.997 0 0 0 7.5 19.75 2.25 2.25 0 0 0 9.75 22a.75.75 0 0 0 .75-.75v-.633c0-.573.11-1.14.322-1.672.304-.76.93-1.33 1.653-1.715a9.04 9.04 0 0 0 2.86-2.4c.498-.634 1.226-1.08 2.032-1.08h.384m-10.253 1.5H9.7m8.075-9.75c.01.05.027.1.05.148.593 1.2.925 2.55.925 3.977 0 1.487-.36 2.89-.999 4.125m.023-8.25c-.076-.365.183-.75.575-.75h.908c.889 0 1.713.518 1.972 1.368.339 1.11.521 2.287.521 3.507 0 1.553-.295 3.036-.831 4.398-.306.774-1.086 1.227-2.824 1.227h-1.053c-.472 0-.745-.556-.5-.96a8.95 8.95 0 0 0 1.302-4.665c0-1.194-.232-2.333-.654-3.375Z" />
                                         </svg>
                                     </button>
                                     <button class="agent-action-btn" onclick={() => copyMessage(message.id)} title="Copy message" aria-label="Copy message">
@@ -1974,13 +2003,42 @@ The current system demonstrates strong performance and security characteristics.
 
     .agent-markdown-streaming {
         position: relative;
-        white-space: pre-wrap;
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-        font-size: 12px;
-        line-height: 1.5;
-        color: rgba(255, 255, 255, 0.95);
-        transform-origin: top left;
         animation: smoothExpand 0.3s ease-out;
+        transition: opacity 0.8s ease-in-out;
+    }
+
+    .agent-markdown-streaming.streaming {
+        /* Additional styling for streaming state if needed */
+    }
+
+    /* Animate content as it appears during streaming */
+    .agent-markdown-streaming.streaming :global(*) {
+        animation: fadeInContent 0.4s ease-out;
+    }
+
+    /* Animate new elements as they're added */
+    .agent-markdown-streaming :global(p),
+    .agent-markdown-streaming :global(h1),
+    .agent-markdown-streaming :global(h2),
+    .agent-markdown-streaming :global(h3),
+    .agent-markdown-streaming :global(h4),
+    .agent-markdown-streaming :global(h5),
+    .agent-markdown-streaming :global(h6),
+    .agent-markdown-streaming :global(ul),
+    .agent-markdown-streaming :global(ol),
+    .agent-markdown-streaming :global(li),
+    .agent-markdown-streaming :global(blockquote),
+    .agent-markdown-streaming :global(pre),
+    .agent-markdown-streaming :global(table),
+    .agent-markdown-streaming :global(code) {
+        animation: fadeInElement 0.3s ease-out;
+    }
+
+    /* Animate text nodes as they appear */
+    .agent-markdown-streaming.streaming :global(span),
+    .agent-markdown-streaming.streaming :global(em),
+    .agent-markdown-streaming.streaming :global(strong) {
+        animation: fadeInText 0.2s ease-out;
     }
 
     @keyframes smoothExpand {
@@ -1992,17 +2050,10 @@ The current system demonstrates strong performance and security characteristics.
         }
     }
 
-    .agent-markdown-chunk {
-        opacity: 0;
-        transform: translateY(4px);
-        animation: fadeInChunk 0.4s ease-out forwards;
-        display: inline;
-    }
-
-    @keyframes fadeInChunk {
+    @keyframes fadeInContent {
         from {
             opacity: 0;
-            transform: translateY(4px);
+            transform: translateY(3px);
         }
         to {
             opacity: 1;
@@ -2010,8 +2061,24 @@ The current system demonstrates strong performance and security characteristics.
         }
     }
 
-    .agent-markdown-final {
-        transition: opacity 0.8s ease-in-out;
+    @keyframes fadeInElement {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes fadeInText {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
     }
 
     .agent-markdown-time-row {
