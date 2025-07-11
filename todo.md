@@ -473,5 +473,5 @@ fix scrolling tabs in sidebar on activating space, fix missing space title
 The web page at http://darc_5.localhost:5196/#2 might be temporarily down or it may have moved permanently to a new web address.
 ERR_FAILED
 
-contxt menu reload
+contxt menu reload inside the tabs
 
