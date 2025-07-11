@@ -274,6 +274,7 @@
 <style>
     .resource-section {
         margin-bottom: 32px;
+        margin-top: 16px;
     }
 
     .resource-section:last-child {

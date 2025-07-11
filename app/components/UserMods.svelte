@@ -212,6 +212,7 @@
 
 <RightSidebar title="User Mods" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity}>
     {#snippet children()}
+        <div style="margin-top: 16px;"></div>
         <!-- Add/Edit Form -->
         {#if showAddForm}
             <div class="mod-form">

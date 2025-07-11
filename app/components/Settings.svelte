@@ -1170,6 +1170,7 @@ To import this data back into DARC, use the import function in Settings.
 <style>
     .setting-section {
         margin-bottom: 32px;
+        margin-top: 16px;
     }
 
     .setting-section:last-child {
