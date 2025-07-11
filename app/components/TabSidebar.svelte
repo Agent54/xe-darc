@@ -115,7 +115,7 @@
                 if (currentIndex === newIndex && currentIndex >= 0 && currentIndex < data.spaceMeta.spaceOrder.length) {
                     isManualScroll = true
                     data.spaceMeta.activeSpace = data.spaceMeta.spaceOrder[currentIndex]
-                    setTimeout(() => { isManualScroll = false }, 100)
+                    setTimeout(() => { isManualScroll = false }, 1500)
                 }
                 
                 scrollActiveSpaceTimeout = null

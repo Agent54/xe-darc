@@ -67,7 +67,7 @@ export default {
 
 			const newRequest = new Request(request)
 			newRequest.headers.append('x-forwarded-host', url.host)
-			url.hostname =  containers.all[serviceName].Names[0].replace('/', '')
+			url.hostname = containers.all[serviceName]?.Names[0]?.replace('/', '')
 			url.port = containers.all[serviceName]?.ports[portIndex]?.private
 			
 			const newReq = new Request(url.href, newRequest)

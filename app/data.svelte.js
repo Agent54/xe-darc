@@ -97,7 +97,7 @@ const spaceMeta = $state({
         leftPinnedTabWidth: 400,
         rightPinnedTabWidth: 350,
         leftSidebarWidth: 320,
-        rightSidebarWidth: 320
+        rightSidebarWidth: 340
     }
 })
 
@@ -109,8 +109,13 @@ async function refresh(spaceId) {
             spaceId: spaceId ? spaceId : { $exists: true },
         },
         fields: initialLoad ? undefined : ['_id'],
-        sort: sortOrder.map(key => ({ [key] : 'asc' }))
+        sort: sortOrder.map(key => ({ [key] : 'asc' })),
+        limit: 4000
     }).catch(err => console.error(err))
+
+    if (newDocs.length > 3000) {
+        console.error('approaching max data size, needs paging and partition support now')
+    }
 
     console.log({newDocs})
 
@@ -326,6 +331,15 @@ export default {
         }
 
         db.put(space)
+
+        db.put({
+            _id: `darc:activity_${crypto.randomUUID()}`,
+            type: 'activity',
+            action: 'space_create',
+            spaceId: _id,
+            name: 'Space ' + (Object.keys(spaces).length + 1),
+            created: Date.now()
+        })
     },
 
     deleteSpace: (spaceId) => {
@@ -354,6 +368,7 @@ export default {
             ...tab,
             url
         })
+
         db.put({
             _id: `darc:activity_${crypto.randomUUID()}`,
             type: 'activity',

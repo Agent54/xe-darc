@@ -26,6 +26,7 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "rollup-plugin-webbundle": "0.2.0",
+    "streaming-markdown": "^0.2.15",
     "svelte": "5.34.8",
     "tailwindcss": "4.1.10",
     "three": "0.177.0",

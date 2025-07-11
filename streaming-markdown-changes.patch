@@ -1,0 +1,245 @@
+diff --git a/app/components/Agent.svelte b/app/components/Agent.svelte
+index eeabf52..63c984d 100644
+--- a/app/components/Agent.svelte
++++ b/app/components/Agent.svelte
+@@ -37,22 +37,131 @@
+     let selectedHistoryId = $state('current')
+ 
+     let markdownBuffer = $state('')
++    let htmlParts = $state([])
++    let streamingParser = $state(null)
++
++    class StreamingMarkdownParser extends EventEmitter {
++        constructor() {
++            super()
++            this.buffer = ''
++            this.htmlParts = []
++            this.pendingContent = ''
++            this.inCodeBlock = false
++            this.codeBlockFence = ''
++            this.listDepth = 0
++            this.lastProcessedIndex = 0
++        }
++
++        addChunk(chunk) {
++            this.buffer += chunk
++            this.parseIncremental()
++        }
++
++        parseIncremental() {
++            const newContent = this.buffer.slice(this.lastProcessedIndex)
++            if (!newContent) return
++
++            // Process line by line for better streaming
++            const lines = this.buffer.split('\n')
++            const processedLines = []
++            
++            for (let i = 0; i < lines.length - 1; i++) {
++                const line = lines[i]
++                processedLines.push(line)
++                
++                // Check if we have a complete element to parse
++                if (this.shouldParseChunk(line)) {
++                    const chunkToParse = processedLines.join('\n') + '\n'
++                    try {
++                        const htmlChunk = micromark(chunkToParse)
++                        if (htmlChunk && htmlChunk !== this.getLastHtmlPart()) {
++                            this.htmlParts.push(htmlChunk)
++                            this.emit('chunk', htmlChunk)
++                        }
++                    } catch (error) {
++                        // If parsing fails, store as pending
++                        this.pendingContent = chunkToParse
++                    }
++                    processedLines.length = 0
++                }
++            }
++            
++            // Store remaining incomplete content
++            if (processedLines.length > 0 || lines[lines.length - 1]) {
++                this.pendingContent = processedLines.join('\n') + (lines[lines.length - 1] || '')
++            }
++            
++            this.lastProcessedIndex = this.buffer.length
++        }
++
++        shouldParseChunk(line) {
++            // Parse on complete markdown blocks
++            return line === '' || // Empty line (paragraph break)
++                   line.match(/^#{1,6}\s/) || // Headers
++                   line.match(/^[-*+]\s/) || // Lists
++                   line.match(/^\d+\.\s/) || // Numbered lists
++                   line.match(/^```/) || // Code blocks
++                   line.match(/^>\s/) || // Blockquotes
++                   line.match(/^\|.*\|/) // Tables
++        }
++
++        getLastHtmlPart() {
++            return this.htmlParts[this.htmlParts.length - 1] || ''
++        }
++
++        finalize() {
++            // Process any remaining content
++            if (this.pendingContent || this.buffer) {
++                try {
++                    const finalHtml = micromark(this.buffer)
++                    this.htmlParts = [finalHtml] // Replace with final parsed version
++                    this.emit('complete', finalHtml)
++                } catch (error) {
++                    this.emit('error', error)
++                }
++            }
++        }
++
++        reset() {
++            this.buffer = ''
++            this.htmlParts = []
++            this.pendingContent = ''
++            this.lastProcessedIndex = 0
++            this.inCodeBlock = false
++            this.codeBlockFence = ''
++            this.listDepth = 0
++        }
++    }
+ 
+     function addMarkdownChunk(chunk) {
+         markdownBuffer += chunk
+-        try {
+-            return micromark(markdownBuffer)
+-        } catch (error) {
+-            return markdownBuffer
++        if (!streamingParser) {
++            streamingParser = new StreamingMarkdownParser()
++            streamingParser.on('chunk', (htmlChunk) => {
++                htmlParts = [...htmlParts, htmlChunk]
++            })
++            streamingParser.on('complete', (finalHtml) => {
++                htmlParts = [finalHtml]
++            })
+         }
++        streamingParser.addChunk(chunk)
++        return streamingParser.htmlParts
+     }
+     
+     function finalizeMarkdown() {
++        if (streamingParser) {
++            streamingParser.finalize()
++        }
+         return micromark(markdownBuffer)
+     }
+     
+     function resetMarkdown() {
+         markdownBuffer = ''
++        htmlParts = []
++        if (streamingParser) {
++            streamingParser.reset()
++            streamingParser = null
++        }
+     }
+ 
+     // Get available targets with actual names in brackets
+@@ -300,6 +409,7 @@
+         currentStreamingMessage = null
+         resetMarkdown()
+         markdownChunks = []
++        htmlParts = []
+         isMarkdownStreaming = false
+         currentChatId = null
+         selectedHistoryId = 'current'
+@@ -465,6 +575,7 @@
+             chatHistory = [...historyItem.messages]
+             currentChatId = historyId
+             markdownChunks = []
++        htmlParts = []
+             isMarkdownStreaming = false
+             selectedHistoryId = historyId
+         }
+@@ -478,6 +589,7 @@
+                 chatHistory = []
+                 currentChatId = null
+                 markdownChunks = []
++        htmlParts = []
+                 isMarkdownStreaming = false
+             }
+         } else if (value === 'show-all') {
+@@ -571,6 +683,8 @@
+         
+         // Initialize streaming
+         markdownChunks = []
++        htmlParts = []
++        htmlParts = []
+         isMarkdownStreaming = true
+         resetMarkdown()
+         
+@@ -684,9 +798,14 @@ The current system demonstrates strong performance and security characteristics.
+             if (chunkIndex < chunks.length) {
+                 const chunk = chunks[chunkIndex]
+ 
++                // Add to traditional chunks for backward compatibility
+                 markdownChunks = [...markdownChunks, chunk]
+                 currentStreamingMessage.rawContent += chunk
+                 
++                // Use new streaming parser for HTML parts
++                const htmlChunks = addMarkdownChunk(chunk)
++                htmlParts = [...htmlChunks]
++                
+                 chatHistory = [...chatHistory]
+                 
+                 chunkIndex++
+@@ -696,7 +815,7 @@ The current system demonstrates strong performance and security characteristics.
+                 // Streaming complete
+                 isMarkdownStreaming = false
+                 currentStreamingMessage.streaming = false
+-                currentStreamingMessage.content = micromark(currentStreamingMessage.rawContent)
++                currentStreamingMessage.content = finalizeMarkdown()
+                 chatHistory = [...chatHistory]
+                 
+                 isProcessing = false
+@@ -902,8 +1021,8 @@ The current system demonstrates strong performance and security characteristics.
+                             <div class="agent-markdown-content">
+                                 {#if message.streaming}
+                                     <div class="agent-markdown-streaming">
+-                                        {#each markdownChunks as chunk, index}
+-                                            <span class="agent-markdown-chunk" style="animation-delay: {0.05}s">{@html chunk}</span>
++                                        {#each htmlParts as htmlPart, index}
++                                            <div class="agent-markdown-html-part" style="animation-delay: {index * 0.05}s">{@html htmlPart}</div>
+                                         {/each}
+                                     </div>
+                                 {:else}
+@@ -1983,6 +2102,23 @@ The current system demonstrates strong performance and security characteristics.
+         animation: smoothExpand 0.3s ease-out;
+     }
+ 
++    .agent-markdown-html-part {
++        display: block;
++        opacity: 0;
++        animation: fadeInHTML 0.4s ease-out forwards;
++    }
++
++    @keyframes fadeInHTML {
++        from {
++            opacity: 0;
++            transform: translateY(5px);
++        }
++        to {
++            opacity: 1;
++            transform: translateY(0);
++        }
++    }
++
+     @keyframes smoothExpand {
+         from {
+             transform: scaleY(0.98);
+diff --git a/app/components/RightSidebar.svelte b/app/components/RightSidebar.svelte
+index ef618bd..0190d66 100644
+--- a/app/components/RightSidebar.svelte
++++ b/app/components/RightSidebar.svelte
+@@ -100,7 +100,7 @@
+         font-size: 14px;
+         font-weight: 600;
+         margin: 0;
+-        color: rgba(255, 255, 255, 0.9);
++        color: #ff4444;
+         text-transform: uppercase;
+         letter-spacing: 0.5px;
+     }

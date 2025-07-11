@@ -6,7 +6,7 @@
     import Settings from './components/Settings.svelte'
     import UserMods from './components/UserMods.svelte'
     import Activity from './components/Activity.svelte'
-    import AIAgent from './components/AIAgent.svelte'
+    import AIAgent from './components/Agent.svelte'
     import Excalidraw from './components/Excalidraw.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'

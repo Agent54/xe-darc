@@ -451,3 +451,27 @@ stop and send / queu replies
 memory interactions
 
 selection of prompt library
+
+download/screenshot apps
+
+multiselect on canvas etc for context to agent chat feature
+
+sub agent threads with killing and process monitoring
+
+agent links / tabs that users can browse without effort and open fully or ignore. like soft tabs or temp tab folders?
+
+
+floating mode for agent sidebar?
+
+
+dropdown inside controlled frame broken!!
+
+
+fix scrolling tabs in sidebar on activating space, fix missing space title
+
+
+The web page at http://darc_5.localhost:5196/#2 might be temporarily down or it may have moved permanently to a new web address.
+ERR_FAILED
+
+contxt menu reload inside the tabs
+
