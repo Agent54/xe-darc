@@ -1747,6 +1747,7 @@ document.addEventListener('input', function(event) {
         if (!attached) {
             try {
                 frameWrapper.moveBefore(controlledFrame, anchor)
+                data.frames[tab.id].wrapper = frameWrapper
                 attached = true
             } catch (err) {
                 console.error(err)
@@ -1793,6 +1794,8 @@ document.addEventListener('input', function(event) {
             backgroundFrames.moveBefore(controlledFrame, anchorFrame)
             detached = true
         }
+
+        delete data.frames[tab.id]?.wrapper
 
         return {
             duration: 0

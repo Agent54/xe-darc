@@ -475,3 +475,4 @@ ERR_FAILED
 
 contxt menu reload inside the tabs
 
+https://github.com/browserbase/stagehand-agent/blob/main/tools.ts

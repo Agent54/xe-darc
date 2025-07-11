@@ -411,6 +411,7 @@
     }
 
     function openTab(tab, index) {
+        console.log('openTab called for tab:', tab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
         // Clear the tabChangeFromScroll flag when user explicitly clicks a tab
         if (tabChangeFromScroll) {
             tabChangeFromScroll = false
@@ -425,6 +426,7 @@
             data.previous()
         } else {
             // Set this tab as active using the data store function
+            console.log('calling data.activate for tab:', tab.id)
             data.activate(tab.id)
         }
         
@@ -446,7 +448,9 @@
             return
         }
         
+        console.log('scroll effect triggered for tab:', activeTab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
         const activeFrameWrapper = data.frames[activeTab.id]?.wrapper
+        console.log('activeFrameWrapper exists:', activeFrameWrapper)
         // Don't scroll if tab change was caused by scrolling
         // if (tabChangeFromScroll) {
         //     return
@@ -459,6 +463,7 @@
         if (!tabChangeFromScroll) {
             setTimeout(() => {
                 if (activeFrameWrapper) {
+                    console.log('calling scrollIntoView for tab:', activeTab.id)
                     activeFrameWrapper.scrollIntoView({ 
                         behavior: isWindowResizing ? 'auto' : 'smooth' 
                     })
@@ -786,6 +791,7 @@
                         }
                         
                         if (entry.isIntersecting && tab) {
+                            console.log('intersection observer activating tab:', tab.id)
                             // Set flag BEFORE changing active tab to prevent race condition
                             tabChangeFromScroll = true
                             // Clear any existing timer to prevent multiple timers
@@ -835,12 +841,14 @@
     // Failsafe effect to reset tabChangeFromScroll if it gets stuck
     $effect(() => {
         if (tabChangeFromScroll) {
+            console.log('tabChangeFromScroll failsafe triggered')
             // Clear any existing failsafe
             if (tabChangeFromScrollFailsafe) {
                 clearTimeout(tabChangeFromScrollFailsafe)
             }
             // Set a failsafe to reset the flag after 2 seconds
             tabChangeFromScrollFailsafe = setTimeout(() => {
+                console.log('tabChangeFromScroll failsafe reset')
                 tabChangeFromScroll = false
                 tabChangeFromScrollFailsafe = null
                 if (tabChangeFromScrollTimer) {
@@ -1592,6 +1600,17 @@
     function toggleDevMode() {
         devModeEnabled = !devModeEnabled
         localStorage.setItem('devModeEnabled', devModeEnabled.toString())
+    }
+
+    async function runTestSuite() {
+        try {
+            console.log('🧪 Starting test suite...')
+            const tests = await import('../tests/main.js')
+            await tests.runAll()
+            console.log('✅ Test suite completed successfully')
+        } catch (error) {
+            console.error('❌ Error running test suite:', error)
+        }
     }
 
     // Check for encrypted sync token on app startup
@@ -2677,6 +2696,18 @@
                         </svg>
                     </span>
                     <span>Load Sample Data</span>
+                </div>
+                <div class="dev-menu-item" 
+                     role="button"
+                     tabindex="0"
+                     onclick={(e) => { e.stopPropagation(); runTestSuite() }}
+                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); runTestSuite() } }}>
+                    <span class="dev-menu-icon-item">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 0 1 0 1.971l-11.54 6.347a1.125 1.125 0 0 1-1.667-.985V5.653Z" />
+                        </svg>
+                    </span>
+                    <span>Run Test Suite</span>
                 </div>
             </div>
         </div>

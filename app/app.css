@@ -64,7 +64,7 @@ header.focus-mode .header-drag-handle {
 }
 
 /* .sidebar-right.sidebar-right-hovered,  */
-.sidebar-right:hover {
+.sidebar-right:hover, :global(.sidebar-right.hover-xe) {
     box-shadow: 0 0 13px 7px #0000003c;
     transform: translateX(0px);
     transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04),  opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45;
@@ -88,7 +88,7 @@ header.focus-mode .header-drag-handle {
 }
 
 /* .sidebar-right.sidebar-right-hovered::before */
-.sidebar-right:hover::before {
+.sidebar-right:hover::before, :global(.sidebar-right.hover-xe::before) {
     content: '';
     position: absolute;
     top: 0;

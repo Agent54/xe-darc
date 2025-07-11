@@ -1240,7 +1240,7 @@ The current system demonstrates strong performance and security characteristics.
         transition: all 0.2s ease;
     }
 
-    .agent-history-item:hover {
+    .agent-history-item:hover, .agent-history-item.hover-xe {
         background: rgba(255, 255, 255, 0.05);
     }
 
@@ -1254,7 +1254,7 @@ The current system demonstrates strong performance and security characteristics.
         cursor: default;
     }
 
-    .agent-history-item.current-chat:hover {
+    .agent-history-item.current-chat:hover, .agent-history-item.current-chat.hover-xe {
         background: rgba(255, 255, 255, 0.03);
     }
 
@@ -1296,11 +1296,12 @@ The current system demonstrates strong performance and security characteristics.
         opacity: 0;
     }
 
-    .agent-history-item:hover .agent-history-item-delete {
+    .agent-history-item:hover .agent-history-item-delete,
+    .agent-history-item.hover-xe .agent-history-item-delete {
         opacity: 1;
     }
 
-    .agent-history-item-delete:hover {
+    .agent-history-item-delete:hover, .agent-history-item-delete.hover-xe {
         background: rgba(239, 68, 68, 0.2);
         color: rgba(239, 68, 68, 0.9);
     }
@@ -1331,7 +1332,7 @@ The current system demonstrates strong performance and security characteristics.
         border-radius: 3px;
     }
 
-    .agent-show-all-button:hover {
+    .agent-show-all-button:hover, .agent-show-all-button.hover-xe {
         background: rgba(255, 255, 255, 0.05);
         color: rgba(255, 255, 255, 0.9);
     }
@@ -1369,7 +1370,7 @@ The current system demonstrates strong performance and security characteristics.
         max-width: 100%;
     }
 
-    .agent-context-select:hover {
+    .agent-context-select:hover, :global(.agent-context-select.hover-xe) {
         background: rgba(255, 255, 255, 0.08);
         border-color: rgba(255, 255, 255, 0.12);
     }
