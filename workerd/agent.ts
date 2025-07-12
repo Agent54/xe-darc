@@ -2,7 +2,7 @@ import { routeAgentRequest, type Schedule } from "agents";
 
 import { unstable_getSchedulePrompt } from "agents/schedule";
 
-import { AIChatAgent as Agent  } from "agents/ai-chat-agent";
+import { AIChatAgent  } from "agents/ai-chat-agent";
 import {
   createDataStreamResponse,
   generateId,
@@ -12,21 +12,21 @@ import {
 } from "ai";
 import { anthropic } from "@ai-sdk/anthropic"; // createAnthropic
 // import { openai } from "@ai-sdk/openai";
-import { processToolCalls } from "./utils.ts";
-import { tools, executions } from "./tools.ts";
+import { processToolCalls } from "./utils";
+import { tools, executions } from "./tools";
 // import { env } from "cloudflare:workers";
 
-// function addCorsHeaders(response: Response): Response {
-//   const headers = new Headers(response.headers);
-//   headers.set('Access-Control-Allow-Origin', '*');
-//   headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-//   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-//   return new Response(response.body, {
-//     status: response.status,
-//     statusText: response.statusText,
-//     headers
-//   });
-// }
+function addCorsHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
 
 // const anthropic = createAnthropic({
 //   apiKey
@@ -57,7 +57,7 @@ const model = anthropic('claude-4-sonnet-20250514')
 /**
  * Chat Agent implementation that handles real-time AI chat interactions
  */
-export class Chat extends Agent<Env> {
+export class Chat extends AIChatAgent<Env> {
   /**
    * Handles incoming chat messages and manages the response stream
    * @param onFinish - Callback function executed when streaming completes
@@ -82,14 +82,14 @@ export class Chat extends Agent<Env> {
       execute: async (dataStream) => {
         // Process any pending tool calls from previous messages
         // This handles human-in-the-loop confirmations for tools
-        // const processedMessages = await processToolCalls({
-        //   messages: this.messages,
-        //   dataStream,
-        //   tools: allTools,
-        //   executions,
-        // });
+        const processedMessages = await processToolCalls({
+          messages: this.messages,
+          dataStream,
+          tools: allTools,
+          executions,
+        });
 
-
+        // Stream the AI response using GPT-4
         const result = streamText({
           model,
           system: `You are a helpful assistant that can do various tasks... 
@@ -98,7 +98,7 @@ ${unstable_getSchedulePrompt({ date: new Date() })}
 
 If the user asks to schedule a task, use the schedule tool to schedule the task.
 `,
-          messages: this.messages, //: processedMessages,
+          messages: processedMessages,
           tools: allTools,
           onFinish: async (args) => {
             onFinish(
@@ -139,6 +139,17 @@ export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext) {
     const url = new URL(request.url);
 
+    if (url.pathname === "/check-open-ai-key") {
+      const hasOpenAIKey = !!process.env.ANTHROPIC_API_KEY;
+      return Response.json({
+        success: hasOpenAIKey,
+      });
+    }
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error(
+        "ANTHROPIC_API_KEY is not set, don't forget to set it locally in .dev.vars, and use `wrangler secret bulk .dev.vars` to upload it to production"
+      );
+    }
     return (
       // Route the request to our agent or return 404 if not found
       (await routeAgentRequest(request, env)) ||
