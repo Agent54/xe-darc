@@ -19,6 +19,7 @@ import { defineConfig } from 'vite';
 import path from 'path';
 import injectHTML from 'vite-plugin-html-inject';
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { cloudflare } from "@cloudflare/vite-plugin";
 
 // import wbn from 'rollup-plugin-webbundle';
 // import * as wbnSign from 'wbn-sign';
@@ -28,6 +29,7 @@ import tailwindcss from '@tailwindcss/vite'
 // dotenv.config();
 
 const plugins = [
+  cloudflare(),
   {
     name: 'patch-link-color',
     transform(code, id) {      

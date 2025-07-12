@@ -18,6 +18,11 @@ class InBrowserTestingFramework {
         this.currentTestName = null
         this.originalConsoleError = null
         this.consoleErrors = []
+        this.isClicking = false
+        this.isHumanTime = true
+        this.isManualMode = false
+        this.isPaused = false
+        this.isStopped = false
         this.setupMouseTracking()
         this.setupClickVisualization()
         this.setupHoverSimulation()
@@ -42,12 +47,15 @@ class InBrowserTestingFramework {
         `
         document.body.appendChild(this.mouseTracker)
 
-        // Track actual mouse movements
+        // Track actual mouse movements - only in manual mode
         this.realMouseHandler = (event) => {
             if (!this.isRunning) return
-            this.mouseTracker.style.left = (event.clientX - 8) + 'px'
-            this.mouseTracker.style.top = (event.clientY - 8) + 'px'
-            this.mouseTracker.style.display = 'block'
+            // Only move the virtual mouse tracker with real mouse in manual mode
+            if (this.isManualMode) {
+                this.mouseTracker.style.left = (event.clientX - 8) + 'px'
+                this.mouseTracker.style.top = (event.clientY - 8) + 'px'
+                this.mouseTracker.style.display = 'block'
+            }
         }
 
         document.addEventListener('mousemove', this.realMouseHandler)
@@ -68,14 +76,11 @@ class InBrowserTestingFramework {
                 animation: clickRipple 0.6s ease-out;
             }
             
-            .test-found-indicator {
-                position: fixed;
-                border: 3px solid #10b981;
-                border-radius: 6px;
-                pointer-events: none;
-                z-index: 1000000;
-                box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
-                animation: foundPulse 2s ease-in-out;
+            .test-found-element {
+                box-shadow: 0 0 20px rgba(16, 185, 129, 0.6), 0 0 0 3px rgba(16, 185, 129, 0.8) !important;
+                animation: foundPulse 2s ease-in-out !important;
+                position: relative !important;
+                z-index: 999999 !important;
             }
             
             @keyframes clickRipple {
@@ -178,15 +183,99 @@ class InBrowserTestingFramework {
         return [...this.consoleErrors]
     }
 
+    // Set human time mode
+    setHumanTime(enabled) {
+        this.isHumanTime = enabled
+        console.log(`🎯 Speed mode: ${enabled ? 'SLOW (realistic speed)' : 'FAST (maximum speed)'}`)
+        
+        // Update test panel with mode change
+        if (this.testPanel) {
+            this.testPanel.addAction('⚙️ Mode Change', `${enabled ? 'Slow' : 'Fast'} mode enabled`)
+        }
+    }
+
+    // Set manual mode
+    setManualMode(enabled) {
+        this.isManualMode = enabled
+        console.log(`👤 Manual mode: ${enabled ? 'ON (manual control)' : 'OFF (automated)'}`)
+        
+        // Update test panel with mode change
+        if (this.testPanel) {
+            this.testPanel.addAction('⚙️ Mode Change', `${enabled ? 'Manual' : 'Auto'} mode enabled`)
+        }
+    }
+
+    // Pause tests
+    async pauseTests() {
+        this.isPaused = true
+        console.log('⏸️ Tests paused')
+        
+        if (this.testPanel) {
+            this.testPanel.addAction('⏸️ Tests Paused', 'Test execution paused by user')
+            this.testPanel.setPaused(true)
+        }
+    }
+
+    // Stop tests
+    async stopTests() {
+        this.isStopped = true
+        this.isRunning = false
+        this.isPaused = false
+        console.log('⏹️ Tests stopped')
+        
+        // Hide mouse tracker
+        if (this.mouseTracker) {
+            this.mouseTracker.style.display = 'none'
+        }
+        
+        // Clear hover state
+        if (this.currentHoverElement && this.currentHoverElement.isConnected) {
+            this.currentHoverElement.classList.remove('hover-xe')
+            this.currentHoverElement = null
+        }
+        
+        if (this.testPanel) {
+            this.testPanel.addAction('⏹️ Tests Stopped', 'Test execution stopped by user')
+            this.testPanel.setRunning(false)
+            this.testPanel.setPaused(false)
+        }
+    }
+
     // Manage hover state
     updateHoverState(element) {
-        // Remove hover class from previous element
-        if (this.currentHoverElement && this.currentHoverElement !== element) {
+        // Only update hover state if we're actually running tests
+        if (!this.isRunning) {
+            console.log('🔧 updateHoverState: Not running, skipping')
+            return
+        }
+        
+        // Don't update hover state during click operations to prevent glitches
+        if (this.isClicking) {
+            console.log('🔧 updateHoverState: Currently clicking, skipping hover update')
+            return
+        }
+        
+        // Skip if this is a test indicator element
+        if (element && (element.classList.contains('test-click-indicator') || element.classList.contains('test-found-indicator'))) {
+            console.log('🔧 updateHoverState: Skipping test indicator element')
+            return
+        }
+        
+        // Log current state
+        const elementInfo = element ? (element.tagName + (element.id ? '#' + element.id : '') + (element.className ? '.' + String(element.className).split(' ').join('.') : '')) : 'null'
+        const currentInfo = this.currentHoverElement ? (this.currentHoverElement.tagName + (this.currentHoverElement.id ? '#' + this.currentHoverElement.id : '') + (this.currentHoverElement.className ? '.' + String(this.currentHoverElement.className).split(' ').join('.') : '')) : 'null'
+        
+        console.log(`🔧 updateHoverState: Changing from ${currentInfo} to ${elementInfo}`)
+        
+        // Remove hover class from previous element only if we're changing to a different element
+        if (this.currentHoverElement && this.currentHoverElement !== element && this.currentHoverElement.isConnected) {
+            console.log(`🔧 updateHoverState: Removing hover-xe from ${currentInfo}`)
             this.currentHoverElement.classList.remove('hover-xe')
         }
         
         // Add hover class to new element
-        if (element && element !== this.currentHoverElement) {
+        if (element && element !== this.currentHoverElement && element.isConnected) {
+            console.log(`🔧 updateHoverState: Adding hover-xe to ${elementInfo}`)
             element.classList.add('hover-xe')
         }
         
@@ -202,7 +291,23 @@ class InBrowserTestingFramework {
 
     // Restart all tests
     async restartAllTests() {
+        // If paused, resume instead of restart
+        if (this.isPaused) {
+            this.isPaused = false
+            console.log('▶️ Resuming tests...')
+            
+            if (this.testPanel) {
+                this.testPanel.addAction('▶️ Tests Resumed', 'Test execution resumed')
+                this.testPanel.setPaused(false)
+            }
+            return
+        }
+        
         console.log('🔄 Restarting all tests...')
+        
+        // Reset states
+        this.isPaused = false
+        this.isStopped = false
         
         // Clear current results and console errors
         this.results = []
@@ -284,6 +389,12 @@ class InBrowserTestingFramework {
             this.isRunning = false
             this.mouseTracker.style.display = 'none'
             
+            // Clear hover state when test finishes
+            if (this.currentHoverElement && this.currentHoverElement.isConnected) {
+                this.currentHoverElement.classList.remove('hover-xe')
+                this.currentHoverElement = null
+            }
+            
             // Clear running state in test panel
             if (this.testPanel && this.testPanel.setRunning) {
                 this.testPanel.setRunning(false)
@@ -295,7 +406,10 @@ class InBrowserTestingFramework {
 
     // Mount the test panel to dev mode mount point
     async setupTestPanel() {
-        if (this.testPanelComponent) return // Already loaded
+        if (this.testPanelComponent) {
+            console.log('✅ Test panel already loaded')
+            return // Already loaded
+        }
         
         try {
             // Find the mount point provided by App.svelte in dev mode
@@ -316,7 +430,7 @@ class InBrowserTestingFramework {
             // Wait a bit for the component to mount and register
             await new Promise(resolve => setTimeout(resolve, 100))
             
-            console.log('✅ Test panel loaded and mounted')
+            console.log('✅ Test panel loaded and mounted (ready to run tests)')
         } catch (error) {
             console.error('❌ Failed to load test panel:', error)
         }
@@ -426,16 +540,28 @@ class InBrowserTestingFramework {
             },
             'left third': (rect) => {
                 const leftThirdEnd = viewport.width / 3
-                return rect.left < leftThirdEnd
+                const result = rect.left < leftThirdEnd
+                if (this.isRunning) {
+                    console.log(`🔍 Left third check: element at ${rect.left}, threshold ${leftThirdEnd}, result: ${result}`)
+                }
+                return result
             },
             'right third': (rect) => {
                 const rightThirdStart = viewport.width * 2 / 3
-                return rect.left >= rightThirdStart
+                const result = rect.left >= rightThirdStart
+                if (this.isRunning) {
+                    console.log(`🔍 Right third check: element at ${rect.left}, threshold ${rightThirdStart}, result: ${result}`)
+                }
+                return result
             },
             'center third': (rect) => {
                 const leftThirdEnd = viewport.width / 3
                 const rightThirdStart = viewport.width * 2 / 3
-                return rect.left >= leftThirdEnd && rect.left < rightThirdStart
+                const result = rect.left >= leftThirdEnd && rect.left < rightThirdStart
+                if (this.isRunning) {
+                    console.log(`🔍 Center third check: element at ${rect.left}, range ${leftThirdEnd}-${rightThirdStart}, result: ${result}`)
+                }
+                return result
             },
             'left half': (rect) => {
                 const halfWidth = viewport.width / 2
@@ -542,25 +668,17 @@ class InBrowserTestingFramework {
             return
         }
         
-        const rect = element.getBoundingClientRect()
-        const indicator = document.createElement('div')
-        indicator.className = 'test-found-indicator'
-        indicator.style.left = (rect.left - 5) + 'px'
-        indicator.style.top = (rect.top - 5) + 'px'
-        indicator.style.width = (rect.width + 10) + 'px'
-        indicator.style.height = (rect.height + 10) + 'px'
-        document.body.appendChild(indicator)
+        const elementInfo = element.tagName + (element.id ? '#' + element.id : '') + (element.className ? '.' + String(element.className).split(' ').join('.') : '')
+        console.log(`🔧 showFoundIndicator: Adding highlight class to ${elementInfo}`)
         
-        this.clickIndicators.push(indicator)
+        // Add the CSS class directly to the element
+        element.classList.add('test-found-element')
         
-        // Remove after animation
+        // Remove the class after animation duration
         setTimeout(() => {
-            if (indicator.parentNode) {
-                indicator.parentNode.removeChild(indicator)
-            }
-            const index = this.clickIndicators.indexOf(indicator)
-            if (index > -1) {
-                this.clickIndicators.splice(index, 1)
+            if (element.isConnected) {
+                element.classList.remove('test-found-element')
+                console.log(`🔧 showFoundIndicator: Removed highlight class from ${elementInfo}`)
             }
         }, 2000)
     }
@@ -574,6 +692,8 @@ class InBrowserTestingFramework {
     // Run all tests
     async runAll() {
         this.isRunning = true
+        this.isPaused = false
+        this.isStopped = false
         this.results = []
         
         // Setup console error tracking and clear any existing errors
@@ -600,6 +720,23 @@ class InBrowserTestingFramework {
         console.log('🎯 Visual feedback enabled - mouse movements and clicks will be highlighted')
         
         for (const { name, testFn } of this.tests) {
+            // Check if tests were stopped
+            if (this.isStopped) {
+                console.log('⏹️ Test execution stopped by user')
+                break
+            }
+            
+            // Wait while paused
+            while (this.isPaused && !this.isStopped) {
+                await new Promise(resolve => setTimeout(resolve, 100))
+            }
+            
+            // Check again if stopped after pause
+            if (this.isStopped) {
+                console.log('⏹️ Test execution stopped by user')
+                break
+            }
+            
             try {
                 console.log(`🔍 Running test: ${name}`)
                 this.updateTestPanel(name, '🔍 Test Started', 'Initializing test environment')
@@ -632,6 +769,12 @@ class InBrowserTestingFramework {
         
         this.isRunning = false
         this.mouseTracker.style.display = 'none'
+        
+        // Clear hover state when tests finish
+        if (this.currentHoverElement && this.currentHoverElement.isConnected) {
+            this.currentHoverElement.classList.remove('hover-xe')
+            this.currentHoverElement = null
+        }
         
         // Teardown console error tracking
         this.teardownConsoleErrorTracking()
@@ -764,9 +907,23 @@ class BrowserPage {
                     page.framework.updateTestPanel(null, '🖱️ Mouse Move', `Moving to ${regionName}`)
                 }
                 
+                // Handle manual mode - show the action and wait for manual mouse movement
+                if (page.framework && page.framework.isManualMode) {
+                    console.log(`👤 Manual Mode: Please move mouse to ${regionName} manually`)
+                    
+                    if (page.framework.testPanel) {
+                        page.framework.testPanel.addAction('👤 Manual Mouse Move Required', `Move mouse to ${regionName} manually`)
+                    }
+                    
+                    // Wait for manual mouse movement to the target area
+                    await page.waitForManualMouseMove(targetX, targetY, regionName)
+                    return
+                }
+                
                 // Calculate movement path with curve and easing
-                const steps = 30 // Number of animation steps
-                const duration = 800 // Total duration in ms
+                // Use different speeds based on mode
+                const steps = page.framework.isHumanTime ? 30 : 5 // Number of animation steps
+                const duration = page.framework.isHumanTime ? 800 : 100 // Total duration in ms
                 const stepDuration = duration / steps
                 
                 for (let i = 0; i <= steps; i++) {
@@ -803,6 +960,7 @@ class BrowserPage {
                     if (element) {
                         // Update hover state using framework
                         if (page.framework) {
+                            console.log(`🔧 MouseMove: Element at (${x}, ${y}):`, element.tagName + (element.id ? '#' + element.id : ''))
                             page.framework.updateHoverState(element)
                         }
                         
@@ -901,6 +1059,23 @@ class BrowserPage {
                     await page.mouse.move(targetX, targetY)
                 }
                 
+                // Handle manual mode - show the action and wait for manual input
+                if (page.framework && page.framework.isManualMode) {
+                    const elementInfo = targetElement ? 
+                        (targetElement.title || targetElement.getAttribute('aria-label') || targetElement.textContent?.trim() || targetElement.tagName.toLowerCase()) : 
+                        'unknown element'
+                    
+                    console.log(`👤 Manual Mode: Please click on "${elementInfo}" manually`)
+                    
+                    if (page.framework.testPanel) {
+                        page.framework.testPanel.addAction('👤 Manual Click Required', `Click on "${elementInfo}" manually`)
+                    }
+                    
+                    // Wait for manual click on the target element
+                    await page.waitForManualClick(targetElement || document.elementFromPoint(targetX, targetY))
+                    return
+                }
+                
                 // If we have a target element, always get fresh position right before clicking
                 if (targetElement) {
                     // Verify element still exists and is connected to DOM
@@ -940,9 +1115,14 @@ class BrowserPage {
                         throw new Error(`Invalid final coordinates: (${finalClickX}, ${finalClickY}) from rect: ${JSON.stringify(finalRect)}`)
                     }
                     
-                    // Update current mouse position to match final click position
-                    page.currentMouseX = finalClickX
-                    page.currentMouseY = finalClickY
+                                    // Update current mouse position to match final click position
+                page.currentMouseX = finalClickX
+                page.currentMouseY = finalClickY
+                
+                // Add delay before clicking in human time mode
+                if (page.framework && page.framework.isHumanTime) {
+                    await page.wait(20)
+                }
                 } else {
                     // Use current mouse position for coordinate-based clicks
                     finalClickX = page.currentMouseX
@@ -971,45 +1151,93 @@ class BrowserPage {
                 
                 // Find element and click it at final click position
                 const element = targetElement || document.elementFromPoint(finalClickX, finalClickY)
+                console.log(`🔧 Click: Found element at (${finalClickX}, ${finalClickY}):`, element)
                 if (element) {
-                    // Dispatch mouse events in proper sequence with proper event details
-                    const mouseDown = new MouseEvent('mousedown', {
-                        clientX: finalClickX, 
-                        clientY: finalClickY, 
-                        bubbles: true, 
-                        cancelable: true,
-                        target: element,
-                        button: 0,
-                        buttons: 1
-                    })
-                    const mouseUp = new MouseEvent('mouseup', {
-                        clientX: finalClickX, 
-                        clientY: finalClickY, 
-                        bubbles: true, 
-                        cancelable: true,
-                        target: element,
-                        button: 0,
-                        buttons: 0
-                    })
-                    const clickEvent = new MouseEvent('click', {
-                        clientX: finalClickX, 
-                        clientY: finalClickY, 
-                        bubbles: true, 
-                        cancelable: true,
-                        target: element,
-                        button: 0,
-                        buttons: 0
-                    })
+                    // Set clicking flag to prevent hover state interference
+                    if (page.framework) {
+                        console.log('🔧 Click: Setting isClicking = true')
+                        page.framework.isClicking = true
+                    }
                     
-                    element.dispatchEvent(mouseDown)
-                    await page.wait(50)
-                    element.dispatchEvent(mouseUp)
-                    await page.wait(50)
-                    element.dispatchEvent(clickEvent)
-                    
-                    // Focus if focusable
-                    if (element.focus && typeof element.focus === 'function') {
-                        element.focus()
+                    try {
+                        // Preserve hover state during click sequence
+                        const wasHovered = element.classList.contains('hover-xe')
+                        console.log(`🔧 Click: Element was hovered: ${wasHovered}`)
+                        
+                        // Dispatch mouse events in proper sequence with proper event details
+                        const mouseDown = new MouseEvent('mousedown', {
+                            clientX: finalClickX, 
+                            clientY: finalClickY, 
+                            bubbles: true, 
+                            cancelable: true,
+                            target: element,
+                            button: 0,
+                            buttons: 1
+                        })
+                        const mouseUp = new MouseEvent('mouseup', {
+                            clientX: finalClickX, 
+                            clientY: finalClickY, 
+                            bubbles: true, 
+                            cancelable: true,
+                            target: element,
+                            button: 0,
+                            buttons: 0
+                        })
+                        const clickEvent = new MouseEvent('click', {
+                            clientX: finalClickX, 
+                            clientY: finalClickY, 
+                            bubbles: true, 
+                            cancelable: true,
+                            target: element,
+                            button: 0,
+                            buttons: 0
+                        })
+                        
+                        console.log('🔧 Click: Dispatching mousedown')
+                        element.dispatchEvent(mouseDown)
+                        
+                        // Restore hover state if it was lost during mousedown
+                        const hasHoverAfterMouseDown = element.classList.contains('hover-xe')
+                        console.log(`🔧 Click: After mousedown, element has hover-xe: ${hasHoverAfterMouseDown}`)
+                        if (wasHovered && !hasHoverAfterMouseDown) {
+                            console.log('🔧 Click: Restoring hover state after mousedown')
+                            element.classList.add('hover-xe')
+                        }
+                        
+                        await page.wait(50)
+                        console.log('🔧 Click: Dispatching mouseup')
+                        element.dispatchEvent(mouseUp)
+                        
+                        // Restore hover state if it was lost during mouseup
+                        const hasHoverAfterMouseUp = element.classList.contains('hover-xe')
+                        console.log(`🔧 Click: After mouseup, element has hover-xe: ${hasHoverAfterMouseUp}`)
+                        if (wasHovered && !hasHoverAfterMouseUp) {
+                            console.log('🔧 Click: Restoring hover state after mouseup')
+                            element.classList.add('hover-xe')
+                        }
+                        
+                        await page.wait(50)
+                        console.log('🔧 Click: Dispatching click event')
+                        element.dispatchEvent(clickEvent)
+                        
+                        // Final hover state restoration
+                        const hasHoverAfterClick = element.classList.contains('hover-xe')
+                        console.log(`🔧 Click: After click, element has hover-xe: ${hasHoverAfterClick}`)
+                        if (wasHovered && !hasHoverAfterClick) {
+                            console.log('🔧 Click: Restoring hover state after click')
+                            element.classList.add('hover-xe')
+                        }
+                        
+                        // Focus if focusable
+                        if (element.focus && typeof element.focus === 'function') {
+                            element.focus()
+                        }
+                    } finally {
+                        // Always clear clicking flag after click sequence completes
+                        if (page.framework) {
+                            console.log('🔧 Click: Clearing isClicking = false')
+                            page.framework.isClicking = false
+                        }
                     }
                 } else {
                     throw new Error(`No element found at coordinates (${finalClickX}, ${finalClickY})`)
@@ -1060,7 +1288,7 @@ class BrowserPage {
         } else if (selectorOrElement && typeof selectorOrElement === 'object' && selectorOrElement.nodeType === 1) {
             // It's an element object
             element = selectorOrElement
-            description = element.tagName.toLowerCase() + (element.id ? '#' + element.id : '') + (element.className ? '.' + element.className.split(' ').join('.') : '')
+            description = element.tagName.toLowerCase() + (element.id ? '#' + element.id : '') + (element.className ? '.' + String(element.className).split(' ').join('.') : '')
         } else {
             throw new Error('click() requires either a selector string or an element object')
         }
@@ -1076,6 +1304,19 @@ class BrowserPage {
         const element = await this.waitForSelector(selector, options)
         console.log(`⌨️  Typing "${text}" into ${selector}`)
         
+        // Handle manual mode - show the action and wait for manual input
+        if (this.framework && this.framework.isManualMode) {
+            console.log(`👤 Manual Mode: Please type "${text}" into ${selector} manually`)
+            
+            if (this.framework.testPanel) {
+                this.framework.testPanel.addAction('👤 Manual Type Required', `Type "${text}" into ${selector} manually`)
+            }
+            
+            // Wait for manual typing by monitoring the element value
+            await this.waitForManualType(element, text)
+            return
+        }
+        
         // Focus the element first
         element.focus()
         
@@ -1083,6 +1324,10 @@ class BrowserPage {
         if (options.clear !== false) {
             element.value = ''
         }
+        
+        // Use different typing speeds based on mode
+        const baseDelay = this.framework && this.framework.isHumanTime ? 50 : 10
+        const randomDelay = this.framework && this.framework.isHumanTime ? 50 : 10
         
         // Simulate typing character by character
         for (let i = 0; i < text.length; i++) {
@@ -1093,7 +1338,7 @@ class BrowserPage {
             const inputEvent = new Event('input', { bubbles: true })
             element.dispatchEvent(inputEvent)
             
-            await this.wait(50 + Math.random() * 50) // Variable typing speed
+            await this.wait(baseDelay + Math.random() * randomDelay) // Variable typing speed
         }
         
         // Dispatch change event
@@ -1200,14 +1445,28 @@ class BrowserPage {
                 
                 // Check area constraint function
                 if (constraintFunction && typeof constraintFunction === 'function') {
-                    return constraintFunction(rect)
+                    try {
+                        return constraintFunction(rect)
+                    } catch (error) {
+                        console.warn(`Area constraint function failed for element:`, el, error)
+                        return false
+                    }
                 }
                 
                 return true
             })
             
             if (candidates.length > 0) {
-                // Find the most specific element
+                // Debug logging for multiple candidates
+                if (candidates.length > 1) {
+                    console.log(`🔍 Found ${candidates.length} ${selector} elements with text "${text}" in ${areaDescription}:`, candidates.map(el => ({
+                        element: el,
+                        text: el.textContent.trim(),
+                        rect: el.getBoundingClientRect()
+                    })))
+                }
+                
+                // Find the most specific element (shortest text content)
                 const element = candidates.reduce((best, current) => {
                     const bestTextLength = best.textContent.trim().length
                     const currentTextLength = current.textContent.trim().length
@@ -1222,6 +1481,20 @@ class BrowserPage {
                 return element
             }
             await this.wait(100)
+        }
+        
+        // Better error reporting - show what was found
+        const allElements = Array.from(document.querySelectorAll(selector))
+        const textMatches = allElements.filter(el => 
+            el && el.isConnected && el.textContent && el.textContent.toLowerCase().includes(text.toLowerCase())
+        )
+        
+        if (textMatches.length > 0) {
+            console.log(`❌ Found ${textMatches.length} elements with text "${text}" but none in ${areaDescription}:`, textMatches.map(el => ({
+                element: el,
+                text: el.textContent.trim(),
+                rect: el.getBoundingClientRect()
+            })))
         }
         
         if (this.framework) {
@@ -1314,7 +1587,145 @@ class BrowserPage {
         if (this.framework && ms > 500) {
             this.framework.updateTestPanel(null, '⏱️ Waiting', `Waiting ${ms}ms`)
         }
-        return new Promise(resolve => setTimeout(resolve, ms))
+        
+        // Check for pause/stop during wait
+        const startTime = Date.now()
+        while (Date.now() - startTime < ms) {
+            // Exit early if stopped
+            if (this.framework && this.framework.isStopped) {
+                throw new Error('Test stopped by user')
+            }
+            
+            // Pause while tests are paused
+            if (this.framework && this.framework.isPaused) {
+                await new Promise(resolve => setTimeout(resolve, 100))
+                continue
+            }
+            
+            // Wait for remaining time or 100ms, whichever is shorter
+            const remainingTime = ms - (Date.now() - startTime)
+            const waitTime = Math.min(remainingTime, 100)
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+        }
+    }
+
+    // Wait for manual click on target element
+    async waitForManualClick(targetElement) {
+        return new Promise((resolve) => {
+            if (!targetElement) {
+                console.error('No target element provided for manual click')
+                resolve()
+                return
+            }
+            
+            const elementInfo = targetElement.title || targetElement.getAttribute('aria-label') || targetElement.textContent?.trim() || targetElement.tagName.toLowerCase()
+            
+            // Show visual indicator for the target element
+            if (this.framework) {
+                this.framework.showFoundIndicator(targetElement)
+            }
+            
+            // Set up click listener
+            const handleClick = (event) => {
+                // Check if the clicked element is the target or contains the target
+                if (event.target === targetElement || targetElement.contains(event.target) || event.target.contains(targetElement)) {
+                    console.log(`👤 Manual click detected on target: ${elementInfo}`)
+                    
+                    if (this.framework && this.framework.testPanel) {
+                        this.framework.testPanel.addAction('✅ Manual Click Completed', `Clicked on "${elementInfo}"`)
+                    }
+                    
+                    document.removeEventListener('click', handleClick, true)
+                    resolve()
+                }
+            }
+            
+            // Add click listener to capture phase
+            document.addEventListener('click', handleClick, true)
+            
+            console.log(`👤 Waiting for manual click on: ${elementInfo}`)
+        })
+    }
+
+    // Wait for manual type into element
+    async waitForManualType(element, expectedText) {
+        return new Promise((resolve) => {
+            if (!element) {
+                console.error('No element provided for manual type')
+                resolve()
+                return
+            }
+            
+            // Show visual indicator for the target element
+            if (this.framework) {
+                this.framework.showFoundIndicator(element)
+            }
+            
+            // Focus the element
+            element.focus()
+            
+            // Set up input listener
+            const handleInput = () => {
+                const currentValue = element.value
+                
+                // Check if the current value contains the expected text
+                if (currentValue.includes(expectedText)) {
+                    console.log(`👤 Manual typing completed: "${currentValue}"`)
+                    
+                    if (this.framework && this.framework.testPanel) {
+                        this.framework.testPanel.addAction('✅ Manual Type Completed', `Typed "${currentValue}"`)
+                    }
+                    
+                    element.removeEventListener('input', handleInput)
+                    resolve()
+                }
+            }
+            
+            // Add input listener
+            element.addEventListener('input', handleInput)
+            
+            console.log(`👤 Waiting for manual typing of: "${expectedText}"`)
+        })
+    }
+
+    // Wait for manual mouse movement to target area
+    async waitForManualMouseMove(targetX, targetY, regionName) {
+        return new Promise((resolve) => {
+            const threshold = 100 // Distance threshold in pixels
+            
+            // Set up mouse move listener
+            const handleMouseMove = (event) => {
+                const currentX = event.clientX
+                const currentY = event.clientY
+                
+                // Calculate distance from target
+                const distance = Math.sqrt(
+                    Math.pow(currentX - targetX, 2) + 
+                    Math.pow(currentY - targetY, 2)
+                )
+                
+                // Check if mouse is close enough to target
+                if (distance <= threshold) {
+                    console.log(`👤 Manual mouse move completed to ${regionName}`)
+                    
+                    if (this.framework && this.framework.testPanel) {
+                        this.framework.testPanel.addAction('✅ Manual Mouse Move Completed', `Moved to ${regionName}`)
+                    }
+                    
+                    // Update logical position
+                    this.currentMouseX = targetX
+                    this.currentMouseY = targetY
+                    
+                    document.removeEventListener('mousemove', handleMouseMove)
+                    resolve()
+                }
+            }
+            
+            // Add mouse move listener
+            document.addEventListener('mousemove', handleMouseMove)
+            
+            console.log(`👤 Waiting for manual mouse movement to ${regionName} (within ${threshold}px of target)`)
+        })
     }
 
     // Get viewport size
@@ -1371,7 +1782,20 @@ class BrowserPage {
     // Fill input field
     async fill(selector, value, options = {}) {
         const element = await this.waitForSelector(selector, options)
-        console.log(`�� Filling "${value}" into ${selector}`)
+        console.log(`📝 Filling "${value}" into ${selector}`)
+        
+        // Handle manual mode - show the action and wait for manual input
+        if (this.framework && this.framework.isManualMode) {
+            console.log(`👤 Manual Mode: Please fill "${value}" into ${selector} manually`)
+            
+            if (this.framework.testPanel) {
+                this.framework.testPanel.addAction('👤 Manual Fill Required', `Fill "${value}" into ${selector} manually`)
+            }
+            
+            // Wait for manual typing by monitoring the element value
+            await this.waitForManualType(element, value)
+            return
+        }
         
         // Click on the element first to focus it properly
         await this.click(selector, options)

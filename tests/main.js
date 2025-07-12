@@ -38,12 +38,17 @@ export function cleanup() {
     }
 }
 
-// Make runAll available globally for easy testing
+// Make test functions available globally for easy testing
 if (typeof window !== 'undefined') {
     window.runTests = runAll
+    window.openTestSuite = async () => {
+        await testFramework.setupTestPanel()
+        testFramework.showTestPanel()
+    }
     window.restartTests = () => testFramework.restartAllTests()
     window.restartTest = (testName) => testFramework.restartTest(testName)
     window.testFramework = testFramework
     console.log('🧪 Tests available! Run window.runTests() to start the test suite')
+    console.log('🔧 Test panel available! Run window.openTestSuite() to open the test panel')
     console.log('🔄 Restart available! Run window.restartTests() to restart all tests')
 } 

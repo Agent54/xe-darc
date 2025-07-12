@@ -3,6 +3,116 @@
     import RightSidebar from './RightSidebar.svelte'
     import data from '../data.svelte.js'
     import * as smd from 'streaming-markdown'
+    import { AgentClient } from "agents/client";
+    // import { createAnthropic } from "@ai-sdk/anthropic"
+    // import { streamText, tool } from 'ai'
+
+    // const anthropic = createAnthropic({
+
+    // })
+    // const model = anthropic('claude-4-sonnet-20250514')
+
+
+
+    // async function doit () {
+    //     const result = streamText({
+    //         model,
+    //         messages: [{ role: 'user', content: 'hello world' }],
+    //         tools: {
+    //             // weather: tool({
+    //             //   description: 'Get the weather in a location (in Celsius)',
+    //             //   parameters: z.object({
+    //             //     location: z
+    //             //       .string()
+    //             //       .describe('The location to get the weather for'),
+    //             //   }),
+    //             //   execute: async ({ location }) => ({
+    //             //     location,
+    //             //     temperature: Math.round((Math.random() * 30 + 5) * 10) / 10, // Random temp between 5°C and 35°C
+    //             //   }),
+    //             }
+    //         })
+
+    //     for await (const delta of result.textStream) {
+    //         console.log(delta)
+    //     }
+    // }
+
+    // doit().then(console.log)
+   
+
+    // {"type":"cf_agent_chat_clear"}
+
+    const client = new AgentClient({
+        agent: "chat",
+        name: "default",
+        host: 'localhost:5193'
+    })
+
+    client.onopen = () => {
+        console.log("Connected to agent");
+        // Send an initial message
+        //client.send(JSON.stringify({ type: "join", user: "user123" }));
+    }
+
+client.onmessage = (event) => {
+  // Handle incoming messages
+  const data = JSON.parse(event.data);
+  console.log("Received:", data);
+
+  if (data.type === "state_update") {
+    // Update local UI with new state
+    //updateUI(data.state);
+  }
+}
+
+client.onclose = () => console.log("Disconnected from agent");
+
+// // Send messages to the Agent
+setTimeout(()=> {
+  client.send(JSON.stringify(
+    {
+    "id": "AjkU9ivN",
+    "init": {
+        "body": "{\"id\":\"v0MTrX3plUXe14Ta\",\"messages\":[{\"id\":\"HfH8wX8njHDoioyB\",\"createdAt\":\"2025-07-12T15:30:26.603Z\",\"role\":\"user\",\"content\":\"asdf\",\"parts\":[{\"type\":\"text\",\"text\":\"asdf\"}]}]}",
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "method": "POST"
+    },
+    "type": "cf_agent_use_chat_request",
+    "url": "/api/chat"
+}))
+
+
+    // JSON.stringify({
+    //   type: "message",
+    //   text: "hello world",
+    //   timestamp: Date.now(),
+    // }),
+//   );
+}, 1000)
+
+    // connection.addEventListener("message", (event) => {
+    //     console.log("Received:", event.data);
+    // })
+
+    // setTimeout(()=> {
+    //     connection.send(
+    //         JSON.stringify(  {
+    //             "type": "cf_agent_use_chat_request",
+    //             "id": "unique-request-id",
+    //             "init": {
+    //             "method": "POST",
+    //             "headers": {"Content-Type": "application/json"},
+    //             "body": "{\"messages\":[{\"id\":\"msg_1\",\"role\":\"user\",\"content\":\"Hello\"}]}"
+    //             }
+    //         })
+    //     )
+    //     },2000)
+    // setTimeout(()=> {
+    //     connection.call('sendMessage', ['test']);
+    // })
 
     let { 
         onClose, 

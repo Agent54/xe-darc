@@ -13,6 +13,9 @@
     let isDragging = $state(false)
     let dragStart = $state({ x: 0, y: 0, startLeft: 0, startTop: 0 })
     let isRunning = $state(false)
+    let isPaused = $state(false)
+    let isHumanTime = $state(true)
+    let isManualMode = $state(false)
     
     onMount(() => {
         // Load saved position
@@ -23,6 +26,17 @@
             } catch (e) {
                 console.warn('Failed to parse saved test panel position:', e)
             }
+        }
+        
+        // Load saved modes
+        const savedHumanTime = localStorage.getItem('testPanelHumanTime')
+        if (savedHumanTime !== null) {
+            isHumanTime = JSON.parse(savedHumanTime)
+        }
+        
+        const savedManualMode = localStorage.getItem('testPanelManualMode')
+        if (savedManualMode !== null) {
+            isManualMode = JSON.parse(savedManualMode)
         }
         
         // Register with test framework
@@ -50,8 +64,15 @@
                 },
                 setRunning: (running) => {
                     isRunning = running
+                },
+                setPaused: (paused) => {
+                    isPaused = paused
                 }
             })
+            
+            // Set initial modes in test framework
+            testFramework.setHumanTime(isHumanTime)
+            testFramework.setManualMode(isManualMode)
         }
     })
     
@@ -118,6 +139,34 @@
             await testFramework.restartTest(currentTest)
         }
     }
+    
+    function toggleHumanTime() {
+        isHumanTime = !isHumanTime
+        localStorage.setItem('testPanelHumanTime', JSON.stringify(isHumanTime))
+        if (testFramework) {
+            testFramework.setHumanTime(isHumanTime)
+        }
+    }
+    
+    function toggleManualMode() {
+        isManualMode = !isManualMode
+        localStorage.setItem('testPanelManualMode', JSON.stringify(isManualMode))
+        if (testFramework) {
+            testFramework.setManualMode(isManualMode)
+        }
+    }
+    
+    async function pauseTests() {
+        if (testFramework) {
+            await testFramework.pauseTests()
+        }
+    }
+    
+    async function stopTests() {
+        if (testFramework) {
+            await testFramework.stopTests()
+        }
+    }
 </script>
 
 {#if isVisible}
@@ -132,12 +181,45 @@
         >
             <div class="status-indicator"></div>
             <span class="title">🧪 Test Runner</span>
+            {#if isRunning}
+                <button 
+                    class="control-button"
+                    onclick={isPaused ? restartAllTests : pauseTests}
+                    title={isPaused ? "Resume Tests" : "Pause Tests"}
+                >
+                    {isPaused ? '▶️' : '⏸️'}
+                </button>
+                <button 
+                    class="control-button stop-button"
+                    onclick={stopTests}
+                    title="Stop Tests"
+                >
+                    ⏹️
+                </button>
+            {:else}
+                <button 
+                    class="control-button"
+                    onclick={restartAllTests}
+                    title="Start All Tests"
+                >
+                    ▶️
+                </button>
+            {/if}
             <button 
-                class="restart-button"
-                onclick={restartAllTests}
-                title="Restart All Tests"
+                class="mode-button"
+                class:active={isHumanTime}
+                onclick={toggleHumanTime}
+                title={isHumanTime ? "Slow Mode: Realistic speed (click to switch to Fast Mode)" : "Fast Mode: Maximum speed (click to switch to Slow Mode)"}
             >
-                🔄
+                {isHumanTime ? 'Slow' : 'Fast'}
+            </button>
+            <button 
+                class="mode-button"
+                class:active={isManualMode}
+                onclick={toggleManualMode}
+                title={isManualMode ? "Manual Mode: Click manually (click to switch to Auto Mode)" : "Auto Mode: Automated clicks (click to switch to Manual Mode)"}
+            >
+                {isManualMode ? 'Manual' : 'Auto'}
             </button>
             <div class="drag-handle">⋮⋮</div>
             <button 
@@ -214,7 +296,7 @@
                     <div class="placeholder-content">
                         <div class="placeholder-status">Ready</div>
                         <div class="placeholder-text">⏳ Waiting for test execution</div>
-                        <div class="placeholder-hint">Click "Run Test Suite" to start</div>
+                        <div class="placeholder-hint">Click "▶️ Start All Tests" to start</div>
                     </div>
                 </div>
             {/if}
@@ -225,8 +307,8 @@
 <style>
     .test-panel {
         position: fixed;
-        width: 350px;
-        max-height: 400px;
+        width: 420px;
+        max-height: 480px;
         background: rgb(0 0 0 / 96%);
         backdrop-filter: blur(21px);
         border: 1px solid hsl(0 0% 12% / 1);
@@ -254,6 +336,7 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
         color: rgba(255, 255, 255, 0.9);
+        white-space: nowrap;
     }
     
     .status-indicator {
@@ -291,7 +374,7 @@
         background-color: rgba(255, 255, 255, 0.1);
     }
     
-    .restart-button {
+    .control-button {
         background: none;
         border: none;
         color: rgba(255, 255, 255, 0.7);
@@ -301,12 +384,45 @@
         line-height: 1;
         border-radius: 3px;
         transition: all 0.2s ease;
-        margin-left: 8px;
+        margin-left: 4px;
     }
     
-    .restart-button:hover {
+    .control-button:hover {
         color: #fff;
         background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .control-button.stop-button:hover {
+        color: #ef4444;
+        background-color: rgba(239, 68, 68, 0.1);
+    }
+    
+    .mode-button {
+        background: none;
+        border: none;
+        color: rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        font-size: 14px;
+        padding: 4px 8px;
+        line-height: 1;
+        border-radius: 3px;
+        transition: all 0.2s ease;
+        margin-left: 4px;
+    }
+    
+    .mode-button:hover {
+        color: #fff;
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .mode-button.active {
+        color: #10b981;
+        background-color: rgba(16, 185, 129, 0.1);
+    }
+    
+    .mode-button.active:hover {
+        color: #10b981;
+        background-color: rgba(16, 185, 129, 0.2);
     }
     
     .restart-test-button {
@@ -330,7 +446,7 @@
     .panel-content {
         padding: 20px;
         padding-top: 12px;
-        max-height: 320px;
+        max-height: 400px;
         overflow-y: auto;
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
@@ -414,6 +530,10 @@
         color: rgba(255, 255, 255, 0.5);
         font-size: 9px;
         margin-top: 3px;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        white-space: pre-wrap;
+        word-break: break-word;
     }
     
     .placeholder {
