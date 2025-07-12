@@ -2720,6 +2720,10 @@
     </div>
 {/if}
 
+{#if devModeEnabled}
+    <div id="test-panel-mount"></div>
+{/if}
+
 {#if focusModeEnabled && contentAreaScrimActive}
     <div class="content-area-scrim"
          role="button"

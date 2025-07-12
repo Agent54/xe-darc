@@ -662,22 +662,22 @@ document.addEventListener('keydown', function(event) {
 
 // Global mouse event listeners for controlled frame
 document.addEventListener('mousedown', function(event) {
-    console.log('🖱️ [CONTROLLED-FRAME] mousedown detected in tab ${tab.id}', {
-        button: event.button,
-        target: event.target?.tagName,
-        clientX: event.clientX,
-        clientY: event.clientY
-    });
+    // console.log('🖱️ [CONTROLLED-FRAME] mousedown detected in tab ${tab.id}', {
+    //     button: event.button,
+    //     target: event.target?.tagName,
+    //     clientX: event.clientX,
+    //     clientY: event.clientY
+    // });
     console.log('iwa:mousedown:${tab.id}');
 }, { capture: true, passive: true });
 
 document.addEventListener('mouseup', function(event) {
-    console.log('🖱️ [CONTROLLED-FRAME] mouseup detected in tab ${tab.id}', {
-        button: event.button,
-        target: event.target?.tagName,
-        clientX: event.clientX,
-        clientY: event.clientY
-    });
+    // console.log('🖱️ [CONTROLLED-FRAME] mouseup detected in tab ${tab.id}', {
+    //     button: event.button,
+    //     target: event.target?.tagName,
+    //     clientX: event.clientX,
+    //     clientY: event.clientY
+    // });
     console.log('iwa:mouseup:${tab.id}');
 }, { capture: true, passive: true });
 

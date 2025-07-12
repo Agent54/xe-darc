@@ -12,3 +12,4 @@ public/dist
 data
 secrets.json
 .claude/claude.json
+.dev.vars

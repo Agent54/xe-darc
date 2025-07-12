@@ -25,7 +25,7 @@ const routeWorker :Workerd.Worker = (
   compatibilityFlags = ["nodejs_compat"],
   compatibilityDate = "2023-12-01",
   modules = [
-    ( name = "worker.js", esModule = embed "worker.js" ),
+    ( name = "docker.js", esModule = embed "docker.js" ),
   ],
   bindings = [
     ( name = "docker", service = "docker" ),
