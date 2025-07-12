@@ -56,21 +56,39 @@
 	client.onmessage = (event) => {
 		// Handle incoming messages
 		const data = JSON.parse(event.data)
-		console.log('Received:', data)
+		console.log('Received message:', data)
 
-        const assistantMessageId = (Date.now() + 1).toString()
+
+        // { "mcp": { "prompts": [], "resources": [], "servers": {}, "tools": [] }, "type": "cf_agent_mcp_servers" }
 
         // "body": "f:{\"messageId\":\"msg-AI9pv13V8IEr5o6jevyUFeAL\"}\n", "done": false, "id": "LdxkiFBI
+        //  { "body": "0:\" you've typed \\\"asdf\\\" - that doesn't seem to be a specific\"\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
 
-        chatHistory = [
-            ...chatHistory,
-            {
-            	id: assistantMessageId,
-            	role: 'assistant',
-            	content: JSON.stringify(data, null, 4),
-            	timestamp: new Date().toISOString()
-            }
-        ]
+        //{ "body": "e:{\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":1287,\"completionTokens\":124},\"isContinued\":false}\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
+
+		// Check if this is a streaming message chunk
+		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('0:')) {
+			handleStreamingChunk(data, { type: 'message' })
+			return
+		}
+
+		// Check if this is a response summary
+		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('d:')) {
+			handleResponseSummary(data)
+			return
+		}
+
+        //const assistantMessageId = (Date.now() + 1).toString()
+
+        // chatHistory = [
+        //     ...chatHistory,
+        //     {
+        //     	id: assistantMessageId,
+        //     	role: 'assistant',
+        //     	content: JSON.stringify(data, null, 4),
+        //     	timestamp: new Date().toISOString()
+        //     }
+        // ]
 
 		if (data.type === 'state_update') {
 			// Update local UI with new state
@@ -145,6 +163,9 @@
 	let streamingRenderer = $state(null)
 	let streamingParser = $state(null)
 	let streamingElement = $state(null)
+	
+	// Add state for tracking active streams
+	let activeStreams = $state(new Map()) // messageId -> { message, parser, renderer, element }
 
 	function initializeStreamingMarkdown(element) {
 		if (!element) return null
@@ -177,6 +198,164 @@
 	function endMarkdownStream(parser) {
 		if (parser) {
 			smd.parser_end(parser)
+		}
+	}
+
+	async function handleStreamingChunk(data, { type } = {}) {
+		try {
+			console.log('handleStreamingChunk called with data:', data)
+			// Parse the streaming message format: { "body": "0:\" content here\"\n", "done": false, "id": "xxx", "type": "cf_agent_use_chat_response" }
+			const messageId = data.id
+			const body = data.body
+			
+			// Extract content after "0:" and parse as JSON
+			const contentStart = body.indexOf('0:') + 2
+			const contentPart = body.substring(contentStart)
+			
+			// Parse the JSON-encoded content
+			let content = ''
+			try {
+				content = JSON.parse(contentPart.trim())
+			} catch (parseError) {
+				// If parsing fails, use the raw content
+				content = contentPart.trim()
+			}
+			
+			// Check if this is the first chunk for this message
+			if (!activeStreams.has(messageId)) {
+				// Create new streaming message - ALL messages use streaming markdown now
+				const streamingMessageId = Date.now().toString()
+				const streamingMessage = {
+					id: streamingMessageId,
+					role: type === 'assistant-doc' ? 'assistant-doc' : 'assistant',
+					content: '',
+					rawContent: '',
+					timestamp: new Date().toISOString(),
+					streaming: true,
+					sourceMessageId: messageId
+				}
+
+				// Add to chat history
+				chatHistory = [...chatHistory, streamingMessage]
+				currentStreamingMessage = streamingMessage
+
+				// Initialize streaming after DOM update
+				await new Promise((resolve) => setTimeout(resolve, 100))
+
+				const streamingSetup = startMarkdownStream(streamingMessageId)
+				if (streamingSetup) {
+					activeStreams.set(messageId, {
+						message: streamingMessage,
+						parser: streamingSetup.parser,
+						renderer: streamingSetup.renderer,
+						element: streamingSetup.element
+					})
+					
+					// Set global streaming state for first stream
+					if (activeStreams.size === 1) {
+						isMarkdownStreaming = true
+						streamingParser = streamingSetup.parser
+						streamingRenderer = streamingSetup.renderer
+						streamingElement = streamingSetup.element
+					}
+				}
+			}
+
+			// Get the active stream
+			const stream = activeStreams.get(messageId)
+			if (stream && content) {
+				// Add content to the message
+				stream.message.rawContent += content
+				
+				// Check if we should switch from chat bubble to document style
+				const lineCount = (stream.message.rawContent.match(/\n/g) || []).length + 1
+				if (lineCount > 10 && stream.message.role === 'assistant') {
+					// Switch to document style
+					stream.message.role = 'assistant-doc'
+					// Update the message in chat history
+					const messageIndex = chatHistory.findIndex(m => m.id === stream.message.id)
+					if (messageIndex !== -1) {
+						chatHistory[messageIndex] = { ...stream.message }
+					}
+				}
+				
+				// Write to streaming parser
+				writeMarkdownChunk(stream.parser, content)
+				
+				// Update chat history to trigger reactivity
+				chatHistory = [...chatHistory]
+			}
+
+			// Check if streaming is complete
+			if (data.done) {
+				const stream = activeStreams.get(messageId)
+				if (stream) {
+					// End the stream
+					endMarkdownStream(stream.parser)
+					stream.message.streaming = false
+					
+					// Remove from active streams
+					activeStreams.delete(messageId)
+					
+					// Update chat history
+					chatHistory = [...chatHistory]
+					
+					// Clear global streaming state if this was the last stream
+					if (activeStreams.size === 0) {
+						isMarkdownStreaming = false
+						currentStreamingMessage = null
+						streamingParser = null
+						streamingRenderer = null
+						streamingElement = null
+						
+						// Set processing to false when streaming completes
+						console.log('Streaming completed, setting isProcessing to false')
+						isProcessing = false
+					}
+				}
+			}
+			
+		} catch (error) {
+			console.error('Error parsing streaming message:', error)
+			// Fall back to regular message display
+			const assistantMessageId = (Date.now() + 1).toString()
+			chatHistory = [
+				...chatHistory,
+				{
+					id: assistantMessageId,
+					role: 'assistant',
+					content: `Error parsing stream: ${data.body}`,
+					timestamp: new Date().toISOString()
+				}
+			]
+		}
+	}
+
+	function handleResponseSummary(data) {
+		try {
+			// Parse the response summary format: { "body": "d:{\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":1288,\"completionTokens\":89}}\n", ... }
+			const body = data.body
+			
+			// Extract content after "d:" and parse as JSON
+			const contentStart = body.indexOf('d:') + 2
+			const contentPart = body.substring(contentStart)
+			
+			// Parse the JSON-encoded content
+			const summaryData = JSON.parse(contentPart.trim())
+			
+            			// Default: render as subtle response summary divider
+			chatHistory = [
+				...chatHistory,
+				{
+					role: 'response-divider',
+					content: `${summaryData.usage.promptTokens} prompt • ${summaryData.usage.completionTokens} completion`,
+					usage: summaryData.usage,
+					timestamp: new Date().toISOString()
+				}
+			]
+			
+		} catch (error) {
+			console.error('Error parsing response summary:', error)
 		}
 	}
 
@@ -268,6 +447,7 @@
 	async function processQueue() {
 		if (queuePaused || messageQueue.length === 0) return
 
+		console.log('Starting queue processing, setting isProcessing to true')
 		isProcessing = true
 
 		while (messageQueue.length > 0 && !queuePaused) {
@@ -293,7 +473,8 @@
 			}
 		}
 
-		isProcessing = false
+		// Keep isProcessing = true until streaming actually completes
+		// Don't set it to false here - let handleStreamingChunk handle it
 	}
 
 	async function processMessage(queueItem) {
@@ -323,28 +504,7 @@
 									role: 'user',
 									content: queueItem.userMessage,
 									parts: [{ type: 'text', text: queueItem.userMessage }]
-								},
-								// {
-								// 	role: 'assistant',
-								// 	id: 'msg-Dkvh0dwl1NkFuw0avwUbpiRt',
-								// 	createdAt: '2025-07-12T15:58:03.792Z',
-								// 	content: `I see you've typed "asdf" - that looks like you might have been testing or accidentally typed on the keyboard. \n\nHow can I help you today? I can assist with:\n- Checking weather information for cities\n- Getting local time for different locations\n- Scheduling tasks and reminders\n- Managing your scheduled tasks\n\nWhat would you like to do?`,
-								// 	toolInvocations: [],
-								// 	parts: [
-								// 		{ type: 'step-start' },
-								// 		{
-								// 			type: 'text',
-								// 			text: `I see you've typed \"asdf\" - that looks like you might have been testing or accidentally typed on the keyboard. \n\nHow can I help you today? I can assist with:\n- Checking weather information for cities\n- Getting local time for different locations\n- Scheduling tasks and reminders\n- Managing your scheduled tasks\n\nWhat would you like to do?`
-								// 		}
-								// 	]
-								// },
-								// {
-								// 	id: 'YaeKePNtOyv0c2EY',
-								// 	createdAt: '2025-07-12T15:58:15.594Z',
-								// 	role: 'user',
-								// 	content: 'sadf',
-								// 	parts: [{ type: 'text', text: 'sadf' }]
-								// }
+								}
 							]
 						}),
 						headers: { 'Content-Type': 'application/json' },
@@ -353,21 +513,16 @@
 					type: 'cf_agent_use_chat_request',
 					url: '/api/chat'
 				}
-
-				//   {
-				//     "id": "AjkU9ivN",
-				//     "init": {
-				//         "body": "{\"id\":\"v0MTrX3plUXe14Ta\",\"messages\":[{\"id\":\"HfH8wX8njHDoioyB\",\"createdAt\":\"2025-07-12T15:30:26.603Z\",\"role\":\"user\",\"content\":\"asdf\",\"parts\":[{\"type\":\"text\",\"text\":\"asdf\"}]}]}",
-				//         "headers": {
-				//             "Content-Type": "application/json"
-				//         },
-				//         "method": "POST"
-				//     },
-				//     "type": "cf_agent_use_chat_request",
-				//     "url": "/api/chat"
-				// }
 			)
 		)
+
+		// Set a fallback timeout to ensure isProcessing doesn't get stuck
+		const fallbackTimeout = setTimeout(() => {
+			if (isProcessing && activeStreams.size === 0) {
+				console.log('Fallback timeout: setting isProcessing to false')
+				isProcessing = false
+			}
+		}, 10000) // 10 second fallback
 
 		try {
 			// Add info cards showing what the agent is accessing/doing
@@ -512,16 +667,11 @@
 				]
 			}
 
-			// Simulate processing delay (reduced from 5000ms to 2000ms)
-			// await new Promise((resolve) => {
-			// 	currentTimeout = setTimeout(resolve, 2000)
-			// })
-
-			// const mockResponse = `I understand you want to work with "${queueItem.userMessage}". Based on the context from ${selectedTargetObj?.name || 'the selected target'}, here's what I can help with.`
-
 			// Update chat timestamp to bump to top
 			updateCurrentChatTimestamp()
 
+			// Keep processing active until streaming completes
+			// Processing will be set to false when streaming ends
 			return true // Processing completed successfully
 		} catch (error) {
 			console.error('Agent processing error:', error)
@@ -536,6 +686,8 @@
 				}
 			]
 
+			clearTimeout(fallbackTimeout)
+			isProcessing = false
 			return true // Error handled, continue processing
 		} finally {
 			currentTimeout = null
@@ -595,25 +747,36 @@
 	}
 
 	function stopCurrentTask() {
+		// Stop all active streams
+		for (const [messageId, stream] of activeStreams) {
+			if (stream.parser) {
+				endMarkdownStream(stream.parser)
+			}
+			stream.message.streaming = false
+		}
+		
+		// Clear all active streams
+		activeStreams.clear()
+		
+		// Clear streaming state
+		isMarkdownStreaming = false
+		currentStreamingMessage = null
+		streamingParser = null
+		streamingRenderer = null
+		streamingElement = null
+
 		// Only stop the current active task, don't clear queue
 		if (currentTimeout) {
 			clearTimeout(currentTimeout)
 			currentTimeout = null
 		}
 
-		// If we're streaming markdown, finalize it
-		if (currentStreamingMessage && streamingParser) {
-			endMarkdownStream(streamingParser)
-			currentStreamingMessage.streaming = false
-			chatHistory = [...chatHistory]
-			currentStreamingMessage = null
-			streamingParser = null
-			streamingRenderer = null
-			streamingElement = null
-		}
-
 		// Stop the current processing
+		console.log('stopCurrentTask called, setting isProcessing to false')
 		isProcessing = false
+
+		// Update chat history to reflect stopped state
+		chatHistory = [...chatHistory]
 
 		// Re-focus the input
 		const input = document.querySelector('.agent-conversation-input')
@@ -663,11 +826,29 @@
 		}
 	}
 
+	function editQueueItem(queueItemId) {
+		const queueItem = messageQueue.find((q) => q.id === queueItemId)
+		if (queueItem && queueItem.status === 'queued') {
+			editingMessageId = queueItemId
+			editingContent = queueItem.userMessage
+		}
+	}
+
 	function saveMessageEdit(messageId) {
 		const messageIndex = chatHistory.findIndex((m) => m.id === messageId)
 		if (messageIndex !== -1) {
 			chatHistory[messageIndex].content = editingContent
 			chatHistory = [...chatHistory]
+		}
+		editingMessageId = null
+		editingContent = ''
+	}
+
+	function saveQueueItemEdit(queueItemId) {
+		const queueItemIndex = messageQueue.findIndex((q) => q.id === queueItemId)
+		if (queueItemIndex !== -1) {
+			messageQueue[queueItemIndex].userMessage = editingContent
+			messageQueue = [...messageQueue]
 		}
 		editingMessageId = null
 		editingContent = ''
@@ -760,9 +941,9 @@
 	function copyMessage(messageId) {
 		const message = chatHistory.find((m) => m.id === messageId)
 		if (message) {
-			// For markdown messages, copy the raw content instead of HTML
+			// For streaming markdown messages, copy the raw content instead of HTML
 			const contentToCopy =
-				message.role === 'assistant-markdown' ? message.rawContent || message.content : message.content
+				(message.role === 'assistant' || message.role === 'assistant-doc') ? message.rawContent || message.content : message.content
 			navigator.clipboard.writeText(contentToCopy)
 		}
 	}
@@ -826,7 +1007,7 @@
 		const markdownMessageId = (Date.now() + 1).toString()
 		currentStreamingMessage = {
 			id: markdownMessageId,
-			role: 'assistant-markdown',
+			role: 'assistant-doc',
 			content: '',
 			rawContent: '',
 			timestamp: new Date().toISOString(),
@@ -1016,6 +1197,7 @@ The current system demonstrates strong performance and security characteristics.
 	{switchToSettings}
 	{switchToUserMods}
 	{switchToActivity}
+	switchToAgent={switchToAIAgent}
 >
 	{#snippet children()}
 		<div class="agent-sticky-header">
@@ -1298,6 +1480,7 @@ The current system demonstrates strong performance and security characteristics.
 															d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M18.75 9V6a2.25 2.25 0 0 0-2.25-2.25H7.5A2.25 2.25 0 0 0 5.25 6v3M6.75 9h10.5m-10.5 0V6a2.25 2.25 0 0 1 2.25-2.25h6A2.25 2.25 0 0 1 17.25 6v3"
 														/>
 													</svg>
+
 												{/if}
 											</div>
 											<div class="agent-info-card-text">
@@ -1312,9 +1495,11 @@ The current system demonstrates strong performance and security characteristics.
 									</div>
 								{/each}
 							</div>
-						{:else if message.role === 'assistant-markdown'}
+						{:else if message.role === 'assistant' || message.role === 'assistant-doc'}
 							<div
 								class="agent-markdown-message"
+								class:assistant-chat={message.role === 'assistant'}
+								class:assistant-doc={message.role === 'assistant-doc'}
 								data-message-id={message.id}
 								role="group"
 								onmouseenter={() => (hoveredMessageId = message.id)}
@@ -1375,12 +1560,16 @@ The current system demonstrates strong performance and security characteristics.
 									</div>
 								</div>
 							</div>
+						{:else if message.role === 'response-divider'}
+							<div class="agent-response-divider">
+								{message.content}
+							</div>
 						{:else}
 							<div
 								class="agent-chat-message"
 								class:user={message.role === 'user'}
-								class:assistant={message.role === 'assistant'}
 								class:error={message.role === 'error'}
+								class:token-summary={message.isTokenSummary}
 								role="group"
 								onmouseenter={() => (hoveredMessageId = message.id)}
 								onmouseleave={() => (hoveredMessageId = null)}
@@ -1401,12 +1590,7 @@ The current system demonstrates strong performance and security characteristics.
 											</div>
 										</div>
 									{:else}
-										<div
-											class="agent-message-text"
-											class:editable={message.role === 'user'}
-											role={message.role === 'user' ? 'button' : null}
-											onclick={() => (message.role === 'user' ? editMessage(message.id) : null)}
-										>
+										<div class="agent-message-text">
 											{message.content}
 										</div>
 									{/if}
@@ -1415,52 +1599,6 @@ The current system demonstrates strong performance and security characteristics.
 									<div class="agent-chat-message-time">
 										{new Date(message.timestamp).toLocaleTimeString()}
 									</div>
-									{#if message.role === 'assistant'}
-										<div class="agent-message-actions" class:visible={hoveredMessageId === message.id}>
-											<button
-												class="agent-action-btn"
-												onclick={() => thumbsUp(message.id)}
-												title="Good response"
-												aria-label="Good response"
-											>
-												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m10.598-9.75H14.25M5.904 18.5c.083.205.173.405.27.602.197.4-.078.898-.523.898h-.908c-.889 0-1.713-.518-1.972-1.368a12 12 0 0 1-.521-3.507c0-1.553.295-3.036.831-4.398C3.387 9.953 4.167 9.5 5.904 9.5h1.053c.472 0 .745.556.5.96a8.958 8.958 0 0 0-1.302 4.665c0 1.194.232 2.333.654 3.375Z"
-													/>
-												</svg>
-											</button>
-											<button
-												class="agent-action-btn"
-												onclick={() => thumbsDown(message.id)}
-												title="Poor response"
-												aria-label="Poor response"
-											>
-												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M7.498 15.25H4.372c-1.026 0-1.945-.694-2.054-1.715a12.137 12.137 0 0 1-.068-1.285c0-2.848.992-5.464 2.649-7.521C5.287 4.247 5.886 4 6.504 4h4.016a4.5 4.5 0 0 1 1.423.23l3.114 1.04a4.5 4.5 0 0 0 1.423.23h1.294M7.498 15.25c.618 0 .991.724.725 1.282A7.997 7.997 0 0 0 7.5 19.75 2.25 2.25 0 0 0 9.75 22a.75.75 0 0 0 .75-.75v-.633c0-.573.11-1.14.322-1.672.304-.76.93-1.33 1.653-1.715a9.04 9.04 0 0 0 2.86-2.4c.498-.634 1.226-1.08 2.032-1.08h.384m-10.253 1.5H9.7m8.075-9.75c.01.05.027.1.05.148.593 1.2.925 2.55.925 3.977 0 1.487-.36 2.89-.999 4.125m.023-8.25c-.076-.365.183-.75.575-.75h.908c.889 0 1.713.518 1.972 1.368.339 1.11.521 2.287.521 3.507 0 1.553-.295 3.036-.831 4.398-.306.774-1.086 1.227-2.824 1.227h-1.053c-.472 0-.745-.556-.5-.96a8.95 8.95 0 0 0 1.302-4.665c0-1.194-.232-2.333-.654-3.375Z"
-													/>
-												</svg>
-											</button>
-											<button
-												class="agent-action-btn"
-												onclick={() => copyMessage(message.id)}
-												title="Copy message"
-												aria-label="Copy message"
-											>
-												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"
-													/>
-												</svg>
-											</button>
-										</div>
-									{/if}
 								</div>
 							</div>
 						{/if}
@@ -1469,26 +1607,10 @@ The current system demonstrates strong performance and security characteristics.
 					{#if isProcessing}
 						<div class="agent-chat-message assistant">
 							<div class="agent-chat-message-content">
-								<div class="agent-typing-row">
-									<div class="agent-typing-indicator">
-										<span></span>
-										<span></span>
-										<span></span>
-									</div>
-									<button
-										class="agent-stop-button"
-										onmousedown={stopCurrentTask}
-										title="Stop Current Task"
-										aria-label="Stop Current Task"
-									>
-										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z"
-											/>
-										</svg>
-									</button>
+								<div class="agent-typing-indicator">
+									<span></span>
+									<span></span>
+									<span></span>
 								</div>
 							</div>
 						</div>
@@ -1525,9 +1647,29 @@ The current system demonstrates strong performance and security characteristics.
 						{#each messageQueue.filter((item) => item.status === 'queued') as queueItem, index}
 							<div class="agent-chat-message user queued" class:paused={queueItem.paused}>
 								<div class="agent-chat-message-content">
-									<div class="agent-message-text">
-										{queueItem.userMessage}
-									</div>
+									{#if editingMessageId === queueItem.id}
+										<div class="agent-edit-container">
+											<textarea
+												class="agent-edit-input"
+												bind:value={editingContent}
+												placeholder="Edit your message..."
+												rows="3"
+											></textarea>
+											<div class="agent-edit-actions">
+												<button class="agent-edit-btn save" onmousedown={() => saveQueueItemEdit(queueItem.id)}>Save</button
+												>
+												<button class="agent-edit-btn cancel" onmousedown={cancelMessageEdit}>Cancel</button>
+											</div>
+										</div>
+									{:else}
+										<div
+											class="agent-message-text editable"
+											role="button"
+											onclick={() => editQueueItem(queueItem.id)}
+										>
+											{queueItem.userMessage}
+										</div>
+									{/if}
 								</div>
 								<div class="agent-chat-message-time-row">
 									<div class="agent-chat-message-time">
@@ -1586,6 +1728,22 @@ The current system demonstrates strong performance and security characteristics.
 						placeholder="We can do anything..."
 						rows="3"
 					></textarea>
+					{#if isProcessing}
+						<button
+							class="agent-stop-button"
+							onmousedown={stopCurrentTask}
+							title="Stop Current Task"
+							aria-label="Stop Current Task"
+						>
+							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z"
+								/>
+							</svg>
+						</button>
+					{/if}
 					<button
 						class="agent-send-button"
 						onmouseup={sendMessage}
@@ -1924,6 +2082,13 @@ The current system demonstrates strong performance and security characteristics.
 		color: white;
 	}
 
+	.agent-chat-message.assistant.token-summary .agent-chat-message-content {
+		background: rgba(255, 255, 255, 0.04);
+		color: rgba(255, 255, 255, 0.6);
+		font-size: 11px;
+		opacity: 0.8;
+	}
+
 	.agent-chat-message.error .agent-chat-message-content {
 		background: rgba(239, 68, 68, 0.8);
 		color: white;
@@ -2038,34 +2203,9 @@ The current system demonstrates strong performance and security characteristics.
 		border-color: rgba(255, 255, 255, 0.12);
 	}
 
-	.agent-stop-controls {
-		display: flex;
-		gap: 6px;
-		margin-top: 8px;
-		padding-left: 12px;
-	}
 
-	.agent-stop-button {
-		/* background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.06); */
-		border-radius: 4px;
-		padding: 4px;
-		color: rgba(255, 255, 255, 0.7);
-		cursor: pointer;
-		transition: all 0.2s ease;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		margin-left: 7px;
-		margin-right: 7px;
-	}
 
-	.agent-stop-button:hover {
-		background: rgba(239, 68, 68, 0.1);
-		border-color: rgba(239, 68, 68, 0.2);
-		color: rgba(239, 68, 68, 0.9);
-	}
+
 
 	.agent-chat-message[class*='queued'] {
 		opacity: 0.6;
@@ -2076,13 +2216,7 @@ The current system demonstrates strong performance and security characteristics.
 		background: rgba(255, 255, 255, 0.02);
 	}
 
-	.agent-typing-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		width: 100%;
-		margin-left: 10px;
-	}
+
 
 	.agent-global-controls {
 		display: flex;
@@ -2216,7 +2350,7 @@ The current system demonstrates strong performance and security characteristics.
 		background: rgba(255, 255, 255, 0.05);
 		border: 1px solid rgba(255, 255, 255, 0.06);
 		border-radius: 8px;
-		padding: 8px 40px 8px 8px;
+		padding: 8px 80px 8px 8px;
 		color: white;
 		font-size: 14px;
 		font-family: inherit;
@@ -2243,7 +2377,6 @@ The current system demonstrates strong performance and security characteristics.
 
 	.agent-send-button {
 		position: absolute;
-
 		background: transparent;
 		border: none;
 		border-radius: 4px;
@@ -2259,23 +2392,23 @@ The current system demonstrates strong performance and security characteristics.
 		right: 5px;
 	}
 
-	.agent-stop-button-container {
-		display: flex;
-		justify-content: flex-end;
-		margin-bottom: 8px;
-	}
+
 
 	.agent-stop-button {
-		background: rgba(255, 255, 255, 0.037);
-		border: 1px solid rgba(255, 255, 255, 0.046);
+		position: absolute;
+		background: transparent;
+		border: none;
 		border-radius: 4px;
 		padding: 4px;
-		color: rgba(255, 255, 255, 0.7);
+		color: rgba(255, 255, 255, 0.6);
 		cursor: pointer;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		transition: all 0.2s ease;
+		z-index: 2;
+		bottom: 11px;
+		right: 40px;
 	}
 
 	.agent-send-button:hover:not(:disabled) {
@@ -2291,7 +2424,6 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-stop-button:hover {
 		background: rgba(255, 255, 255, 0.08);
 		color: rgba(255, 255, 255, 0.9);
-		border-color: rgba(255, 255, 255, 0.12);
 	}
 
 	.agent-action-buttons {
@@ -2432,6 +2564,19 @@ The current system demonstrates strong performance and security characteristics.
 		animation: messageSlideIn 0.3s ease-out;
 	}
 
+	/* Chat bubble style for regular assistant messages */
+	.agent-markdown-message.assistant-chat {
+		margin: 8px 0;
+		align-items: flex-start;
+	}
+
+	/* Document style for assistant-doc messages */
+	.agent-markdown-message.assistant-doc {
+		margin: 16px 0;
+		align-items: flex-start;
+		width: 100%;
+	}
+
 	@keyframes messageSlideIn {
 		from {
 			opacity: 0;
@@ -2459,6 +2604,105 @@ The current system demonstrates strong performance and security characteristics.
 		font-size: 12px;
 		transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		min-height: 40px;
+	}
+
+	/* Chat bubble styling for regular assistant messages */
+	.agent-markdown-message.assistant-chat .agent-markdown-content {
+		background: rgba(255, 255, 255, 0.1);
+		border: none;
+		border-radius: 12px;
+		padding: 8px 12px;
+		font-size: 14px;
+		line-height: 1.4;
+		color: white;
+		word-wrap: break-word;
+		max-width: 85%;
+	}
+
+	/* Override markdown styles for chat bubbles to look like simple text */
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(p) {
+		margin: 0;
+		color: white;
+		font-size: 14px;
+		line-height: 1.4;
+	}
+
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(h1),
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(h2),
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(h3),
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(h4),
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(h5),
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(h6) {
+		font-size: 14px;
+		font-weight: 600;
+		margin: 0 0 4px 0;
+		color: white;
+		border: none;
+		padding: 0;
+	}
+
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(ul),
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(ol) {
+		margin: 4px 0;
+		padding-left: 16px;
+		font-size: 14px;
+	}
+
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(li) {
+		margin: 0;
+		color: white;
+		font-size: 14px;
+		line-height: 1.4;
+	}
+
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(strong) {
+		color: white;
+		font-weight: 600;
+	}
+
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(em) {
+		color: white;
+		font-style: italic;
+	}
+
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(code) {
+		background: rgba(255, 255, 255, 0.15);
+		border: none;
+		border-radius: 3px;
+		padding: 1px 4px;
+		font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+		font-size: 13px;
+		color: white;
+	}
+
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(pre) {
+		background: rgba(0, 0, 0, 0.3);
+		border: none;
+		border-radius: 4px;
+		padding: 8px;
+		margin: 4px 0;
+		font-size: 13px;
+		line-height: 1.3;
+	}
+
+	.agent-markdown-message.assistant-chat .agent-markdown-content :global(blockquote) {
+		border-left: 2px solid rgba(255, 255, 255, 0.3);
+		padding-left: 8px;
+		margin: 4px 0;
+		color: white;
+		font-style: italic;
+		font-size: 14px;
+	}
+
+	/* Document styling for assistant-doc messages */
+	.agent-markdown-message.assistant-doc .agent-markdown-content {
+		background: rgba(0, 0, 0, 0.4);
+		border-radius: 6px;
+		padding: 12px;
+		max-height: 600px;
+		font-size: 12px;
+		min-height: 40px;
+		backdrop-filter: blur(10px);
 	}
 
 	/* .agent-markdown-content::before {
@@ -2491,6 +2735,7 @@ The current system demonstrates strong performance and security characteristics.
 		position: relative;
 		animation: smoothExpand 0.3s ease-out;
 		transition: opacity 0.8s ease-in-out;
+        padding: 4px;
 	}
 
 	.agent-markdown-streaming.streaming {
@@ -2613,9 +2858,20 @@ The current system demonstrates strong performance and security characteristics.
 		font-size: 12px;
 	}
 
+	.agent-markdown-content :global(ul) {
+		list-style-type: disc;
+		list-style-position: outside;
+	}
+
+	.agent-markdown-content :global(ol) {
+		list-style-type: decimal;
+		list-style-position: outside;
+	}
+
 	.agent-markdown-content :global(li) {
 		margin: 2px 0;
 		color: rgba(255, 255, 255, 0.85);
+		display: list-item;
 	}
 
 	.agent-markdown-content :global(strong) {
@@ -2706,5 +2962,28 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-markdown-content :global(a:hover) {
 		color: rgba(59, 130, 246, 1);
 		border-bottom-color: rgba(59, 130, 246, 0.8);
+	}
+
+	.agent-response-divider {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin: 16px 0;
+		padding: 8px 0;
+		font-size: 9px;
+		color: rgba(255, 255, 255, 0.25);
+		font-weight: 400;
+		letter-spacing: 0.5px;
+		text-transform: uppercase;
+		position: relative;
+	}
+
+	.agent-response-divider::before,
+	.agent-response-divider::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: rgba(255, 255, 255, 0.06);
+		margin: 0 12px;
 	}
 </style>

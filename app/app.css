@@ -1653,6 +1653,42 @@ ul::-webkit-scrollbar {
     cursor: default;
 }
 
+.url-display-button {
+    background: none;
+    border: none;
+    padding: 0;
+    width: 100%;
+    text-align: left;
+    cursor: default;
+    border-radius: 4px;
+}
+
+.url-edit-form {
+    width: 100%;
+}
+
+.url-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: 'SF Mono', Consolas, monospace;
+    font-weight: 400;
+    outline: none;
+}
+
+.url-input:focus {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.url-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
 .frame-header-actions {
     display: flex;
     align-items: center;

@@ -45,8 +45,9 @@ function addCorsHeaders(response: Response): Response {
 // claude-4-opus-20250514
 // claude-3-5-haiku-20241022
 // claude-3-7-sonnet-20250219
+// claude-4-sonnet-20250514
 
-const model = anthropic('claude-4-sonnet-20250514')
+const model = anthropic('claude-3-5-haiku-20241022')
 
 // Cloudflare AI Gateway
 // const openai = createOpenAI({

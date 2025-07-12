@@ -121,6 +121,7 @@
     let lastUsedViewMode = $state('canvas')
     let showFixedNewTabButton = $state(false)
     let openSidebars = $state(new Set())
+    let sidebarStateLoaded = $state(false)
     let focusModeEnabled = $state(false)
     let focusModeHovered = $state(false)
     let contentAreaScrimActive = $state(false)
@@ -142,6 +143,11 @@
     let isSwitchingSidebars = $state(false)
 
     let userMods = $state([])
+    
+    // URL editing state
+    let isEditingUrl = $state(false)
+    let editingUrlValue = $state('')
+    let urlInput = $state(null)
 
     function getEnabledUserMods(tab) {
         if (!tab?.url) return { css: [], js: [] }
@@ -207,11 +213,40 @@
             if (savedLastUsedViewMode !== null) {
                 lastUsedViewMode = savedLastUsedViewMode
             }
+
+            // Load open sidebars
+            const savedOpenSidebars = localStorage.getItem('openSidebars')
+            if (savedOpenSidebars !== null) {
+                try {
+                    const sidebarArray = JSON.parse(savedOpenSidebars)
+                    openSidebars = new Set(sidebarArray)
+                    console.log('Restored sidebar state:', sidebarArray)
+                } catch (e) {
+                    console.warn('Failed to parse saved sidebar state:', e)
+                    openSidebars = new Set()
+                }
+            }
+            
+            // Mark sidebar state as loaded (whether we found saved state or not)
+            sidebarStateLoaded = true
         } catch (error) {
             console.error('Error loading user mods:', error)
             userMods = []
         }
     }
+
+    // Save open sidebars to localStorage whenever they change (but only after initial load)
+    $effect(() => {
+        if (!sidebarStateLoaded) return // Don't save during initial load
+        
+        try {
+            const sidebarArray = Array.from(openSidebars)
+            localStorage.setItem('openSidebars', JSON.stringify(sidebarArray))
+            console.log('Saved sidebar state:', sidebarArray)
+        } catch (error) {
+            console.warn('Failed to save sidebar state:', error)
+        }
+    })
 
     // Determine if sidebars are newly opened (but not when switching)
     $effect(() => {
@@ -1907,6 +1942,80 @@
         return url
     }
 
+    // URL editing functions
+    function startEditingUrl() {
+        if (!data.spaceMeta.activeTab) return
+        isEditingUrl = true
+        editingUrlValue = data.spaceMeta.activeTab.url || ''
+        // Focus the input after it's rendered
+        setTimeout(() => {
+            if (urlInput) {
+                urlInput.focus()
+                urlInput.select()
+            }
+        }, 10)
+    }
+
+    function stopEditingUrl() {
+        isEditingUrl = false
+        editingUrlValue = ''
+    }
+
+    function handleUrlSubmit(event) {
+        event.preventDefault()
+        if (!editingUrlValue.trim() || !data.spaceMeta.activeTab) {
+            stopEditingUrl()
+            return
+        }
+        
+        const activeTab = data.spaceMeta.activeTab
+        
+        try {
+            let url = new URL(editingUrlValue)
+            data.navigate(activeTab.id, url.href)
+        } catch {
+            // Not a valid URL, treat as search
+            const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
+            let searchUrl
+            
+            switch (defaultSearchEngine) {
+                case 'kagi':
+                    searchUrl = new URL('https://kagi.com/search')
+                    break
+                case 'custom':
+                    const customUrl = localStorage.getItem('customSearchUrl')
+                    if (customUrl) {
+                        try {
+                            searchUrl = new URL(customUrl + encodeURIComponent(editingUrlValue))
+                            data.navigate(activeTab.id, searchUrl.href)
+                            stopEditingUrl()
+                            return
+                        } catch {
+                            // Fallback to Google if custom URL is invalid
+                            searchUrl = new URL('https://www.google.com/search')
+                        }
+                    } else {
+                        searchUrl = new URL('https://www.google.com/search')
+                    }
+                    break
+                default: // google
+                    searchUrl = new URL('https://www.google.com/search')
+                    break
+            }
+            
+            searchUrl.searchParams.set('q', editingUrlValue)
+            data.navigate(activeTab.id, searchUrl.href)
+        }
+        
+        stopEditingUrl()
+    }
+
+    function handleUrlKeydown(event) {
+        if (event.key === 'Escape') {
+            stopEditingUrl()
+        }
+    }
+
     function setupFallbackColor() {
         if (!controlledFrameSupported) {
             const storedColorData = localStorage.getItem('darc-dev-color')
@@ -2820,7 +2929,23 @@
     
     <div class="frame-header-url-container">
         <div class="frame-header-url">
-            <UrlRenderer url={getDisplayUrl(data.spaceMeta.activeTab?.url)} variant="compact" />
+            {#if isEditingUrl}
+                <form onsubmit={handleUrlSubmit} class="url-edit-form">
+                    <input
+                        bind:this={urlInput}
+                        bind:value={editingUrlValue}
+                        onkeydown={handleUrlKeydown}
+                        onblur={stopEditingUrl}
+                        class="url-input"
+                        type="text"
+                        placeholder="Enter URL or search..."
+                    />
+                </form>
+            {:else}
+                <button class="url-display-button" onclick={startEditingUrl} title="Click to edit URL">
+                    <UrlRenderer url={getDisplayUrl(data.spaceMeta.activeTab?.url)} variant="compact" />
+                </button>
+            {/if}
         </div>
     </div>
 
@@ -2974,7 +3099,8 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                           {switchToResources} 
                           {switchToSettings}
                           {switchToUserMods}
-                          {switchToActivity} />
+                          {switchToActivity}
+                          switchToAgent={switchToAIAgent} />
             </div>
         {/if}
         
@@ -2985,7 +3111,8 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          {switchToResources} 
                          {switchToSettings}
                          {switchToUserMods}
-                         {switchToActivity} />
+                         {switchToActivity}
+                         switchToAgent={switchToAIAgent} />
             </div>
         {/if}
         
@@ -2997,6 +3124,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          {switchToSettings}
                          {switchToUserMods}
                          {switchToActivity}
+                         switchToAgent={switchToAIAgent}
                          {userMods}
                          onUpdateUserMods={updateUserMods}
                          currentTab={data.spaceMeta.activeTab} />
@@ -3025,6 +3153,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          {switchToSettings}
                          {switchToUserMods}
                          {switchToActivity}
+                         switchToAgent={switchToAIAgent}
                          {tabs}
                          closedTabs={data.closedTabs} />
             </div>
