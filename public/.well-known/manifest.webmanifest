@@ -78,10 +78,10 @@
   "dark_background_color": "black",
   "permissions": ["audioCapture", "window-management", "presentation-api","publickey-credentials-create","publickey-credentials-get", "display-capture", "picture-in-picture"],
   "permissions_policy": {
-    "controlled-frame": ["self", "*"],
+    "controlled-frame": ["self"],
     "picture-in-picture": ["self", "*"],
     "display-capture": ["self", "*"],  
-    "cross-origin-isolated": ["self", "*", ""],
+    "cross-origin-isolated": ["self"],
     "fullscreen": ["self", "*"],
     "microphone": ["self", "*"],
     "camera": ["self", "*"],

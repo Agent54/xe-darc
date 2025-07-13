@@ -126,10 +126,9 @@
 	let conversation = $state('')
 	let isProcessing = $state(false)
 	let chatHistory = $state([])
-	let selectedModel = $state('claude-sonnet')
+	let selectedModel = $state('claude-3-5-haiku-20241022')
 	let hoveredMessageId = $state(null)
 	let currentTimeout = null
-	let cardCycleIndex = $state(0)
 	let currentStreamingMessage = $state(null)
 	let messageQueue = $state([])
 	let queuePaused = $state(false)
@@ -138,6 +137,43 @@
 	let editingContent = $state('')
 	let isMarkdownStreaming = $state(false)
 	let selectedHistoryId = $state('current')
+
+	// Model configurations with proper names and IDs
+	const models = [
+		{
+			name: 'Claude Haiku',
+			id: 'claude-3-5-haiku-20241022',
+            avatarTitle: 'H',
+			icon: `
+				<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Simple Icons by Simple Icons Collaborators - https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md --><path fill="currentColor" d="m4.714 15.956l4.718-2.648l.079-.23l-.08-.128h-.23l-.79-.048l-2.695-.073l-2.337-.097l-2.265-.122l-.57-.121l-.535-.704l.055-.353l.48-.321l.685.06l1.518.104l2.277.157l1.651.098l2.447.255h.389l.054-.158l-.133-.097l-.103-.098l-2.356-1.596l-2.55-1.688l-1.336-.972l-.722-.491L2 6.223l-.158-1.008l.656-.722l.88.06l.224.061l.893.686l1.906 1.476l2.49 1.833l.364.304l.146-.104l.018-.072l-.164-.274l-1.354-2.446l-1.445-2.49l-.644-1.032l-.17-.619a3 3 0 0 1-.103-.729L6.287.133L6.7 0l.995.134l.42.364l.619 1.415L9.735 4.14l1.555 3.03l.455.898l.243.832l.09.255h.159V9.01l.127-1.706l.237-2.095l.23-2.695l.08-.76l.376-.91l.747-.492l.583.28l.48.685l-.067.444l-.286 1.851l-.558 2.903l-.365 1.942h.213l.243-.242l.983-1.306l1.652-2.064l.728-.82l.85-.904l.547-.431h1.032l.759 1.129l-.34 1.166l-1.063 1.347l-.88 1.142l-1.263 1.7l-.79 1.36l.074.11l.188-.02l2.853-.606l1.542-.28l1.84-.315l.832.388l.09.395l-.327.807l-1.967.486l-2.307.462l-3.436.813l-.043.03l.049.061l1.548.146l.662.036h1.62l3.018.225l.79.522l.473.638l-.08.485l-1.213.62l-1.64-.389l-3.825-.91l-1.31-.329h-.183v.11l1.093 1.068l2.003 1.81l2.508 2.33l.127.578l-.321.455l-.34-.049l-2.204-1.657l-.85-.747l-1.925-1.62h-.127v.17l.443.649l2.343 3.521l.122 1.08l-.17.353l-.607.213l-.668-.122l-1.372-1.924l-1.415-2.168l-1.141-1.943l-.14.08l-.674 7.254l-.316.37l-.728.28l-.607-.461l-.322-.747l.322-1.476l.388-1.924l.316-1.53l.285-1.9l.17-.632l-.012-.042l-.14.018l-1.432 1.967l-2.18 2.945l-1.724 1.845l-.413.164l-.716-.37l.066-.662l.401-.589l2.386-3.036l1.439-1.882l.929-1.086l-.006-.158h-.055L4.138 18.56l-1.13.146l-.485-.456l.06-.746l.231-.243l1.907-1.312Z"/></svg>
+			`
+		},
+		{
+			name: 'Claude Sonnet',
+			id: 'claude-4-sonnet-20250514',
+            avatarTitle: 'S',
+			icon: `
+				<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Simple Icons by Simple Icons Collaborators - https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md --><path fill="currentColor" d="m4.714 15.956l4.718-2.648l.079-.23l-.08-.128h-.23l-.79-.048l-2.695-.073l-2.337-.097l-2.265-.122l-.57-.121l-.535-.704l.055-.353l.48-.321l.685.06l1.518.104l2.277.157l1.651.098l2.447.255h.389l.054-.158l-.133-.097l-.103-.098l-2.356-1.596l-2.55-1.688l-1.336-.972l-.722-.491L2 6.223l-.158-1.008l.656-.722l.88.06l.224.061l.893.686l1.906 1.476l2.49 1.833l.364.304l.146-.104l.018-.072l-.164-.274l-1.354-2.446l-1.445-2.49l-.644-1.032l-.17-.619a3 3 0 0 1-.103-.729L6.287.133L6.7 0l.995.134l.42.364l.619 1.415L9.735 4.14l1.555 3.03l.455.898l.243.832l.09.255h.159V9.01l.127-1.706l.237-2.095l.23-2.695l.08-.76l.376-.91l.747-.492l.583.28l.48.685l-.067.444l-.286 1.851l-.558 2.903l-.365 1.942h.213l.243-.242l.983-1.306l1.652-2.064l.728-.82l.85-.904l.547-.431h1.032l.759 1.129l-.34 1.166l-1.063 1.347l-.88 1.142l-1.263 1.7l-.79 1.36l.074.11l.188-.02l2.853-.606l1.542-.28l1.84-.315l.832.388l.09.395l-.327.807l-1.967.486l-2.307.462l-3.436.813l-.043.03l.049.061l1.548.146l.662.036h1.62l3.018.225l.79.522l.473.638l-.08.485l-1.213.62l-1.64-.389l-3.825-.91l-1.31-.329h-.183v.11l1.093 1.068l2.003 1.81l2.508 2.33l.127.578l-.321.455l-.34-.049l-2.204-1.657l-.85-.747l-1.925-1.62h-.127v.17l.443.649l2.343 3.521l.122 1.08l-.17.353l-.607.213l-.668-.122l-1.372-1.924l-1.415-2.168l-1.141-1.943l-.14.08l-.674 7.254l-.316.37l-.728.28l-.607-.461l-.322-.747l.322-1.476l.388-1.924l.316-1.53l.285-1.9l.17-.632l-.012-.042l-.14.018l-1.432 1.967l-2.18 2.945l-1.724 1.845l-.413.164l-.716-.37l.066-.662l.401-.589l2.386-3.036l1.439-1.882l.929-1.086l-.006-.158h-.055L4.138 18.56l-1.13.146l-.485-.456l.06-.746l.231-.243l1.907-1.312Z"/></svg>
+			`
+		},
+		{
+			name: 'Claude Opus',
+			id: 'claude-4-opus-20250514',
+            avatarTitle: 'O',
+			icon: `
+				<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Simple Icons by Simple Icons Collaborators - https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md --><path fill="currentColor" d="m4.714 15.956l4.718-2.648l.079-.23l-.08-.128h-.23l-.79-.048l-2.695-.073l-2.337-.097l-2.265-.122l-.57-.121l-.535-.704l.055-.353l.48-.321l.685.06l1.518.104l2.277.157l1.651.098l2.447.255h.389l.054-.158l-.133-.097l-.103-.098l-2.356-1.596l-2.55-1.688l-1.336-.972l-.722-.491L2 6.223l-.158-1.008l.656-.722l.88.06l.224.061l.893.686l1.906 1.476l2.49 1.833l.364.304l.146-.104l.018-.072l-.164-.274l-1.354-2.446l-1.445-2.49l-.644-1.032l-.17-.619a3 3 0 0 1-.103-.729L6.287.133L6.7 0l.995.134l.42.364l.619 1.415L9.735 4.14l1.555 3.03l.455.898l.243.832l.09.255h.159V9.01l.127-1.706l.237-2.095l.23-2.695l.08-.76l.376-.91l.747-.492l.583.28l.48.685l-.067.444l-.286 1.851l-.558 2.903l-.365 1.942h.213l.243-.242l.983-1.306l1.652-2.064l.728-.82l.85-.904l.547-.431h1.032l.759 1.129l-.34 1.166l-1.063 1.347l-.88 1.142l-1.263 1.7l-.79 1.36l.074.11l.188-.02l2.853-.606l1.542-.28l1.84-.315l.832.388l.09.395l-.327.807l-1.967.486l-2.307.462l-3.436.813l-.043.03l.049.061l1.548.146l.662.036h1.62l3.018.225l.79.522l.473.638l-.08.485l-1.213.62l-1.64-.389l-3.825-.91l-1.31-.329h-.183v.11l1.093 1.068l2.003 1.81l2.508 2.33l.127.578l-.321.455l-.34-.049l-2.204-1.657l-.85-.747l-1.925-1.62h-.127v.17l.443.649l2.343 3.521l.122 1.08l-.17.353l-.607.213l-.668-.122l-1.372-1.924l-1.415-2.168l-1.141-1.943l-.14.08l-.674 7.254l-.316.37l-.728.28l-.607-.461l-.322-.747l.322-1.476l.388-1.924l.316-1.53l.285-1.9l.17-.632l-.012-.042l-.14.018l-1.432 1.967l-2.18 2.945l-1.724 1.845l-.413.164l-.716-.37l.066-.662l.401-.589l2.386-3.036l1.439-1.882l.929-1.086l-.006-.158h-.055L4.138 18.56l-1.13.146l-.485-.456l.06-.746l.231-.243l1.907-1.312Z"/></svg>
+			`
+		},
+		{
+			name: 'OpenAI O3',
+			id: 'openai-o3',
+			icon: `
+				<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
+					<path fill="currentColor" d="M22.282 9.821a6 6 0 0 0-.516-4.91a6.05 6.05 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a6 6 0 0 0-3.998 2.9a6.05 6.05 0 0 0 .743 7.097a5.98 5.98 0 0 0 .51 4.911a6.05 6.05 0 0 0 6.515 2.9A6 6 0 0 0 13.26 24a6.06 6.06 0 0 0 5.772-4.206a6 6 0 0 0 3.997-2.9a6.06 6.06 0 0 0-.747-7.073M13.26 22.43a4.48 4.48 0 0 1-2.876-1.04l.141-.081l4.779-2.758a.8.8 0 0 0 .392-.681v-6.737l2.02 1.168a.07.07 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494M3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085l4.783 2.759a.77.77 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646M2.34 7.896a4.5 4.5 0 0 1 2.366-1.973V11.6a.77.77 0 0 0 .388.677l5.815 3.354l-2.02 1.168a.08.08 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.08.08 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667m2.01-3.023l-.141-.085l-4.774-2.782a.78.78 0 0 0-.785 0L9.409 9.23V6.897a.07.07 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.8.8 0 0 0-.393.681zm1.097-2.365l2.602-1.5l2.607 1.5v2.999l-2.597 1.5l-2.607-1.5Z"/>
+				</svg>
+			`
+		}
+	]
 
 	// Streaming markdown state
 	let streamingRenderer = $state(null)
@@ -299,7 +335,7 @@
 				
 				// Check if we should switch from chat bubble to document style
 				const lineCount = (stream.message.rawContent.match(/\n/g) || []).length + 1
-				if (lineCount > 10 && stream.message.role === 'assistant') {
+				if (lineCount > 16 && stream.message.role === 'assistant') {
 					// Switch to document style
 					stream.message.role = 'assistant-doc'
 					// Update the message in chat history
@@ -762,6 +798,28 @@
 		const userMessage = conversation.trim()
 		conversation = ''
 
+		// Check for test commands
+		if (userMessage.toLowerCase() === 'cards') {
+			handleTestCards()
+			const input = document.querySelector('.agent-conversation-input')
+			if (input) input.focus()
+			return
+		}
+
+		if (userMessage.toLowerCase() === 'doc') {
+			handleTestDoc()
+			const input = document.querySelector('.agent-conversation-input')
+			if (input) input.focus()
+			return
+		}
+
+		if (userMessage.toLowerCase() === 'test') {
+			handleTestMessage()
+			const input = document.querySelector('.agent-conversation-input')
+			if (input) input.focus()
+			return
+		}
+
 		// Add message to queue
 		const queueItem = {
 			id: Date.now().toString(),
@@ -875,147 +933,55 @@
 
 		try {
 			// Add info cards showing what the agent is accessing/doing
-			const selectedTargetObj = availableTargets.find((t) => t.id === queueItem.selectedTarget)
-			const infoCards = []
+			// const selectedTargetObj = availableTargets.find((t) => t.id === queueItem.selectedTarget)
+			// const infoCards = []
 
 			// Show context access
-			if (queueItem.selectedTarget === 'current-tab' && currentTab) {
-				infoCards.push({
-					type: 'context',
-					action: 'read-tab',
-					status: 'accessed',
-					title: currentTab.title || 'Untitled Tab',
-					url: currentTab.url,
-					favicon: currentTab.favicon || null
-				})
-			} else if (queueItem.selectedTarget === 'current-space') {
-				const spaceName = data.spaceMeta.activeSpace
-					? data.spaces[data.spaceMeta.activeSpace]?.name || 'Unnamed Space'
-					: 'No active space'
-				const tabCount = data.spaces[data.spaceMeta.activeSpace]?.tabs?.length || 0
-				infoCards.push({
-					type: 'context',
-					action: 'read-space',
-					status: 'accessed',
-					title: spaceName,
-					details: `${tabCount} tabs`
-				})
-			} else if (queueItem.selectedTarget === 'all-spaces') {
-				infoCards.push({
-					type: 'context',
-					action: 'read-all-spaces',
-					status: 'accessed',
-					title: 'All Spaces',
-					details: `${Object.keys(data.spaces).length} spaces`
-				})
-			}
+			// if (queueItem.selectedTarget === 'current-tab' && currentTab) {
+			// 	infoCards.push({
+			// 		type: 'context',
+			// 		action: 'read-tab',
+			// 		status: 'accessed',
+			// 		title: currentTab.title || 'Untitled Tab',
+			// 		url: currentTab.url,
+			// 		favicon: currentTab.favicon || null
+			// 	})
+			// } else if (queueItem.selectedTarget === 'current-space') {
+			// 	const spaceName = data.spaceMeta.activeSpace
+			// 		? data.spaces[data.spaceMeta.activeSpace]?.name || 'Unnamed Space'
+			// 		: 'No active space'
+			// 	const tabCount = data.spaces[data.spaceMeta.activeSpace]?.tabs?.length || 0
+			// 	infoCards.push({
+			// 		type: 'context',
+			// 		action: 'read-space',
+			// 		status: 'accessed',
+			// 		title: spaceName,
+			// 		details: `${tabCount} tabs`
+			// 	})
+			// } else if (queueItem.selectedTarget === 'all-spaces') {
+			// 	infoCards.push({
+			// 		type: 'context',
+			// 		action: 'read-all-spaces',
+			// 		status: 'accessed',
+			// 		title: 'All Spaces',
+			// 		details: `${Object.keys(data.spaces).length} spaces`
+			// 	})
+			// }
 
-			// Cycle through different card types for demo
-			const cardTypes = [
-				{
-					type: 'tool',
-					action: 'web-search',
-					status: 'accessed',
-					title: 'Web Search',
-					details: 'Searching for relevant information'
-				},
-				{
-					type: 'tool',
-					action: 'execute-js',
-					status: 'accessed',
-					title: 'JavaScript Execution',
-					details: currentTab ? currentTab.title || 'Current Tab' : 'No target tab'
-				},
-				{
-					type: 'tool',
-					action: 'screenshot',
-					status: 'accessed',
-					title: 'Page Analysis',
-					details: 'Analyzing current page content'
-				},
-				{
-					type: 'tool',
-					action: 'modify-content',
-					status: 'modified',
-					title: 'Content Modification',
-					details: 'Modifying page content'
-				},
-				{
-					type: 'security',
-					action: 'camera-access',
-					status: 'accessed',
-					title: 'Camera Access',
-					details: 'Requesting camera permission'
-				},
-				{
-					type: 'security',
-					action: 'microphone-access',
-					status: 'denied',
-					title: 'Microphone Access',
-					details: 'User denied microphone access'
-				},
-				{
-					type: 'tool',
-					action: 'clipboard-access',
-					status: 'accessed',
-					title: 'Clipboard Access',
-					details: 'Reading/writing clipboard'
-				},
-				{
-					type: 'security',
-					action: 'location-access',
-					status: 'accessed',
-					title: 'Location Access',
-					details: 'Accessing device location'
-				},
-				{
-					type: 'tool',
-					action: 'file-download',
-					status: 'accessed',
-					title: 'File Download',
-					details: 'Downloading file to device'
-				},
-				{
-					type: 'security',
-					action: 'ad-block',
-					status: 'denied',
-					title: 'Ad Blocked',
-					details: 'Blocked advertisement content'
-				},
-				{
-					type: 'tool',
-					action: 'api-call',
-					status: 'accessed',
-					title: 'API Request',
-					details: 'Making external API call'
-				},
-				{
-					type: 'security',
-					action: 'analytics-block',
-					status: 'denied',
-					title: 'Analytics Blocked',
-					details: 'Blocked tracking scripts'
-				}
-			]
 
-			// Add the cycling card
-			infoCards.push(cardTypes[cardCycleIndex % cardTypes.length])
-
-			// Increment for next time
-			cardCycleIndex = (cardCycleIndex + 1) % cardTypes.length
 
 			// Add info cards to chat history
-			if (infoCards.length > 0) {
-				const infoCardsMessage = {
-					id: Date.now().toString(),
-					role: 'info-cards',
-					cards: infoCards,
-					timestamp: new Date().toISOString()
-				}
-				
-				chatHistory = [...chatHistory, infoCardsMessage]
-				knownMessageIds.add(infoCardsMessage.id)
-			}
+			// if (infoCards.length > 0) {
+			// 	const infoCardsMessage = {
+			// 		id: Date.now().toString(),
+			// 		role: 'info-cards',
+			// 		cards: infoCards,
+			// 		timestamp: new Date().toISOString()
+			// 	}
+			// 	
+			// 	chatHistory = [...chatHistory, infoCardsMessage]
+			// 	knownMessageIds.add(infoCardsMessage.id)
+			// }
 
 			// Update chat timestamp to bump to top
 			updateCurrentChatTimestamp()
@@ -1315,9 +1281,9 @@
 		}
 	}
 
-	function deleteChatHistory(historyId) {
-		chatHistoryList = chatHistoryList.filter((h) => h.id !== historyId)
-	}
+	// function deleteChatHistory(historyId) {
+	// 	chatHistoryList = chatHistoryList.filter((h) => h.id !== historyId)
+	// }
 
 	function copyMessage(messageId) {
 		const message = chatHistory.find((m) => m.id === messageId)
@@ -1339,7 +1305,7 @@
 		// TODO: Implement feedback system
 	}
 
-	function approveToolPermission(toolCallId) {
+	async function approveToolPermission(toolCallId) {
 		console.log('Approving tool permission for:', toolCallId)
 		
 		// Find the tool call information
@@ -1384,6 +1350,12 @@
 				console.warn('Could not parse tool args from details:', toolCallInfo.details, error)
 			}
 		}
+
+        let result = 'Yes, confirmed.'
+
+        if (toolCallInfo.title === 'readPageContent') {
+            result += `\n---page content---\n${await data.readPage(currentTab.id)}` 
+        }
 		
 		// Construct the message payload with tool invocation result
 		const messagePayload = {
@@ -1415,7 +1387,7 @@
 								toolCallId: toolCallId,
 								toolName: toolCallInfo.title,
 								args: toolArgs,
-								result: 'Yes, confirmed.'
+								result
 							}
 						}
 					],
@@ -1425,7 +1397,7 @@
 						toolCallId: toolCallId,
 						toolName: toolCallInfo.title,
 						args: toolArgs,
-						result: 'Yes, confirmed.'
+						result
 					}],
 					revisionId: crypto.randomUUID()
 				}
@@ -1596,8 +1568,8 @@
 	function handleActionButton(action) {
 		switch (action) {
 			case 'search':
-				// Generate test markdown document
-				generateTestMarkdownDocument()
+				// Use test doc function
+				handleTestDoc()
 				break
 			case 'ask':
 				conversation = conversation || 'ask about '
@@ -1619,6 +1591,321 @@
 		}
 		const input = document.querySelector('.agent-conversation-input')
 		if (input) input.focus()
+	}
+
+	function handleTestCards() {
+		// Add user message
+		const userMessage = {
+			id: Date.now().toString(),
+			role: 'user',
+			content: 'cards',
+			timestamp: new Date().toISOString()
+		}
+		chatHistory = [...chatHistory, userMessage]
+		knownMessageIds.add(userMessage.id)
+
+		// Show all possible test cards
+		const testCards = [
+			{
+				type: 'context',
+				action: 'read-tab',
+				status: 'accessed',
+				title: currentTab ? currentTab.title || 'Untitled Tab' : 'Test Tab',
+				url: currentTab ? currentTab.url : 'https://example.com',
+				favicon: currentTab ? currentTab.favicon : null
+			},
+			{
+				type: 'context',
+				action: 'read-space',
+				status: 'accessed',
+				title: 'Current Space',
+				details: '5 tabs'
+			},
+			{
+				type: 'context',
+				action: 'read-all-spaces',
+				status: 'accessed',
+				title: 'All Spaces',
+				details: '3 spaces total'
+			},
+			{
+				type: 'tool',
+				action: 'web-search',
+				status: 'accessed',
+				title: 'Web Search',
+				details: 'Searching for relevant information'
+			},
+			{
+				type: 'tool',
+				action: 'execute-js',
+				status: 'accessed',
+				title: 'JavaScript Execution',
+				details: currentTab ? currentTab.title || 'Current Tab' : 'No target tab'
+			},
+			{
+				type: 'tool',
+				action: 'screenshot',
+				status: 'accessed',
+				title: 'Page Analysis',
+				details: 'Analyzing current page content'
+			},
+			{
+				type: 'tool',
+				action: 'modify-content',
+				status: 'modified',
+				title: 'Content Modification',
+				details: 'Modifying page content'
+			},
+			{
+				type: 'tool',
+				action: 'inject-script',
+				status: 'accessed',
+				title: 'Script Injection',
+				details: 'Adding custom functionality'
+			},
+			{
+				type: 'tool',
+				action: 'clipboard-access',
+				status: 'accessed',
+				title: 'Clipboard Access',
+				details: 'Reading/writing clipboard'
+			},
+			{
+				type: 'tool',
+				action: 'file-download',
+				status: 'accessed',
+				title: 'File Download',
+				details: 'Downloading file to device'
+			},
+			{
+				type: 'tool',
+				action: 'file-upload',
+				status: 'accessed',
+				title: 'File Upload',
+				details: 'Uploading file from device'
+			},
+			{
+				type: 'tool',
+				action: 'api-call',
+				status: 'accessed',
+				title: 'API Request',
+				details: 'Making external API call'
+			},
+			{
+				type: 'tool',
+				action: 'local-storage',
+				status: 'accessed',
+				title: 'Local Storage',
+				details: 'Storing data locally'
+			},
+			{
+				type: 'tool',
+				action: 'css-injection',
+				status: 'modified',
+				title: 'CSS Injection',
+				details: 'Custom styling applied'
+			},
+			{
+				type: 'security',
+				action: 'camera-access',
+				status: 'accessed',
+				title: 'Camera Access',
+				details: 'Requesting camera permission'
+			},
+			{
+				type: 'security',
+				action: 'microphone-access',
+				status: 'denied',
+				title: 'Microphone Access',
+				details: 'User denied microphone access'
+			},
+			{
+				type: 'security',
+				action: 'location-access',
+				status: 'accessed',
+				title: 'Location Access',
+				details: 'Accessing device location'
+			},
+			{
+				type: 'security',
+				action: 'notification-permission',
+				status: 'accessed',
+				title: 'Notifications',
+				details: 'Permission to show notifications'
+			},
+			{
+				type: 'security',
+				action: 'fullscreen-request',
+				status: 'accessed',
+				title: 'Fullscreen Mode',
+				details: 'Entering fullscreen view'
+			},
+			{
+				type: 'security',
+				action: 'ad-block',
+				status: 'denied',
+				title: 'Ad Blocked',
+				details: 'Blocked advertisement content'
+			},
+			{
+				type: 'security',
+				action: 'analytics-block',
+				status: 'denied',
+				title: 'Analytics Blocked',
+				details: 'Blocked tracking scripts'
+			},
+			{
+				type: 'security',
+				action: 'malware-scan',
+				status: 'accessed',
+				title: 'Security Scan',
+				details: 'Scanning for threats'
+			},
+			{
+				type: 'security',
+				action: 'proxy-detection',
+				status: 'accessed',
+				title: 'Proxy Detection',
+				details: 'Checking network routing'
+			}
+		]
+
+		const infoCardsMessage = {
+			id: Date.now().toString(),
+			role: 'info-cards',
+			cards: testCards,
+			timestamp: new Date().toISOString()
+		}
+		
+		chatHistory = [...chatHistory, infoCardsMessage]
+		knownMessageIds.add(infoCardsMessage.id)
+		updateCurrentChatTimestamp()
+	}
+
+	function handleTestDoc() {
+		// Add user message
+		const userMessage = {
+			id: Date.now().toString(),
+			role: 'user',
+			content: 'doc',
+			timestamp: new Date().toISOString()
+		}
+		chatHistory = [...chatHistory, userMessage]
+		knownMessageIds.add(userMessage.id)
+
+		// Generate test markdown document but manage processing state properly
+		generateTestMarkdownDocumentForTest()
+	}
+
+	function handleTestMessage() {
+		// Add user message
+		const userMessage = {
+			id: Date.now().toString(),
+			role: 'user',
+			content: 'test',
+			timestamp: new Date().toISOString()
+		}
+		chatHistory = [...chatHistory, userMessage]
+		knownMessageIds.add(userMessage.id)
+
+		// Add simple assistant response with proper content structure
+		const assistantMessage = {
+			id: Date.now().toString(),
+			role: 'assistant',
+			content: 'Hello world! This is a test response.',
+			rawContent: 'Hello world! This is a test response.',
+			timestamp: new Date().toISOString(),
+			streaming: false,
+			model: selectedModel
+		}
+
+		chatHistory = [...chatHistory, assistantMessage]
+		knownMessageIds.add(assistantMessage.id)
+		updateCurrentChatTimestamp()
+	}
+
+	async function generateTestMarkdownDocumentForTest() {
+		// Add streaming markdown message without setting global processing state
+		const markdownMessageId = Date.now().toString()
+		const streamingMessage = {
+			id: markdownMessageId,
+			role: 'assistant-doc',
+			content: '',
+			rawContent: '',
+			timestamp: new Date().toISOString(),
+			streaming: true,
+			model: selectedModel
+		}
+
+		chatHistory = [...chatHistory, streamingMessage]
+		knownMessageIds.add(markdownMessageId)
+
+		// Wait for DOM to update, then initialize streaming parser
+		await tick()
+		
+		const streamingSetup = startMarkdownStream(markdownMessageId)
+		if (!streamingSetup) return
+
+		// Test markdown document (shorter version)
+		const testMarkdown = `# Test Document
+
+## Overview
+
+This is a test markdown document to demonstrate the document rendering format.
+
+### Features
+
+- **Markdown rendering**: Full markdown support
+- **Streaming display**: Content appears progressively  
+- **Document layout**: Optimized for longer content
+
+### Code Example
+
+\`\`\`javascript
+function example() {
+    console.log("Hello from test document!")
+    return "success"
+}
+\`\`\`
+
+### Summary
+
+This demonstrates the assistant-doc message format with proper markdown rendering and document-style layout.
+
+---
+
+*Test completed successfully*`
+
+		// Split into chunks and stream
+		const chunks = []
+		let remaining = testMarkdown
+		while (remaining.length > 0) {
+			const chunkLength = Math.floor(Math.random() * 40) + 30
+			const chunk = remaining.substring(0, chunkLength)
+			chunks.push(chunk)
+			remaining = remaining.substring(chunkLength)
+		}
+
+		// Stream the chunks
+		let chunkIndex = 0
+		const streamNextChunk = () => {
+			if (chunkIndex < chunks.length) {
+				const chunk = chunks[chunkIndex]
+				streamingMessage.rawContent += chunk
+				writeMarkdownChunk(streamingSetup.parser, chunk)
+				chatHistory = [...chatHistory]
+				chunkIndex++
+				setTimeout(streamNextChunk, 150)
+			} else {
+				// Streaming complete
+				streamingMessage.streaming = false
+				endMarkdownStream(streamingSetup.parser)
+				chatHistory = [...chatHistory]
+				updateCurrentChatTimestamp()
+			}
+		}
+
+		setTimeout(streamNextChunk, 100)
 	}
 
 	async function generateTestMarkdownDocument() {
@@ -1852,8 +2139,9 @@ The current system demonstrates strong performance and security characteristics.
 				</select>
 
 				<select class="agent-model-select" bind:value={selectedModel}>
-					<option value="claude-sonnet">Claude Sonnet</option>
-					<option value="openai-o3">OpenAI O3</option>
+					{#each models as model}
+						<option value={model.id}>{model.name}</option>
+					{/each}
 				</select>
 			</div>
 
@@ -2202,24 +2490,17 @@ The current system demonstrates strong performance and security characteristics.
 							>
 								<div class="agent-message-header">
 									<div class="agent-avatar">
-										{#if message.model === 'claude-sonnet'}
-											<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
-												<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#FF7F50"/>
-												<path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="#FF6B35"/>
-												<circle cx="12" cy="12" r="2" fill="#FFFFFF"/>
-											</svg>
-										{:else if message.model === 'openai-o3'}
-											<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
-												<path d="M12.5 2.5c-2.5 0-4.5 2-4.5 4.5v1.5c-1.5 0-2.5 1-2.5 2.5s1 2.5 2.5 2.5h1.5v1.5c0 2.5 2 4.5 4.5 4.5s4.5-2 4.5-4.5v-1.5c1.5 0 2.5-1 2.5-2.5s-1-2.5-2.5-2.5h-1.5V7c0-2.5-2-4.5-4.5-4.5z" fill="#00A67E"/>
-												<circle cx="12.5" cy="12.5" r="3" fill="#FFFFFF"/>
-												<circle cx="12.5" cy="12.5" r="1.5" fill="#00A67E"/>
-											</svg>
-										{:else}
+										{@html models.find(m => m.id === message.model)?.icon || `
 											<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
 												<circle cx="12" cy="12" r="10" fill="#8B5CF6"/>
 												<circle cx="12" cy="12" r="6" fill="#FFFFFF"/>
 												<circle cx="12" cy="12" r="2" fill="#8B5CF6"/>
 											</svg>
+										`}
+										{#if models.find(m => m.id === message.model)?.avatarTitle}
+											<div class="agent-avatar-title-overlay">
+												{models.find(m => m.id === message.model)?.avatarTitle}
+											</div>
 										{/if}
 									</div>
 								</div>
@@ -3411,6 +3692,19 @@ The current system demonstrates strong performance and security characteristics.
 		flex-shrink: 0;
 		border: 1px solid rgba(255, 255, 255, 0.2);
         margin-left: -12px;
+		position: relative;
+	}
+
+	.agent-avatar-title-overlay {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        width: 10px;
+        height: 10px;
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 200;
+        z-index: 1;
 	}
 
 	/* Chat bubble style for regular assistant messages */

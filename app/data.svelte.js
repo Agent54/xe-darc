@@ -290,6 +290,18 @@ export default {
     activate,
     loadSampleData,
 
+    readPage: async (tabId) => {
+        const frame = frames[tabId]
+
+        if (!frame?.frame) {
+            return 'Error: frame not active'
+        }
+
+        const result = await frame.frame.executeScript({code: 'document.body.innerHTML'})
+
+        return result[0]
+    },
+
     previous: () => {
         const activeSpace = spaces[spaceMeta.activeSpace]
         if (!activeSpace || !activeSpace.activeTabsOrder || activeSpace.activeTabsOrder.length < 2) {

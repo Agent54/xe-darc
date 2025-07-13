@@ -120,8 +120,8 @@ export const tools = {
   getScheduledTasks,
   cancelScheduledTask,
   readPageContent: tool({
-    description: "read current tab page content, optional with a xpath selector",
-    parameters: z.object({ selector: z.optional(z.string()) }),
+    description: "read current tab page content, optional with a xpath selector or only text access if not specific html structure requiring task is performed",
+    parameters: z.object({ selector: z.optional(z.string()), textOnly: z.optional(z.boolean()) }),
     // Omitting execute function makes this tool require human confirmation
   }),
 };
