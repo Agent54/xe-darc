@@ -4,42 +4,6 @@
 	import data from '../data.svelte.js'
 	import * as smd from 'streaming-markdown'
 	import { AgentClient } from 'agents/client'
-	// import { createAnthropic } from "@ai-sdk/anthropic"
-	// import { streamText, tool } from 'ai'
-
-	// const anthropic = createAnthropic({
-
-	// })
-	// const model = anthropic('claude-4-sonnet-20250514')
-
-	// async function doit () {
-	//     const result = streamText({
-	//         model,
-	//         messages: [{ role: 'user', content: 'hello world' }],
-	//         tools: {
-	//             // weather: tool({
-	//             //   description: 'Get the weather in a location (in Celsius)',
-	//             //   parameters: z.object({
-	//             //     location: z
-	//             //       .string()
-	//             //       .describe('The location to get the weather for'),
-	//             //   }),
-	//             //   execute: async ({ location }) => ({
-	//             //     location,
-	//             //     temperature: Math.round((Math.random() * 30 + 5) * 10) / 10, // Random temp between 5°C and 35°C
-	//             //   }),
-	//             }
-	//         })
-
-	//     for await (const delta of result.textStream) {
-	//         console.log(delta)
-	//     }
-	// }
-
-	// doit().then(console.log)
-
-	// {"type": "cf_agent_chat_clear"}
-
 
 	const client = new AgentClient({
 		agent: 'chat',
@@ -108,21 +72,10 @@
 			return
 		}
 
-        //const assistantMessageId = (Date.now() + 1).toString()
-
-        // chatHistory = [
-        //     ...chatHistory,
-        //     {
-        //     	id: assistantMessageId,
-        //     	role: 'assistant',
-        //     	content: JSON.stringify(data, null, 4),
-        //     	timestamp: new Date().toISOString()
-        //     }
-        // ]
-
 		if (data.type === 'state_update') {
 			// Update local UI with new state
 			//updateUI(data.state);
+            console.log('state upd', data)
 		}
 	}
 
@@ -139,9 +92,6 @@
 		//   );
 	// }, 1000)
 
-	// connection.addEventListener("message", (event) => {
-	//     console.log("Received:", event.data);
-	// })
 
 	// setTimeout(()=> {
 	//     connection.send(
@@ -305,7 +255,8 @@
 					rawContent: '',
 					timestamp: new Date().toISOString(),
 					streaming: true,
-					sourceMessageId: messageId
+					sourceMessageId: messageId,
+					model: selectedModel
 				}
 
 				// Add to chat history
@@ -429,6 +380,7 @@
 				title: toolCallData.toolName,
 				details: formatToolArgs(toolCallData.args),
 				toolCallId: toolCallData.toolCallId,
+				toolArgs: toolCallData.args, // Store original args for easy access
 				needsPermission: true, // Start as true, will be updated based on response
 				awaitingPermission: true // Track that we're waiting to see what kind of response this gets
 			}
@@ -638,7 +590,8 @@
 					content: message.content,
 					timestamp: message.createdAt || new Date().toISOString(),
 					streaming: false,
-					isServerMessage: true
+					isServerMessage: true,
+					model: selectedModel
 				}
 				
 				// Handle tool invocations if present
@@ -693,6 +646,7 @@
 									title: invocation.toolName,
 									details: formatToolInvocationDetails(invocation),
 									toolCallId: invocation.toolCallId,
+									toolArgs: invocation.args, // Store original args for easy access
 									needsPermission: true,
 									awaitingPermission: false,
 									permissionResult: invocation.result
@@ -871,7 +825,8 @@
 			id: messageId,
 			role: 'user',
 			content: queueItem.userMessage,
-			timestamp: queueItem.timestamp
+			timestamp: queueItem.timestamp,
+			model: queueItem.selectedModel
 		}
 		
 		chatHistory = [...chatHistory, userMessage]
@@ -1091,6 +1046,9 @@
 	}
 
 	function clearHistory() {
+		// Send clear message to agent
+		client.send(JSON.stringify({"type":"cf_agent_chat_clear"}))
+
 		// Cancel current task and queue
 		if (currentTimeout) {
 			clearTimeout(currentTimeout)
@@ -1384,12 +1342,106 @@
 	function approveToolPermission(toolCallId) {
 		console.log('Approving tool permission for:', toolCallId)
 		
-		// Send approval to agent
+		// Find the tool call information
+		let toolCallInfo = null
+		for (const message of chatHistory) {
+			if (message.role === 'info-cards') {
+				const toolCard = message.cards.find(card => card.toolCallId === toolCallId)
+				if (toolCard) {
+					toolCallInfo = toolCard
+					break
+				}
+			}
+		}
+		
+		if (!toolCallInfo) {
+			console.error('Could not find tool call information for:', toolCallId)
+			return
+		}
+		
+		// Find the most recent user message and assistant response
+		const userMessage = [...chatHistory].reverse().find(msg => msg.role === 'user')
+		const assistantMessage = [...chatHistory].reverse().find(msg => msg.role === 'assistant' || msg.role === 'assistant-doc')
+		
+		if (!userMessage || !assistantMessage) {
+			console.error('Could not find user or assistant message for tool permission')
+			return
+		}
+		
+		// Get tool args from stored toolArgs or parse from details as fallback
+		let toolArgs = toolCallInfo.toolArgs || {}
+		if (!toolArgs || Object.keys(toolArgs).length === 0) {
+			try {
+				// First try to parse as "Args:" prefixed format
+				const argsMatch = toolCallInfo.details.match(/Args:\s*({[\s\S]*?})(?:\n\n|$)/m)
+				if (argsMatch) {
+					toolArgs = JSON.parse(argsMatch[1])
+				} else {
+					// If no "Args:" prefix, try parsing the entire details as JSON
+					toolArgs = JSON.parse(toolCallInfo.details)
+				}
+			} catch (error) {
+				console.warn('Could not parse tool args from details:', toolCallInfo.details, error)
+			}
+		}
+		
+		// Construct the message payload with tool invocation result
+		const messagePayload = {
+			id: crypto.randomUUID(),
+			messages: [
+				{
+					id: userMessage.id,
+					createdAt: userMessage.timestamp,
+					role: 'user',
+					content: userMessage.content,
+					parts: [{
+						type: 'text',
+						text: userMessage.content
+					}]
+				},
+				{
+					id: assistantMessage.id,
+					createdAt: assistantMessage.timestamp,
+					role: 'assistant',
+					content: assistantMessage.content || assistantMessage.rawContent || '',
+					parts: [
+						{ type: 'step-start' },
+						{ type: 'text', text: assistantMessage.content || assistantMessage.rawContent || '' },
+						{
+							type: 'tool-invocation',
+							toolInvocation: {
+								state: 'result',
+								step: 0,
+								toolCallId: toolCallId,
+								toolName: toolCallInfo.title,
+								args: toolArgs,
+								result: 'Yes, confirmed.'
+							}
+						}
+					],
+					toolInvocations: [{
+						state: 'result',
+						step: 0,
+						toolCallId: toolCallId,
+						toolName: toolCallInfo.title,
+						args: toolArgs,
+						result: 'Yes, confirmed.'
+					}],
+					revisionId: crypto.randomUUID()
+				}
+			]
+		}
+		
+		// Send the complete chat message
 		client.send(JSON.stringify({
-			type: 'cf_agent_tool_permission_response',
-			toolCallId: toolCallId,
-			approved: true,
-			result: 'Yes, confirmed.'
+			id: crypto.randomUUID(),
+			init: {
+				body: JSON.stringify(messagePayload),
+				headers: { 'Content-Type': 'application/json' },
+				method: 'POST'
+			},
+			type: 'cf_agent_use_chat_request',
+			url: '/api/chat'
 		}))
 		
 		// Update the card status
@@ -1400,7 +1452,8 @@
 						return {
 							...card,
 							status: 'approved',
-							permissionResult: 'Yes, confirmed.'
+							permissionResult: 'Yes, confirmed.',
+							awaitingPermission: false
 						}
 					}
 					return card
@@ -1416,12 +1469,106 @@
 	function rejectToolPermission(toolCallId) {
 		console.log('Rejecting tool permission for:', toolCallId)
 		
-		// Send rejection to agent
+		// Find the tool call information
+		let toolCallInfo = null
+		for (const message of chatHistory) {
+			if (message.role === 'info-cards') {
+				const toolCard = message.cards.find(card => card.toolCallId === toolCallId)
+				if (toolCard) {
+					toolCallInfo = toolCard
+					break
+				}
+			}
+		}
+		
+		if (!toolCallInfo) {
+			console.error('Could not find tool call information for:', toolCallId)
+			return
+		}
+		
+		// Find the most recent user message and assistant response
+		const userMessage = [...chatHistory].reverse().find(msg => msg.role === 'user')
+		const assistantMessage = [...chatHistory].reverse().find(msg => msg.role === 'assistant' || msg.role === 'assistant-doc')
+		
+		if (!userMessage || !assistantMessage) {
+			console.error('Could not find user or assistant message for tool permission')
+			return
+		}
+		
+		// Get tool args from stored toolArgs or parse from details as fallback
+		let toolArgs = toolCallInfo.toolArgs || {}
+		if (!toolArgs || Object.keys(toolArgs).length === 0) {
+			try {
+				// First try to parse as "Args:" prefixed format
+				const argsMatch = toolCallInfo.details.match(/Args:\s*({[\s\S]*?})(?:\n\n|$)/m)
+				if (argsMatch) {
+					toolArgs = JSON.parse(argsMatch[1])
+				} else {
+					// If no "Args:" prefix, try parsing the entire details as JSON
+					toolArgs = JSON.parse(toolCallInfo.details)
+				}
+			} catch (error) {
+				console.warn('Could not parse tool args from details:', toolCallInfo.details, error)
+			}
+		}
+		
+		// Construct the message payload with tool invocation result
+		const messagePayload = {
+			id: crypto.randomUUID(),
+			messages: [
+				{
+					id: userMessage.id,
+					createdAt: userMessage.timestamp,
+					role: 'user',
+					content: userMessage.content,
+					parts: [{
+						type: 'text',
+						text: userMessage.content
+					}]
+				},
+				{
+					id: assistantMessage.id,
+					createdAt: assistantMessage.timestamp,
+					role: 'assistant',
+					content: assistantMessage.content || assistantMessage.rawContent || '',
+					parts: [
+						{ type: 'step-start' },
+						{ type: 'text', text: assistantMessage.content || assistantMessage.rawContent || '' },
+						{
+							type: 'tool-invocation',
+							toolInvocation: {
+								state: 'result',
+								step: 0,
+								toolCallId: toolCallId,
+								toolName: toolCallInfo.title,
+								args: toolArgs,
+								result: 'No, denied.'
+							}
+						}
+					],
+					toolInvocations: [{
+						state: 'result',
+						step: 0,
+						toolCallId: toolCallId,
+						toolName: toolCallInfo.title,
+						args: toolArgs,
+						result: 'No, denied.'
+					}],
+					revisionId: crypto.randomUUID()
+				}
+			]
+		}
+		
+		// Send the complete chat message
 		client.send(JSON.stringify({
-			type: 'cf_agent_tool_permission_response',
-			toolCallId: toolCallId,
-			approved: false,
-			result: 'No, denied.'
+			id: crypto.randomUUID(),
+			init: {
+				body: JSON.stringify(messagePayload),
+				headers: { 'Content-Type': 'application/json' },
+				method: 'POST'
+			},
+			type: 'cf_agent_use_chat_request',
+			url: '/api/chat'
 		}))
 		
 		// Update the card status
@@ -1432,7 +1579,8 @@
 						return {
 							...card,
 							status: 'denied',
-							permissionResult: 'No, denied.'
+							permissionResult: 'No, denied.',
+							awaitingPermission: false
 						}
 					}
 					return card
@@ -1498,7 +1646,8 @@
 			content: '',
 			rawContent: '',
 			timestamp: new Date().toISOString(),
-			streaming: true
+			streaming: true,
+			model: selectedModel
 		}
 
 		chatHistory = [...chatHistory, currentStreamingMessage]
@@ -2051,6 +2200,29 @@ The current system demonstrates strong performance and security characteristics.
 								onmouseenter={() => (hoveredMessageId = message.id)}
 								onmouseleave={() => (hoveredMessageId = null)}
 							>
+								<div class="agent-message-header">
+									<div class="agent-avatar">
+										{#if message.model === 'claude-sonnet'}
+											<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
+												<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#FF7F50"/>
+												<path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="#FF6B35"/>
+												<circle cx="12" cy="12" r="2" fill="#FFFFFF"/>
+											</svg>
+										{:else if message.model === 'openai-o3'}
+											<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
+												<path d="M12.5 2.5c-2.5 0-4.5 2-4.5 4.5v1.5c-1.5 0-2.5 1-2.5 2.5s1 2.5 2.5 2.5h1.5v1.5c0 2.5 2 4.5 4.5 4.5s4.5-2 4.5-4.5v-1.5c1.5 0 2.5-1 2.5-2.5s-1-2.5-2.5-2.5h-1.5V7c0-2.5-2-4.5-4.5-4.5z" fill="#00A67E"/>
+												<circle cx="12.5" cy="12.5" r="3" fill="#FFFFFF"/>
+												<circle cx="12.5" cy="12.5" r="1.5" fill="#00A67E"/>
+											</svg>
+										{:else}
+											<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
+												<circle cx="12" cy="12" r="10" fill="#8B5CF6"/>
+												<circle cx="12" cy="12" r="6" fill="#FFFFFF"/>
+												<circle cx="12" cy="12" r="2" fill="#8B5CF6"/>
+											</svg>
+										{/if}
+									</div>
+								</div>
 								<div class="agent-markdown-content">
 									<div class="agent-markdown-streaming" class:streaming={message.streaming}>
 										<!-- Markdown content will be inserted here by the streaming-markdown library -->
@@ -2588,6 +2760,7 @@ The current system demonstrates strong performance and security characteristics.
 		flex-direction: column;
 		gap: 12px;
 		scroll-behavior: smooth;
+        overflow-y: visible;
 	}
 
 	.agent-chat-scroll-padding {
@@ -3217,12 +3390,34 @@ The current system demonstrates strong performance and security characteristics.
 		margin: 16px 0;
 		align-items: flex-start;
 		animation: messageSlideIn 0.3s ease-out;
+        /* border-top-left-radius: 0; */
+	}
+
+	.agent-message-header {
+		display: flex;
+		align-items: center;
+		margin-bottom: 4px;
+		gap: 8px;
+	}
+
+	.agent-avatar {
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.1);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+        margin-left: -12px;
 	}
 
 	/* Chat bubble style for regular assistant messages */
 	.agent-markdown-message.assistant-chat {
 		margin: 8px 0;
 		align-items: flex-start;
+        /* border-top-left-radius: 0; */
 	}
 
 	/* Document style for assistant-doc messages */
@@ -3230,6 +3425,7 @@ The current system demonstrates strong performance and security characteristics.
 		margin: 16px 0;
 		align-items: flex-start;
 		width: 100%;
+        /* border-top-left-radius: 0; */
 	}
 
 	@keyframes messageSlideIn {
