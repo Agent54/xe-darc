@@ -496,3 +496,6 @@ dropdwn bugreport
 
 broken new tab focus/ shouldfocus option
 
+model favicon avatars
+
+reduce the height of the doc scroling elem

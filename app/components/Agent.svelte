@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte'
+	import { onMount, tick } from 'svelte'
 	import RightSidebar from './RightSidebar.svelte'
 	import data from '../data.svelte.js'
 	import * as smd from 'streaming-markdown'
@@ -66,9 +66,21 @@
 
         //{ "body": "e:{\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":1287,\"completionTokens\":124},\"isContinued\":false}\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
 
+		// Ignore empty status messages - these are just completion signals
+		if (data.type === 'cf_agent_use_chat_response' && (!data.body || data.body.trim() === '')) {
+			console.log('Ignoring empty status message:', data)
+			return
+		}
+
 		// Check if this is a streaming message chunk
 		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('0:')) {
 			handleStreamingChunk(data, { type: 'message' })
+			return
+		}
+
+		// Check if this is a stream completion message
+		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('e:')) {
+			handleStreamingChunk(data, { type: 'completion' })
 			return
 		}
 
@@ -204,10 +216,40 @@
 	async function handleStreamingChunk(data, { type } = {}) {
 		try {
 			console.log('handleStreamingChunk called with data:', data)
-			// Parse the streaming message format: { "body": "0:\" content here\"\n", "done": false, "id": "xxx", "type": "cf_agent_use_chat_response" }
 			const messageId = data.id
 			const body = data.body
 			
+			// Handle completion message (e:)
+			if (type === 'completion' || body.startsWith('e:')) {
+				console.log('🏁 COMPLETION MESSAGE - messageId:', messageId)
+				const stream = activeStreams.get(messageId)
+				if (stream) {
+					// End the stream
+					endMarkdownStream(stream.parser)
+					stream.message.streaming = false
+					
+					// Remove from active streams
+					activeStreams.delete(messageId)
+					console.log('🗑️ STREAM REMOVED - activeStreams=' + activeStreams.size)
+					
+					// Update chat history
+					chatHistory = [...chatHistory]
+					
+					// Clear global streaming state if this was the last stream
+					if (activeStreams.size === 0) {
+						isMarkdownStreaming = false
+						currentStreamingMessage = null
+						streamingParser = null
+						streamingRenderer = null
+						streamingElement = null
+						isProcessing = false
+						console.log('✅ STREAMING COMPLETE - isProcessing=false isMarkdownStreaming=false')
+					}
+				}
+				return
+			}
+			
+			// Parse the streaming message format: { "body": "0:\" content here\"\n", "done": false, "id": "xxx", "type": "cf_agent_use_chat_response" }
 			// Extract content after "0:" and parse as JSON
 			const contentStart = body.indexOf('0:') + 2
 			const contentPart = body.substring(contentStart)
@@ -219,6 +261,12 @@
 			} catch (parseError) {
 				// If parsing fails, use the raw content
 				content = contentPart.trim()
+			}
+			
+			// Skip if there's no actual content
+			if (!content || content.trim() === '') {
+				console.log('Skipping empty content chunk for messageId:', messageId)
+				return
 			}
 			
 			// Check if this is the first chunk for this message
@@ -239,9 +287,9 @@
 				chatHistory = [...chatHistory, streamingMessage]
 				currentStreamingMessage = streamingMessage
 
-				// Initialize streaming after DOM update
-				await new Promise((resolve) => setTimeout(resolve, 100))
-
+				// Wait for Svelte to update the DOM, then initialize streaming
+				await tick()
+				
 				const streamingSetup = startMarkdownStream(streamingMessageId)
 				if (streamingSetup) {
 					activeStreams.set(messageId, {
@@ -257,7 +305,10 @@
 						streamingParser = streamingSetup.parser
 						streamingRenderer = streamingSetup.renderer
 						streamingElement = streamingSetup.element
+						console.log('📝 STREAMING START - activeStreams=' + activeStreams.size + ' isMarkdownStreaming=true')
 					}
+				} else {
+					console.warn('Failed to initialize streaming for messageId:', messageId)
 				}
 			}
 
@@ -286,37 +337,33 @@
 				chatHistory = [...chatHistory]
 			}
 
-			// Check if streaming is complete
-			if (data.done) {
-				const stream = activeStreams.get(messageId)
-				if (stream) {
-					// End the stream
-					endMarkdownStream(stream.parser)
-					stream.message.streaming = false
-					
-					// Remove from active streams
-					activeStreams.delete(messageId)
-					
-					// Update chat history
-					chatHistory = [...chatHistory]
-					
-					// Clear global streaming state if this was the last stream
-					if (activeStreams.size === 0) {
-						isMarkdownStreaming = false
-						currentStreamingMessage = null
-						streamingParser = null
-						streamingRenderer = null
-						streamingElement = null
-						
-						// Set processing to false when streaming completes
-						console.log('Streaming completed, setting isProcessing to false')
-						isProcessing = false
-					}
-				}
-			}
+			// Old completion detection removed - now handled by 'e:' messages above
 			
 		} catch (error) {
 			console.error('Error parsing streaming message:', error)
+			
+			// Clean up any hanging streams on error
+			const messageId = data.id
+			if (activeStreams.has(messageId)) {
+				const stream = activeStreams.get(messageId)
+				if (stream) {
+					endMarkdownStream(stream.parser)
+					stream.message.streaming = false
+				}
+				activeStreams.delete(messageId)
+			}
+			
+			// Reset processing state if no streams remain
+			if (activeStreams.size === 0) {
+				isMarkdownStreaming = false
+				currentStreamingMessage = null
+				streamingParser = null
+				streamingRenderer = null
+				streamingElement = null
+				isProcessing = false
+				console.log('⚠️ ERROR CLEANUP - isProcessing=false (streaming error)')
+			}
+			
 			// Fall back to regular message display
 			const assistantMessageId = (Date.now() + 1).toString()
 			chatHistory = [
@@ -343,7 +390,9 @@
 			// Parse the JSON-encoded content
 			const summaryData = JSON.parse(contentPart.trim())
 			
-            			// Default: render as subtle response summary divider
+			console.log('Response summary received:', summaryData)
+			
+			// Add response summary divider
 			chatHistory = [
 				...chatHistory,
 				{
@@ -353,6 +402,20 @@
 					timestamp: new Date().toISOString()
 				}
 			]
+			
+			// Ensure processing is stopped when we get the response summary
+			// This acts as a fallback in case streaming completion wasn't detected properly
+			setTimeout(() => {
+				if (activeStreams.size === 0 && isProcessing) {
+					isProcessing = false
+					isMarkdownStreaming = false
+					currentStreamingMessage = null
+					streamingParser = null
+					streamingRenderer = null
+					streamingElement = null
+					console.log('📊 RESPONSE SUMMARY FALLBACK - isProcessing=false')
+				}
+			}, 100)
 			
 		} catch (error) {
 			console.error('Error parsing response summary:', error)
@@ -447,8 +510,8 @@
 	async function processQueue() {
 		if (queuePaused || messageQueue.length === 0) return
 
-		console.log('Starting queue processing, setting isProcessing to true')
 		isProcessing = true
+		console.log('🔄 PROCESSING START - isProcessing=true')
 
 		while (messageQueue.length > 0 && !queuePaused) {
 			// Find first unpaused item
@@ -493,14 +556,14 @@
         client.send(
 			JSON.stringify(
 				{
-					id: 'LdxkiFBI',
+					id: crypto.randomUUID(),
 					init: {
 						body: JSON.stringify({
-							id: '4LVN0ce9q86dJ5Zf',
+							id: crypto.randomUUID(),
 							messages: [
 								{
-									id: 'ledV45aOCHXPTa62',
-									createdAt: '2025-07-12T15:58:00.384Z',
+									id: crypto.randomUUID(),
+									createdAt: new Date().toISOString(),
 									role: 'user',
 									content: queueItem.userMessage,
 									parts: [{ type: 'text', text: queueItem.userMessage }]
@@ -519,10 +582,15 @@
 		// Set a fallback timeout to ensure isProcessing doesn't get stuck
 		const fallbackTimeout = setTimeout(() => {
 			if (isProcessing && activeStreams.size === 0) {
-				console.log('Fallback timeout: setting isProcessing to false')
 				isProcessing = false
+				isMarkdownStreaming = false
+				currentStreamingMessage = null
+				streamingParser = null
+				streamingRenderer = null
+				streamingElement = null
+				console.log('⏰ FALLBACK TIMEOUT - isProcessing=false (15s timeout)')
 			}
-		}, 10000) // 10 second fallback
+		}, 15000) // 15 second fallback
 
 		try {
 			// Add info cards showing what the agent is accessing/doing
@@ -691,6 +759,7 @@
 			return true // Error handled, continue processing
 		} finally {
 			currentTimeout = null
+			clearTimeout(fallbackTimeout)
 		}
 	}
 
@@ -700,6 +769,17 @@
 			clearTimeout(currentTimeout)
 			currentTimeout = null
 		}
+
+		// Stop all active streams
+		for (const [messageId, stream] of activeStreams) {
+			if (stream.parser) {
+				endMarkdownStream(stream.parser)
+			}
+			if (stream.message) {
+				stream.message.streaming = false
+			}
+		}
+		activeStreams.clear()
 
 		// Stop processing and clear queue
 		isProcessing = false
@@ -747,18 +827,22 @@
 	}
 
 	function stopCurrentTask() {
+		console.log('stopCurrentTask called, cleaning up streams...')
+		
 		// Stop all active streams
 		for (const [messageId, stream] of activeStreams) {
 			if (stream.parser) {
 				endMarkdownStream(stream.parser)
 			}
-			stream.message.streaming = false
+			if (stream.message) {
+				stream.message.streaming = false
+			}
 		}
 		
 		// Clear all active streams
 		activeStreams.clear()
 		
-		// Clear streaming state
+		// Clear streaming state immediately
 		isMarkdownStreaming = false
 		currentStreamingMessage = null
 		streamingParser = null
@@ -771,11 +855,11 @@
 			currentTimeout = null
 		}
 
-		// Stop the current processing
-		console.log('stopCurrentTask called, setting isProcessing to false')
+		// Stop the current processing immediately
 		isProcessing = false
+		console.log('🛑 STOP TASK - isProcessing=false (user stopped)')
 
-		// Update chat history to reflect stopped state
+		// Update chat history to reflect stopped state and trigger reactivity
 		chatHistory = [...chatHistory]
 
 		// Re-focus the input
@@ -2816,8 +2900,6 @@ The current system demonstrates strong performance and security characteristics.
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		justify-content: space-between;
-		width: 100%;
 		margin-top: 8px;
 	}
 
