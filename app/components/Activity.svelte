@@ -7,7 +7,8 @@
         switchToResources,
         switchToSettings,
         switchToUserMods,
-        switchToActivity
+        switchToActivity,
+        switchToAgent
     } = $props()
 
     // Dummy activity data with various types of actions
@@ -225,7 +226,7 @@
     }
 </script>
 
-<RightSidebar title="Activity" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity}>
+<RightSidebar title="Activity" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent}>
     {#snippet children()}
         <div class="activity-timeline">
             {#each activityData.slice(0, visibleEntries) as activity, index (activity.id)}

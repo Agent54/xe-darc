@@ -12,3 +12,5 @@ public/dist
 data
 secrets.json
 .claude/claude.json
+.wrangler
+.dev.vars

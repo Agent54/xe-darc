@@ -475,3 +475,31 @@ ERR_FAILED
 
 contxt menu reload inside the tabs
 
+https://github.com/browserbase/stagehand-agent/blob/main/tools.ts
+
+
+Failed to execute 'writeText' on 'Clipboard': Write permission denied.
+
+new tab menu
+
+broken restore closed tabs hanlding
+
+move stop button in input box left to sent
+
+input box rewriter/ suggester eg. markdown for code snippeets
+
+memeroy/ prompt (global/dynamic/contextual)/ history/ context / tool management
+
+onboarding view with base setup and ok buton to trigger borderless
+
+dropdwn bugreport
+
+broken new tab focus/ shouldfocus option
+
+model favicon avatars
+
+reduce the height of the doc scroling elem
+
+spaces header scroll on app start wrong position
+
+json etc sytnax highlight cloudless style

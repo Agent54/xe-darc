@@ -64,7 +64,7 @@ header.focus-mode .header-drag-handle {
 }
 
 /* .sidebar-right.sidebar-right-hovered,  */
-.sidebar-right:hover {
+.sidebar-right:hover, :global(.sidebar-right.hover-xe) {
     box-shadow: 0 0 13px 7px #0000003c;
     transform: translateX(0px);
     transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04),  opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45;
@@ -88,7 +88,7 @@ header.focus-mode .header-drag-handle {
 }
 
 /* .sidebar-right.sidebar-right-hovered::before */
-.sidebar-right:hover::before {
+.sidebar-right:hover::before, :global(.sidebar-right.hover-xe::before) {
     content: '';
     position: absolute;
     top: 0;
@@ -1651,6 +1651,42 @@ ul::-webkit-scrollbar {
     font-weight: 400;
     user-select: none;
     cursor: default;
+}
+
+.url-display-button {
+    background: none;
+    border: none;
+    padding: 0;
+    width: 100%;
+    text-align: left;
+    cursor: default;
+    border-radius: 4px;
+}
+
+.url-edit-form {
+    width: 100%;
+}
+
+.url-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: 'SF Mono', Consolas, monospace;
+    font-weight: 400;
+    outline: none;
+}
+
+.url-input:focus {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.url-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
 }
 
 .frame-header-actions {

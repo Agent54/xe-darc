@@ -121,6 +121,7 @@
     let lastUsedViewMode = $state('canvas')
     let showFixedNewTabButton = $state(false)
     let openSidebars = $state(new Set())
+    let sidebarStateLoaded = $state(false)
     let focusModeEnabled = $state(false)
     let focusModeHovered = $state(false)
     let contentAreaScrimActive = $state(false)
@@ -142,6 +143,11 @@
     let isSwitchingSidebars = $state(false)
 
     let userMods = $state([])
+    
+    // URL editing state
+    let isEditingUrl = $state(false)
+    let editingUrlValue = $state('')
+    let urlInput = $state(null)
 
     function getEnabledUserMods(tab) {
         if (!tab?.url) return { css: [], js: [] }
@@ -207,11 +213,40 @@
             if (savedLastUsedViewMode !== null) {
                 lastUsedViewMode = savedLastUsedViewMode
             }
+
+            // Load open sidebars
+            const savedOpenSidebars = localStorage.getItem('openSidebars')
+            if (savedOpenSidebars !== null) {
+                try {
+                    const sidebarArray = JSON.parse(savedOpenSidebars)
+                    openSidebars = new Set(sidebarArray)
+                    console.log('Restored sidebar state:', sidebarArray)
+                } catch (e) {
+                    console.warn('Failed to parse saved sidebar state:', e)
+                    openSidebars = new Set()
+                }
+            }
+            
+            // Mark sidebar state as loaded (whether we found saved state or not)
+            sidebarStateLoaded = true
         } catch (error) {
             console.error('Error loading user mods:', error)
             userMods = []
         }
     }
+
+    // Save open sidebars to localStorage whenever they change (but only after initial load)
+    $effect(() => {
+        if (!sidebarStateLoaded) return // Don't save during initial load
+        
+        try {
+            const sidebarArray = Array.from(openSidebars)
+            localStorage.setItem('openSidebars', JSON.stringify(sidebarArray))
+            console.log('Saved sidebar state:', sidebarArray)
+        } catch (error) {
+            console.warn('Failed to save sidebar state:', error)
+        }
+    })
 
     // Determine if sidebars are newly opened (but not when switching)
     $effect(() => {
@@ -411,6 +446,7 @@
     }
 
     function openTab(tab, index) {
+        console.log('openTab called for tab:', tab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
         // Clear the tabChangeFromScroll flag when user explicitly clicks a tab
         if (tabChangeFromScroll) {
             tabChangeFromScroll = false
@@ -425,6 +461,7 @@
             data.previous()
         } else {
             // Set this tab as active using the data store function
+            console.log('calling data.activate for tab:', tab.id)
             data.activate(tab.id)
         }
         
@@ -446,7 +483,9 @@
             return
         }
         
+        console.log('scroll effect triggered for tab:', activeTab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
         const activeFrameWrapper = data.frames[activeTab.id]?.wrapper
+        console.log('activeFrameWrapper exists:', activeFrameWrapper)
         // Don't scroll if tab change was caused by scrolling
         // if (tabChangeFromScroll) {
         //     return
@@ -459,6 +498,7 @@
         if (!tabChangeFromScroll) {
             setTimeout(() => {
                 if (activeFrameWrapper) {
+                    console.log('calling scrollIntoView for tab:', activeTab.id)
                     activeFrameWrapper.scrollIntoView({ 
                         behavior: isWindowResizing ? 'auto' : 'smooth' 
                     })
@@ -786,6 +826,7 @@
                         }
                         
                         if (entry.isIntersecting && tab) {
+                            console.log('intersection observer activating tab:', tab.id)
                             // Set flag BEFORE changing active tab to prevent race condition
                             tabChangeFromScroll = true
                             // Clear any existing timer to prevent multiple timers
@@ -835,12 +876,14 @@
     // Failsafe effect to reset tabChangeFromScroll if it gets stuck
     $effect(() => {
         if (tabChangeFromScroll) {
+            console.log('tabChangeFromScroll failsafe triggered')
             // Clear any existing failsafe
             if (tabChangeFromScrollFailsafe) {
                 clearTimeout(tabChangeFromScrollFailsafe)
             }
             // Set a failsafe to reset the flag after 2 seconds
             tabChangeFromScrollFailsafe = setTimeout(() => {
+                console.log('tabChangeFromScroll failsafe reset')
                 tabChangeFromScroll = false
                 tabChangeFromScrollFailsafe = null
                 if (tabChangeFromScrollTimer) {
@@ -1594,6 +1637,18 @@
         localStorage.setItem('devModeEnabled', devModeEnabled.toString())
     }
 
+    async function openTestSuite() {
+        try {
+            console.log('🧪 Opening test suite...')
+            const { testFramework } = await import('../tests/main.js')
+            await testFramework.setupTestPanel()
+            testFramework.showTestPanel()
+            console.log('✅ Test suite panel opened')
+        } catch (error) {
+            console.error('❌ Error opening test suite:', error)
+        }
+    }
+
     // Check for encrypted sync token on app startup
     async function checkSyncTokenAuth() {
         const encryptedTokenData = localStorage.getItem('darc-encrypted-token')
@@ -1885,6 +1940,80 @@
             return 'about:newtab'
         }
         return url
+    }
+
+    // URL editing functions
+    function startEditingUrl() {
+        if (!data.spaceMeta.activeTab) return
+        isEditingUrl = true
+        editingUrlValue = data.spaceMeta.activeTab.url || ''
+        // Focus the input after it's rendered
+        setTimeout(() => {
+            if (urlInput) {
+                urlInput.focus()
+                urlInput.select()
+            }
+        }, 10)
+    }
+
+    function stopEditingUrl() {
+        isEditingUrl = false
+        editingUrlValue = ''
+    }
+
+    function handleUrlSubmit(event) {
+        event.preventDefault()
+        if (!editingUrlValue.trim() || !data.spaceMeta.activeTab) {
+            stopEditingUrl()
+            return
+        }
+        
+        const activeTab = data.spaceMeta.activeTab
+        
+        try {
+            let url = new URL(editingUrlValue)
+            data.navigate(activeTab.id, url.href)
+        } catch {
+            // Not a valid URL, treat as search
+            const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
+            let searchUrl
+            
+            switch (defaultSearchEngine) {
+                case 'kagi':
+                    searchUrl = new URL('https://kagi.com/search')
+                    break
+                case 'custom':
+                    const customUrl = localStorage.getItem('customSearchUrl')
+                    if (customUrl) {
+                        try {
+                            searchUrl = new URL(customUrl + encodeURIComponent(editingUrlValue))
+                            data.navigate(activeTab.id, searchUrl.href)
+                            stopEditingUrl()
+                            return
+                        } catch {
+                            // Fallback to Google if custom URL is invalid
+                            searchUrl = new URL('https://www.google.com/search')
+                        }
+                    } else {
+                        searchUrl = new URL('https://www.google.com/search')
+                    }
+                    break
+                default: // google
+                    searchUrl = new URL('https://www.google.com/search')
+                    break
+            }
+            
+            searchUrl.searchParams.set('q', editingUrlValue)
+            data.navigate(activeTab.id, searchUrl.href)
+        }
+        
+        stopEditingUrl()
+    }
+
+    function handleUrlKeydown(event) {
+        if (event.key === 'Escape') {
+            stopEditingUrl()
+        }
     }
 
     function setupFallbackColor() {
@@ -2678,6 +2807,18 @@
                     </span>
                     <span>Load Sample Data</span>
                 </div>
+                <div class="dev-menu-item" 
+                     role="button"
+                     tabindex="0"
+                     onclick={(e) => { e.stopPropagation(); openTestSuite() }}
+                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openTestSuite() } }}>
+                    <span class="dev-menu-icon-item">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
+                        </svg>
+                    </span>
+                    <span>Open Test Suite</span>
+                </div>
             </div>
         </div>
     {/if}
@@ -2687,6 +2828,10 @@
     <div class="dev-color-badge" style="background-color: {fallbackColor};" title="Fallback Mode - ControlledFrame API not available">
         <span class="dev-color-text">{fallbackColorName}</span>
     </div>
+{/if}
+
+{#if devModeEnabled}
+    <div id="test-panel-mount"></div>
 {/if}
 
 {#if focusModeEnabled && contentAreaScrimActive}
@@ -2784,7 +2929,23 @@
     
     <div class="frame-header-url-container">
         <div class="frame-header-url">
-            <UrlRenderer url={getDisplayUrl(data.spaceMeta.activeTab?.url)} variant="compact" />
+            {#if isEditingUrl}
+                <form onsubmit={handleUrlSubmit} class="url-edit-form">
+                    <input
+                        bind:this={urlInput}
+                        bind:value={editingUrlValue}
+                        onkeydown={handleUrlKeydown}
+                        onblur={stopEditingUrl}
+                        class="url-input"
+                        type="text"
+                        placeholder="Enter URL or search..."
+                    />
+                </form>
+            {:else}
+                <button class="url-display-button" onclick={startEditingUrl} title="Click to edit URL">
+                    <UrlRenderer url={getDisplayUrl(data.spaceMeta.activeTab?.url)} variant="compact" />
+                </button>
+            {/if}
         </div>
     </div>
 
@@ -2938,7 +3099,8 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                           {switchToResources} 
                           {switchToSettings}
                           {switchToUserMods}
-                          {switchToActivity} />
+                          {switchToActivity}
+                          switchToAgent={switchToAIAgent} />
             </div>
         {/if}
         
@@ -2949,7 +3111,8 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          {switchToResources} 
                          {switchToSettings}
                          {switchToUserMods}
-                         {switchToActivity} />
+                         {switchToActivity}
+                         switchToAgent={switchToAIAgent} />
             </div>
         {/if}
         
@@ -2961,6 +3124,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          {switchToSettings}
                          {switchToUserMods}
                          {switchToActivity}
+                         switchToAgent={switchToAIAgent}
                          {userMods}
                          onUpdateUserMods={updateUserMods}
                          currentTab={data.spaceMeta.activeTab} />
@@ -2989,6 +3153,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          {switchToSettings}
                          {switchToUserMods}
                          {switchToActivity}
+                         switchToAgent={switchToAIAgent}
                          {tabs}
                          closedTabs={data.closedTabs} />
             </div>
