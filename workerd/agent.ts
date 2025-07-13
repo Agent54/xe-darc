@@ -125,8 +125,8 @@ If the user asks to schedule a task, use the schedule tool to schedule the task.
       ...this.messages,
       {
         id: generateId(),
-        role: "user",
-        content: `Running scheduled task: ${description}`,
+        role: "system",
+        content: `Running scheduled task now: ${description}`,
         createdAt: new Date(),
       },
     ]);

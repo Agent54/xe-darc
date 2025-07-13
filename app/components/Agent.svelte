@@ -84,9 +84,27 @@
 			return
 		}
 
+		// Check if this is a tool call message
+		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('9:')) {
+			handleToolCall(data)
+			return
+		}
+
+		// Check if this is a tool result message
+		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('a:')) {
+			handleToolResult(data)
+			return
+		}
+
 		// Check if this is a response summary
 		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('d:')) {
 			handleResponseSummary(data)
+			return
+		}
+
+		// Handle complete message updates
+		if (data.type === 'cf_agent_chat_messages') {
+			handleChatMessages(data)
 			return
 		}
 
@@ -178,6 +196,9 @@
 	
 	// Add state for tracking active streams
 	let activeStreams = $state(new Map()) // messageId -> { message, parser, renderer, element }
+	
+	// Track known message IDs to avoid duplicates
+	let knownMessageIds = $state(new Set())
 
 	function initializeStreamingMarkdown(element) {
 		if (!element) return null
@@ -227,6 +248,10 @@
 					// End the stream
 					endMarkdownStream(stream.parser)
 					stream.message.streaming = false
+					
+					// Mark the final message as a complete server message
+					// This helps prevent duplicates when server sends complete message updates
+					stream.message.isServerMessage = true
 					
 					// Remove from active streams
 					activeStreams.delete(messageId)
@@ -286,6 +311,9 @@
 				// Add to chat history
 				chatHistory = [...chatHistory, streamingMessage]
 				currentStreamingMessage = streamingMessage
+				
+				// Track this message as known
+				knownMessageIds.add(streamingMessageId)
 
 				// Wait for Svelte to update the DOM, then initialize streaming
 				await tick()
@@ -366,16 +394,112 @@
 			
 			// Fall back to regular message display
 			const assistantMessageId = (Date.now() + 1).toString()
-			chatHistory = [
-				...chatHistory,
-				{
-					id: assistantMessageId,
-					role: 'assistant',
-					content: `Error parsing stream: ${data.body}`,
-					timestamp: new Date().toISOString()
-				}
-			]
+			const errorMessage = {
+				id: assistantMessageId,
+				role: 'assistant',
+				content: `Error parsing stream: ${data.body}`,
+				timestamp: new Date().toISOString()
+			}
+			
+			chatHistory = [...chatHistory, errorMessage]
+			knownMessageIds.add(assistantMessageId)
 		}
+	}
+
+	function handleToolCall(data) {
+		try {
+			// Parse the tool call format: { "body": "9:{\"toolCallId\":\"toolu_01V5FvBnDEuQWSMgHjsXi1fr\",\"toolName\":\"getWeatherInformation\",\"args\":{\"city\":\"Tallinn\"}}\n", ... }
+			const body = data.body
+			
+			// Extract content after "9:" and parse as JSON
+			const contentStart = body.indexOf('9:') + 2
+			const contentPart = body.substring(contentStart)
+			
+			// Parse the JSON-encoded content
+			const toolCallData = JSON.parse(contentPart.trim())
+			
+			console.log('Tool call received:', toolCallData)
+			
+			// Assume all tool calls might need permission initially
+			// We'll determine this based on the response format later
+			const toolCard = {
+				type: 'tool',
+				action: 'tool-call',
+				status: 'processing',
+				title: toolCallData.toolName,
+				details: formatToolArgs(toolCallData.args),
+				toolCallId: toolCallData.toolCallId,
+				needsPermission: true, // Start as true, will be updated based on response
+				awaitingPermission: true // Track that we're waiting to see what kind of response this gets
+			}
+			
+			// Add tool call card to chat history
+			const toolCardMessage = {
+				id: Date.now().toString(),
+				role: 'info-cards',
+				cards: [toolCard],
+				timestamp: new Date().toISOString()
+			}
+			
+			chatHistory = [...chatHistory, toolCardMessage]
+			knownMessageIds.add(toolCardMessage.id)
+			
+		} catch (error) {
+			console.error('Error parsing tool call:', error)
+		}
+	}
+
+	function handleToolResult(data) {
+		try {
+			// Parse the tool result format: { "body": "a:{\"toolCallId\":\"toolu_01M2WQV8xT3dN2wTYXMTbMMC\",\"result\":\"10am\"}\n", ... }
+			const body = data.body
+			
+			// Extract content after "a:" and parse as JSON
+			const contentStart = body.indexOf('a:') + 2
+			const contentPart = body.substring(contentStart)
+			
+			// Parse the JSON-encoded content
+			const toolResultData = JSON.parse(contentPart.trim())
+			
+			console.log('Tool result received via a: message:', toolResultData)
+			
+			// If we get an "a:" message, this tool does NOT require permission
+			// Tools that require permission don't get "a:" messages, they get handled via complete message payload
+			
+			// Find the corresponding tool call card and update it
+			const updatedHistory = chatHistory.map(message => {
+				if (message.role === 'info-cards') {
+					const updatedCards = message.cards.map(card => {
+						if (card.toolCallId === toolResultData.toolCallId) {
+							// This tool doesn't need permission since it got a direct result
+							return {
+								...card,
+								status: 'accessed',
+								needsPermission: false,
+								awaitingPermission: false,
+								result: toolResultData.result,
+								details: card.details + '\n\nResult: ' + JSON.stringify(toolResultData.result, null, 2)
+							}
+						}
+						return card
+					})
+					return { ...message, cards: updatedCards }
+				}
+				return message
+			})
+			
+			chatHistory = updatedHistory
+			
+		} catch (error) {
+			console.error('Error parsing tool result:', error)
+		}
+	}
+
+	function formatToolArgs(args) {
+		if (!args || typeof args !== 'object') return ''
+		
+		// Format args as readable JSON with proper indentation
+		return JSON.stringify(args, null, 2)
 	}
 
 	function handleResponseSummary(data) {
@@ -393,15 +517,16 @@
 			console.log('Response summary received:', summaryData)
 			
 			// Add response summary divider
-			chatHistory = [
-				...chatHistory,
-				{
-					role: 'response-divider',
-					content: `${summaryData.usage.promptTokens} prompt • ${summaryData.usage.completionTokens} completion`,
-					usage: summaryData.usage,
-					timestamp: new Date().toISOString()
-				}
-			]
+			const responseDividerMessage = {
+				id: Date.now().toString(),
+				role: 'response-divider',
+				content: `${summaryData.usage.promptTokens} prompt • ${summaryData.usage.completionTokens} completion`,
+				usage: summaryData.usage,
+				timestamp: new Date().toISOString()
+			}
+			
+			chatHistory = [...chatHistory, responseDividerMessage]
+			knownMessageIds.add(responseDividerMessage.id)
 			
 			// Ensure processing is stopped when we get the response summary
 			// This acts as a fallback in case streaming completion wasn't detected properly
@@ -420,6 +545,205 @@
 		} catch (error) {
 			console.error('Error parsing response summary:', error)
 		}
+	}
+
+	function handleChatMessages(data) {
+		try {
+			const messages = data.messages || []
+			console.log('Handling chat messages:', messages)
+			
+			// Find messages that are truly new (not already in chat history)
+			const newMessages = []
+			
+			for (const message of messages) {
+				// Skip if we've already processed this message ID
+				if (message.id && knownMessageIds.has(message.id)) {
+					console.log('⏭️ Skipping known message ID:', message.id)
+					continue
+				}
+				
+				// Handle potential conflicts with active streams
+				if (message.role === 'assistant' && activeStreams.size > 0) {
+					const conflictingStream = Array.from(activeStreams.entries()).find(([streamId, stream]) => {
+						// Check if this server message might be the complete version of a streaming message
+						return stream.message.rawContent && message.content &&
+							stream.message.rawContent.includes(message.content.substring(0, 50))
+					})
+					
+					if (conflictingStream) {
+						const [streamId, stream] = conflictingStream
+						console.log('🔄 Found conflicting stream, checking if server message is complete...')
+						
+						// If server message is significantly longer than streaming content, 
+						// it might be a complete replacement
+						if (message.content.length > stream.message.rawContent.length * 1.5) {
+							console.log('📝 Server message is complete, replacing streaming message')
+							
+							// Stop the stream and replace with server message
+							endMarkdownStream(stream.parser)
+							activeStreams.delete(streamId)
+							
+							// Remove the streaming message from chat history
+							chatHistory = chatHistory.filter(msg => msg.id !== stream.message.id)
+							
+							// Don't skip this message - process it as a replacement
+						} else {
+							console.log('⏭️ Skipping message that conflicts with active stream:', message.id)
+							continue
+						}
+					}
+				}
+				
+				// Skip if this message content already exists in chat history
+				// (handles case where local message gets server ID later)
+				const isDuplicate = chatHistory.some(existing => {
+					// Exact content match with same role
+					if (existing.content === message.content && existing.role === message.role) {
+						// Check if timestamps are close (within 5 seconds)
+						const timeDiff = Math.abs(new Date(existing.timestamp).getTime() - new Date(message.createdAt).getTime())
+						if (timeDiff < 5000) {
+							console.log('⏭️ Skipping duplicate content message:', message.id)
+							return true
+						}
+					}
+					
+					// Check if this is a streaming message that might be replaced by server message
+					if (existing.streaming && existing.role === 'assistant' && message.role === 'assistant') {
+						// If existing message is streaming and has similar content, it might be a duplicate
+						const contentSimilarity = existing.rawContent && message.content && 
+							existing.rawContent.includes(message.content.substring(0, 50))
+						if (contentSimilarity) {
+							console.log('⏭️ Skipping message similar to streaming content:', message.id)
+							return true
+						}
+					}
+					
+					return false
+				})
+				
+				if (!isDuplicate) {
+					newMessages.push(message)
+					knownMessageIds.add(message.id)
+				}
+			}
+			
+			// Only process truly new messages
+			for (const message of newMessages) {
+				console.log('Processing new message:', message)
+				
+				// Convert the message to our internal format
+				const internalMessage = {
+					id: message.id,
+					role: message.role,
+					content: message.content,
+					timestamp: message.createdAt || new Date().toISOString(),
+					streaming: false,
+					isServerMessage: true
+				}
+				
+				// Handle tool invocations if present
+				if (message.toolInvocations && message.toolInvocations.length > 0) {
+					// Process each tool invocation
+					for (const invocation of message.toolInvocations) {
+						// Check if this is a permission request based on the result format
+						const isPermissionResult = invocation.result === 'No, denied.' || 
+												   invocation.result === 'Yes, confirmed.' ||
+												   (invocation.result && typeof invocation.result === 'string' && 
+												    (invocation.result.includes('denied') || invocation.result.includes('confirmed')))
+						
+						if (isPermissionResult) {
+							// This is a tool that required permission - update existing card if it exists
+							const isApproved = invocation.result === 'Yes, confirmed.' || 
+											  (invocation.result && invocation.result.includes('confirmed'))
+							
+							// Try to find existing card and update it
+							const updatedHistory = chatHistory.map(msg => {
+								if (msg.role === 'info-cards') {
+									const updatedCards = msg.cards.map(card => {
+										if (card.toolCallId === invocation.toolCallId) {
+											return {
+												...card,
+												status: isApproved ? 'approved' : 'denied',
+												needsPermission: true,
+												awaitingPermission: false,
+												permissionResult: invocation.result
+											}
+										}
+										return card
+									})
+									return { ...msg, cards: updatedCards }
+								}
+								return msg
+							})
+							
+							// Check if we found and updated an existing card
+							const cardFound = updatedHistory.some(msg => 
+								msg.role === 'info-cards' && 
+								msg.cards.some(card => card.toolCallId === invocation.toolCallId)
+							)
+							
+							if (cardFound) {
+								chatHistory = updatedHistory
+							} else {
+								// Create new card for this permission result
+								const toolCard = {
+									type: 'tool',
+									action: 'tool-call',
+									status: isApproved ? 'approved' : 'denied',
+									title: invocation.toolName,
+									details: formatToolInvocationDetails(invocation),
+									toolCallId: invocation.toolCallId,
+									needsPermission: true,
+									awaitingPermission: false,
+									permissionResult: invocation.result
+								}
+								
+								const toolCardMessage = {
+									id: `tool-${message.id}-${invocation.toolCallId}`,
+									role: 'info-cards',
+									cards: [toolCard],
+									timestamp: new Date().toISOString()
+								}
+								
+								chatHistory = [...chatHistory, toolCardMessage]
+								knownMessageIds.add(toolCardMessage.id)
+							}
+						}
+						// For non-permission results, we don't create cards here since they'll be handled by "a:" messages
+					}
+				}
+				
+				// Add the message to chat history
+				chatHistory = [...chatHistory, internalMessage]
+			}
+			
+			// Safeguard: Don't accidentally clear history
+			if (newMessages.length === 0 && messages.length > 0) {
+				console.log('⚠️ No new messages found but server sent messages - possible duplicate detection')
+			}
+			
+			// Update current chat timestamp if we have new messages
+			if (newMessages.length > 0) {
+				updateCurrentChatTimestamp()
+			}
+			
+		} catch (error) {
+			console.error('Error handling chat messages:', error)
+		}
+	}
+
+	function formatToolInvocationDetails(invocation) {
+		const details = []
+		
+		if (invocation.args) {
+			details.push(`Args: ${JSON.stringify(invocation.args, null, 2)}`)
+		}
+		
+		if (invocation.result) {
+			details.push(`Result: ${JSON.stringify(invocation.result, null, 2)}`)
+		}
+		
+		return details.join('\n\n')
 	}
 
 	// Get available targets with actual names in brackets
@@ -543,15 +867,17 @@
 	async function processMessage(queueItem) {
 		// Add user message to history
 		const messageId = queueItem.id
-		chatHistory = [
-			...chatHistory,
-			{
-				id: messageId,
-				role: 'user',
-				content: queueItem.userMessage,
-				timestamp: queueItem.timestamp
-			}
-		]
+		const userMessage = {
+			id: messageId,
+			role: 'user',
+			content: queueItem.userMessage,
+			timestamp: queueItem.timestamp
+		}
+		
+		chatHistory = [...chatHistory, userMessage]
+		
+		// Track this message as known
+		knownMessageIds.add(messageId)
 
         client.send(
 			JSON.stringify(
@@ -725,14 +1051,15 @@
 
 			// Add info cards to chat history
 			if (infoCards.length > 0) {
-				chatHistory = [
-					...chatHistory,
-					{
-						role: 'info-cards',
-						cards: infoCards,
-						timestamp: new Date().toISOString()
-					}
-				]
+				const infoCardsMessage = {
+					id: Date.now().toString(),
+					role: 'info-cards',
+					cards: infoCards,
+					timestamp: new Date().toISOString()
+				}
+				
+				chatHistory = [...chatHistory, infoCardsMessage]
+				knownMessageIds.add(infoCardsMessage.id)
 			}
 
 			// Update chat timestamp to bump to top
@@ -744,15 +1071,15 @@
 		} catch (error) {
 			console.error('Agent processing error:', error)
 			const errorMessageId = (Date.now() + 2).toString()
-			chatHistory = [
-				...chatHistory,
-				{
-					id: errorMessageId,
-					role: 'error',
-					content: 'Sorry, I encountered an error. Please try again.',
-					timestamp: new Date().toISOString()
-				}
-			]
+			const errorMessage = {
+				id: errorMessageId,
+				role: 'error',
+				content: 'Sorry, I encountered an error. Please try again.',
+				timestamp: new Date().toISOString()
+			}
+			
+			chatHistory = [...chatHistory, errorMessage]
+			knownMessageIds.add(errorMessageId)
 
 			clearTimeout(fallbackTimeout)
 			isProcessing = false
@@ -795,6 +1122,9 @@
 		isMarkdownStreaming = false
 		currentChatId = null
 		selectedHistoryId = 'current'
+
+		// Clear known message IDs
+		knownMessageIds.clear()
 
 		// Clear streaming parser
 		streamingParser = null
@@ -996,6 +1326,14 @@
 			currentChatId = historyId
 			isMarkdownStreaming = false
 			selectedHistoryId = historyId
+			
+			// Rebuild known message IDs from the loaded history
+			knownMessageIds.clear()
+			for (const message of chatHistory) {
+				if (message.id) {
+					knownMessageIds.add(message.id)
+				}
+			}
 		}
 	}
 
@@ -1007,6 +1345,7 @@
 				chatHistory = []
 				currentChatId = null
 				isMarkdownStreaming = false
+				knownMessageIds.clear()
 			}
 		} else if (value === 'show-all') {
 			// TODO: Implement show all functionality
@@ -1040,6 +1379,70 @@
 	function thumbsDown(messageId) {
 		console.log('Thumbs down for message:', messageId)
 		// TODO: Implement feedback system
+	}
+
+	function approveToolPermission(toolCallId) {
+		console.log('Approving tool permission for:', toolCallId)
+		
+		// Send approval to agent
+		client.send(JSON.stringify({
+			type: 'cf_agent_tool_permission_response',
+			toolCallId: toolCallId,
+			approved: true,
+			result: 'Yes, confirmed.'
+		}))
+		
+		// Update the card status
+		const updatedHistory = chatHistory.map(message => {
+			if (message.role === 'info-cards') {
+				const updatedCards = message.cards.map(card => {
+					if (card.toolCallId === toolCallId) {
+						return {
+							...card,
+							status: 'approved',
+							permissionResult: 'Yes, confirmed.'
+						}
+					}
+					return card
+				})
+				return { ...message, cards: updatedCards }
+			}
+			return message
+		})
+		
+		chatHistory = updatedHistory
+	}
+
+	function rejectToolPermission(toolCallId) {
+		console.log('Rejecting tool permission for:', toolCallId)
+		
+		// Send rejection to agent
+		client.send(JSON.stringify({
+			type: 'cf_agent_tool_permission_response',
+			toolCallId: toolCallId,
+			approved: false,
+			result: 'No, denied.'
+		}))
+		
+		// Update the card status
+		const updatedHistory = chatHistory.map(message => {
+			if (message.role === 'info-cards') {
+				const updatedCards = message.cards.map(card => {
+					if (card.toolCallId === toolCallId) {
+						return {
+							...card,
+							status: 'denied',
+							permissionResult: 'No, denied.'
+						}
+					}
+					return card
+				})
+				return { ...message, cards: updatedCards }
+			}
+			return message
+		})
+		
+		chatHistory = updatedHistory
 	}
 
 	function handleActionButton(action) {
@@ -1077,15 +1480,15 @@
 		const messageId = Date.now().toString()
 
 		// Add user message
-		chatHistory = [
-			...chatHistory,
-			{
-				id: messageId,
-				role: 'user',
-				content: 'Generate a test markdown document',
-				timestamp: new Date().toISOString()
-			}
-		]
+		const userMessage = {
+			id: messageId,
+			role: 'user',
+			content: 'Generate a test markdown document',
+			timestamp: new Date().toISOString()
+		}
+		
+		chatHistory = [...chatHistory, userMessage]
+		knownMessageIds.add(messageId)
 
 		// Add streaming markdown message
 		const markdownMessageId = (Date.now() + 1).toString()
@@ -1099,6 +1502,7 @@
 		}
 
 		chatHistory = [...chatHistory, currentStreamingMessage]
+		knownMessageIds.add(markdownMessageId)
 
 		// Initialize streaming
 		isMarkdownStreaming = true
@@ -1332,250 +1736,308 @@ The current system demonstrates strong performance and security characteristics.
 										class:modified={card.status === 'modified'}
 										class:denied={card.status === 'denied'}
 									>
-										<div class="agent-info-card-header">
-											<div class="agent-info-card-icon">
-												{#if card.action === 'read-tab'}
-													{#if card.favicon}
-														<img src={card.favicon} alt="" class="agent-info-card-favicon" />
-													{:else}
-														<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z"
-															/>
-														</svg>
-													{/if}
-												{:else if card.action === 'read-space' || card.action === 'read-all-spaces'}
+									<div class="agent-info-card-header">
+										<div class="agent-info-card-icon">
+											{#if card.action === 'read-tab'}
+												{#if card.favicon}
+													<img src={card.favicon} alt="" class="agent-info-card-favicon" />
+												{:else}
 													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
 														<path
 															stroke-linecap="round"
 															stroke-linejoin="round"
-															d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 0 1-1.125-1.125v-3.75ZM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-8.25ZM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-2.25Z"
+															d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z"
 														/>
 													</svg>
-												{:else if card.action === 'web-search'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-														/>
-													</svg>
-												{:else if card.action === 'execute-js'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M14.25 9.75 16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 1 3.75 6v12A2.25 2.25 0 0 1 6 20.25Z"
-														/>
-													</svg>
-												{:else if card.action === 'modify-content'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-														/>
-													</svg>
-												{:else if card.action === 'inject-script'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5"
-														/>
-													</svg>
-												{:else if card.action === 'block-request'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636"
-														/>
-													</svg>
-												{:else if card.action === 'grant-permission'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-														/>
-													</svg>
-												{:else if card.action === 'api-call'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-														/>
-													</svg>
-												{:else if card.action === 'access-cookies'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"
-														/>
-													</svg>
-												{:else if card.action === 'file-download'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
-														/>
-													</svg>
-												{:else if card.action === 'file-upload'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
-														/>
-													</svg>
-												{:else if card.action === 'screenshot'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
-														/>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
-														/>
-													</svg>
-												{:else if card.action === 'notification-permission'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"
-														/>
-													</svg>
-												{:else if card.action === 'location-access'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-														/>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"
-														/>
-													</svg>
-												{:else if card.action === 'camera-access'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"
-														/>
-													</svg>
-												{:else if card.action === 'microphone-access'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
-														/>
-													</svg>
-												{:else if card.action === 'clipboard-access'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z"
-														/>
-													</svg>
-												{:else if card.action === 'fullscreen-request'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
-														/>
-													</svg>
-												{:else if card.action === 'local-storage'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
-														/>
-													</svg>
-												{:else if card.action === 'proxy-detection'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M9.348 14.652a3.75 3.75 0 010-5.304m5.304 0a3.75 3.75 0 010 5.304m-7.425 2.121a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.981 0 13.79M12 12h.008v.007H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-														/>
-													</svg>
-												{:else if card.action === 'analytics-block'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"
-														/>
-													</svg>
-												{:else if card.action === 'ad-block'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
-														/>
-													</svg>
-												{:else if card.action === 'malware-scan'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
-														/>
-													</svg>
-												{:else if card.action === 'css-injection'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42"
-														/>
-													</svg>
-												{:else if card.action === 'page-redirect'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-														/>
-													</svg>
-												{:else if card.action === 'print-dialog'}
-													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M18.75 9V6a2.25 2.25 0 0 0-2.25-2.25H7.5A2.25 2.25 0 0 0 5.25 6v3M6.75 9h10.5m-10.5 0V6a2.25 2.25 0 0 1 2.25-2.25h6A2.25 2.25 0 0 1 17.25 6v3"
-														/>
-													</svg>
+												{/if}
+											{:else if card.action === 'read-space' || card.action === 'read-all-spaces'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 0 1-1.125-1.125v-3.75ZM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-8.25ZM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-2.25Z"
+													/>
+												</svg>
+											{:else if card.action === 'web-search'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+													/>
+												</svg>
+											{:else if card.action === 'execute-js'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M14.25 9.75 16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 1 3.75 6v12A2.25 2.25 0 0 1 6 20.25Z"
+													/>
+												</svg>
+											{:else if card.action === 'modify-content'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+													/>
+												</svg>
+											{:else if card.action === 'inject-script'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5"
+													/>
+												</svg>
+											{:else if card.action === 'block-request'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636"
+													/>
+												</svg>
+											{:else if card.action === 'grant-permission'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+													/>
+												</svg>
+											{:else if card.action === 'api-call'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+													/>
+												</svg>
+											{:else if card.action === 'access-cookies'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"
+													/>
+												</svg>
+											{:else if card.action === 'file-download'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
+													/>
+												</svg>
+											{:else if card.action === 'file-upload'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+													/>
+												</svg>
+											{:else if card.action === 'screenshot'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
+													/>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
+													/>
+												</svg>
+											{:else if card.action === 'notification-permission'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"
+													/>
+												</svg>
+											{:else if card.action === 'location-access'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+													/>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"
+													/>
+												</svg>
+											{:else if card.action === 'camera-access'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"
+													/>
+												</svg>
+											{:else if card.action === 'microphone-access'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
+													/>
+												</svg>
+											{:else if card.action === 'clipboard-access'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z"
+													/>
+												</svg>
+											{:else if card.action === 'fullscreen-request'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+													/>
+												</svg>
+											{:else if card.action === 'local-storage'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+													/>
+												</svg>
+											{:else if card.action === 'proxy-detection'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M9.348 14.652a3.75 3.75 0 010-5.304m5.304 0a3.75 3.75 0 010 5.304m-7.425 2.121a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.981 0 13.79M12 12h.008v.007H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+													/>
+												</svg>
+											{:else if card.action === 'analytics-block'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"
+													/>
+												</svg>
+											{:else if card.action === 'ad-block'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+													/>
+												</svg>
+											{:else if card.action === 'malware-scan'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+													/>
+												</svg>
+											{:else if card.action === 'css-injection'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42"
+													/>
+												</svg>
+											{:else if card.action === 'page-redirect'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+													/>
+												</svg>
+											{:else if card.action === 'print-dialog'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M18.75 9V6a2.25 2.25 0 0 0-2.25-2.25H7.5A2.25 2.25 0 0 0 5.25 6v3M6.75 9h10.5m-10.5 0V6a2.25 2.25 0 0 1 2.25-2.25h6A2.25 2.25 0 0 1 17.25 6v3"
+													/>
+												</svg>
+											{:else if card.action === 'tool-call'}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z"
+													/>
+												</svg>
 
-												{/if}
-											</div>
-											<div class="agent-info-card-text">
-												<div class="agent-info-card-title">{card.title}</div>
-												{#if card.details}
-													<div class="agent-info-card-details">{card.details}</div>
-												{:else if card.url}
-													<div class="agent-info-card-url">{card.url}</div>
-												{/if}
+											{/if}
+										</div>
+										<div class="agent-info-card-text">
+											<div class="agent-info-card-title">{card.title}</div>
+											{#if card.details}
+												<div class="agent-info-card-details">{card.details}</div>
+											{:else if card.url}
+												<div class="agent-info-card-url">{card.url}</div>
+											{/if}
+										</div>
+									</div>
+									
+									<!-- Debug info -->
+									<!-- <div style="font-size: 9px; color: rgba(255,255,255,0.3); margin-top: 4px;">
+										DEBUG: needsPermission={card.needsPermission}, awaitingPermission={card.awaitingPermission}, status={card.status}, result={card.result}
+									</div> -->
+									
+									{#if card.awaitingPermission}
+										<div class="agent-info-card-actions">
+											<button
+												class="agent-permission-btn approve"
+												onclick={() => approveToolPermission(card.toolCallId)}
+												title="Approve tool permission"
+											>
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+													/>
+												</svg>
+												Accept
+											</button>
+											<button
+												class="agent-permission-btn reject"
+												onclick={() => rejectToolPermission(card.toolCallId)}
+												title="Reject tool permission"
+											>
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636"
+													/>
+												</svg>
+												Reject
+											</button>
+										</div>
+									{:else if card.needsPermission && card.permissionResult}
+										<div class="agent-info-card-result">
+											<div class="agent-permission-result {card.status}">
+												{card.status === 'approved' ? 'Approved' : 'Denied'}
 											</div>
 										</div>
+									{:else if card.result}
+										<div class="agent-info-card-result">
+											<div class="agent-tool-result">
+												Result: {card.result}
+											</div>
+										</div>
+									{/if}
 									</div>
 								{/each}
 							</div>
@@ -2570,6 +3032,16 @@ The current system demonstrates strong performance and security characteristics.
 		background: rgba(239, 68, 68, 0.05);
 	}
 
+	.agent-info-card.approved {
+		border-left: 2px solid rgba(34, 197, 94, 0.45);
+		background: rgba(34, 197, 94, 0.05);
+	}
+
+	.agent-info-card.processing {
+		border-left: 2px solid rgba(251, 191, 36, 0.45);
+		background: rgba(251, 191, 36, 0.05);
+	}
+
 	.agent-info-card-header {
 		display: flex;
 		align-items: center;
@@ -2612,6 +3084,105 @@ The current system demonstrates strong performance and security characteristics.
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.agent-info-card.tool .agent-info-card-details {
+		white-space: pre-wrap;
+		font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+		font-size: 10px;
+		overflow: visible;
+		text-overflow: unset;
+		background: rgba(0, 0, 0, 0.2);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 3px;
+		padding: 6px;
+		margin-top: 4px;
+		max-height: 120px;
+		overflow-y: auto;
+	}
+
+	.agent-info-card-actions {
+		display: flex;
+		gap: 8px;
+		margin-top: 8px;
+		padding-top: 8px;
+		border-top: 1px solid rgba(255, 255, 255, 0.1);
+	}
+
+	.agent-permission-btn {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 8px;
+		border-radius: 4px;
+		font-size: 10px;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		border: 1px solid transparent;
+		font-weight: 500;
+	}
+
+	.agent-permission-btn.approve {
+		background: rgba(34, 197, 94, 0.2);
+		color: rgba(34, 197, 94, 0.9);
+		border-color: rgba(34, 197, 94, 0.3);
+	}
+
+	.agent-permission-btn.approve:hover {
+		background: rgba(34, 197, 94, 0.3);
+		border-color: rgba(34, 197, 94, 0.5);
+		color: white;
+	}
+
+	.agent-permission-btn.reject {
+		background: rgba(239, 68, 68, 0.2);
+		color: rgba(239, 68, 68, 0.9);
+		border-color: rgba(239, 68, 68, 0.3);
+	}
+
+	.agent-permission-btn.reject:hover {
+		background: rgba(239, 68, 68, 0.3);
+		border-color: rgba(239, 68, 68, 0.5);
+		color: white;
+	}
+
+	.agent-info-card-result {
+		margin-top: 8px;
+		padding-top: 8px;
+		border-top: 1px solid rgba(255, 255, 255, 0.1);
+	}
+
+	.agent-permission-result {
+		font-size: 10px;
+		font-weight: 500;
+		padding: 2px 6px;
+		border-radius: 3px;
+		display: inline-block;
+	}
+
+	.agent-permission-result.approved {
+		background: rgba(34, 197, 94, 0.2);
+		color: rgba(34, 197, 94, 0.9);
+		border: 1px solid rgba(34, 197, 94, 0.3);
+	}
+
+	.agent-permission-result.denied {
+		background: rgba(239, 68, 68, 0.2);
+		color: rgba(239, 68, 68, 0.9);
+		border: 1px solid rgba(239, 68, 68, 0.3);
+	}
+
+	.agent-tool-result {
+		font-size: 10px;
+		color: rgba(255, 255, 255, 0.8);
+		font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+		background: rgba(0, 0, 0, 0.2);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 3px;
+		padding: 6px;
+		white-space: pre-wrap;
+		max-height: 80px;
+		overflow-y: auto;
 	}
 
 	.agent-chat-actions {

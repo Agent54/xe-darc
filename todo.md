@@ -499,3 +499,7 @@ broken new tab focus/ shouldfocus option
 model favicon avatars
 
 reduce the height of the doc scroling elem
+
+spaces header scroll on app start wrong position
+
+json etc sytnax highlight cloudless style
