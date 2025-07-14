@@ -2984,7 +2984,6 @@
                         bind:this={urlInput}
                         bind:value={editingUrlValue}
                         onkeydown={handleUrlKeydown}
-                        onblur={stopEditingUrl}
                         class="url-input"
                         type="text"
                         placeholder="Enter URL or search..."

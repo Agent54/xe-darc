@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tmux list-sessions:*)",
+      "Bash(tmux capture-pane:*)"
+    ],
+    "deny": []
+  }
+}

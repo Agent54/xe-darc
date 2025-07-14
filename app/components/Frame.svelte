@@ -1,9 +1,42 @@
 <script>
     import { fade } from 'svelte/transition'
+    import { linear } from 'svelte/easing'
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
     import { origin } from '../lib/utils.js'
     import data from '../data.svelte.js'
+    
+    // Custom lightbox scale animation
+    function lightboxScale(_, { duration = 150 }) {
+        return {
+            duration,
+            easing: linear,
+            css: t => {
+                const scale = 0.8 + (0.2 * t)
+                const opacity = t
+                return `
+                    transform: scale(${scale});
+                    opacity: ${opacity};
+                `
+            }
+        }
+    }
+
+    // Custom preview expand transition (fade out while growing)
+    function previewExpand(_, { duration = 200 }) {
+        return {
+            duration,
+            easing: linear,
+            css: t => {
+                const scale = 1 + (0.3 * (1 - t)) // Grow from 100% to 130%
+                const opacity = t // Fade out
+                return `
+                    transform: scale(${scale});
+                    opacity: ${opacity};
+                `
+            }
+        }
+    }
 
     let {
         style = '',
@@ -42,10 +75,13 @@
     
     // Global hover link preview state
     let globalHoverPreview = $state(null) // { href, target, rel, title, position }
+    let globalHoverPreviewTabId = $state(null) // { href, target, rel, title, position }
     let globalHoverPreviewVisible = $state(false)
     let globalHoverPreviewShown = $state(false) // Controls the delayed fade-in
     let globalHoverPreviewTimeout = null
     let isHoveringPreview = $state(false) // Track if mouse is over the preview
+    let globalHoverPreviewPinned = $state(false) // Track if preview is pinned for debugging
+    let globalHoverPreviewExpanding = $state(false) // Track if preview is expanding to lightbox
     
     let inputDiffVisible = $state(false)
     let inputDiffTimeout = null
@@ -79,50 +115,89 @@
         }
     })
 
+    // Cleanup function to properly reset all preview state
+    function cleanupGlobalPreview() {
+        // Don't cleanup if preview is pinned for debugging or expanding
+        if (globalHoverPreviewPinned || globalHoverPreviewExpanding) {
+            return
+        }
+        
+        if (globalHoverPreviewTimeout) {
+            clearTimeout(globalHoverPreviewTimeout)
+            globalHoverPreviewTimeout = null
+        }
+        globalHoverPreviewShown = false
+        setTimeout(() => {
+            if (!globalHoverPreviewExpanding) {
+                globalHoverPreviewVisible = false
+                globalHoverPreview = null
+                globalHoverPreviewTabId = null
+            }
+        }, 300)
+    }
+
+    // Special cleanup for expanding (triggers the transition)
+    function cleanupForExpand() {
+        if (globalHoverPreviewTimeout) {
+            clearTimeout(globalHoverPreviewTimeout)
+            globalHoverPreviewTimeout = null
+        }
+        globalHoverPreviewShown = false
+        globalHoverPreviewVisible = false
+    }
+
     // Show global hover preview when regular link preview has been visible for a while
     $effect(() => {
-        if (linkPreviewVisible && hoveredLink && !globalHoverPreviewVisible && data.spaceMeta.config.showLinkPreviews) {
-            // Clear any existing global preview timeout
-            if (globalHoverPreviewTimeout) {
-                clearTimeout(globalHoverPreviewTimeout)
-            }
-            
-            // Set timeout to create preview node after 500ms (earlier than before)
-            globalHoverPreviewTimeout = setTimeout(() => {
-                globalHoverPreview = hoveredLink
-                globalHoverPreviewVisible = true
-                
-                // Add delayed fade-in after node is created (let page load)
+        if (linkPreviewVisible && hoveredLink && data.spaceMeta.config.showLinkPreviews) {
+            // If there's already a preview for a different link, clean it up first
+            if (globalHoverPreviewVisible && globalHoverPreview?.href !== hoveredLink.href) {
+                cleanupGlobalPreview()
+                // Wait a bit before showing new preview to avoid conflicts
                 setTimeout(() => {
-                    globalHoverPreviewShown = true
-                }, 1000) // 1000ms delay for page loading
-                
-                // Set timeout to hide global preview after 20 seconds
-                globalHoverPreviewTimeout = setTimeout(() => {
-                    globalHoverPreviewShown = false
-                    // Hide the node after fade out completes
-                    setTimeout(() => {
-                        globalHoverPreviewVisible = false
-                        globalHoverPreview = null
-                        globalHoverPreviewTimeout = null
-                    }, 300) // Wait for fade out transition
-                }, 20000)
-            }, 500) // Reduced from 1000ms to 500ms
-        } else if (!linkPreviewVisible && !isHoveringPreview) {
-            // Hide global preview when regular preview is hidden AND not hovering the preview
-            if (globalHoverPreviewTimeout) {
-                clearTimeout(globalHoverPreviewTimeout)
-                globalHoverPreviewTimeout = null
+                    startGlobalPreview()
+                }, 100)
+            } else if (!globalHoverPreviewVisible) {
+                startGlobalPreview()
             }
-            if (globalHoverPreviewVisible) {
-                globalHoverPreviewShown = false
-                setTimeout(() => {
-                    globalHoverPreviewVisible = false
-                    globalHoverPreview = null
-                }, 11300) // Wait for fade out
-            }
+        } else if (!linkPreviewVisible && !isHoveringPreview && !globalHoverPreviewPinned) {
+            // Hide global preview when regular preview is hidden AND not hovering the preview AND not pinned
+            cleanupGlobalPreview()
         }
     })
+
+    function startGlobalPreview() {
+        // Clear any existing timeout
+        if (globalHoverPreviewTimeout) {
+            clearTimeout(globalHoverPreviewTimeout)
+        }
+        
+        // Set timeout to create preview node after 500ms
+        globalHoverPreviewTimeout = setTimeout(() => {
+            if (!hoveredLink?.href) {
+                return
+            }
+            const tab = data.newTab(data.spaceMeta.activeSpace, { url: hoveredLink.href, preview: true, opener: tabId })
+
+            globalHoverPreviewTabId = tab.id
+            globalHoverPreview = hoveredLink
+            globalHoverPreviewVisible = true
+            
+            // Add delayed fade-in after node is created (let page load)
+            setTimeout(() => {
+                globalHoverPreviewShown = true
+            }, 1000) // 1000ms delay for page loading
+            
+            // Set timeout to hide global preview after 20 seconds (unless pinned)
+            const autoHideTimeout = setTimeout(() => {
+                if (!globalHoverPreviewPinned) {
+                    cleanupGlobalPreview()
+                }
+            }, 20000)
+            
+            // Store the auto-hide timeout so it can be cleared if needed
+            globalHoverPreviewTimeout = autoHideTimeout
+        }, 500)
+    }
 
     $effect(() => {
        
@@ -168,10 +243,10 @@
     // Calculate preview position to ensure it stays within window bounds
     function calculatePreviewLeft(position) {
         const previewWidth = 300
-        const padding = 2 // Reduced to 2px for much closer positioning
+        const padding = 150 // Reduced to 2px for much closer positioning
         
         // Try positioning to the right of the link first
-        let left = position.right + padding
+        let left = position.left + padding
         
         // If it would overflow the right edge, position to the left
         if (left + previewWidth > window.innerWidth - padding) {
@@ -386,28 +461,27 @@
     {/if}
 {/if}
 
-{#if globalHoverPreviewVisible && globalHoverPreview}
-    <div 
-        class="global-hover-preview" 
-        class:shown={globalHoverPreviewShown}
-        style={globalHoverPreview?.position ? 
-            `left: ${calculatePreviewLeft(globalHoverPreview.position)}px; top: ${calculatePreviewTop(globalHoverPreview.position)}px;` : 
-            ''}
-        role="dialog"
-        aria-label="Link preview"
-        onmouseenter={() => { isHoveringPreview = true }}
-        onmouseleave={() => { 
-            isHoveringPreview = false 
-            // Trigger hide logic when leaving preview
-            if (!linkPreviewVisible) {
-                globalHoverPreviewShown = false
-                setTimeout(() => {
-                    globalHoverPreviewVisible = false
-                    globalHoverPreview = null
-                }, 300)
-            }
-        }}
-    >
+{#if globalHoverPreviewVisible && globalHoverPreview && data.docs[globalHoverPreviewTabId]?.preview}
+    {#key globalHoverPreview.href}
+        <div 
+            class="global-hover-preview" 
+            class:shown={globalHoverPreviewShown}
+            style={globalHoverPreview?.position ? 
+                `left: ${calculatePreviewLeft(globalHoverPreview.position)}px; top: ${calculatePreviewTop(globalHoverPreview.position)}px;` : 
+                ''}
+            role="dialog"
+            aria-label="Link preview"
+            tabindex="-1"
+            out:previewExpand={{duration: 200}}
+            onmouseenter={() => { isHoveringPreview = true }}
+            onmouseleave={() => { 
+                isHoveringPreview = false 
+                // Trigger hide logic when leaving preview
+                if (!linkPreviewVisible) {
+                    cleanupGlobalPreview()
+                }
+            }}
+        >
         <div class="global-hover-preview-container">
             <div class="global-hover-preview-header">
                 <div class="global-hover-preview-title">
@@ -425,16 +499,122 @@
                     />
                     <UrlRenderer url={globalHoverPreview.href} variant="compact" />
                 </div>
+                <div class="global-hover-preview-controls">
+                    <button 
+                        class="global-hover-preview-pin"
+                        class:pinned={globalHoverPreviewPinned}
+                        aria-label="Pin link preview for debugging"
+                        onclick={() => {
+                            globalHoverPreviewPinned = !globalHoverPreviewPinned
+                        }}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 9 V3 a1 1 0 0 1 6 0 v6"></path>
+                            <path d="M9 9 a3 3 0 0 0 6 0"></path>
+                            <path d="M12 15 v6"></path>
+                        </svg>
+                    </button>
+                    <button 
+                        class="global-hover-preview-expand"
+                        aria-label="Expand to full tab"
+                        onclick={() => {
+                            globalHoverPreviewExpanding = true
+                            // Trigger the visual closing with expand animation
+                            cleanupForExpand()
+                            // Delay the actual update to allow the expand animation to play
+                            setTimeout(() => {
+                                data.updateTab(globalHoverPreviewTabId, {preview: false, lightbox: true})
+                                globalHoverPreview = null
+                                globalHoverPreviewTabId = null
+                                globalHoverPreviewExpanding = false
+                            }, 200)
+                        }}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15,3 21,3 21,9"></polyline>
+                            <polyline points="9,21 3,21 3,15"></polyline>
+                            <line x1="21" y1="3" x2="14" y2="10"></line>
+                            <line x1="3" y1="21" x2="10" y2="14"></line>
+                        </svg>
+                    </button>
+                    <button 
+                        class="global-hover-preview-close"
+                        aria-label="Close link preview"
+                        onclick={() => {
+                            globalHoverPreviewVisible = false
+                            globalHoverPreview = null
+                            globalHoverPreviewTabId = null
+                            globalHoverPreviewPinned = false
+                            if (globalHoverPreviewTimeout) {
+                                clearTimeout(globalHoverPreviewTimeout)
+                                globalHoverPreviewTimeout = null
+                            }
+                        }}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="global-hover-preview-frame">
+                {#if data.docs[globalHoverPreviewTabId]}
+                    <ControlledFrame
+                        {style}
+                        class="global-hover-preview-controlledframe"
+                        {isScrolling}
+                        tabId={globalHoverPreviewTabId}
+                        {headerPartOfMain}
+                        {onFrameFocus}
+                        {onFrameBlur}
+                        {userMods}
+                        {requestedResources}
+                    />
+                {/if}
+            </div>
+        </div>
+        </div>
+    {/key}
+{/if}
+
+{#if tab.lightboxChild && data.docs[tab.lightboxChild]}
+    <div 
+        class="lightbox-backdrop"
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+        in:fade={{duration: 120}}
+        out:fade={{duration: 180}}
+        onclick={(e) => {
+            // Only close if clicking the backdrop, not the content
+            if (e.target === e.currentTarget) {
+                data.closeTab(tab.spaceId, tab.lightboxChild)
+            }
+        }}
+        onkeydown={(e) => {
+            if (e.key === 'Escape') {
+                data.closeTab(tab.spaceId, tab.lightboxChild)
+            }
+        }}
+    >
+        <div class="lightbox-container" 
+             in:lightboxScale={{duration: 150}}
+             out:lightboxScale={{duration: 100}}>
+            <div class="lightbox-header">
+                <div class="lightbox-title">
+                    <img 
+                        src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={data.docs[tab.lightboxChild].url}&size=16"
+                        alt=""
+                        class="lightbox-favicon"
+                    />
+                    <UrlRenderer url={data.docs[tab.lightboxChild].url} variant="compact" />
+                </div>
                 <button 
-                    class="global-hover-preview-close"
-                    aria-label="Close link preview"
+                    class="lightbox-close"
+                    aria-label="Close lightbox"
                     onclick={() => {
-                        globalHoverPreviewVisible = false
-                        globalHoverPreview = null
-                        if (globalHoverPreviewTimeout) {
-                            clearTimeout(globalHoverPreviewTimeout)
-                            globalHoverPreviewTimeout = null
-                        }
+                        data.closeTab(tab.spaceId, tab.lightboxChild)
                     }}
                 >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -443,17 +623,26 @@
                     </svg>
                 </button>
             </div>
-            <div class="global-hover-preview-frame">
-                <controlledframe
-                    src={globalHoverPreview.href}
-                    class="global-hover-preview-controlledframe"
-                    partition="persist:preview"
-                    allowscaling={false}
-                    autosize={false}
-                    allowtransparency={false}
-                    sandbox="allow-scripts allow-same-origin"
-                    referrerpolicy="strict-origin-when-cross-origin"
-                ></controlledframe>
+            <div class="lightbox-frame">
+                <ControlledFrame
+                    {style}
+                    {isScrolling}
+                    class="lightbox-controlledframe"
+                    tabId={tab.lightboxChild}
+                    {headerPartOfMain}
+                    {captureTabScreenshot}
+                    {onFrameFocus}
+                    {onFrameBlur}
+                    {userMods}
+                    {requestedResources}
+                    {statusLightsEnabled}
+                    bind:hoveredLink
+                    bind:linkPreviewVisible
+                    bind:linkPreviewTimeout
+                    bind:inputDiffVisible
+                    bind:inputDiffTimeout
+                    bind:inputDiffData
+                />
             </div>
         </div>
     </div>
@@ -754,7 +943,7 @@
         width: 300px;
         height: 200px;
         background: rgba(15, 15, 15, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        /* border: 1px solid rgba(255, 255, 255, 0.08); */
         border-radius: 8px;
         box-shadow: 
             0 8px 20px rgba(0, 0, 0, 0.4),
@@ -800,23 +989,90 @@
         border-radius: 2px;
     }
 
+    .global-hover-preview-controls {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .global-hover-preview-pin {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        color: rgba(255, 255, 255, 0.6);
+        transition: background 0.2s ease, color 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .global-hover-preview-pin:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .global-hover-preview-pin.pinned {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .global-hover-preview-pin.pinned:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 1);
+    }
+
+    .global-hover-preview-pin svg {
+        width: 12px;
+        height: 12px;
+    }
+
+    .global-hover-preview-expand {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        color: rgba(255, 255, 255, 0.6);
+        transition: background 0.2s ease, color 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .global-hover-preview-expand:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .global-hover-preview-expand svg {
+        width: 12px;
+        height: 12px;
+    }
+
     .global-hover-preview-close {
         width: 20px;
         height: 20px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(255, 255, 255, 0.1);
+        background: transparent;
         border: none;
         border-radius: 4px;
         cursor: pointer;
-        color: rgba(255, 255, 255, 0.8);
-        transition: background 0.2s ease;
+        color: rgba(255, 255, 255, 0.6);
+        transition: background 0.2s ease, color 0.2s ease;
         flex-shrink: 0;
     }
 
     .global-hover-preview-close:hover {
-        background: rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
     }
 
     .global-hover-preview-close svg {
@@ -832,14 +1088,130 @@
         transform-origin: top left;
     }
 
-    .global-hover-preview-controlledframe {
+    :global(.global-hover-preview-controlledframe) {
         width: 200%;
         height: 200%;
         border: none;
         background: white;
         display: block;
-        border-radius: 0 0 8px 8px;
+        position: absolute;
+        border-radius: 0 0 8px 8px !important;
         transform: scale(0.5);
         transform-origin: top left;
+    }
+    :global(.global-hover-preview-controlledframe.frame) {
+        width: 200% !important;
+        height: 200% !important;
+    }
+
+    /* Lightbox styles */
+    .lightbox-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 15000;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px;
+        z-index: 1;
+    }
+
+    .lightbox-container {
+        width: calc(100% - 80px);
+        height: calc(100% - 80px);
+        background: rgba(15, 15, 15, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        box-shadow: 
+            0 25px 50px rgba(0, 0, 0, 0.4),
+            0 0 0 1px rgba(255, 255, 255, 0.05);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .lightbox-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.3);
+        flex-shrink: 0;
+    }
+
+    .lightbox-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 12px;
+        font-weight: 500;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .lightbox-favicon {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        border-radius: 2px;
+    }
+
+    .lightbox-close {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        color: rgba(255, 255, 255, 0.6);
+        transition: background 0.2s ease, color 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .lightbox-close:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .lightbox-close svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .lightbox-frame {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+        overflow: hidden;
+    }
+
+    :global(.lightbox-controlledframe) {
+        width: 100%;
+        height: 100%;
+        border: none;
+        /* background: white; */
+        display: block;
+        border-radius: 0 0 12px 12px;
+    }
+    :global(.lightbox-controlledframe.frame) {
+        width: 100% !important;
+        height: 100% !important;
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
+    }
+    :global(.lightbox-controlledframe.frame .frame-instance) {
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
     }
 </style>
