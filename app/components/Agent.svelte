@@ -1356,6 +1356,20 @@
         if (toolCallInfo.title === 'readPageContent') {
             result += `\n---page content---\n${await data.readPage(currentTab.id)}` 
         }
+
+        if (toolCallInfo.title === 'openNewTab') {
+            const newTab = data.newTab(data.spaceMeta.activeSpace, { 
+                url: toolArgs.url,
+                title: toolArgs.title
+            })
+            if (newTab) {
+                // Activate the new tab
+                data.activate(newTab.id)
+                result += `\n---new tab created---\nTab ID: ${newTab.id}\nURL: ${toolArgs.url || 'about:newtab'}`
+            } else {
+                result += `\n---error---\nFailed to create new tab`
+            }
+        }
 		
 		// Construct the message payload with tool invocation result
 		const messagePayload = {
@@ -3844,7 +3858,7 @@ The current system demonstrates strong performance and security characteristics.
 		background: rgba(0, 0, 0, 0.4);
 		border-radius: 6px;
 		padding: 12px;
-		max-height: 600px;
+		max-height: 450px;
 		font-size: 12px;
 		min-height: 40px;
 		backdrop-filter: blur(10px);

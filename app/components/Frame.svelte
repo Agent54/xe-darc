@@ -238,7 +238,11 @@
 
     $effect(() => {
         if (tab.shouldFocus) {
-            tab.shouldFocus = false
+            // Delay resetting shouldFocus to give NewTab component time to handle it
+            setTimeout(() => {
+                tab.shouldFocus = false
+            }, 100)
+            
             setTimeout(() => {
                 data.frames[tab.id]?.wrapper?.scrollIntoView({ behavior: 'smooth' })
                 if (tabButtons[tab.id]) {

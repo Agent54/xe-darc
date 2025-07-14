@@ -8,8 +8,8 @@ import {
   generateId,
   streamText,
   type StreamTextOnFinishCallback,
-  type ToolSet,
-} from "ai";
+  type ToolSet
+} from "ai"
 import { anthropic } from "@ai-sdk/anthropic"; // createAnthropic
 // import { openai } from "@ai-sdk/openai";
 import { processToolCalls } from "./utils";
@@ -88,7 +88,7 @@ export class Chat extends AIChatAgent<Env> {
           dataStream,
           tools: allTools,
           executions,
-        });
+        })
 
         // Stream the AI response using GPT-4
         const result = streamText({
@@ -104,7 +104,7 @@ If the user asks to schedule a task, use the schedule tool to schedule the task.
           onFinish: async (args) => {
             onFinish(
               args as Parameters<StreamTextOnFinishCallback<ToolSet>>[0]
-            );
+            )
             // await this.mcp.closeConnection(mcpConnection.id);
           },
           onError: (error) => {
@@ -129,7 +129,7 @@ If the user asks to schedule a task, use the schedule tool to schedule the task.
         content: `Running scheduled task now: ${description}`,
         createdAt: new Date(),
       },
-    ]);
+    ])
   }
 }
 
@@ -155,6 +155,6 @@ export default {
       // Route the request to our agent or return 404 if not found
       (await routeAgentRequest(request, env)) ||
       new Response("Not found", { status: 404 })
-    );
-  },
+    )
+  }
 } satisfies ExportedHandler<Env>;

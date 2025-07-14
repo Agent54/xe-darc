@@ -503,3 +503,15 @@ reduce the height of the doc scroling elem
 spaces header scroll on app start wrong position
 
 json etc sytnax highlight cloudless style
+
+citation backlinks to the pages
+
+tool: make tool skill
+
+context: ask for tabs/ ask for canvas views
+
+separate small and big model selector
+
+settgins only for adding provider and token, not models
+
+center frame in canvas on clicking tabs
