@@ -133,6 +133,7 @@
     let statusLightsEnabled = $state(false)
     let certificateMonitorForTab = $state(null)
     let devModeEnabled = $state(false)
+    let globalTabComplete = $state(true)
     
     // Window resize state for performance optimization
     let isWindowResizing = $state(false)
@@ -201,6 +202,12 @@
             const savedDevMode = localStorage.getItem('devModeEnabled')
             if (savedDevMode !== null) {
                 devModeEnabled = savedDevMode === 'true'
+            }
+
+            // Load global tab complete setting
+            const savedGlobalTabComplete = localStorage.getItem('globalTabComplete')
+            if (savedGlobalTabComplete !== null) {
+                globalTabComplete = savedGlobalTabComplete === 'true'
             }
 
             // Load view mode settings
@@ -1637,6 +1644,11 @@
         localStorage.setItem('devModeEnabled', devModeEnabled.toString())
     }
 
+    function toggleGlobalTabComplete() {
+        globalTabComplete = !globalTabComplete
+        localStorage.setItem('globalTabComplete', globalTabComplete.toString())
+    }
+
     async function openTestSuite() {
         try {
             console.log('🧪 Opening test suite...')
@@ -2647,6 +2659,19 @@
                 </span>
                 <span>Dark Mode</span>
                 {#if darkMode}<span class="checkmark">•</span>{/if}
+            </div>
+            <div class="settings-menu-item menu-item" 
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleGlobalTabComplete() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleGlobalTabComplete() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25 12 21m0 0-3.75-3.75M12 21V3" />
+                    </svg>
+                </span>
+                <span>Global Tab Complete</span>
+                {#if globalTabComplete}<span class="checkmark">•</span>{/if}
             </div>
             <div class="settings-menu-item menu-item" 
                  class:active={batterySaver}

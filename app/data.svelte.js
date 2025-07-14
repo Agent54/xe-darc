@@ -165,6 +165,11 @@ async function refresh(spaceId) {
                 }
             } else {
                 spaces[doc.spaceId].tabs.push(doc)
+                
+                // If this tab is the active tab and has shouldFocus, ensure it stays set
+                if (spaceMeta.activeTab?.id === doc.id && doc.shouldFocus) {
+                    spaceMeta.activeTab.shouldFocus = true
+                }
             }
             
 
@@ -235,12 +240,24 @@ function activate(tabId) {
         activeSpace.activeTabsOrder ??= []
         activeSpace.activeTabsOrder = [tabId, ...activeSpace.activeTabsOrder]
 
-        spaceMeta.activeTab = tab
-
-        if (tab && tab.url === 'about:newtab') {
-            tab.shouldFocus = true
+        if (tab) {
+            spaceMeta.activeTab = tab
+            if (tab.url === 'about:newtab') {
+                tab.shouldFocus = true
+            }
+            return tab
         }
-        return tab
+    }
+    
+    // If tab not found in spaces, still set it as active (it might be loading)
+    // This ensures new tabs get activated even if they haven't been loaded yet
+    const tabDoc = docs[tabId]
+    if (tabDoc) {
+        spaceMeta.activeTab = tabDoc
+        if (tabDoc.url === 'about:newtab') {
+            tabDoc.shouldFocus = true
+        }
+        return tabDoc
     }
     
     return null
@@ -406,10 +423,12 @@ export default {
             url: url || 'about:newtab',
             title: url ? title : 'New Tab',
             order: Date.now(),
-            opener
+            opener,
+            shouldFocus: !url || url === 'about:newtab' // Add shouldFocus for new tabs
         }
         
         db.put(tab)
+        return tab
     },
 
     updateTab: (tabId, { canvas } = {}) => {

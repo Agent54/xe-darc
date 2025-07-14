@@ -440,7 +440,13 @@
                                 {/if}
                                 
                                 <button class="new-tab-button" 
-                                        onmousedown={() => data.newTab(spaceId)}
+                                        onmousedown={() => {
+                                            const newTab = data.newTab(spaceId)
+                                            if (newTab) {
+                                                data.spaceMeta.activeSpace = spaceId
+                                                data.activate(newTab.id)
+                                            }
+                                        }}
                                         aria-label="Create new tab">
                                     <span class="new-tab-icon">+</span>
                                     <span class="new-tab-text">New Tab</span>
@@ -657,7 +663,7 @@
         cursor: pointer;
         transition: all 150ms ease;
         border: 1px solid transparent;
-        opacity: 0.6;
+        opacity: 0.35;
         padding: 0;
         margin: 0;
     }

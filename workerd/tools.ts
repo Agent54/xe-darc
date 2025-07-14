@@ -124,6 +124,14 @@ export const tools = {
     parameters: z.object({ selector: z.optional(z.string()), textOnly: z.optional(z.boolean()) }),
     // Omitting execute function makes this tool require human confirmation
   }),
+  openNewTab: tool({
+    description: "open a new tab in the current space, optionally with a specific URL",
+    parameters: z.object({ 
+      url: z.optional(z.string()).describe("URL to open in the new tab - if not provided, opens a new tab page"),
+      title: z.optional(z.string()).describe("Title for the new tab - if not provided, will be determined from the URL")
+    }),
+    // Omitting execute function makes this tool require human confirmation
+  }),
 };
 
 /**
@@ -136,5 +144,10 @@ export const executions = {
   getWeatherInformation: async ({ city }: { city: string }) => {
     console.log(`Getting weather information for ${city}`);
     return `The weather in ${city} is sunny`;
+  },
+  openNewTab: async ({ url, title }: { url?: string; title?: string }) => {
+    console.log(`Opening new tab with URL: ${url || 'about:newtab'}`);
+    // This will be handled by the client-side code when the tool is approved
+    return `New tab opened${url ? ` with URL: ${url}` : ''}${title ? ` (${title})` : ''}`;
   },
 };
