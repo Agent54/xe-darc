@@ -18,6 +18,7 @@
         userMods,
         requestedResources,
         statusLightsEnabled = false,
+        triggerOauthPopup,
 
         hoveredLink = $bindable(),
         linkPreviewVisible = $bindable(),
@@ -545,7 +546,7 @@
             (e.name && (e.name.includes('oauth') || e.name.includes('auth') || e.name.includes('login')))
         )
 
-        if (isOAuthPopup && controlledFrameSupported) {
+        if (isOAuthPopup) {
             handleOAuthPopup(tab, e)
         } else {
             data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title, opener: tab.id })         
@@ -557,13 +558,13 @@
         console.log('Creating OAuth popup for:', e.targetUrl)
         
         // Set reactive state to show popup
-        oauthPopup = {
+        triggerOauthPopup({
             url: e.targetUrl,
             width: e.initialWidth || 500,
             height: e.initialHeight || 600,
             parentTab,
             event: e
-        }
+        })
     }
 
     async function updateTabMeta(tab, frame = null) {

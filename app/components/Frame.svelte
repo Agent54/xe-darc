@@ -110,7 +110,7 @@
                 
                 // Set up window.opener patching via content script
                 const openerPatchScript = {
-                    name: `oauth-opener-patch-${Date.now()}`,
+                    name: `oauth-opener-patch`,
                     matches: ['<all_urls>'],
                     js: {
                         code: `
@@ -154,7 +154,7 @@
                             }
                         `
                     },
-                    runAt: 'document_start',
+                    runAt: 'document-start',
                     allFrames: true
                 }
                 
