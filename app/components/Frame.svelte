@@ -34,8 +34,6 @@
     // "fullscreen"
     // "hid"
 
-    // OAuth popup state
-    let oauthPopup = $state(null) // { url, width, height, parentTab, event }
     
     // Link preview state
     let hoveredLink = $state(null) // { href, target, rel, title }
@@ -60,173 +58,11 @@
         }
     })
 
-    // Close OAuth popup
-    function closeOAuthPopup() {
-        console.log('OAuth popup closed')
-        oauthPopup = null
-    }
-
-    // Handle OAuth popup events
-    function handleOAuthPopupEvent(eventType, popupFrame, event) {
-        if (!oauthPopup) return
-
-        const { parentTab } = oauthPopup
-        const parentFrame = data.frames[parentTab.id]?.frame
-        
-        switch (eventType) {
-            case 'consolemessage':
-                const message = event.message
-                
-                if (message.startsWith(`oauth:message:${parentTab.id}:`)) {
-                    try {
-                        const data = JSON.parse(message.split(`oauth:message:${parentTab.id}:`)[1])
-                        console.log('[OAuth] Received message from popup:', data)
-                        
-                        // Forward the message to the parent frame's content window
-                        if (parentFrame && parentFrame.contentWindow) {
-                            parentFrame.contentWindow.postMessage(data.message, data.targetOrigin || '*')
-                        }
-                        
-                        // Also dispatch as a custom event that the parent page can listen for
-                        window.dispatchEvent(new CustomEvent('oauth-popup-message', {
-                            detail: {
-                                tabId: parentTab.id,
-                                message: data.message,
-                                targetOrigin: data.targetOrigin
-                            }
-                        }))
-                        
-                    } catch (error) {
-                        console.error('[OAuth] Error parsing popup message:', error)
-                    }
-                } else if (message === `oauth:close:${parentTab.id}`) {
-                    console.log('[OAuth] Popup requested close')
-                    closeOAuthPopup()
-                }
-                break
-
-            case 'loadstart':
-                console.log('[OAuth] Popup loading started for:', oauthPopup.url)
-                
-                // Set up window.opener patching via content script
-                const openerPatchScript = {
-                    name: `oauth-opener-patch`,
-                    matches: ['<all_urls>'],
-                    js: {
-                        code: `
-                            console.log('[OAuth Popup] Patching window.opener for ${parentTab.id}');
-                            
-                            // Store original opener reference
-                            if (typeof window.originalOpener === 'undefined') {
-                                window.originalOpener = window.opener;
-                                
-                                // Create patched opener that forwards messages to parent
-                                window.opener = {
-                                    postMessage: (message, targetOrigin) => {
-                                        console.log('[OAuth Popup] Forwarding postMessage to parent:', message);
-                                        
-                                        // Send message via console to parent frame
-                                        console.log('oauth:message:${parentTab.id}:' + JSON.stringify({
-                                            message: message,
-                                            targetOrigin: targetOrigin,
-                                            timestamp: Date.now()
-                                        }));
-                                    },
-                                    
-                                    close: () => {
-                                        console.log('[OAuth Popup] Close requested by content');
-                                        console.log('oauth:close:${parentTab.id}');
-                                    },
-                                    
-                                    focus: () => {
-                                        console.log('[OAuth Popup] Focus requested');
-                                    }
-                                };
-                                
-                                // Also patch window.close to notify parent
-                                const originalClose = window.close;
-                                window.close = () => {
-                                    console.log('oauth:close:${parentTab.id}');
-                                    originalClose.call(window);
-                                };
-                                
-                                console.log('[OAuth Popup] window.opener patched successfully');
-                            }
-                        `
-                    },
-                    runAt: 'document-start',
-                    allFrames: true
-                }
-                
-                // Add content script to patch window.opener
-                if (popupFrame.addContentScripts) {
-                    popupFrame.addContentScripts([openerPatchScript]).then(() => {
-                        console.log('[OAuth] Opener patch script added successfully')
-                    }).catch((error) => {
-                        console.error('[OAuth] Failed to add opener patch script:', error)
-                    })
-                } else {
-                    console.warn('[OAuth] addContentScripts not available - window.opener patching may not work')
-                }
-                break
-
-            case 'loadstop':
-                console.log('[OAuth] Popup loading completed')
-                break
-
-            case 'loadabort':
-                console.warn('[OAuth] Popup load aborted:', event)
-                break
-
-            case 'exit':
-                console.log('[OAuth] Popup process exited:', event)
-                closeOAuthPopup()
-                break
-
-            case 'close':
-                closeOAuthPopup()
-                break
-        }
-    }
-
-    // Handle OAuth popup window attachment
-    function handleOAuthPopupAttachment(popupFrame) {
-        if (!oauthPopup) return
-
-        try {
-            oauthPopup.event.window.attach(popupFrame)
-            console.log('[OAuth] Window attached to popup frame')
-        } catch (error) {
-            console.error('[OAuth] Failed to attach window to popup:', error)
-        }
-    }
-
-    // Handle keyboard events for OAuth popup
-    function handleOAuthKeydown(event) {
-        if (oauthPopup && event.key === 'Escape') {
-            closeOAuthPopup()
-        }
-    }
-
-    // Auto-close timeout for OAuth popup
-    let oauthTimeout
     $effect(() => {
-        if (oauthPopup) {
-            // Set timeout to auto-close popup after 10 minutes
-            oauthTimeout = setTimeout(() => {
-                console.log('[OAuth] Popup timeout - closing after 10 minutes')
-                closeOAuthPopup()
-            }, 10 * 60 * 1000)
-        } else if (oauthTimeout) {
-            clearTimeout(oauthTimeout)
-            oauthTimeout = null
-        }
-
+       
         // Cleanup on component unmount
         return () => {
-            if (oauthTimeout) {
-                clearTimeout(oauthTimeout)
-            }
+
             if (linkPreviewTimeout) {
                 clearTimeout(linkPreviewTimeout)
             }
@@ -433,46 +269,6 @@
     {/if}
 {/if}
 
-<!-- OAuth Popup Modal -->
-{#if oauthPopup}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div 
-        class="oauth-popup-backdrop" 
-        onclick={closeOAuthPopup}
-        transition:fade={{duration: 200}}
-    ></div>
-    
-    <controlledframe
-        bind:this={oauthPopup.frame}
-        class="oauth-popup-frame"
-        style="width: {oauthPopup.width}px; height: {oauthPopup.height}px;"
-        src={oauthPopup.url}
-        partition={oauthPopup.parentTab.partition || 'persist:myapp'}
-        
-        sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
-        allow="camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; usb 'none'; publickey-credentials-create 'self'; publickey-credentials-get 'self'"
-        referrerpolicy="strict-origin-when-cross-origin"
-        allowscaling={false}
-        autosize={true}
-        allowtransparency={false}
-        
-        onconsolemessage={e => handleOAuthPopupEvent('consolemessage', oauthPopup.frame, e)}
-        onloadstart={e => { 
-            handleOAuthPopupEvent('loadstart', oauthPopup.frame, e)
-            handleOAuthPopupAttachment(oauthPopup.frame)
-        }}
-        onloadstop={e => handleOAuthPopupEvent('loadstop', oauthPopup.frame, e)}
-        onloadabort={e => handleOAuthPopupEvent('loadabort', oauthPopup.frame, e)}
-        onexit={e => handleOAuthPopupEvent('exit', oauthPopup.frame, e)}
-        onclose={e => handleOAuthPopupEvent('close', oauthPopup.frame, e)}
-        
-        transition:fade={{duration: 300, delay: 100}}
-    ></controlledframe>
-{/if}
-
-<svelte:window onkeydown={handleOAuthKeydown} />
-
 <style>
      .hibernated-frame {
         background: #0a0a0a;
@@ -620,34 +416,6 @@
     .iframe-blocked-suggestion strong {
         color: rgba(255, 255, 255, 0.8);
         font-weight: 600;
-    }
-
-    /* OAuth popup styles */
-    .oauth-popup-backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: 9999;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-    }
-
-    .oauth-popup-frame {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 10000;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 
-            0 25px 50px rgba(0, 0, 0, 0.6),
-            0 0 0 1px rgba(255, 255, 255, 0.1);
-        background: #0a0a0a;
     }
 
     .link-preview {
