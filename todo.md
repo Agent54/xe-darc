@@ -515,3 +515,17 @@ separate small and big model selector
 settgins only for adding provider and token, not models
 
 center frame in canvas on clicking tabs
+
+focus wrong context dev tool bug
+
+container isolation internet etc.
+
+container ai models? olllama performance?
+
+menu toggle global ai tab complete, tooltip
+
+cpu and memory info for tabs
+
+new tab loop in excalidraw
+
+ai test selection blocking / non blocking test runs
