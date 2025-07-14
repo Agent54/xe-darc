@@ -5,10 +5,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 Darc is an experimental next-generation browser built on Xenon and Svelte. It combines cutting-edge browser UI concepts from Arc, stacked browsing, and agentic browsers. The project focuses on UI innovation and expects high resource usage (10s-100s MB per day, 2GB+ memory).
 
+## Development Setup
+
+### Shared Development Environment
+The development server runs continuously in a tmux session for efficient collaboration:
+- **Tmux session 0**: Contains the running `npm run dev` server on port 5193
+- **Shared log view**: Use `tmux capture-pane -t 0 -p` to view current console output
+- **Real-time monitoring**: Vite HMR updates and console logs are visible in the shared session
+- **No need to start server**: Development server is most likely already running in watch mode, only start it after inspecting tmux sessions and only using tmux yourself
+
+
+### Console Monitoring
+```bash
+# View current tmux sessions
+tmux list-sessions
+
+# Capture current console output
+tmux capture-pane -t 0 -p
+
+# Attach to session if needed
+tmux attach-session -t 0
+```
+
 ## Development Commands
 
 ### Core Development
-- `npm run dev` - Start development server on port 5193
+- `npm run dev` - Start development server on port 5193 (already running in tmux)
 - `npm run build` - Build for production 
 - `npm run preview` - Preview production build
 - `npm run bump-version` - Increment version using bump_version.js

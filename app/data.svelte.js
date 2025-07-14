@@ -160,11 +160,15 @@ async function refresh(spaceId) {
             }
 
             if (doc.archive) {
-                console.log(doc)
+                // console.log(doc)
                 if (doc.archive === 'closed') {
                     closedTabs.push(doc)
                 }
+                continue
             } else {
+                if (doc.preview) {
+                    continue
+                }
                 spaces[doc.spaceId].tabs.push(doc)
                 
                 // If this tab is the active tab and has shouldFocus, ensure it stays set
@@ -262,6 +266,70 @@ function activate(tabId) {
     }
     
     return null
+}
+
+function closeTab (spaceId, tabId) {
+    const tab = docs[tabId]
+
+    if (tab.lightbox) {
+        // If this tab is a lightbox, close the parent tab instead
+        const parentTab = docs[tab.opener]
+
+        db.put({...parentTab, lightboxChild: null })
+    }
+
+    if (tab.lightboxChild) {
+        closeTab(tab.spaceId, tab.lightboxChild)
+    }
+   
+    db.put({
+        ...tab,
+        closed: true, // legacy
+        archive: 'closed',
+        frame: undefined,
+        wrapper: undefined
+    })
+
+    db.put({
+        _id: `darc:activity_${crypto.randomUUID()}`,
+        tabId: tab.id,
+        spaceId: tab.spaceId,
+        type: 'activity',
+        action: 'close',
+        url: tab.url,
+        title: tab.title,
+        favicon: tab.favicon,
+        created: Date.now()
+    })
+    // const space = spaces[spaceId]
+    // if (!space || !space.tabs) {
+    //     return { success: false, wasLastTab: false }
+    // }
+    // const tabIndex = space.tabs.findIndex(tab => tab.id === tabId)
+    // if (tabIndex === -1) {
+    //     return { success: false, wasLastTab: false }
+    // }
+    // const tab = space.tabs[tabIndex]
+    // const wasLastTab = space.tabs.length === 1
+    // // Add to closed tabs before removing
+    // closedTabs.push({
+    //     ...tab,
+    //     closedAt: Date.now(),
+    //     spaceId // Ensure spaceId is preserved
+    // })
+    // space.tabs.splice(tabIndex, 1)
+    // // If we closed the active tab, need to set a new active tab
+    // if (spaceMeta.activeTab?.id === tabId) {
+    //     if (space.tabs.length > 0) {
+    //         // Set the next tab as active, or the previous one if this was the last
+    //         const newActiveIndex = Math.min(tabIndex, space.tabs.length - 1)
+    //         const newActiveTabId = space.tabs[newActiveIndex]?.id || space.tabs[0]?.id
+    //         activate(newActiveTabId)
+    //     } else {
+    //         spaceMeta.activeTab = null
+    //     }
+    // }
+    // return { success: true, wasLastTab }
 }
 
 $effect.root(() => {
@@ -394,6 +462,7 @@ export default {
 
     navigate(tabId, url) {
         const tab = docs[tabId]
+       
         db.put({
             ...tab,
             url
@@ -412,7 +481,7 @@ export default {
         })
     },
     
-    newTab: (spaceId, { url, title, opener } = {}) => {
+    newTab: (spaceId, { url, title, opener, preview } = {}) => {
         const _id = `darc:tab_${crypto.randomUUID()}`
 
         const tab = {
@@ -425,14 +494,15 @@ export default {
             title: url ? title : 'New Tab',
             order: Date.now(),
             opener,
+            preview: !!preview,
             shouldFocus: !url || url === 'about:newtab' // Add shouldFocus for new tabs
         }
-        
+
         db.put(tab)
         return tab
     },
 
-    updateTab: (tabId, { canvas } = {}) => {
+    updateTab: (tabId, { canvas, lightbox, preview } = {}) => {
         const tab = docs[tabId]
        
         let newProps = {}
@@ -441,64 +511,27 @@ export default {
             newProps.canvas = canvas
         }
 
+        if (typeof lightbox !== 'undefined') {
+            newProps.lightbox = lightbox
+
+            if (lightbox) {
+                const parentTab = docs[tab.opener]
+                if (parentTab) {
+                    parentTab.lightboxChild = tabId
+                }
+            }
+        }
+        if (typeof preview !== 'undefined') {
+            newProps.preview = preview
+        }
+
         db.put({
             ...tab,
             ...newProps
         })
     },
 
-    closeTab: (spaceId, tabId) => {
-        const tab = docs[tabId]
-       
-        db.put({
-            ...tab,
-            closed: true, // legacy
-            archive: 'closed',
-            frame: undefined,
-            wrapper: undefined
-        })
-
-        db.put({
-            _id: `darc:activity_${crypto.randomUUID()}`,
-            tabId: tab.id,
-            spaceId: tab.spaceId,
-            type: 'activity',
-            action: 'close',
-            url: tab.url,
-            title: tab.title,
-            favicon: tab.favicon,
-            created: Date.now()
-        })
-        // const space = spaces[spaceId]
-        // if (!space || !space.tabs) {
-        //     return { success: false, wasLastTab: false }
-        // }
-        // const tabIndex = space.tabs.findIndex(tab => tab.id === tabId)
-        // if (tabIndex === -1) {
-        //     return { success: false, wasLastTab: false }
-        // }
-        // const tab = space.tabs[tabIndex]
-        // const wasLastTab = space.tabs.length === 1
-        // // Add to closed tabs before removing
-        // closedTabs.push({
-        //     ...tab,
-        //     closedAt: Date.now(),
-        //     spaceId // Ensure spaceId is preserved
-        // })
-        // space.tabs.splice(tabIndex, 1)
-        // // If we closed the active tab, need to set a new active tab
-        // if (spaceMeta.activeTab?.id === tabId) {
-        //     if (space.tabs.length > 0) {
-        //         // Set the next tab as active, or the previous one if this was the last
-        //         const newActiveIndex = Math.min(tabIndex, space.tabs.length - 1)
-        //         const newActiveTabId = space.tabs[newActiveIndex]?.id || space.tabs[0]?.id
-        //         activate(newActiveTabId)
-        //     } else {
-        //         spaceMeta.activeTab = null
-        //     }
-        // }
-        // return { success: true, wasLastTab }
-    },
+    closeTab,
 
     clearClosedTabs: () => {
         // Update each closed tab to be marked as deleted

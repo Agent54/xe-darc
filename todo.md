@@ -531,3 +531,5 @@ new tab loop in excalidraw
 ai test selection blocking / non blocking test runs
 
 new tab menu
+
+mcp manager

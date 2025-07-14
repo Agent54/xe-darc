@@ -13,12 +13,13 @@
         style = '',
         headerPartOfMain,
         isScrolling,
-        captureTabScreenshot,
+        captureTabScreenshot = () => {},
         onFrameFocus = () => {},
         onFrameBlur = () => {},
         userMods,
         requestedResources,
         statusLightsEnabled = false,
+        class: className = '',
 
         hoveredLink = $bindable(),
         linkPreviewVisible = $bindable(),
@@ -408,6 +409,9 @@
 
     function handleLoadAbort(tab, event) {
         console.log('🚨 onloadabort', event)
+        if (!tab) {
+            return
+        }
         
         // Load failed, stop loading immediately
         tab.loading = false
@@ -507,8 +511,8 @@
             }
         }
         
-        const hasNetworkError = !!currentNetworkErr
-        const hasCertError = !!currentCertErr
+        // const hasNetworkError = !!currentNetworkErr
+        // const hasCertError = !!currentCertErr
         
         // Update title and capture screenshot after page loads (only if successful)
         if (wasLoading) {
@@ -1798,7 +1802,7 @@ document.addEventListener('input', function(event) {
                 attached = true
             } catch (err) {
                 console.error(err)
-                delete data.frames[tab.id]
+                tab?.id && delete data.frames[tab.id]
                 setTimeout(() => {
                     retry = retry + 1
                 }, 10)
@@ -1826,7 +1830,7 @@ document.addEventListener('input', function(event) {
     
     function detach () {
         if (!tab?._id || tab.hibernated) {
-            delete data.frames[tab.id]
+            tab?.id && delete data.frames[tab.id]
             return {
                 duration: 0
             }
@@ -2070,7 +2074,8 @@ document.addEventListener('input', function(event) {
         class:network-error={!!currentNetworkError}
         class:new-tab-page={isNewTabUrl(tab.url)}
         id="tab_{tab.id}"
-        class="frame"
+        class="frame {className}"
+
         role="tabpanel"
         tabindex="0"
         onmousedown={() => {
