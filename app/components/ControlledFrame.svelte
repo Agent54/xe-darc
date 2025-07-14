@@ -741,12 +741,25 @@ document.addEventListener('mouseover', function(event) {
     if (anchor && anchor !== currentHoveredAnchor) {
         currentHoveredAnchor = anchor;
         
-        // Log anchor enter with details
+        // Get anchor position relative to viewport
+        const rect = anchor.getBoundingClientRect();
+        
+        // Log anchor enter with details including position
         console.log('iwa:link-enter:${tab.id}:' + JSON.stringify({
             href: anchor.href || anchor.getAttribute('href') || '',
             target: anchor.target || anchor.getAttribute('target') || '',
             rel: anchor.rel || anchor.getAttribute('rel') || '',
-            title: anchor.title || anchor.getAttribute('title') || ''
+            title: anchor.title || anchor.getAttribute('title') || '',
+            position: {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2,
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+                width: rect.width,
+                height: rect.height
+            }
         }));
     } else if (!anchor && currentHoveredAnchor) {
         // Left the anchor element
