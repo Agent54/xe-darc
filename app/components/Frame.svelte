@@ -41,10 +41,11 @@
     let linkPreviewTimeout = null
     
     // Global hover link preview state
-    let globalHoverPreview = $state(null) // { href, target, rel, title }
+    let globalHoverPreview = $state(null) // { href, target, rel, title, position }
     let globalHoverPreviewVisible = $state(false)
     let globalHoverPreviewShown = $state(false) // Controls the delayed fade-in
     let globalHoverPreviewTimeout = null
+    let isHoveringPreview = $state(false) // Track if mouse is over the preview
     
     let inputDiffVisible = $state(false)
     let inputDiffTimeout = null
@@ -80,7 +81,7 @@
 
     // Show global hover preview when regular link preview has been visible for a while
     $effect(() => {
-        if (linkPreviewVisible && hoveredLink && !globalHoverPreviewVisible) {
+        if (linkPreviewVisible && hoveredLink && !globalHoverPreviewVisible && data.spaceMeta.config.showLinkPreviews) {
             // Clear any existing global preview timeout
             if (globalHoverPreviewTimeout) {
                 clearTimeout(globalHoverPreviewTimeout)
@@ -107,8 +108,8 @@
                     }, 300) // Wait for fade out transition
                 }, 20000)
             }, 500) // Reduced from 1000ms to 500ms
-        } else if (!linkPreviewVisible) {
-            // Hide global preview when regular preview is hidden (on mouseleave)
+        } else if (!linkPreviewVisible && !isHoveringPreview) {
+            // Hide global preview when regular preview is hidden AND not hovering the preview
             if (globalHoverPreviewTimeout) {
                 clearTimeout(globalHoverPreviewTimeout)
                 globalHoverPreviewTimeout = null
@@ -118,7 +119,7 @@
                 setTimeout(() => {
                     globalHoverPreviewVisible = false
                     globalHoverPreview = null
-                }, 300) // Wait for fade out
+                }, 11300) // Wait for fade out
             }
         }
     })
@@ -163,6 +164,53 @@
     $effect(() => {
         data.frames[tab.id] ??= { frame: iframeFrame, wrapper: frameWrapper }
     })
+
+    // Calculate preview position to ensure it stays within window bounds
+    function calculatePreviewLeft(position) {
+        const previewWidth = 300
+        const padding = 2 // Reduced to 2px for much closer positioning
+        
+        // Try positioning to the right of the link first
+        let left = position.right + padding
+        
+        // If it would overflow the right edge, position to the left
+        if (left + previewWidth > window.innerWidth - padding) {
+            left = position.left - previewWidth - padding
+        }
+        
+        // If it would still overflow the left edge, clamp to left edge
+        if (left < 5) {
+            left = 5
+        }
+        
+        // Final check: if preview is too wide for viewport, clamp to right edge
+        if (left + previewWidth > window.innerWidth - 5) {
+            left = window.innerWidth - previewWidth - 5
+        }
+        
+        return Math.max(5, left)
+    }
+    
+    function calculatePreviewTop(position) {
+        const previewHeight = 200 + 32 // container height + header height
+        const padding = 10 // Reduced from 40 to bring preview closer
+        
+        // Try positioning at the top of the link first
+        let top = position.top - padding
+        
+        // If it would overflow the top edge, position below the link
+        if (top < padding) {
+            top = position.bottom + padding
+        }
+        
+        // If it would overflow the bottom edge, clamp to bottom
+        if (top + previewHeight > window.innerHeight - padding) {
+            top = window.innerHeight - previewHeight - padding
+        }
+        
+        // Final check: ensure minimum distance from top (keep some space from window edge)
+        return Math.max(20, top)
+    }
 
 </script>
 
@@ -342,8 +390,23 @@
     <div 
         class="global-hover-preview" 
         class:shown={globalHoverPreviewShown}
+        style={globalHoverPreview?.position ? 
+            `left: ${calculatePreviewLeft(globalHoverPreview.position)}px; top: ${calculatePreviewTop(globalHoverPreview.position)}px;` : 
+            ''}
         role="dialog"
         aria-label="Link preview"
+        onmouseenter={() => { isHoveringPreview = true }}
+        onmouseleave={() => { 
+            isHoveringPreview = false 
+            // Trigger hide logic when leaving preview
+            if (!linkPreviewVisible) {
+                globalHoverPreviewShown = false
+                setTimeout(() => {
+                    globalHoverPreviewVisible = false
+                    globalHoverPreview = null
+                }, 300)
+            }
+        }}
     >
         <div class="global-hover-preview-container">
             <div class="global-hover-preview-header">
@@ -691,11 +754,11 @@
         width: 300px;
         height: 200px;
         background: rgba(15, 15, 15, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 8px;
         box-shadow: 
             0 8px 20px rgba(0, 0, 0, 0.4),
-            0 0 0 1px rgba(255, 255, 255, 0.1);
+            0 0 0 1px rgba(255, 255, 255, 0.05);
         display: flex;
         flex-direction: column;
         overflow: hidden;
