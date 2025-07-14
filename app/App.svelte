@@ -202,6 +202,11 @@
             const savedDevMode = localStorage.getItem('devModeEnabled')
             if (savedDevMode !== null) {
                 devModeEnabled = savedDevMode === 'true'
+                
+                const savedShowLinkPreviews = localStorage.getItem('showLinkPreviews')
+                if (savedShowLinkPreviews !== null) {
+                    data.spaceMeta.config.showLinkPreviews = savedShowLinkPreviews === 'true'
+                }
             }
 
             // Load global tab complete setting
@@ -1644,6 +1649,11 @@
         localStorage.setItem('devModeEnabled', devModeEnabled.toString())
     }
 
+    function toggleLinkPreviews() {
+        data.spaceMeta.config.showLinkPreviews = !data.spaceMeta.config.showLinkPreviews
+        localStorage.setItem('showLinkPreviews', data.spaceMeta.config.showLinkPreviews.toString())
+    }
+
     function toggleGlobalTabComplete() {
         globalTabComplete = !globalTabComplete
         localStorage.setItem('globalTabComplete', globalTabComplete.toString())
@@ -2743,6 +2753,20 @@
                 </span>
                 <span>Dev Mode</span>
                 {#if devModeEnabled}<span class="checkmark">•</span>{/if}
+            </div>
+            
+            <div class="settings-menu-item menu-item" 
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleLinkPreviews() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLinkPreviews() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                    </svg>
+                </span>
+                <span>Link Previews</span>
+                {#if data.spaceMeta.config.showLinkPreviews}<span class="checkmark">•</span>{/if}
             </div>
             
             <div class="settings-menu-separator"></div>

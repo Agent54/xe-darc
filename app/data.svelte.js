@@ -97,7 +97,8 @@ const spaceMeta = $state({
         leftPinnedTabWidth: 400,
         rightPinnedTabWidth: 350,
         leftSidebarWidth: 320,
-        rightSidebarWidth: 340
+        rightSidebarWidth: 340,
+        showLinkPreviews: true
     }
 })
 
