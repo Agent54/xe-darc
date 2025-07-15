@@ -31,6 +31,8 @@
 
     let tab = $derived(data.docs[tabId])
 
+    $inspect(tab)
+
     let anchor = $state(null)
 
     let initialUrl = $state('')
@@ -186,14 +188,14 @@
         return url?.startsWith('about:newtab') || url?.startsWith('about:blank')
     }
 
-    function handlePermissionRequest(eventName, tab, event) {
+    function handlePermissionRequest(tabId, event) {
         // Show orange LED for permission request
         showPermissionRequest()
 
         requestedResources.push({
             permission: event.permission,
-            url: event.url || tab.url,
-            tabId: tab.id,
+            url: event.url,
+            tabId: tabId,
             timestamp: new Date().toISOString(),
             userAgent: navigator.userAgent,
             id: 'camera',
@@ -206,11 +208,11 @@
             lastUsed: 'now', status: 'Request'
         })
 
-        console.log(`🔒 [Permission Request] Tab ${tab.id}: ${event.permission}`)
+        console.log(`🔒 [Permission Request] Tab ${tabId}: ${event.permission}`)
         console.log('📋 Permission request details:', {
             permission: event.permission,
-            url: event.url || tab.url,
-            tabId: tab.id,
+            url: event.url,
+            tabId: tabId,
             timestamp: new Date().toISOString(),
             userAgent: navigator.userAgent
         })
@@ -218,7 +220,7 @@
         // Grant all permissions but log them for monitoring
         try {
             event.request.allow()
-            console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url || tab.url}`)
+            console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url}`)
             
             // Hide permission request LED after granting
             setTimeout(() => {
@@ -1311,6 +1313,7 @@ document.addEventListener('input', function(event) {
 
     // Listen for messages from content scripts
     function setupMessageListener(frame) {
+        const mytab = untrack(() => tab)
         // Listen for messages from the controlled frame's content window
         // if (frame.contentWindow) {
         //     frame.contentWindow.addEventListener('message', (event) => {
@@ -1357,7 +1360,7 @@ document.addEventListener('input', function(event) {
                 window.dispatchEvent(new CustomEvent('darc-close-tab-from-frame', {
                     detail: { 
                         tabId: tabId,
-                        sourceFrame: `tab_${tab.id}`
+                        sourceFrame: `tab_${tabId}`
                     }
                 }))
             } else if (message.startsWith('iwa:new-tab:')) {
@@ -1369,19 +1372,19 @@ document.addEventListener('input', function(event) {
                 window.dispatchEvent(new CustomEvent('darc-new-tab-from-frame', {
                     detail: { 
                         tabId: tabId,
-                        sourceFrame: `tab_${tab.id}`
+                        sourceFrame: `tab_${mytab.id}`
                     }
                 }))
             } else if (message.startsWith('iwa:link-enter:')) {
                 const prefix = 'iwa:link-enter:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const linkData = JSON.parse(dataPayload)
@@ -1409,12 +1412,12 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:link-leave:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const linkData = JSON.parse(dataPayload)
@@ -1435,12 +1438,12 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:input-text:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const inputData = JSON.parse(dataPayload)
@@ -1459,12 +1462,12 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:zoom:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract zoom direction after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract zoom direction after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     const zoomDirection = remainingMessage.substring(tabIdPattern.length)
                     
                     console.log(`[Tab ${tabId}] Zoom direction:`, zoomDirection)
@@ -1512,12 +1515,12 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:dragdrop:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const eventData = JSON.parse(dataPayload)
@@ -1534,12 +1537,12 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:dragdrop-data:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const additionalData = JSON.parse(dataPayload)
@@ -1565,7 +1568,7 @@ document.addEventListener('input', function(event) {
                 
                 // Dispatch mouseup event to parent app
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
-                    detail: { tabId: tabId }
+                    detail: { tabId }
                 }))
             }
         })
@@ -1716,9 +1719,9 @@ document.addEventListener('input', function(event) {
         if (!anchor || !frameWrapper) { 
             return
         }
-        
+
         let controlledFrame = data.frames[tab.id]?.frame
-        
+
         // If current URL is about:newtab, don't create/use controlled frame
         // if (isNewTabUrl(initialUrl)) {
         //     console.log('Skipping controlled frame creation for:', initialUrl)
@@ -1739,25 +1742,27 @@ document.addEventListener('input', function(event) {
         let addNode = false
         if (!controlledFrame) {
             controlledFrame = document.createElement('controlledframe')
+            const tabId = tab.id
+            const mytab = untrack(() => tab)
 
-            data.frames[tab.id] = { frame: controlledFrame, wrapper: frameWrapper }
+            data.frames[tabId] = { frame: controlledFrame, wrapper: frameWrapper }
             addNode = true
 
             controlledFrame.classList.add('frame-instance')
 
             controlledFrame.partition = tab.partition || 'persist:myapp'
-            controlledFrame.onloadcommit = e => handleLoadCommit(tab, e)
-            controlledFrame.onnewwindow = e => handleNewWindow(tab, e)
-            controlledFrame.onaudiostatechanged = e => handleAudioStateChanged(tab, e)
-            controlledFrame.onloadstart = e => handleLoadStart(tab, e)
-            controlledFrame.onloadstop = e => handleLoadStop(tab, e)
-            controlledFrame.oncontentload = e => handleContentLoad(tab, e)
-            controlledFrame.onclose = e => handleEvent('onclose', tab, e)
-            controlledFrame.oncontentresize = e => handleEvent('oncontentresize',tab, e)
-            controlledFrame.ondialog = e => handleEvent('ondialog',tab, e)
-            controlledFrame.onexit = e => handleEvent('onexit',tab, e)
-            controlledFrame.onloadabort = e => handleLoadAbort(tab, e)
-            controlledFrame.onloadredirect = e => handleEvent('onloadredirect',tab, e)
+            controlledFrame.onloadcommit = e => handleLoadCommit(mytab, e)
+            controlledFrame.onnewwindow = e => handleNewWindow(mytab, e)
+            controlledFrame.onaudiostatechanged = e => handleAudioStateChanged(mytab, e)
+            controlledFrame.onloadstart = e => handleLoadStart(mytab, e)
+            controlledFrame.onloadstop = e => handleLoadStop(mytab, e)
+            controlledFrame.oncontentload = e => handleContentLoad(mytab, e)
+            controlledFrame.onclose = e => handleEvent('onclose', mytab, e)
+            controlledFrame.oncontentresize = e => handleEvent('oncontentresize',mytab, e)
+            controlledFrame.ondialog = e => handleEvent('ondialog',mytab, e)
+            controlledFrame.onexit = e => handleEvent('onexit',mytab, e)
+            controlledFrame.onloadabort = e => handleLoadAbort(mytab, e)
+            controlledFrame.onloadredirect = e => handleEvent('onloadredirect',mytab, e)
             //     onloadredirect={(e) => { 
             //         handleEvent('onloadredirect',tab, e)
             //         // Update URL on redirect
@@ -1767,11 +1772,11 @@ document.addEventListener('input', function(event) {
             //         // }
             //         return false
             //     }}
-            controlledFrame.onpermissionrequest = e => handlePermissionRequest('onpermissionrequest',tab, e)
-            controlledFrame.onresize = e => handleEvent('onresize',tab, e)
-            controlledFrame.onresponsive = e => handleEvent('onresponsive',tab, e)  
-            controlledFrame.onsizechanged = e => handleEvent('onsizechanged',tab, e)
-            controlledFrame.onunresponsive = e => handleEvent(tab, e, 'onunresponsive')
+            controlledFrame.onpermissionrequest = e => handlePermissionRequest(tabId, e)
+            controlledFrame.onresize = e => handleEvent('onresize',mytab, e)
+            controlledFrame.onresponsive = e => handleEvent('onresponsive',mytab, e)  
+            controlledFrame.onsizechanged = e => handleEvent('onsizechanged',mytab, e)
+            controlledFrame.onunresponsive = e => handleEvent(mytab, e, 'onunresponsive')
             controlledFrame.allowscaling = true
             controlledFrame.autosize = true
             controlledFrame.allowtransparency = false

@@ -533,3 +533,10 @@ ai test selection blocking / non blocking test runs
 new tab menu
 
 mcp manager
+
+claude hoocks > worker > dashboard/ reflect canvas
+
+ERR_INTERNET_DISCONNECTED
+
+https://www.speedtest.net/th crashes in lightbox view
+
