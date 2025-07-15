@@ -467,7 +467,7 @@
             class="global-hover-preview" 
             class:shown={globalHoverPreviewShown}
             style={globalHoverPreview?.position ? 
-                `left: ${calculatePreviewLeft(globalHoverPreview.position)}px; top: ${calculatePreviewTop(globalHoverPreview.position)}px;` : 
+                `margin-left: ${calculatePreviewLeft(globalHoverPreview.position)}px; top: ${calculatePreviewTop(globalHoverPreview.position)}px;` : 
                 ''}
             role="dialog"
             aria-label="Link preview"
@@ -559,7 +559,7 @@
                 </div>
             </div>
             <div class="global-hover-preview-frame">
-                {#if data.docs[globalHoverPreviewTabId]}
+                {#if data.docs[globalHoverPreviewTabId] && !globalHoverPreviewExpanding}
                     <ControlledFrame
                         {style}
                         class="global-hover-preview-controlledframe"
@@ -584,8 +584,8 @@
         role="dialog"
         aria-modal="true"
         tabindex="-1"
-        in:fade={{duration: 120}}
-        out:fade={{duration: 180}}
+        in:fade={{duration: 100}}
+        out:fade={{duration: 120}}
         onclick={(e) => {
             // Only close if clicking the backdrop, not the content
             if (e.target === e.currentTarget) {
@@ -599,8 +599,8 @@
         }}
     >
         <div class="lightbox-container" 
-             in:lightboxScale={{duration: 150}}
-             out:lightboxScale={{duration: 100}}>
+             in:lightboxScale={{duration: 100}}
+             out:lightboxScale={{duration: 80}}>
             <div class="lightbox-header">
                 <div class="lightbox-title">
                     <img 
@@ -921,11 +921,10 @@
         color: rgba(255, 255, 255, 0.8);
     }
 
-    /* Global hover link preview styles */
     .global-hover-preview {
-        position: fixed;
+        position: absolute;
         top: 40px;
-        right: 40px;
+        /* right: 40px; */
         z-index: 20000;
         pointer-events: auto;
         opacity: 0;
@@ -1092,7 +1091,6 @@
         width: 200%;
         height: 200%;
         border: none;
-        background: white;
         display: block;
         position: absolute;
         border-radius: 0 0 8px 8px !important;
@@ -1102,30 +1100,36 @@
     :global(.global-hover-preview-controlledframe.frame) {
         width: 200% !important;
         height: 200% !important;
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
+    }
+    :global(.global-hover-preview-controlledframe.frame .frame-instance) {
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
     }
 
-    /* Lightbox styles */
     .lightbox-backdrop {
         position: absolute;
         top: 0;
-        left: 0;
-        width: 100%;
+        /* left: 0; */
+        /* width: 100%; */
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgb(0 0 0 / 58%);
+        backdrop-filter: blur(2px);
         z-index: 15000;
-        backdrop-filter: blur(4px);
-        -webkit-backdrop-filter: blur(4px);
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 40px;
         z-index: 1;
+        width: calc(100vw - var(--space-taken, 0px) - 18px);
+        max-width: 1411px;
     }
 
     .lightbox-container {
         width: calc(100% - 80px);
         height: calc(100% - 80px);
-        background: rgba(15, 15, 15, 0.95);
+        background: rgb(0 0 0);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         box-shadow: 
@@ -1141,7 +1145,7 @@
         align-items: center;
         justify-content: space-between;
         padding: 12px 16px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        /* border-bottom: 1px solid rgba(255, 255, 255, 0.1); */
         background: rgba(0, 0, 0, 0.3);
         flex-shrink: 0;
     }

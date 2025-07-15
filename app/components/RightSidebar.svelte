@@ -89,6 +89,7 @@
         flex-direction: column;
         font-family: 'Inter', sans-serif;
         color: #fff;
+        box-shadow: -7px 2px 9px 0px #00000085;
     }
 
     .sidebar-header {

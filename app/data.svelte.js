@@ -166,7 +166,7 @@ async function refresh(spaceId) {
                 }
                 continue
             } else {
-                if (doc.preview) {
+                if (doc.preview || doc.lightbox) {
                     continue
                 }
                 spaces[doc.spaceId].tabs.push(doc)
@@ -295,6 +295,7 @@ function closeTab (spaceId, tabId) {
         tabId: tab.id,
         spaceId: tab.spaceId,
         type: 'activity',
+        archive: 'history',
         action: 'close',
         url: tab.url,
         title: tab.title,
@@ -433,6 +434,7 @@ export default {
         db.put({
             _id: `darc:activity_${crypto.randomUUID()}`,
             type: 'activity',
+            archive: 'history',
             action: 'space_create',
             spaceId: _id,
             name: 'Space ' + (Object.keys(spaces).length + 1),
@@ -471,6 +473,7 @@ export default {
         db.put({
             _id: `darc:activity_${crypto.randomUUID()}`,
             type: 'activity',
+            archive: 'history',
             action: 'visit',
             tabId: tab.id,
             spaceId: tab.spaceId,

@@ -976,6 +976,11 @@ ul::-webkit-scrollbar {
   scroll-snap-stop: normal;
   border: 1px solid #ffffff12;
   transition: width 0.3s ease;
+  /* max-width: 1400px; */
+}
+
+:global(.tab-group .frame) {
+    max-width: 1400px;
 }
 
 .has-right-pins :global(.frame) {
@@ -1616,7 +1621,8 @@ ul::-webkit-scrollbar {
     top: 13px;
 }
 
-.frame-title-bar:hover {
+.frame-title-bar:hover,
+.frame-title-bar.editing-url {
     top: -10px;
     z-index: 100;
     opacity: 1;
@@ -1624,7 +1630,8 @@ ul::-webkit-scrollbar {
     box-shadow: 0 6px 35px 5px rgb(0 0 0 / 36%);
 }
 
-.frame-title-bar.window-controls-overlay:hover {
+.frame-title-bar.window-controls-overlay:hover,
+.frame-title-bar.window-controls-overlay.editing-url {
     top: 28px;
 }
 

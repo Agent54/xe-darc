@@ -2957,7 +2957,7 @@
 <TabSidebar {isDragEnabled} />
 
 
-<div class="frame-title-bar" class:window-controls-overlay={headerPartOfMain}>
+<div class="frame-title-bar" class:window-controls-overlay={headerPartOfMain} class:editing-url={isEditingUrl}>
     <div class="frame-header-controls">
         <button class="frame-button" title="Back" aria-label="Back" onclick={goBack}>
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
@@ -2984,6 +2984,7 @@
                         bind:this={urlInput}
                         bind:value={editingUrlValue}
                         onkeydown={handleUrlKeydown}
+                        onblur={stopEditingUrl}
                         class="url-input"
                         type="text"
                         placeholder="Enter URL or search..."
@@ -3055,7 +3056,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
      style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
     {#if viewMode === 'canvas'}
         <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
-    {:else if viewMode === 'reading'}
+    <!-- {:else if viewMode === 'reading'}
         {#each tabs as tab, tabIndex (tab.id)}
                 {#key userModsHash}
                     <div class="reading-mode">
@@ -3068,12 +3069,12 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                         <Frame tabId={tab.id} {controlledFrameSupported} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/key}
-        {/each}
+        {/each} -->
     {:else}
         {#each unpinnedTabs as tab (tab.id)}
                 {#key userModsHash}
                     {#if  tab.type !== 'divider'}
-                        <div>
+                        <div class:tab-group={unpinnedTabs.length > 1}>
                             {#key origin(tab.url)}
                                 <div class="url-display visible">
                                     <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
@@ -3092,25 +3093,27 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
     bind:certificateMonitorForTab={certificateMonitorForTab} 
 />
 
-<div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
-class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
-style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px;">
-    {#each rightPinnedTabs as tab (tab.id)}
-        {#key userModsHash}
-            {#if  tab.type !== 'divider'}
-                <div>
-                    {#key origin(tab.url)}
-                        <div class="url-display visible">
-                            <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
-                        </div>
-                    {/key}
-                    
-                    <Frame tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
-                </div>
-            {/if}
-        {/key}
-    {/each}
-</div>
+{#if rightPinnedTabs.length > 0}
+    <div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
+    class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
+    style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px;">
+        {#each rightPinnedTabs as tab (tab.id)}
+            {#key userModsHash}
+                {#if  tab.type !== 'divider'}
+                    <div>
+                        {#key origin(tab.url)}
+                            <div class="url-display visible">
+                                <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
+                            </div>
+                        {/key}
+                        
+                        <Frame tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    </div>
+                {/if}
+            {/key}
+        {/each}
+    </div>
+{/if}
 
 <!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->
 <div class="sidebar-right" role="region" >
