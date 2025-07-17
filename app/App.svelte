@@ -3074,7 +3074,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         {#each unpinnedTabs as tab (tab.id)}
                 {#key userModsHash}
                     {#if  tab.type !== 'divider'}
-                        <div class:tab-group={unpinnedTabs.length > 1}>
+                        <div class:tab-group={unpinnedTabs.length > 1} class:active={tab.id === data.spaceMeta.activeTab?.id}>
                             {#key origin(tab.url)}
                                 <div class="url-display visible">
                                     <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />

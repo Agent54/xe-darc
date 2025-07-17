@@ -540,3 +540,39 @@ ERR_INTERNET_DISCONNECTED
 
 https://www.speedtest.net/th crashes in lightbox view
 
+active tab highlight
+
+tools/context/memory etc sidebar
+
+my data management (form fills on steroids)
+
+browser data delete + incognito
+
+login + cert manager
+
+A dotted circle appears around inactive/hibernated site icons
+
+always keep site active/ load site on startup
+
+web extensions
+
+images view/ sources/links view
+
+screenshot mode
+
+move mic/see to input box
+
+open ai from toolbar for discoverability
+
+share links for all data items on different levels eg tab groups, summaries reports etc.
+
+task manager memory/cpu etc.
+
+previewhovercard title actions show only on hover
+
+white google search initial page bug
+
+remove hibernate flag and default to hibernated
+
+
+context menu url copy + reload

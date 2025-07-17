@@ -70,7 +70,7 @@
     
     // Link preview state
     let hoveredLink = $state(null) // { href, target, rel, title }
-    let linkPreviewVisible = $state(false)
+    // let linkPreviewVisible = $state(false)
     let linkPreviewTimeout = null
     
     // Global hover link preview state
@@ -82,6 +82,37 @@
     let isHoveringPreview = $state(false) // Track if mouse is over the preview
     let globalHoverPreviewPinned = $state(false) // Track if preview is pinned for debugging
     let globalHoverPreviewExpanding = $state(false) // Track if preview is expanding to lightbox
+    // Delay timer for hiding the global hover preview (prevents flicker while moving cursor)
+    let hidePreviewDelayTimeout = null
+    
+    // Window dimensions for calculating preview aspect ratio
+    let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1200)
+    let windowHeight = $state(typeof window !== 'undefined' ? window.innerHeight : 800)
+
+    // Function to create off-origin lightbox
+    function createOffOriginLightbox(url, originalOrigin, targetOrigin) {
+        console.log(`🔗 Creating off-origin lightbox: ${originalOrigin} → ${targetOrigin}`)
+        const lightboxTab = data.newTab(data.spaceMeta.activeSpace, { 
+            url: url,
+            title: targetOrigin,
+            opener: tabId,
+            lightbox: true
+        })
+        return lightboxTab
+    }
+    
+    // Calculate preview height based on window aspect ratio
+    let previewHeight = $derived.by(() => {
+        const previewWidth = 280
+        const windowAspectRatio = windowHeight / windowWidth
+        const calculatedHeight = previewWidth * windowAspectRatio
+        
+        // Apply min/max constraints for usability
+        const minHeight = 200 // Prevent too small on ultrawide screens
+        const maxHeight = 700 // Prevent too large on portrait/tall screens
+        
+        return Math.round(Math.max(minHeight, Math.min(maxHeight, calculatedHeight)))
+    })
     
     let inputDiffVisible = $state(false)
     let inputDiffTimeout = null
@@ -148,20 +179,32 @@
 
     // Show global hover preview when regular link preview has been visible for a while
     $effect(() => {
-        if (linkPreviewVisible && hoveredLink && data.spaceMeta.config.showLinkPreviews) {
+        if (hoveredLink && data.spaceMeta.config.showLinkPreviews) {
+            // Cancel any pending hide delay because we have (or are about to have) a hovered link again
+            if (hidePreviewDelayTimeout) {
+                clearTimeout(hidePreviewDelayTimeout)
+                hidePreviewDelayTimeout = null
+            }
             // If there's already a preview for a different link, clean it up first
             if (globalHoverPreviewVisible && globalHoverPreview?.href !== hoveredLink.href) {
-                cleanupGlobalPreview()
-                // Wait a bit before showing new preview to avoid conflicts
-                setTimeout(() => {
-                    startGlobalPreview()
-                }, 100)
+                // Hide the current preview after a short delay before switching
+                if (hidePreviewDelayTimeout) clearTimeout(hidePreviewDelayTimeout)
+                hidePreviewDelayTimeout = setTimeout(() => {
+                    cleanupGlobalPreview()
+                    // Start the new preview slightly after the old one begins hiding
+                    setTimeout(() => startGlobalPreview(), 100)
+                }, 150)
             } else if (!globalHoverPreviewVisible) {
                 startGlobalPreview()
             }
-        } else if (!linkPreviewVisible && !isHoveringPreview && !globalHoverPreviewPinned) {
+        } else if ( !isHoveringPreview && !globalHoverPreviewPinned) {
             // Hide global preview when regular preview is hidden AND not hovering the preview AND not pinned
-            cleanupGlobalPreview()
+            if (hidePreviewDelayTimeout) clearTimeout(hidePreviewDelayTimeout)
+            hidePreviewDelayTimeout = setTimeout(() => {
+                if (!isHoveringPreview && !hoveredLink) {
+                    cleanupGlobalPreview()
+                }
+            }, 150)
         }
     })
 
@@ -199,6 +242,22 @@
         }, 500)
     }
 
+    $effect(() => {
+        // Update window dimensions on resize
+        if (typeof window !== 'undefined') {
+            function updateWindowDimensions() {
+                windowWidth = window.innerWidth
+                windowHeight = window.innerHeight
+            }
+            
+            window.addEventListener('resize', updateWindowDimensions)
+            
+            return () => {
+                window.removeEventListener('resize', updateWindowDimensions)
+            }
+        }
+    })
+    
     $effect(() => {
        
         // Cleanup on component unmount
@@ -242,7 +301,7 @@
 
     // Calculate preview position to ensure it stays within window bounds
     function calculatePreviewLeft(position) {
-        const previewWidth = 300
+        const previewWidth = 280
         const padding = 150 // Reduced to 2px for much closer positioning
         
         // Try positioning to the right of the link first
@@ -267,7 +326,7 @@
     }
     
     function calculatePreviewTop(position) {
-        const previewHeight = 200 + 32 // container height + header height
+        const totalPreviewHeight = previewHeight + 32 // container height + header height
         const padding = 10 // Reduced from 40 to bring preview closer
         
         // Try positioning at the top of the link first
@@ -279,8 +338,8 @@
         }
         
         // If it would overflow the bottom edge, clamp to bottom
-        if (top + previewHeight > window.innerHeight - padding) {
-            top = window.innerHeight - previewHeight - padding
+        if (top + totalPreviewHeight > window.innerHeight - padding) {
+            top = window.innerHeight - totalPreviewHeight - padding
         }
         
         // Final check: ensure minimum distance from top (keep some space from window edge)
@@ -327,15 +386,17 @@
             {userMods}
             {requestedResources}
             {statusLightsEnabled}
+            {createOffOriginLightbox}
             bind:hoveredLink
-            bind:linkPreviewVisible
+            
             bind:linkPreviewTimeout
             bind:inputDiffVisible
             bind:inputDiffTimeout
             bind:inputDiffData
         />
+        <!-- bind:linkPreviewVisible    linkPreviewVisible &&  -->
 
-        {#if linkPreviewVisible && hoveredLink}
+        {#if hoveredLink}
             <div class="link-preview" transition:fade={{duration: 150}}>
                 {#if isDifferentOrigin}
                     <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -393,8 +454,8 @@
                 csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
                 allow="accelerometer 'none'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'none'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-create 'self'; publickey-credentials-get 'self'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'" -->
             
-            <!-- Link preview for iframe fallback -->
-            {#if linkPreviewVisible && hoveredLink}
+            <!-- Link preview for iframe fallback  linkPreviewVisible &&-->
+            {#if hoveredLink}
                 <div class="link-preview" transition:fade={{duration: 150}}>
                     {#if isDifferentOrigin}
                         <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -473,16 +534,28 @@
             aria-label="Link preview"
             tabindex="-1"
             out:previewExpand={{duration: 200}}
-            onmouseenter={() => { isHoveringPreview = true }}
+            onmouseenter={() => { 
+                isHoveringPreview = true 
+                // Cancel pending hide when mouse enters the preview
+                if (hidePreviewDelayTimeout) {
+                    clearTimeout(hidePreviewDelayTimeout)
+                    hidePreviewDelayTimeout = null
+                }
+            }}
             onmouseleave={() => { 
                 isHoveringPreview = false 
                 // Trigger hide logic when leaving preview
-                if (!linkPreviewVisible) {
-                    cleanupGlobalPreview()
+                if (!hoveredLink) {
+                    if (hidePreviewDelayTimeout) clearTimeout(hidePreviewDelayTimeout)
+                    hidePreviewDelayTimeout = setTimeout(() => {
+                        if (!isHoveringPreview && !hoveredLink) {
+                            cleanupGlobalPreview()
+                        }
+                    }, 150)
                 }
             }}
         >
-        <div class="global-hover-preview-container">
+        <div class="global-hover-preview-container" style="height: {previewHeight}px;">
             <div class="global-hover-preview-header">
                 <div class="global-hover-preview-title">
                     {#if globalIsDifferentOrigin}
@@ -637,12 +710,13 @@
                     {requestedResources}
                     {statusLightsEnabled}
                     bind:hoveredLink
-                    bind:linkPreviewVisible
+                    
                     bind:linkPreviewTimeout
                     bind:inputDiffVisible
                     bind:inputDiffTimeout
                     bind:inputDiffData
                 />
+                <!-- bind:linkPreviewVisible -->
             </div>
         </div>
     </div>
@@ -939,8 +1013,7 @@
 
     .global-hover-preview-container {
         position: relative;
-        width: 300px;
-        height: 200px;
+        width: 280px;
         background: rgba(15, 15, 15, 0.95);
         /* border: 1px solid rgba(255, 255, 255, 0.08); */
         border-radius: 8px;
@@ -960,6 +1033,13 @@
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         background: rgba(0, 0, 0, 0.3);
         flex-shrink: 0;
+        position: relative;
+    }
+
+    .global-hover-preview-header:hover .global-hover-preview-controls {
+        opacity: 1;
+        visibility: visible;
+        width: auto;
     }
 
     .global-hover-preview-title {
@@ -971,6 +1051,38 @@
         font-weight: 500;
         min-width: 0;
         flex: 1;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .global-hover-preview-title::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 20px;
+        background: linear-gradient(to right, transparent, rgba(15, 15, 15, 0.95));
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+
+    .global-hover-preview-title:hover::after {
+        opacity: 1;
+    }
+
+    .global-hover-preview-title :global(.url-renderer) {
+        overflow-x: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .global-hover-preview-title :global(.url-renderer)::-webkit-scrollbar {
+        display: none;
     }
 
     .global-hover-preview-external {
@@ -992,6 +1104,18 @@
         display: flex;
         align-items: center;
         gap: 4px;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.2s ease, visibility 0.2s ease, width 0.2s ease;
+        flex-shrink: 0;
+        width: 0;
+        overflow: hidden;
+    }
+
+    .global-hover-preview-container:has(.global-hover-preview-pin.pinned) .global-hover-preview-controls {
+        opacity: 1;
+        visibility: visible;
+        width: auto;
     }
 
     .global-hover-preview-pin {
@@ -1123,7 +1247,12 @@
         padding: 40px;
         z-index: 1;
         width: calc(100vw - var(--space-taken, 0px) - 18px);
-        max-width: 1411px;
+    }
+
+    @media (min-width: 1800px) {
+        .lightbox-backdrop {
+            max-width: 1411px;
+        }
     }
 
     .lightbox-container {

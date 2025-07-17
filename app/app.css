@@ -975,12 +975,18 @@ ul::-webkit-scrollbar {
   scroll-snap-align: start;
   scroll-snap-stop: normal;
   border: 1px solid #ffffff12;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, border-color 0.3s ease;
   /* max-width: 1400px; */
 }
 
-:global(.tab-group .frame) {
-    max-width: 1400px;
+@media (min-width: 1800px) {
+    :global(.tab-group .frame) {
+        max-width: 1400px;
+    }
+}
+
+:global(.tab-group .active .frame){
+    border: 1px solid #74747466;
 }
 
 .has-right-pins :global(.frame) {

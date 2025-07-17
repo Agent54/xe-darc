@@ -484,7 +484,7 @@ export default {
         })
     },
     
-    newTab: (spaceId, { url, title, opener, preview } = {}) => {
+    newTab: (spaceId, { url, title, opener, preview, lightbox } = {}) => {
         const _id = `darc:tab_${crypto.randomUUID()}`
 
         const tab = {
@@ -498,7 +498,20 @@ export default {
             order: Date.now(),
             opener,
             preview: !!preview,
+            lightbox: !!lightbox,
             shouldFocus: !url || url === 'about:newtab' // Add shouldFocus for new tabs
+        }
+
+        // If creating a lightbox, also update the parent tab to reference it
+        if (lightbox && opener) {
+            const parentTab = docs[opener]
+            if (parentTab) {
+                // Update parent tab to reference this lightbox
+                db.put({
+                    ...parentTab,
+                    lightboxChild: _id
+                })
+            }
         }
 
         db.put(tab)
