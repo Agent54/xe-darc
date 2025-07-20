@@ -578,3 +578,28 @@ remove hibernate flag and default to hibernated
 context menu url copy + reload
 
 fix closed tabs and lighbox child zombies
+
+cmd click new tab in background
+
+context menu open new tab (in background)
+
+closing lightbox navigates parent bug
+
+naviagate to data:text/html,<html><head><
+
+todos, milestones, plan and voting/ feedback
+
+
+lightbox navigation and history, display, closed tabs handling
+
+spacemanager like multipreviews? next to lightbox
+
+docker build + start from github url > website + xterm + vscode?
+
+frames not in background frames but in frames array ?
+
+proper permission handling in sidebar
+
+cmd open link
+
+bug debug play bar behind drag handles

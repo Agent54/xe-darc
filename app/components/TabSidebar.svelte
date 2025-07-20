@@ -193,9 +193,9 @@
     
     function restoreClosedTab(tab) {
         // Remove from closed tabs
-        const closedIndex = data.closedTabs.findIndex(t => t.id === tab.id)
+        const closedIndex = data.spaceMeta.closedTabs.findIndex(t => t.id === tab.id)
         if (closedIndex !== -1) {
-            data.closedTabs.splice(closedIndex, 1)
+            data.spaceMeta.closedTabs.splice(closedIndex, 1)
         }
         
         // Add back to the space (use active space if the original space doesn't exist)
@@ -275,7 +275,7 @@
 
     // Watch for new closed tabs and auto-show menu, might be a bit much?
     // $effect(() => {
-    //     const currentLength = data.closedTabs.length
+    //     const currentLength = data.spaceMeta.closedTabs.length
     //     if (currentLength > previousClosedTabsLength) {
     //         // New tab was closed, show menu
     //         if (closedTabsHideTimeout) {
@@ -499,7 +499,7 @@
         </div>
         
         
-        {#if data.closedTabs.length > 0}
+        {#if data.spaceMeta.closedTabs.length > 0}
             <div class="closed-tabs-section"
                  onmouseenter={handleClosedTabsMouseEnter}
                  onmouseleave={handleClosedTabsMouseLeave}
@@ -509,11 +509,11 @@
                         onclick={() => { data.clearClosedTabs(); handleClosedTabsMouseLeave() }}
                         aria-label="Clear all recently closed tabs">
                     <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
-                    <span class="closed-tabs-count">{data.closedTabs.length}</span>
+                    <span class="closed-tabs-count">{data.spaceMeta.closedTabs.length}</span>
                 </button>
                 <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
-                        {#each data.closedTabs as tab}
+                        {#each data.spaceMeta.closedTabs as tab}
                             <button class="closed-tab-item" title={tab.url} onmousedown={() => restoreClosedTab(tab)}>
                                 <Favicon {tab} showButton={false} />
                                 <div class="tab-text">

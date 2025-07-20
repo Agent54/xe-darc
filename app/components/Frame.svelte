@@ -235,9 +235,15 @@
         }
     }
 
-    // Cancel all hover previews when tab starts loading
-    $effect(() => {
+    // Cancel all hover previews when tab starts loading or navigates
+    let prevUrl = null
+    $effect(() => {       
         if (tab.loading) {
+            cleanupAllHoverPreviews()
+        }
+
+        if (tab.url !== prevUrl) {
+            prevUrl = tab.url
             cleanupAllHoverPreviews()
         }
     })

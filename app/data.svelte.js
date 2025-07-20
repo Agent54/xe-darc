@@ -72,7 +72,6 @@ if (remote) {
     })
 }
 
-let closedTabs = $state([])
 const origins = $state({})
 const spaces = $state({})
 const globalPins = $state([])
@@ -92,6 +91,7 @@ setInterval(() => {
 const spaceMeta = $state({
     activeSpace: localStorage.getItem('activeSpace') || null,
     spaceOrder: [],
+    closedTabs: [],
     activeTab: null,
     config: {
         leftPinnedTabWidth: 400,
@@ -124,7 +124,7 @@ async function refresh(spaceId) {
         spaces[spaceId] ??= {}
         spaces[spaceId].tabs = []
     }
-    closedTabs = []
+    spaceMeta.closedTabs = []
 
     for (const refreshDoc of newDocs) {
         let doc
@@ -163,7 +163,7 @@ async function refresh(spaceId) {
             if (doc.archive) {
                 // console.log(doc)
                 if (doc.archive === 'closed') {
-                    closedTabs.push(doc)
+                    spaceMeta.closedTabs.push(doc)
                 }
                 continue
             } else {
@@ -367,7 +367,6 @@ function loadSampleData () {
 export default {
     origins,
     spaceMeta,
-    closedTabs,
     globalPins,
     spaces,
     activity,
@@ -558,7 +557,7 @@ export default {
 
     clearClosedTabs: () => {
         // Update each closed tab to be marked as deleted
-        const docsToUpdate = closedTabs.map(tab => ({
+        const docsToUpdate = spaceMeta.closedTabs.map(tab => ({
             ...tab,
             deleted: true,
             archive: 'deleted'

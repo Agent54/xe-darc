@@ -145,15 +145,6 @@
             }
         }
     })
-
-    function showPermissionRequest() {
-        permissionRequestActive = true
-        // This doesn't auto-hide, cleared when permission is handled
-    }
-
-    function hidePermissionRequest() {
-        permissionRequestActive = false
-    }
     
     // Update initialUrl when tab URL changes
     $effect(() => {
@@ -189,48 +180,37 @@
     }
 
     function handlePermissionRequest(tabId, event) {
-        // Show orange LED for permission request
-        showPermissionRequest()
+        permissionRequestActive = true
 
         requestedResources.push({
             permission: event.permission,
             url: event.url,
             tabId: tabId,
             timestamp: new Date().toISOString(),
-            userAgent: navigator.userAgent,
-            id: 'camera',
-            name: 'Camera',
-            icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-            </svg>`,
-            description: 'Camera access for photos and video capture',
-            lastUsed: 'now', status: 'Request'
+            id: event.permission,
+            lastUsed: 'now',
+            status: 'Request'
         })
 
-        console.log(`🔒 [Permission Request] Tab ${tabId}: ${event.permission}`)
-        console.log('📋 Permission request details:', {
-            permission: event.permission,
-            url: event.url,
-            tabId: tabId,
-            timestamp: new Date().toISOString(),
-            userAgent: navigator.userAgent
+        console.log('📋 Permission request:', {
+            event,
+            tab
         })
         
-        // Grant all permissions but log them for monitoring
         try {
-            event.request.allow()
-            console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url}`)
+            // event.request.allow()
+            // console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url}`)
+            event.request.deny()
             
             // Hide permission request LED after granting
             setTimeout(() => {
-                hidePermissionRequest()
+                permissionRequestActive = false
             }, 1000)
         } catch (error) {
             console.error(`❌ [Permission Error] Failed to grant ${event.permission}:`, error)
             // Hide permission request LED on error too
             setTimeout(() => {
-                hidePermissionRequest()
+                permissionRequestActive = false
             }, 1000)
         }
     }
@@ -420,7 +400,7 @@
         
         // Check if this is a certificate error
         if (event && event.reason) {
-            console.log(`🔍 Checking if "${event.reason}" is a certificate error...`)
+            // console.log(`🔍 Checking if "${event.reason}" is a certificate error...`)
             if (isCertificateError(event.reason)) {
                 console.log(`🔒 CERTIFICATE ERROR DETECTED: ${event.reason}`)
                 setCertificateError(tab, event.reason, event.url || tab.url)
@@ -428,8 +408,6 @@
                 console.log(`🌐 NETWORK ERROR DETECTED in loadabort: ${event.reason}`)
                 const errorCode = event.reason.replace('net::', '')
                 setNetworkError(tab, errorCode, event.url || tab.url)
-            } else {
-                console.log(`ℹ️ Not a certificate or network error: ${event.reason}`)
             }
         }
     }
@@ -591,7 +569,7 @@
         if (isOAuthPopup) {
             handleOAuthPopup(tab, e)
         } else {
-            data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title, opener: tab.id })         
+            data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title, opener: tab.id, lightbox: true })         
         }
     }
 
@@ -1101,6 +1079,7 @@ document.addEventListener('input', function(event) {
                 || details.url.indexOf("googletagmanager.com") != -1
                 || details.url.indexOf("adservice.google.com") != -1
                 || details.url.indexOf("doubleclick.net") != -1
+                || details.url.indexOf('cdn.cookielaw.org') != -1
 
             if (block) {
                 // Show red LED for blocked requests
@@ -1324,11 +1303,12 @@ document.addEventListener('input', function(event) {
                 // console.log('📋 Tab data:', tab)
                 // console.groupEnd()
             }
-        }).then(() => {
-            console.log('✅ Context menu "Here" created successfully')
-        }).catch((err) => {
-            console.error('❌ Failed to create context menu:', err)
         })
+        // .then(() => {
+        //     console.log('✅ Context menu "Here" created successfully')
+        // }).catch((err) => {
+        //     console.error('❌ Failed to create context menu:', err)
+        // })
 
         // Also listen to onClicked event for additional logging
         frame.contextMenus.onClicked.addListener((info) => {
