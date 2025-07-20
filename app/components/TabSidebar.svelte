@@ -312,8 +312,6 @@
 
 <svelte:window onclick={handleClickOutside} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
-
-
 <div class="sidebar-box" 
      class:hovered={isHovered}
      onmouseenter={handleMouseEnter} 

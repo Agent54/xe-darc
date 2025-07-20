@@ -72,7 +72,7 @@ if (remote) {
     })
 }
 
-const closedTabs = $state([])
+let closedTabs = $state([])
 const origins = $state({})
 const spaces = $state({})
 const globalPins = $state([])
@@ -124,6 +124,7 @@ async function refresh(spaceId) {
         spaces[spaceId] ??= {}
         spaces[spaceId].tabs = []
     }
+    closedTabs = []
 
     for (const refreshDoc of newDocs) {
         let doc
@@ -498,6 +499,7 @@ export default {
             order: Date.now(),
             opener,
             preview: !!preview,
+            archive: preview ? 'preview' : undefined,
             lightbox: !!lightbox,
             shouldFocus: !url || url === 'about:newtab' // Add shouldFocus for new tabs
         }
@@ -539,6 +541,11 @@ export default {
         }
         if (typeof preview !== 'undefined') {
             newProps.preview = preview
+            if (preview) {
+                newProps.archive = 'preview'
+            } else {
+                newProps.archive = undefined
+            }
         }
 
         db.put({
@@ -566,7 +573,8 @@ export default {
         }
         
         // Clear the closedTabs array
-        closedTabs.length = 0
+        // closedTabs = []
+        // closedTabs.length = 0
     },
 
     previousSpace: () => {

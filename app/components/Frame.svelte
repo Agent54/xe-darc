@@ -1,71 +1,10 @@
 <script>
-    import { fade } from 'svelte/transition'
-    import { linear } from 'svelte/easing'
+    import { fade, scale } from 'svelte/transition'
+
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
     import { origin } from '../lib/utils.js'
     import data from '../data.svelte.js'
-    
-    // Custom lightbox scale animation
-    function lightboxScale(node, { duration = 150 }) {
-        // Add animating class to disable expensive effects
-        const backdrop = node.closest('.lightbox-backdrop')
-        if (backdrop) {
-            backdrop.classList.add('animating')
-        }
-        node.classList.add('animating')
-
-        return {
-            duration,
-            easing: linear,
-            css: t => {
-                const scale = 0.8 + (0.2 * t)
-                const opacity = t
-                return `
-                    transform: translateZ(0) scale(${scale});
-                    opacity: ${opacity};
-                `
-            },
-            tick: (t, u) => {
-                // Remove animating class when animation completes
-                if (t === 1) {
-                    requestAnimationFrame(() => {
-                        if (backdrop) {
-                            backdrop.classList.remove('animating')
-                        }
-                        node.classList.remove('animating')
-                    })
-                }
-            }
-        }
-    }
-
-    // Custom preview expand transition (fade out while growing)
-    function previewExpand(node, { duration = 200 }) {
-        // Add animating class to disable expensive effects
-        node.classList.add('animating')
-
-        return {
-            duration,
-            easing: linear,
-            css: t => {
-                const scale = 1 + (0.3 * (1 - t)) // Grow from 100% to 130%
-                const opacity = t // Fade out
-                return `
-                    transform: translateZ(0) scale(${scale});
-                    opacity: ${opacity};
-                `
-            },
-            tick: (t, u) => {
-                // Remove animating class when animation completes
-                if (t === 1) {
-                    requestAnimationFrame(() => {
-                        node.classList.remove('animating')
-                    })
-                }
-            }
-        }
-    }
 
     let {
         style = '',
@@ -100,7 +39,7 @@
     // Link preview state
     let hoveredLink = $state(null) // { href, target, rel, title }
     // let linkPreviewVisible = $state(false)
-    let linkPreviewTimeout = null
+    // let linkPreviewTimeout = null
     
     // Global hover link preview state
     let globalHoverPreview = $state(null) // { href, target, rel, title, position }
@@ -128,17 +67,30 @@
                 // Convert existing visible preview to lightbox
                 console.log(`🔄 Converting existing hover preview to lightbox: ${url}`)
                 globalHoverPreviewExpanding = true
+                
+                // Preserve the existing ControlledFrame instance by moving it to background first
+                const previewFrameData = data.frames[globalHoverPreviewTabId]
+                if (previewFrameData?.frame) {
+                    console.log('🎯 Preserving ControlledFrame instance for lightbox conversion')
+                    const backgroundFrames = document.getElementById('backgroundFrames')
+                    const anchorFrame = document.getElementById('anchorFrame')
+                    if (backgroundFrames && anchorFrame) {
+                        // Move to background to preserve the frame during state transition
+                        backgroundFrames.moveBefore(previewFrameData.frame, anchorFrame)
+                        // Clear the wrapper reference but keep the frame
+                        delete previewFrameData.wrapper
+                    }
+                }
+                
                 cleanupForExpand()
                 
-                // Convert the preview tab to lightbox
-                setTimeout(() => {
-                    data.updateTab(globalHoverPreviewTabId, {preview: false, lightbox: true})
-                    globalHoverPreview = null
-                    globalHoverPreviewTabId = null
-                    globalHoverPreviewExpanding = false
-                }, 200)
+                // Convert the preview tab to lightbox immediately
+                data.updateTab(globalHoverPreviewTabId, {preview: false, lightbox: true})
+                globalHoverPreview = null
+                globalHoverPreviewTabId = null
+                globalHoverPreviewExpanding = false
                 
-                // Return the existing tab (will be converted to lightbox)
+                // Return the existing tab (now converted to lightbox)
                 return data.docs[globalHoverPreviewTabId]
             } else if (globalHoverPreviewTimeout) {
                 // There's a pending hover preview for the same URL
@@ -269,10 +221,10 @@
             hidePreviewDelayTimeout = null
         }
         // Clear any link preview timeouts
-        if (linkPreviewTimeout) {
-            clearTimeout(linkPreviewTimeout)
-            linkPreviewTimeout = null
-        }
+        // if (linkPreviewTimeout) {
+        //     clearTimeout(linkPreviewTimeout)
+        //     linkPreviewTimeout = null
+        // }
         // Clear hovered link state
         if (hoveredLink) {
             hoveredLink = null
@@ -283,12 +235,19 @@
         }
     }
 
+    // Cancel all hover previews when tab starts loading
+    $effect(() => {
+        if (tab.loading) {
+            cleanupAllHoverPreviews()
+        }
+    })
+
     // Show global hover preview when regular link preview has been visible for a while
     $effect(() => {
-        // Don't show hover previews when a lightbox is active
+        // Don't show hover previews when a lightbox is active or tab is loading
         const hasActiveLightbox = tab.lightboxChild && data.docs[tab.lightboxChild]
         
-        if (hoveredLink && data.spaceMeta.config.showLinkPreviews && !hasActiveLightbox) {
+        if (hoveredLink && data.spaceMeta.config.showLinkPreviews && !hasActiveLightbox && !tab.loading) {
             // Cancel any pending hide delay because we have (or are about to have) a hovered link again
             if (hidePreviewDelayTimeout) {
                 clearTimeout(hidePreviewDelayTimeout)
@@ -324,7 +283,7 @@
             clearTimeout(globalHoverPreviewTimeout)
         }
         
-        // Set timeout to create preview node after 500ms
+        // Set timeout to create preview node after 700ms
         globalHoverPreviewTimeout = setTimeout(() => {
             if (!hoveredLink?.href) {
                 return
@@ -340,16 +299,16 @@
                 globalHoverPreviewShown = true
             }, 1000) // 1000ms delay for page loading
             
-            // Set timeout to hide global preview after 20 seconds (unless pinned)
+            // Set timeout to hide global preview after 21 seconds (unless pinned)
             const autoHideTimeout = setTimeout(() => {
                 if (!globalHoverPreviewPinned) {
                     cleanupGlobalPreview()
                 }
-            }, 20000)
+            }, 21000)
             
             // Store the auto-hide timeout so it can be cleared if needed
             globalHoverPreviewTimeout = autoHideTimeout
-        }, 500)
+        }, 700)
     }
 
     $effect(() => {
@@ -373,9 +332,9 @@
         // Cleanup on component unmount
         return () => {
 
-            if (linkPreviewTimeout) {
-                clearTimeout(linkPreviewTimeout)
-            }
+            // if (linkPreviewTimeout) {
+            //     clearTimeout(linkPreviewTimeout)
+            // }
             if (globalHoverPreviewTimeout) {
                 clearTimeout(globalHoverPreviewTimeout)
             }
@@ -498,13 +457,12 @@
             {statusLightsEnabled}
             {createOffOriginLightbox}
             bind:hoveredLink
-            
-            bind:linkPreviewTimeout
+           
             bind:inputDiffVisible
             bind:inputDiffTimeout
             bind:inputDiffData
         />
-        <!-- bind:linkPreviewVisible    linkPreviewVisible &&  -->
+        <!--  bind:linkPreviewTimeout bind:linkPreviewVisible    linkPreviewVisible &&  -->
 
         {#if hoveredLink}
             <div class="link-preview" transition:fade={{duration: 150}}>
@@ -643,7 +601,7 @@
             role="dialog"
             aria-label="Link preview"
             tabindex="-1"
-            out:previewExpand={{duration: 200}}
+            out:scale={{duration: 200}}
             onmouseenter={() => { 
                 isHoveringPreview = true 
                 // Cancel pending hide when mouse enters the preview
@@ -702,15 +660,28 @@
                         aria-label="Expand to full tab"
                         onclick={() => {
                             globalHoverPreviewExpanding = true
+                            
+                            // Preserve the existing ControlledFrame instance by moving it to background first
+                            const previewFrameData = data.frames[globalHoverPreviewTabId]
+                            if (previewFrameData?.frame) {
+                                console.log('🎯 Preserving ControlledFrame instance for expand button conversion')
+                                const backgroundFrames = document.getElementById('backgroundFrames')
+                                const anchorFrame = document.getElementById('anchorFrame')
+                                if (backgroundFrames && anchorFrame) {
+                                    // Move to background to preserve the frame during state transition
+                                    backgroundFrames.moveBefore(previewFrameData.frame, anchorFrame)
+                                    // Clear the wrapper reference but keep the frame
+                                    delete previewFrameData.wrapper
+                                }
+                            }
+                            
                             // Trigger the visual closing with expand animation
                             cleanupForExpand()
-                            // Delay the actual update to allow the expand animation to play
-                            setTimeout(() => {
-                                data.updateTab(globalHoverPreviewTabId, {preview: false, lightbox: true})
-                                globalHoverPreview = null
-                                globalHoverPreviewTabId = null
-                                globalHoverPreviewExpanding = false
-                            }, 200)
+                            // Convert to lightbox immediately
+                            data.updateTab(globalHoverPreviewTabId, {preview: false, lightbox: true})
+                            globalHoverPreview = null
+                            globalHoverPreviewTabId = null
+                            globalHoverPreviewExpanding = false
                         }}
                     >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -768,7 +739,7 @@
         aria-modal="true"
         tabindex="-1"
         in:fade={{duration: 100}}
-        out:fade={{duration: 120}}
+        out:fade={{duration: 80}}
         onclick={(e) => {
             // Only close if clicking the backdrop, not the content
             if (e.target === e.currentTarget) {
@@ -782,8 +753,8 @@
         }}
     >
         <div class="lightbox-container" 
-             in:lightboxScale={{duration: 100}}
-             out:lightboxScale={{duration: 80}}>
+             in:scale={{duration: 100}}
+             out:scale={{duration: 80}}>
             <div class="lightbox-header">
                 <div class="lightbox-title">
                     <img 
@@ -821,12 +792,11 @@
                     {statusLightsEnabled}
                     bind:hoveredLink
                     
-                    bind:linkPreviewTimeout
                     bind:inputDiffVisible
                     bind:inputDiffTimeout
                     bind:inputDiffData
                 />
-                <!-- bind:linkPreviewVisible -->
+                <!-- bind:linkPreviewTimeout bind:linkPreviewVisible -->
             </div>
         </div>
     </div>

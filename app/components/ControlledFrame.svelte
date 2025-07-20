@@ -6,7 +6,7 @@
     import NetworkErrorPage from './NetworkErrorPage.svelte'
     import NewTab from './NewTab.svelte'
     import { origin } from '../lib/utils.js'
-    // import { fade } from 'svelte/transition'
+    import { generateDiff } from '../lib/utils.js'
 
     let {
         tabId,
@@ -23,8 +23,6 @@
         createOffOriginLightbox = () => {},
 
         hoveredLink = $bindable(),
-        // linkPreviewVisible = $bindable(),
-        linkPreviewTimeout = $bindable(),
         inputDiffVisible = $bindable(),
         inputDiffTimeout = $bindable(),
         inputDiffData = $bindable(),
@@ -34,6 +32,7 @@
 
     $inspect(tab)
 
+    let linkPreviewTimeout = null
     let anchor = $state(null)
 
     let initialUrl = $state('')
@@ -1426,7 +1425,6 @@ document.addEventListener('input', function(event) {
                         
                         if (linkData.href) {
                             hoveredLink = linkData
-                            // linkPreviewVisible = true
                             
                             if (linkPreviewTimeout) {
                                 clearTimeout(linkPreviewTimeout)
@@ -1434,10 +1432,9 @@ document.addEventListener('input', function(event) {
                             }
 
                             linkPreviewTimeout = setTimeout(() => {
-                                // linkPreviewVisible = false
                                 hoveredLink = null
                                 linkPreviewTimeout = null
-                            }, 5000)
+                            }, 7000)
                         }
                     } catch (error) {
                         console.error('Failed to parse link enter data:', error)
@@ -1457,7 +1454,6 @@ document.addEventListener('input', function(event) {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const linkData = JSON.parse(dataPayload)
                         
-                        // linkPreviewVisible = false
                         hoveredLink = null
 
                         if (linkPreviewTimeout) {
@@ -1607,74 +1603,6 @@ document.addEventListener('input', function(event) {
                 }))
             }
         })
-    }
-
-    // Simple diff algorithm to generate additions/deletions
-    function generateDiff(oldText, newText) {
-        const diff = []
-        let i = 0, j = 0
-        
-        while (i < oldText.length || j < newText.length) {
-            if (i >= oldText.length) {
-                // Remaining characters are additions
-                diff.push({ type: 'add', char: newText[j] })
-                j++
-            } else if (j >= newText.length) {
-                // Remaining characters are deletions
-                diff.push({ type: 'delete', char: oldText[i] })
-                i++
-            } else if (oldText[i] === newText[j]) {
-                // Characters match
-                diff.push({ type: 'same', char: oldText[i] })
-                i++
-                j++
-            } else {
-                // Characters differ - look ahead to see if it's insert/delete/replace
-                let foundMatch = false
-                
-                // Check if next few chars in new text match current old char (insertion)
-                for (let k = j + 1; k < Math.min(j + 5, newText.length); k++) {
-                    if (newText[k] === oldText[i]) {
-                        // Found match - insert the characters before it
-                        for (let l = j; l < k; l++) {
-                            diff.push({ type: 'add', char: newText[l] })
-                        }
-                        diff.push({ type: 'same', char: oldText[i] })
-                        i++
-                        j = k + 1
-                        foundMatch = true
-                        break
-                    }
-                }
-                
-                if (!foundMatch) {
-                    // Check if next few chars in old text match current new char (deletion)
-                    for (let k = i + 1; k < Math.min(i + 5, oldText.length); k++) {
-                        if (oldText[k] === newText[j]) {
-                            // Found match - delete the characters before it
-                            for (let l = i; l < k; l++) {
-                                diff.push({ type: 'delete', char: oldText[l] })
-                            }
-                            diff.push({ type: 'same', char: newText[j] })
-                            i = k + 1
-                            j++
-                            foundMatch = true
-                            break
-                        }
-                    }
-                }
-                
-                if (!foundMatch) {
-                    // Treat as replacement
-                    diff.push({ type: 'delete', char: oldText[i] })
-                    diff.push({ type: 'add', char: newText[j] })
-                    i++
-                    j++
-                }
-            }
-        }
-        
-        return diff
     }
 
     // Generate random text changes for diff simulation
@@ -1841,7 +1769,7 @@ document.addEventListener('input', function(event) {
                 data.frames[tab.id].wrapper = frameWrapper
                 attached = true
             } catch (err) {
-                console.error(err)
+                console.error('Error attaching ControlledFrame:', err)
                 tab?.id && delete data.frames[tab.id]
                 setTimeout(() => {
                     retry = retry + 1
@@ -1852,12 +1780,10 @@ document.addEventListener('input', function(event) {
 
     let detached = false
     onDestroy(() => {
-        // console.log('ondestro', { tab, detached })
         if (tab?.id && !detached && !tab.hibernated) {
             delete data.frames[tab.id]
         }
         
-        // Clean up LED indicator timeouts
         if (networkAccessTimeout) {
             clearTimeout(networkAccessTimeout)
             networkAccessTimeout = null
@@ -1865,6 +1791,10 @@ document.addEventListener('input', function(event) {
         if (blockedRequestTimeout) {
             clearTimeout(blockedRequestTimeout)
             blockedRequestTimeout = null
+        }
+        if (linkPreviewTimeout) {
+            clearTimeout(linkPreviewTimeout)
+            linkPreviewTimeout = null
         }
     })
     

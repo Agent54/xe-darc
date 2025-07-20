@@ -576,3 +576,5 @@ remove hibernate flag and default to hibernated
 
 
 context menu url copy + reload
+
+fix closed tabs and lighbox child zombies
