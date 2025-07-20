@@ -7,7 +7,14 @@
     import data from '../data.svelte.js'
     
     // Custom lightbox scale animation
-    function lightboxScale(_, { duration = 150 }) {
+    function lightboxScale(node, { duration = 150 }) {
+        // Add animating class to disable expensive effects
+        const backdrop = node.closest('.lightbox-backdrop')
+        if (backdrop) {
+            backdrop.classList.add('animating')
+        }
+        node.classList.add('animating')
+
         return {
             duration,
             easing: linear,
@@ -15,15 +22,29 @@
                 const scale = 0.8 + (0.2 * t)
                 const opacity = t
                 return `
-                    transform: scale(${scale});
+                    transform: translateZ(0) scale(${scale});
                     opacity: ${opacity};
                 `
+            },
+            tick: (t, u) => {
+                // Remove animating class when animation completes
+                if (t === 1) {
+                    requestAnimationFrame(() => {
+                        if (backdrop) {
+                            backdrop.classList.remove('animating')
+                        }
+                        node.classList.remove('animating')
+                    })
+                }
             }
         }
     }
 
     // Custom preview expand transition (fade out while growing)
-    function previewExpand(_, { duration = 200 }) {
+    function previewExpand(node, { duration = 200 }) {
+        // Add animating class to disable expensive effects
+        node.classList.add('animating')
+
         return {
             duration,
             easing: linear,
@@ -31,9 +52,17 @@
                 const scale = 1 + (0.3 * (1 - t)) // Grow from 100% to 130%
                 const opacity = t // Fade out
                 return `
-                    transform: scale(${scale});
+                    transform: translateZ(0) scale(${scale});
                     opacity: ${opacity};
                 `
+            },
+            tick: (t, u) => {
+                // Remove animating class when animation completes
+                if (t === 1) {
+                    requestAnimationFrame(() => {
+                        node.classList.remove('animating')
+                    })
+                }
             }
         }
     }
@@ -92,6 +121,54 @@
     // Function to create off-origin lightbox
     function createOffOriginLightbox(url, originalOrigin, targetOrigin) {
         console.log(`🔗 Creating off-origin lightbox: ${originalOrigin} → ${targetOrigin}`)
+        
+        // Check if there's a current hover preview for the same URL
+        if (globalHoverPreview && globalHoverPreview.href === url) {
+            if (globalHoverPreviewVisible && globalHoverPreviewTabId) {
+                // Convert existing visible preview to lightbox
+                console.log(`🔄 Converting existing hover preview to lightbox: ${url}`)
+                globalHoverPreviewExpanding = true
+                cleanupForExpand()
+                
+                // Convert the preview tab to lightbox
+                setTimeout(() => {
+                    data.updateTab(globalHoverPreviewTabId, {preview: false, lightbox: true})
+                    globalHoverPreview = null
+                    globalHoverPreviewTabId = null
+                    globalHoverPreviewExpanding = false
+                }, 200)
+                
+                // Return the existing tab (will be converted to lightbox)
+                return data.docs[globalHoverPreviewTabId]
+            } else if (globalHoverPreviewTimeout) {
+                // There's a pending hover preview for the same URL
+                console.log(`🔄 Converting pending hover preview to lightbox: ${url}`)
+                
+                // Cancel the hover preview timeout
+                clearTimeout(globalHoverPreviewTimeout)
+                globalHoverPreviewTimeout = null
+                
+                // Create lightbox directly instead of preview
+                const lightboxTab = data.newTab(data.spaceMeta.activeSpace, { 
+                    url: url,
+                    title: targetOrigin,
+                    opener: tabId,
+                    lightbox: true
+                })
+                
+                // Clean up hover preview state
+                globalHoverPreview = null
+                globalHoverPreviewVisible = false
+                globalHoverPreviewShown = false
+                
+                return lightboxTab
+            }
+        }
+        
+        // Clean up any other hover previews when creating a new lightbox
+        cleanupAllHoverPreviews()
+        
+        // No matching hover preview, create new lightbox tab
         const lightboxTab = data.newTab(data.spaceMeta.activeSpace, { 
             url: url,
             title: targetOrigin,
@@ -177,9 +254,41 @@
         globalHoverPreviewVisible = false
     }
 
+    // Complete cleanup of all hover preview state (for lightbox creation)
+    function cleanupAllHoverPreviews() {
+        console.log('🚫 Cleaning up all hover previews for lightbox creation')
+        
+        // Cancel any pending preview
+        if (globalHoverPreviewTimeout) {
+            clearTimeout(globalHoverPreviewTimeout)
+            globalHoverPreviewTimeout = null
+        }
+        // Clear any pending hide delays
+        if (hidePreviewDelayTimeout) {
+            clearTimeout(hidePreviewDelayTimeout)
+            hidePreviewDelayTimeout = null
+        }
+        // Clear any link preview timeouts
+        if (linkPreviewTimeout) {
+            clearTimeout(linkPreviewTimeout)
+            linkPreviewTimeout = null
+        }
+        // Clear hovered link state
+        if (hoveredLink) {
+            hoveredLink = null
+        }
+        // Clean up visible preview immediately (except pinned ones for debugging)
+        if (globalHoverPreviewVisible && !globalHoverPreviewPinned) {
+            cleanupGlobalPreview()
+        }
+    }
+
     // Show global hover preview when regular link preview has been visible for a while
     $effect(() => {
-        if (hoveredLink && data.spaceMeta.config.showLinkPreviews) {
+        // Don't show hover previews when a lightbox is active
+        const hasActiveLightbox = tab.lightboxChild && data.docs[tab.lightboxChild]
+        
+        if (hoveredLink && data.spaceMeta.config.showLinkPreviews && !hasActiveLightbox) {
             // Cancel any pending hide delay because we have (or are about to have) a hovered link again
             if (hidePreviewDelayTimeout) {
                 clearTimeout(hidePreviewDelayTimeout)
@@ -199,9 +308,10 @@
             }
         } else if ( !isHoveringPreview && !globalHoverPreviewPinned) {
             // Hide global preview when regular preview is hidden AND not hovering the preview AND not pinned
+            // OR when a lightbox becomes active
             if (hidePreviewDelayTimeout) clearTimeout(hidePreviewDelayTimeout)
             hidePreviewDelayTimeout = setTimeout(() => {
-                if (!isHoveringPreview && !hoveredLink) {
+                if (!isHoveringPreview && (!hoveredLink || hasActiveLightbox)) {
                     cleanupGlobalPreview()
                 }
             }, 150)
@@ -1002,13 +1112,16 @@
         z-index: 20000;
         pointer-events: auto;
         opacity: 0;
-        transform: translateY(-10px);
+        transform: translateZ(0) translateY(-10px);
         transition: opacity 300ms ease-out, transform 300ms ease-out;
+        /* CSS optimization tricks */
+        will-change: opacity, transform;
+        backface-visibility: hidden;
     }
 
     .global-hover-preview.shown {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateZ(0) translateY(0);
     }
 
     .global-hover-preview-container {
@@ -1023,6 +1136,14 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        /* CSS optimization tricks */
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        will-change: transform;
+    }
+
+    .global-hover-preview-container.animating {
+        box-shadow: none;
     }
 
     .global-hover-preview-header {
@@ -1239,14 +1360,23 @@
         /* width: 100%; */
         height: 100%;
         background: rgb(0 0 0 / 58%);
-        backdrop-filter: blur(2px);
-        z-index: 15000;
+        backdrop-filter: blur(1px);
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 40px;
         z-index: 1;
         width: calc(100vw - var(--space-taken, 0px) - 18px);
+        /* CSS optimization tricks */
+        will-change: opacity, backdrop-filter;
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        /* Disable expensive effects during animation */
+        transition: backdrop-filter 0.2s ease;
+    }
+
+    .lightbox-backdrop.animating {
+        backdrop-filter: none;
     }
 
     @media (min-width: 1800px) {
@@ -1267,6 +1397,16 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        /* CSS optimization tricks */
+        will-change: transform, opacity, box-shadow;
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        /* Optimize rendering during transitions */
+        transition: box-shadow 0.15s ease;
+    }
+
+    .lightbox-container.animating {
+        box-shadow: none;
     }
 
     .lightbox-header {
