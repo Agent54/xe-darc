@@ -575,7 +575,6 @@
             // Focus the input element with a small delay to ensure DOM is ready
             setTimeout(() => {
                 if (inputElement) {
-                    console.log('🎯 Focusing input element', inputElement)
                     inputElement.focus()
                 } else {
                     console.warn('🎯 Input element not available for focus')

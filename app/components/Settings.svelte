@@ -768,7 +768,6 @@
                         pinned: tab.pinned,
                         muted: tab.muted,
                         audioPlaying: tab.audioPlaying,
-                        hibernated: tab.hibernated,
                         partition: tab.partition
                     })),
                     closed: closed.map(tab => ({

@@ -23,6 +23,7 @@
         createOffOriginLightbox = () => {},
 
         hoveredLink = $bindable(),
+        commandKeyPressed = $bindable(),
         inputDiffVisible = $bindable(),
         inputDiffTimeout = $bindable(),
         inputDiffData = $bindable(),
@@ -36,6 +37,9 @@
     let anchor = $state(null)
 
     let initialUrl = $state('')
+    
+    // Track command key state
+    let isCommandKeyDown = $state(false)
 
     // OAuth popup state
     let oauthPopup = $state(null) // { url, width, height, parentTab, event }
@@ -416,7 +420,7 @@
         setTimeout(() => updateTabMeta(tab), 100)
     }
 
-    // todo cycle every 5 seconds to non hibernated tabs to check audiostate 
+    // todo cycle every 15 seconds to check audiostate?
     // function updateTabAudioState (frame) {
     //     if (frame && typeof frame.getAudioState === 'function') {
     //         frame.getAudioState().then(audible => {
@@ -471,7 +475,7 @@
                 }
                 
                 // Create lightbox via parent function
-                createOffOriginLightbox(event.url, currentOrigin, targetOrigin)
+                createOffOriginLightbox(event.url, currentOrigin, targetOrigin, isCommandKeyDown)
                 
                 // Don't set loading state since we're blocking navigation
                 return
@@ -569,7 +573,7 @@
         if (isOAuthPopup) {
             handleOAuthPopup(tab, e)
         } else {
-            data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title, opener: tab.id, lightbox: true })         
+            data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title, opener: tab.id, lightbox: !isCommandKeyDown })         
         }
     }
 
@@ -692,6 +696,11 @@ window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
 
 // Global keyboard event listener for controlled frame
 document.addEventListener('keydown', function(event) {
+    // Track command key state
+    if (event.metaKey || event.ctrlKey) {
+        console.log('iwa:command-key-down:${tab.id}');
+    }
+    
     // Check for Cmd+W (Mac) or Ctrl+W (Windows/Linux)
     if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
         console.log('iwa:close-tab:${tab.id}');
@@ -708,6 +717,13 @@ document.addEventListener('keydown', function(event) {
         event.stopPropagation();
         event.stopImmediatePropagation();
         return false;
+    }
+}, { capture: true, passive: false });
+
+document.addEventListener('keyup', function(event) {
+    // Track command key state
+    if (event.key === 'Meta' || event.key === 'Control') {
+        console.log('iwa:command-key-up:${tab.id}');
     }
 }, { capture: true, passive: false });
 
@@ -1365,6 +1381,22 @@ document.addEventListener('input', function(event) {
                 onFrameFocus()
             } else if (message === 'iwa:blur') {
                 onFrameBlur()
+            } else if (message.startsWith('iwa:command-key-down:')) {
+                // Track command key press from controlled frame
+                const tabId = message.substring('iwa:command-key-down:'.length)
+                if (tabId === mytab.id) {
+                    isCommandKeyDown = true
+                    commandKeyPressed = true
+                    console.log(`📌 Command key pressed in tab ${tabId}`)
+                }
+            } else if (message.startsWith('iwa:command-key-up:')) {
+                // Track command key release from controlled frame
+                const tabId = message.substring('iwa:command-key-up:'.length)
+                if (tabId === mytab.id) {
+                    isCommandKeyDown = false
+                    commandKeyPressed = false
+                    console.log(`📌 Command key released in tab ${tabId}`)
+                }
             } else if (message.startsWith('iwa:close-tab:')) {
                 // Extract tab ID from message - handle colons in tab ID
                 const tabId = message.substring('iwa:close-tab:'.length)
@@ -1724,7 +1756,6 @@ document.addEventListener('input', function(event) {
             controlledFrame.autosize = true
             controlledFrame.allowtransparency = false
 
-            console.log('setting up frame', controlledFrame)
             controlledFrame.setZoomMode?.('disabled')
             setupRequestHandler(controlledFrame)
             setupMessageListener(controlledFrame)
@@ -1760,7 +1791,7 @@ document.addEventListener('input', function(event) {
 
     let detached = false
     onDestroy(() => {
-        if (tab?.id && !detached && !tab.hibernated) {
+        if (tab?.id && !detached) {
             delete data.frames[tab.id]
         }
         
@@ -1779,7 +1810,7 @@ document.addEventListener('input', function(event) {
     })
     
     function detach () {
-        if (!tab?._id || tab.hibernated) {
+        if (!tab?._id) {
             tab?.id && delete data.frames[tab.id]
             return {
                 duration: 0

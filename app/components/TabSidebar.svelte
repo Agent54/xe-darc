@@ -22,7 +22,7 @@
     let previousSpaceIndex = -1
     let scrollActiveSpaceTimeout = null
 
-    const globallyPinnedTabs = $derived(data.globalPins)
+    const globallyPinnedTabs = $derived(data.spaceMeta.globalPins)
     
     function handleMouseEnter() {
         isHovered = true
@@ -472,7 +472,7 @@
                                         {/if}
                                     {/each}
                                     
-                                    <div class="tab-group" title="April - 10 tabs">
+                                    <!-- TODO: <div class="tab-group" title="April - 10 tabs">
                                         <div class="tab-group-main">
                                             <div class="tab-group-favicons">
                                                 <div class="tab-group-favicon">
@@ -489,7 +489,7 @@
                                         </div>
                                         <span class="tab-group-count">10</span>
                                         <button class="tab-group-close" aria-label="Close tab group">×</button>
-                                    </div>
+                                    </div> -->
                                 </div>
                             </div>
                         {/each}

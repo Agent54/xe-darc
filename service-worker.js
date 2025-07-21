@@ -3,7 +3,7 @@ self.addEventListener('fetch', (e) => {
 
     if (e.request.url == 'isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac/app/test.js') {
         const response = new Response(`export default function test() {
-    console.log('test world ')
+    console.log('dynamic loading of js module successful')
 }`, {
             status: 200,
             headers: {

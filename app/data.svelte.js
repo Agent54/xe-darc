@@ -14,6 +14,12 @@ const db = new PouchDB('darc', { adapter: 'idb' })
 const sortOrder = ['archive', 'spaceId', 'type', 'order']
 
 const docs = $state({})
+const origins = $state({})
+const spaces = $state({})
+const activity = $state({})
+const resources = $state({})
+const frames = $state({})
+const previews = $state({})
 
 db.bulkDocs(bootstrap).then(async (res) => {
     db.createIndex({
@@ -72,27 +78,12 @@ if (remote) {
     })
 }
 
-const origins = $state({})
-const spaces = $state({})
-const globalPins = $state([])
-const activity = $state({})
-const resources = $state({})
-const frames = {}
-
-
-console.log('starting garbage collector')
-// garbage collect instances that are not in the tabs array every 15 minutes
-setInterval(() => {
-    Object.entries(frames).forEach(instance => {
-        console.log('inspecting for gb instance', instance)
-    })
-}, 900000)
-
 const spaceMeta = $state({
     activeSpace: localStorage.getItem('activeSpace') || null,
     spaceOrder: [],
     closedTabs: [],
     activeTab: null,
+    globalPins: [],
     config: {
         leftPinnedTabWidth: 400,
         rightPinnedTabWidth: 350,
@@ -101,6 +92,23 @@ const spaceMeta = $state({
         showLinkPreviews: true
     }
 })
+
+// Cleanup frame instances
+setInterval(() => {
+    Object.entries(frames).sort((a, b) => b[1].active - a[1].active).forEach(([id, frameData], i) => {
+        if (!frameData.frame || docs[id]?.pinned || spaceMeta.activeTab?.id === id) {
+            return
+        }
+
+        if (frameData.active && ((Date.now() - frameData.active) > 172800000)) {
+            console.log('hibernating > 2 days', frameData)
+            hibernate(id)
+        } else if (i > 40) {
+            console.log('hibernating > 40', frameData)
+            hibernate(id)
+        }
+    })
+}, 900000)
 
 let initialLoad = true
 async function refresh(spaceId) {
@@ -118,13 +126,13 @@ async function refresh(spaceId) {
         console.error('approaching max data size, needs paging and partition support now')
     }
 
-    console.log({newDocs})
+    console.log({ newDocs })
 
     if (spaceId) {
         spaces[spaceId] ??= {}
         spaces[spaceId].tabs = []
     }
-    spaceMeta.closedTabs = []
+    const closedTabs = []
 
     for (const refreshDoc of newDocs) {
         let doc
@@ -163,11 +171,16 @@ async function refresh(spaceId) {
             if (doc.archive) {
                 // console.log(doc)
                 if (doc.archive === 'closed') {
-                    spaceMeta.closedTabs.push(doc)
+                    closedTabs.push(doc)
                 }
                 continue
             } else {
                 if (doc.preview || doc.lightbox) {
+                    previews[doc.opener] ??= { lightbox: null, tabs: [] }
+                    previews[doc.opener].tabs.push(doc)
+                    if (doc.lightbox) {
+                        previews[doc.opener].lightbox = doc._id
+                    }
                     continue
                 }
                 spaces[doc.spaceId].tabs.push(doc)
@@ -190,12 +203,10 @@ async function refresh(spaceId) {
         // }
     }
 
-    sortSpaces()
-    initialLoad = false
-}
-
-function sortSpaces () {
+    spaceMeta.closedTabs = closedTabs.sort((a, b) => b.modified - a.modified)
     spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
+    
+    initialLoad = false
 }
 
 let lastLocalSeq = null
@@ -254,6 +265,10 @@ function activate(tabId) {
             return tab
         }
     }
+
+    if (frames[tabId]) {
+        frames[tabId].active = Date.now()
+    }
     
     // If tab not found in spaces, still set it as active (it might be loading)
     // This ensures new tabs get activated even if they haven't been loaded yet
@@ -271,38 +286,44 @@ function activate(tabId) {
 
 function closeTab (spaceId, tabId) {
     const tab = docs[tabId]
-
-    if (tab.lightbox) {
-        // If this tab is a lightbox, close the parent tab instead
-        const parentTab = docs[tab.opener]
-
-        db.put({...parentTab, lightboxChild: null })
-    }
-
-    if (tab.lightboxChild) {
-        closeTab(tab.spaceId, tab.lightboxChild)
-    }
    
-    db.put({
-        ...tab,
-        closed: true, // legacy
-        archive: 'closed',
-        frame: undefined,
-        wrapper: undefined
-    })
+    db.bulkDocs([
+        ...(previews[tabId]?.tabs.map(prev => {
+            if (frames[prev.id])  {
+                frames[prev.id].frame = null
+            }
+            
+            return {
+                ...prev,
+                closed: true, // legacy
+                archive: 'closed',
+                frame: undefined,
+                wrapper: undefined,
+                modified: Date.now()
+            }
+        }) || []),
+        {
+            ...tab,
+            closed: true, // legacy
+            archive: 'closed',
+            frame: undefined,
+            wrapper: undefined,
+            modified: Date.now()
+        },
+        {
+            _id: `darc:activity_${crypto.randomUUID()}`,
+            tabId: tab.id,
+            spaceId: tab.spaceId,
+            type: 'activity',
+            archive: 'history',
+            action: 'close',
+            url: tab.url,
+            title: tab.title,
+            favicon: tab.favicon,
+            created: Date.now()
+        }
+    ])
 
-    db.put({
-        _id: `darc:activity_${crypto.randomUUID()}`,
-        tabId: tab.id,
-        spaceId: tab.spaceId,
-        type: 'activity',
-        archive: 'history',
-        action: 'close',
-        url: tab.url,
-        title: tab.title,
-        favicon: tab.favicon,
-        created: Date.now()
-    })
     // const space = spaces[spaceId]
     // if (!space || !space.tabs) {
     //     return { success: false, wasLastTab: false }
@@ -364,15 +385,20 @@ function loadSampleData () {
     })
 }
 
+function hibernate (tabId) {
+    frames[tabId].frame = null
+    frames[tabId].hibernated = Date.now()
+}
+
 export default {
     origins,
     spaceMeta,
-    globalPins,
     spaces,
     activity,
     resources,
     docs,
     frames,
+    previews,
 
     activate,
     loadSampleData,
@@ -388,6 +414,17 @@ export default {
 
         return result[0]
     },
+
+    hibernateOthers: (keepTabId) => {
+        for (const tabId of Object.keys(frames)) {
+            if (!docs[tabId].pinned && tabId !== keepTabId) {
+                frames[tabId].frame = null
+                frames[tabId].hibernated = Date.now()
+            }
+        }
+    },
+
+    hibernate,
 
     previous: () => {
         const activeSpace = spaces[spaceMeta.activeSpace]
@@ -413,6 +450,10 @@ export default {
         
         // Set the previous tab as active
         spaceMeta.activeTab = previousTab
+
+        if (frames[previousTab]) {
+            frames[previousTab].active = Date.now()
+        }
         
         return true
     },
@@ -484,7 +525,7 @@ export default {
         })
     },
     
-    newTab: (spaceId, { url, title, opener, preview, lightbox } = {}) => {
+    newTab: (spaceId, { url, title, opener, preview, lightbox, shouldFocus } = {}) => {
         const _id = `darc:tab_${crypto.randomUUID()}`
 
         const tab = {
@@ -499,20 +540,11 @@ export default {
             opener,
             preview: !!preview,
             archive: preview ? 'preview' : undefined,
-            lightbox: !!lightbox,
-            shouldFocus: !url || url === 'about:newtab' // Add shouldFocus for new tabs
+            lightbox: !!lightbox
         }
 
-        // If creating a lightbox, also update the parent tab to reference it
-        if (lightbox && opener) {
-            const parentTab = docs[opener]
-            if (parentTab) {
-                // Update parent tab to reference this lightbox
-                db.put({
-                    ...parentTab,
-                    lightboxChild: _id
-                })
-            }
+        if (shouldFocus) {
+            spaceMeta.activeTab = tab
         }
 
         db.put(tab)
@@ -530,13 +562,6 @@ export default {
 
         if (typeof lightbox !== 'undefined') {
             newProps.lightbox = lightbox
-
-            if (lightbox) {
-                const parentTab = docs[tab.opener]
-                if (parentTab) {
-                    parentTab.lightboxChild = tabId
-                }
-            }
         }
         if (typeof preview !== 'undefined') {
             newProps.preview = preview
@@ -560,7 +585,8 @@ export default {
         const docsToUpdate = spaceMeta.closedTabs.map(tab => ({
             ...tab,
             deleted: true,
-            archive: 'deleted'
+            archive: 'deleted',
+            modified: Date.now()
         }))
         
         if (docsToUpdate.length > 0) {

@@ -20,29 +20,9 @@
     // Proper detection of ControlledFrame API support
     function isControlledFrameSupported() {
         // Method 1: Check if the custom element is defined
-        if (typeof customElements !== 'undefined' && customElements.get('controlledframe')) {
-            console.log('✅ ControlledFrame API detected via customElements.get()')
+        if (typeof window.HTMLControlledFrameElement !== 'undefined' || (typeof customElements !== 'undefined' && customElements.get('controlledframe'))) {
+            // console.log('✅ ControlledFrame API detected via customElements.get()')
             return true
-        }
-        
-        // Method 2: Check if the global constructor exists
-        if (typeof window.HTMLControlledFrameElement !== 'undefined') {
-            console.log('✅ ControlledFrame API detected via HTMLControlledFrameElement constructor')
-            return true
-        }
-        
-        // Method 3: Try to create element and check for API methods
-        try {
-            const testElement = document.createElement('controlledframe')
-            const hasApiMethods = typeof testElement.setZoomMode === 'function' || 
-                                 typeof testElement.back === 'function' ||
-                                 typeof testElement.forward === 'function'
-            if (hasApiMethods) {
-                console.log('✅ ControlledFrame API detected via element methods')
-                return true
-            }
-        } catch (error) {
-            console.log('❌ ControlledFrame element creation failed:', error)
         }
         
         console.log('❌ ControlledFrame API not available - falling back to iframe')
@@ -62,7 +42,9 @@
     const requestedResources = $state([])
 
    window.getScreenDetails().then(screen => {
-        console.log('screen control error', screen)
+       // console.log('screen control success', screen)
+   }).catch(err => {
+        console.log('screen control error. FIXME: needs to be triggered on user action for the first time, needs to be integrated into welcome screen/setup modal', err)
    })
 
     // handle permission change
@@ -367,17 +349,10 @@
     window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
 
-    function openNewTab() {
-        // Use data module to create new tab in current active space
-        if (!data.spaceMeta.activeSpace) {
-            console.warn('No active space to create tab in')
-            return
-        }
-        
-        const newTab = data.newTab(data.spaceMeta.activeSpace)
+    function openNewTab() {        
+        const newTab = data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (newTab) {
-            // Set this tab as the active tab using the data store function
-            data.activate(newTab.id)
+            data.activate(newTab.id) // obsolete?
             setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
         }
     }
@@ -743,58 +718,19 @@
         }
     }
 
-    function togglePinTab(tab) {
-        if (!data.spaceMeta.activeSpace || !tab) return
-        
-        // Find the tab in the current space and toggle its pinned state
-        // const space = data.spaces[data.spaceMeta.activeSpace]
-        // if (space && space.tabs) {
-        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-        //     if (tabIndex !== -1) {
-        //         space.tabs[tabIndex].pinned = space.tabs[tabIndex].pinned ? null : 'left'
-        //     }
-        // }
-        data.pin({ tabId: tab.id, pinned: tab.pinned ? null : 'left' })
-        hideContextMenu()
-    }
-
     function pinTabLeft(tab) {
         if (!data.spaceMeta.activeSpace || !tab) return
-        
-        // const space = data.spaces[data.spaceMeta.activeSpace]
-        // if (space && space.tabs) {
-        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-        //     if (tabIndex !== -1) {
-        //         space.tabs[tabIndex].pinned = 'left'
-        //     }
-        // }
+
         data.pin({ tabId: tab.id, pinned: 'left' })
         hideContextMenu()
     }
 
     function pinTabRight(tab) {
-        // if (!data.spaceMeta.activeSpace || !tab) return
-        
-        // const space = data.spaces[data.spaceMeta.activeSpace]
-        // if (space && space.tabs) {
-        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-        //     if (tabIndex !== -1) {
-        //         space.tabs[tabIndex].pinned = 'right'
-        //     }
-        // }
         data.pin({ tabId: tab.id, pinned: 'right' })
         hideContextMenu()
     }
 
     function unpinTab(tab) {
-        // if (!data.spaceMeta.activeSpace || !tab) return
-        // const space = data.spaces[data.spaceMeta.activeSpace]
-        // if (space && space.tabs) {
-        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-        //     if (tabIndex !== -1) {
-        //         space.tabs[tabIndex].pinned = null
-        //     }
-        // }
         data.pin({ tabId: tab.id, pinned: null })
         hideContextMenu()
     }
@@ -974,44 +910,42 @@
             let screenshot = null
             
             // Check if frame is ready and loaded
-            const isFrameReady = () => {
-                return frame.src && 
-                       !frame.src.includes('about:blank') && 
-                       frame.contentWindow !== null
-            }
+            // const isFrameReady = () => {
+            //     return frame.src && 
+            //            !frame.src.includes('about:blank') && 
+            //            frame.contentWindow !== null
+            // }
             
             // Wait for frame to be ready if needed
-            if (!isFrameReady()) {
-                console.log('Frame not ready for screenshot, waiting...')
-                await new Promise(resolve => setTimeout(resolve, 1000))
-                if (!isFrameReady()) {
-                    console.log('Frame still not ready, skipping screenshot')
-                    return null
-                }
-            }
-            
-            const imageDetails = {
-                format: 'png',
-                quality: 80
-            }
+            // if (!isFrameReady()) {
+            //     console.log('Frame not ready for screenshot, waiting...')
+            //     await new Promise(resolve => setTimeout(resolve, 1000))
+            //     if (!isFrameReady()) {
+            //         console.log('Frame still not ready, skipping screenshot')
+            //         return null
+            //     }
+            // }
             
             // Retry mechanism for flaky captures
-            for (let attempt = 1; attempt <= 3; attempt++) {
+            // for (let attempt = 1; attempt <= 3; attempt++) {
                 try {
-                    console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
-                    screenshot = await frame.captureVisibleRegion(imageDetails)
-                    if (screenshot) {
-                        console.log(`Screenshot successful on attempt ${attempt}`)
-                        break
-                    }
+                    // console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
+                    screenshot = await frame.captureVisibleRegion({
+                        format: 'png',
+                        quality: 80
+                    })
+                    // if (screenshot) {
+                    //     console.log(`Screenshot successful on attempt ${attempt}`)
+                    //     // break
+                    // }
                 } catch (captureError) {
-                    console.log(`Capture attempt ${attempt} failed:`, captureError.message)
-                    if (attempt < 3) {
-                        // Wait before retry, increasing delay each time
-                        await new Promise(resolve => setTimeout(resolve, attempt * 500))
-                    }
+                    console.log(`Capture failed:`, captureError)
+                    // if (attempt < 3) {
+                    //     // Wait before retry, increasing delay each time
+                    //     await new Promise(resolve => setTimeout(resolve, attempt * 500))
+                    // }
                 }
-            }
+            // }
             
             
             if (screenshot) {
@@ -1320,7 +1254,7 @@
     function getViewModeIcon(mode) {
         switch (mode) {
             case 'default': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" /></svg>`
-            case 'stage': return `<svg  class="w-4 h-4"  xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            case 'stage': return `<svg  class="w-4 h-4"  xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="1 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
             </svg>`
             case 'tile': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>`
@@ -1332,6 +1266,7 @@
     }
 
     function checkTabListOverflow() {
+        console.log('checkTabListOverflow')
         const tabList = document.querySelector('.tab-list')
         if (tabList) {
             isTabListOverflowing = tabList.scrollWidth > tabList.clientWidth
@@ -1377,6 +1312,7 @@
 
     // Check overflow when tabs change
     $effect(() => {
+        // FIXME: fix all effects
         if (tabs) {
             // Use longer timeout to ensure DOM is fully updated
             setTimeout(checkTabListOverflow, 100)
@@ -1900,8 +1836,6 @@
             logDragDropEvent('dragend', event)
             window.dragEventCounter = 0 // Reset counter
         }, { capture: true })
-
-        console.log('🎯 Global drag and drop event listeners installed')
     }
 
     // Initialize drag and drop listeners
@@ -2211,23 +2145,59 @@
             </span>
             <span>{menu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
         </div>
+
+        <!-- TODO: -->
         <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => { menu.tab.hibernated = !menu.tab.hibernated; onHide(); }}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); menu.tab.hibernated = !menu.tab.hibernated; onHide(); } }}>
+                role="menuitem"
+                tabindex="0"
+                onmouseup={() => toggleMuteTab(menu.tab)}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(menu.tab) } }}>
             <span class="context-menu-icon">
-                {#if menu.tab.hibernated}
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+            </span>
+            <span>Load at startup</span>
+        </div>
+
+        {#if data.frames[menu.tab.id]?.frame && data.spaceMeta.activeTab?.id !== menu.tab.id}
+            <div class="context-menu-item" 
+                role="menuitem"
+                tabindex="0"
+                onmouseup={() => { data.hibernate(menu.tab.id); onHide(); }}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.hibernate(menu.tab.id); onHide(); } }}>
+                <span class="context-menu-icon">
+                    <!-- {#if menu.tab.hibernated}
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+                        </svg>
+                    {:else} -->
+                    
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+                    </svg>  
+                </span>
+                <span>Hibernate</span>
+            </div>
+        {/if}
+
+        <div class="context-menu-item" 
+            role="menuitem"
+            tabindex="0"
+            onmouseup={() => {  data.hibernateOthers(menu.tab.id); onHide(); }}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault();  data.hibernateOthers(menu.tab.id); onHide(); } }}>
+            <span class="context-menu-icon">
+                <!-- {#if menu.tab.hibernated}
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
                     </svg>
-                {:else}
+                {:else} -->
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
                     </svg>
-                {/if}
+                <!-- {/if} -->
             </span>
-            <span>{menu.tab.hibernated ? 'Wake Up' : 'Hibernate'}</span>
+            <span>Hibernate others</span>
         </div>
 
         <div class="context-menu-item has-submenu" 
@@ -2326,7 +2296,9 @@
     onresize={handleResize}
     onfocus={updateWindowFocusState}
     onblur={updateWindowFocusState}
-    onvisibilitychange={() => { console.log('visibilitychange', document.visibilityState) }}
+    onvisibilitychange={() => { 
+        // console.log('visibilitychange', document.visibilityState) 
+    }}
 />
 
 <header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) focusModeHovered = true }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) focusModeHovered = false }}>

@@ -607,3 +607,9 @@ bug debug play bar behind drag handles
 copy link context menu
 
 clipboard copy/manager
+
+parallel chat stack/ closed chats menu/ context sidebar or top section
+
+load at startup option
+
+inputs + scroll pos restore
