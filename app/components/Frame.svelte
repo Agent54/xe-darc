@@ -35,7 +35,6 @@
     // "fullscreen"
     // "hid"
 
-    
     // Link preview state
     let hoveredLink = $state(null) // { href, target, rel, title }
     // let linkPreviewVisible = $state(false)
@@ -1086,7 +1085,7 @@
         top: 40px;
         /* right: 40px; */
         z-index: 20000;
-        pointer-events: auto;
+        pointer-events: none;
         opacity: 0;
         transform: translateZ(0) translateY(-10px);
         transition: opacity 300ms ease-out, transform 300ms ease-out;
@@ -1097,6 +1096,7 @@
 
     .global-hover-preview.shown {
         opacity: 1;
+        pointer-events: auto;
         transform: translateZ(0) translateY(0);
     }
 
@@ -1462,5 +1462,15 @@
     :global(.lightbox-controlledframe.frame .frame-instance) {
         border-top-left-radius: 0 !important;
         border-top-right-radius: 0 !important;
+    }
+
+    /* TODO: */
+    .stage-manager-fold {
+        transform: perspective(1200px) rotateY(-45deg) translateX(-20%) scale(0.85);
+        transform-origin: right center;
+        transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    }
+    .stage-manager-fold.active {
+        transform: perspective(1200px) rotateY(0deg) translateX(0%) scale(1);
     }
 </style>

@@ -603,3 +603,7 @@ proper permission handling in sidebar
 cmd open link
 
 bug debug play bar behind drag handles
+
+copy link context menu
+
+clipboard copy/manager
