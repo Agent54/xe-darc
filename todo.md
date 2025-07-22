@@ -613,3 +613,11 @@ parallel chat stack/ closed chats menu/ context sidebar or top section
 load at startup option
 
 inputs + scroll pos restore
+
+diary and time summary breakdown from browsing and code and mails other sites
+
+mute/unmute on history
+
+mute others feature
+
+var reactivity/ perf fixes app.svelte

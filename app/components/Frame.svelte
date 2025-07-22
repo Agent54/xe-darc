@@ -71,12 +71,10 @@
         //     // Clean up any hover previews when creating a new tab
         //     cleanupAllHoverPreviews()
             
-        //     // Create normal tab with shouldFocus
         //     const newTab = data.newTab(data.spaceMeta.activeSpace, { 
         //         url: url,
         //         title: targetOrigin,
         //         opener: tabId,
-        //         shouldFocus: true
         //     })
             
         //     // Activate the new tab immediately
@@ -374,22 +372,7 @@
         }
     })
 
-    $effect(() => {
-        if (tab.shouldFocus) {
-            // Delay resetting shouldFocus to give NewTab component time to handle it
-            setTimeout(() => {
-                tab.shouldFocus = false
-            }, 100)
-            
-            setTimeout(() => {
-                data.frames[tab.id]?.wrapper?.scrollIntoView({ behavior: 'smooth' })
-                if (tabButtons[tab.id]) {
-                    tabButtons[tab.id].scrollIntoView({ behavior: 'smooth' })
-                }
-            }, 100)
-        }
-    })  
-    //TODo clear daata support
+    //TODO: clear data support
 
     let iframeFrame = $state(null)
     let frameWrapper = $state(null)
@@ -446,7 +429,7 @@
     }
 </script>
 
-{#if !data.frames[tab.id]?.frame && data.spaceMeta.activeTab?.id !== tab.id && !tab.pinned}
+{#if !data.frames[tab.id]?.frame && data.spaceMeta.activeTabId !== tab.id && !tab.pinned}
     <div 
         bind:this={frameWrapper}
         transition:fade={{duration: 150}}

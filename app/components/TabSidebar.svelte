@@ -85,7 +85,7 @@
 
     function activateTab(tabId) {
         // If clicking on the currently active tab, switch to previous tab
-        if (tabId === data.spaceMeta.activeTab?.id) {
+        if (tabId === data.spaceMeta.activeTabId) {
             data.previous()
         } else {
             data.activate(tabId)
@@ -253,13 +253,13 @@
 
     // Watch for active tab changes and scroll to it in sidebar
     $effect(() => {
-        if (!data.spaceMeta.activeTab) {
+        if (!data.spaceMeta.activeTabId) {
             return
         }
         
         // Find the active tab element in the sidebar
         setTimeout(() => {
-            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTab?.id}"]`)
+            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTabId}"]`)
             if (activeTabElement) {
                 const tabsList = activeTabElement.closest('.tabs-list')
                 if (tabsList) {
@@ -430,7 +430,7 @@
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
                                         {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
-                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTab} title={tab.url} onmousedown={() => activateTab(tab.id)}>
+                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} title={tab.url} onmousedown={() => activateTab(tab.id)}>
                                                 <Favicon {tab} showButton={false} />
                                             </button>
                                         {/each}
@@ -462,7 +462,7 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab?.id} data-tab-id={tab.id}>
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} data-tab-id={tab.id}>
                                                 <button class="tab-item-main" title={tab.url} onmousedown={() => activateTab(tab.id)}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>

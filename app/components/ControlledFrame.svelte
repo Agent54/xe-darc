@@ -31,8 +31,6 @@
 
     let tab = $derived(data.docs[tabId])
 
-    $inspect(tab)
-
     let linkPreviewTimeout = null
     let anchor = $state(null)
 
@@ -139,7 +137,7 @@
 
     // Check if current tab has applicable user mods
     $effect(() => {
-        if (tab.url && tab.id === data.spaceMeta.activeTab?.id) {
+        if (tab.url && tab.id === data.spaceMeta.activeTabId) {
             console.log('checking for applicable mods', tab.url)
             const applicableMods = getApplicableMods(tab.url)
             if (applicableMods.length > 0) {
@@ -492,7 +490,7 @@
         const currentNetworkErr = data.origins[originValue]?.networkError
         const currentCertErr = data.origins[originValue]?.certificateError
         
-        console.log(`handleLoadStop called for`, {tab, e, currentNetworkErr})
+        // console.log(`handleLoadStop called for`, {tab, e, currentNetworkErr})
 
         tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
@@ -510,7 +508,7 @@
                 console.log(`🔒 Certificate error cleared - successfully navigated to ${tab.url}`)
             }
             
-            console.log(`✅ Page loaded successfully: ${tab.url}`)
+            // console.log(`✅ Page loaded successfully: ${tab.url}`)
         } else {
             // Load failed - preserve errors
             console.log(`🚨 Load failed - preserving errors for ${tab.url}`)
@@ -1011,8 +1009,6 @@ document.addEventListener('input', function(event) {
                 }
             })
         ]
-
-        console.log('trying' , tab.id)
 
         if (!frame.addContentScripts) {
             initialUrl = untrack(() => tab.url)
@@ -2067,7 +2063,7 @@ document.addEventListener('input', function(event) {
 
         <div class="hidden" bind:this={anchor}></div>
 
-        {#if tab.id === data.spaceMeta.activeTab?.id && statusLightsEnabled}
+        {#if tab.id === data.spaceMeta.activeTabId && statusLightsEnabled}
             <div class="led-indicator-array">
                 <div class="led-dot network-access" class:active={networkAccessActive}></div>
                 <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>
@@ -2092,7 +2088,7 @@ document.addEventListener('input', function(event) {
         {:else if isNewTabUrl(tab.url)}
             <NewTab
                 {tab}
-                isActive={tab.id === data.spaceMeta.activeTab?.id}
+                isActive={tab.id === data.spaceMeta.activeTabId}
             />
         {/if}
     </div>

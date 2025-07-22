@@ -567,7 +567,7 @@
     })
 
     $effect(() => {
-        if (tab.shouldFocus) {
+        if (isActive) {
             // if its brokenb add this in app shell
             // data.frames[tab.id]?.wrapper?.scrollIntoView({ behavior: 'smooth' })
             // tabButtons[tab.id]?.scrollIntoView({ behavior: 'smooth' })
@@ -580,8 +580,6 @@
                     console.warn('🎯 Input element not available for focus')
                 }
             }, 50)
-            
-            tab.shouldFocus = false
         }
         initializeAI()
 

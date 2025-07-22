@@ -352,7 +352,6 @@
     function openNewTab() {        
         const newTab = data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (newTab) {
-            data.activate(newTab.id) // obsolete?
             setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
         }
     }
@@ -396,19 +395,18 @@
     }
 
     function handleZoomReset() {
-        if (tabs.length > 0 && data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                const frame = data.frames[activeTab.id]?.frame
+        if (tabs.length > 0 && data.spaceMeta.activeTabId) {
+            if (data.frames[data.spaceMeta.activeTabId]) {
+                const frame = data.frames[data.spaceMeta.activeTabId]?.frame
                 
                 if (frame && frame.setZoom) {
                     frame.setZoom(1.0).then(() => {
-                        console.log(`[Tab ${activeTab.id}] Zoom reset to 100%`)
+                        console.log(`[Tab ${data.spaceMeta.activeTabId}] Zoom reset to 100%`)
                     }).catch((error) => {
-                        console.error(`[Tab ${activeTab.id}] Failed to reset zoom:`, error)
+                        console.error(`[Tab ${data.spaceMeta.activeTabId}] Failed to reset zoom:`, error)
                     })
                 } else if (frame && !frame.setZoom) {
-                    console.warn(`[Tab ${activeTab.id}] setZoom API not available on this frame`)
+                    console.warn(`[Tab ${data.spaceMeta.activeTabId}] setZoom API not available on this frame`)
                 } else {
                     console.warn('No active frame available for zoom reset')
                 }
@@ -421,9 +419,8 @@
     }
 
     function handleTabClose(event) {
-        console.log('Handling tab close request')
-        if (tabs.length > 0 && data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
+        if (tabs.length > 0 && data.spaceMeta.activeTabId) {
+            const activeTab = data.docs[data.spaceMeta.activeTabId]
             if (activeTab) {
                 closeTab(activeTab, event)
             }
@@ -444,7 +441,7 @@
         }
         
         // If clicking on the currently active tab, switch to previous tab
-        if (tab.id === data.spaceMeta.activeTab?.id) {
+        if (tab.id === data.spaceMeta.activeTabId) {
             data.previous()
         } else {
             // Set this tab as active using the data store function
@@ -460,19 +457,19 @@
 
     let tabButtons = $state({})
 
+
     // Effect to handle scrolling to active tab when it changes or when sidebars are toggled
     $effect(() => {
         // Watch for changes to active tab and sidebar state
-        const activeTab = data.spaceMeta.activeTab
-        const sidebarCount = openSidebars.size
-        
-        if (!activeTab) {
+        const sidebarCount = openSidebars.size // just for triggering effect
+        const activeFrameWrapper = data.frames[data.spaceMeta.activeTabId]?.wrapper
+
+        if (!activeFrameWrapper) {
             return
         }
         
-        console.log('scroll effect triggered for tab:', activeTab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
-        const activeFrameWrapper = data.frames[activeTab.id]?.wrapper
-        console.log('activeFrameWrapper exists:', activeFrameWrapper)
+        console.log('scroll effect triggered for tab:', data.spaceMeta.activeTabId, 'tabChangeFromScroll:', {tabChangeFromScroll})
+
         // Don't scroll if tab change was caused by scrolling
         // if (tabChangeFromScroll) {
         //     return
@@ -485,19 +482,19 @@
         if (!tabChangeFromScroll) {
             setTimeout(() => {
                 if (activeFrameWrapper) {
-                    console.log('calling scrollIntoView for tab:', activeTab.id)
+                    console.log('calling scrollIntoView for tab:', data.spaceMeta.activeTabId)
                     activeFrameWrapper.scrollIntoView({ 
                         behavior: isWindowResizing ? 'auto' : 'smooth' 
                     })
                 } else {
-                    console.warn('Frame wrapper not available for tab:', activeTab.id)
+                    console.warn('Frame wrapper not available for tab:', data.spaceMeta.activeTabId)
                 }
             }, 10)
         }
         
         setTimeout(() => {
-            if (tabButtons[activeTab.id]) {
-                tabButtons[activeTab.id].scrollIntoView({
+            if (tabButtons[data.spaceMeta.activeTabId]) {
+                tabButtons[data.spaceMeta.activeTabId].scrollIntoView({
                     behavior: isWindowResizing ? 'auto' : 'smooth',
                     inline: 'nearest',
                     block: 'nearest'
@@ -516,19 +513,18 @@
         const leftCount = leftPinnedTabs.length
         const rightCount = rightPinnedTabs.length
 
-        // console.log({leftCount, rightCount, tabChangeFromScroll})
+        console.log({leftCount, rightCount, tabChangeFromScroll})
         
         if (tabChangeFromScroll || !pinsInit) {
+            pinsInit = true
             return
         }
-
-        pinsInit = true
     
         untrack(() => {
              // Find the active tab in unpinned tabs
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                const activeFrameWrapper = data.frames[activeTab.id]?.wrapper
+            if (data.spaceMeta.activeTabId) {
+                console.log('pins effect triggered for tab:', data.spaceMeta.activeTabId)
+                const activeFrameWrapper = data.frames[data.spaceMeta.activeTabId]?.wrapper
                 // Scroll the active unpinned tab into view after pinned tabs layout change
                 setTimeout(() => {
                     if (activeFrameWrapper) {
@@ -567,11 +563,10 @@
             closedTabPlaceholderCount++
         }
         
-        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
+        setTimeout(checkTabListOverflow, 100) // Check overflow after DOM update
     }
 
     // function restoreTab(tab) {
-    //     tab.shouldFocus = true
     //     // tabs.push(tab)
     //     // closed = closed.filter(t => t !== tab)
         
@@ -669,25 +664,23 @@
             return
         }
 
-        if (data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                const frame = data.frames[activeTab.id]?.frame
-                frame.back?.()
-                // if (frame && typeof frame.back === 'function') {
-                //     // Check if the frame can go back
-                //     // if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
-                //     //     // No back navigation available, set to start page
-                //     //     activeTab.url = 'about:newtab'
-                //     // } else {
-                //     frame.back()
-                //     // }
-                // } else if (activeTab.url !== 'about:newtab') {
-                //     // Frame doesn't support navigation or is not a controlled frame
-                //     // Set to start page
-                //     activeTab.url = 'about:newtab'
-                // }
-            }
+        if (data.spaceMeta.activeTabId) {
+
+            const frame = data.frames[data.spaceMeta.activeTabId]?.frame
+            frame.back?.()
+            // if (frame && typeof frame.back === 'function') {
+            //     // Check if the frame can go back
+            //     // if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
+            //     //     // No back navigation available, set to start page
+            //     //     activeTab.url = 'about:newtab'
+            //     // } else {
+            //     frame.back()
+            //     // }
+            // } else if (activeTab.url !== 'about:newtab') {
+            //     // Frame doesn't support navigation or is not a controlled frame
+            //     // Set to start page
+            //     activeTab.url = 'about:newtab'
+            // }
         }
     }
 
@@ -698,23 +691,17 @@
             return
         }
 
-        if (data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                const frame = data.frames[activeTab.id]?.frame
-                if (frame && typeof frame.forward === 'function') {
-                    frame.forward()
-                }
+        if (data.spaceMeta.activeTabId) {
+            const frame = data.frames[data.spaceMeta.activeTabId]?.frame
+            if (frame && typeof frame.forward === 'function') {
+                frame.forward()
             }
         }
     }
 
     function reloadActiveTab() {
-        if (data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                reloadTab(activeTab)
-            }
+        if (data.spaceMeta.activeTabId) {
+            reloadTab(data.spaceMeta.activeTabId)
         }
     }
 
@@ -782,7 +769,7 @@
                                 clearTimeout(tabChangeFromScrollTimer)
                             }
                             // Change active tab directly (without untrack since we're using the flag)
-                            data.spaceMeta.activeTab = tab
+                            data.spaceMeta.activeTabId = tab.id
                             // Reset flag after a longer delay to prevent race conditions with the effect
                             tabChangeFromScrollTimer = setTimeout(() => {
                                 tabChangeFromScroll = false
@@ -1344,7 +1331,7 @@
         // Make the focused tab active
         if (focusedTabId) {
             // Set the active tab using the data store function
-            if (focusedTabId !== data.spaceMeta.activeTab?.id) {
+            if (focusedTabId !== data.spaceMeta.activeTabId) {
                 data.activate(focusedTabId)
             }
         }
@@ -1903,9 +1890,10 @@
 
     // URL editing functions
     function startEditingUrl() {
-        if (!data.spaceMeta.activeTab) return
+        if (!data.spaceMeta.activeTabId) return
         isEditingUrl = true
-        editingUrlValue = data.spaceMeta.activeTab.url || ''
+        const activeTab = data.docs[data.spaceMeta.activeTabId]
+        editingUrlValue = activeTab.url || ''
         // Focus the input after it's rendered
         setTimeout(() => {
             if (urlInput) {
@@ -1922,16 +1910,14 @@
 
     function handleUrlSubmit(event) {
         event.preventDefault()
-        if (!editingUrlValue.trim() || !data.spaceMeta.activeTab) {
+        if (!editingUrlValue.trim() || !data.spaceMeta.activeTabId) {
             stopEditingUrl()
             return
         }
         
-        const activeTab = data.spaceMeta.activeTab
-        
         try {
             let url = new URL(editingUrlValue)
-            data.navigate(activeTab.id, url.href)
+            data.navigate(data.spaceMeta.activeTabId, url.href)
         } catch {
             // Not a valid URL, treat as search
             const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
@@ -1946,7 +1932,7 @@
                     if (customUrl) {
                         try {
                             searchUrl = new URL(customUrl + encodeURIComponent(editingUrlValue))
-                            data.navigate(activeTab.id, searchUrl.href)
+                            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
                             stopEditingUrl()
                             return
                         } catch {
@@ -1963,7 +1949,7 @@
             }
             
             searchUrl.searchParams.set('q', editingUrlValue)
-            data.navigate(activeTab.id, searchUrl.href)
+            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
         }
         
         stopEditingUrl()
@@ -2160,7 +2146,7 @@
             <span>Load at startup</span>
         </div>
 
-        {#if data.frames[menu.tab.id]?.frame && data.spaceMeta.activeTab?.id !== menu.tab.id}
+        {#if data.frames[menu.tab.id]?.frame && data.spaceMeta.activeTabId !== menu.tab.id}
             <div class="context-menu-item" 
                 role="menuitem"
                 tabindex="0"
@@ -2312,7 +2298,7 @@
                     <li 
                         bind:this={tabButtons[tab.id]}
                         class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTab?.id} 
+                        class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
@@ -2363,7 +2349,7 @@
                     <li 
                         bind:this={tabButtons[tab.id]}
                         class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTab?.id} 
+                        class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
@@ -2410,7 +2396,7 @@
                     <li 
                         bind:this={tabButtons[tab.id]}
                         class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTab?.id} 
+                        class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
@@ -2979,7 +2965,7 @@
                 </form>
             {:else}
                 <button class="url-display-button" onclick={startEditingUrl} title="Click to edit URL">
-                    <UrlRenderer url={getDisplayUrl(data.spaceMeta.activeTab?.url)} variant="compact" />
+                    <UrlRenderer url={getDisplayUrl(data.docs[data.spaceMeta.activeTabId]?.url)} variant="compact" />
                 </button>
             {/if}
         </div>
@@ -3003,7 +2989,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
             </svg>
         </button>
-        <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onclick={(e) => closeTab(data.spaceMeta.activeTab, e)}>
+        <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onclick={(e) => closeTab(data.docs[data.spaceMeta.activeTabId], e)}>
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -3061,7 +3047,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         {#each unpinnedTabs as tab (tab.id)}
                 {#key userModsHash}
                     {#if  tab.type !== 'divider'}
-                        <div class:tab-group={unpinnedTabs.length > 1} class:active={tab.id === data.spaceMeta.activeTab?.id}>
+                        <div class:tab-group={unpinnedTabs.length > 1} class:active={tab.id === data.spaceMeta.activeTabId}>
                             {#key origin(tab.url)}
                                 <div class="url-display visible">
                                     <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
@@ -3165,7 +3151,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                          switchToAgent={switchToAIAgent}
                          {userMods}
                          onUpdateUserMods={updateUserMods}
-                         currentTab={data.spaceMeta.activeTab} />
+                         currentTab={data.docs[data.spaceMeta.activeTabId]} />
             </div>
         {/if}
         
@@ -3179,7 +3165,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                          {switchToActivity}
                          {switchToAIAgent}
                          {viewMode}
-                         currentTab={data.spaceMeta.activeTab} />
+                         currentTab={data.docs[data.spaceMeta.activeTabId]} />
             </div>
         {/if}
         
