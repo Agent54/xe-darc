@@ -133,6 +133,10 @@ async function refresh(spaceId) {
         spaces[spaceId].tabs = []
     }
     const closedTabs = []
+    for (const previewTabId of Object.keys(previews)) {
+        previews[previewTabId].lightbox = null
+        previews[previewTabId].tabs = []
+    }
 
     for (const refreshDoc of newDocs) {
         let doc
@@ -220,6 +224,7 @@ db.changes({
 }).on('change', async change => {
     lastLocalSeq = change.seq
 
+    // console.log('change', change)
     // if (change.doc instanceof type.errors) {
     //     console.error(change.doc.summary, change.doc)
     //     return
@@ -233,11 +238,11 @@ db.changes({
         // fixme: deep comp
         for (const key of ['canvas', 'pinned', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
-                if (change.doc.spaceId && change.doc.type !== 'space') {
+                if (change.doc.spaceId && change.doc.type !== 'space' && change.doc.type !== 'activity') {
                     refresh(change.doc.spaceId)
                 } else if (change.doc.type === 'space') {
                     spaces[change.doc._id] = { ...spaces[change.doc._id], ...change.doc }
-                    sortSpaces()
+                    spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
                 } else {
                     console.warn('unknown change', change)
                 }
@@ -286,6 +291,8 @@ function activate(tabId) {
 
 function closeTab (spaceId, tabId) {
     const tab = docs[tabId]
+
+    frames[tabId].frame = null
    
     db.bulkDocs([
         ...(previews[tabId]?.tabs.map(prev => {
@@ -297,8 +304,6 @@ function closeTab (spaceId, tabId) {
                 ...prev,
                 closed: true, // legacy
                 archive: 'closed',
-                frame: undefined,
-                wrapper: undefined,
                 modified: Date.now()
             }
         }) || []),
@@ -306,8 +311,6 @@ function closeTab (spaceId, tabId) {
             ...tab,
             closed: true, // legacy
             archive: 'closed',
-            frame: undefined,
-            wrapper: undefined,
             modified: Date.now()
         },
         {

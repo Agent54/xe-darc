@@ -275,7 +275,7 @@
     // Show global hover preview when regular link preview has been visible for a while
     $effect(() => {
         // Don't show hover previews when a lightbox is active or tab is loading
-        const hasActiveLightbox = tab.lightboxChild && data.docs[tab.lightboxChild]
+        const hasActiveLightbox = data.previews[tab._id]?.lightbox
         
         if (hoveredLink && data.spaceMeta.config.showLinkPreviews && !hasActiveLightbox && !tab.loading) {
             // Cancel any pending hide delay because we have (or are about to have) a hovered link again
@@ -761,7 +761,8 @@
         {/key}
     {/if}
 
-    {#if tab.lightboxChild && data.docs[tab.lightboxChild]}
+    {#if data.previews[tab._id] && data.docs[data.previews[tab._id]?.lightbox]}
+        {@const lightboxChild = data.docs[data.previews[tab._id].lightbox]}
         <div 
             class="lightbox-backdrop"
             role="dialog"
@@ -772,12 +773,12 @@
             onclick={(e) => {
                 // Only close if clicking the backdrop, not the content
                 if (e.target === e.currentTarget) {
-                    data.closeTab(tab.spaceId, tab.lightboxChild)
+                    data.closeTab(tab.spaceId, lightboxChild?._id)
                 }
             }}
             onkeydown={(e) => {
                 if (e.key === 'Escape') {
-                    data.closeTab(tab.spaceId, tab.lightboxChild)
+                    data.closeTab(tab.spaceId, lightboxChild?._id)
                 }
             }}
         >
@@ -787,11 +788,11 @@
                 <div class="lightbox-header">
                     <div class="lightbox-title">
                         <img 
-                            src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={data.docs[tab.lightboxChild].url}&size=16"
+                            src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={lightboxChild?.url}&size=16"
                             alt=""
                             class="lightbox-favicon"
                         />
-                        <UrlRenderer url={data.docs[tab.lightboxChild].url} variant="compact" />
+                        <UrlRenderer url={lightboxChild?.url} variant="compact" />
                     </div>
                     <div class="lightbox-controls">
                         <Tooltip text="Move to new tab" position="bottom">
@@ -849,7 +850,7 @@
                                 class="lightbox-close"
                                 aria-label="Close lightbox"
                                 onclick={() => {
-                                    data.closeTab(tab.spaceId, tab.lightboxChild)
+                                    data.closeTab(tab.spaceId, lightboxChild?.id)
                                 }}
                             >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -865,7 +866,7 @@
                         {style}
                         {isScrolling}
                         class="lightbox-controlledframe"
-                        tabId={tab.lightboxChild}
+                        tabId={lightboxChild?.id}
                         {headerPartOfMain}
                         {captureTabScreenshot}
                         {onFrameFocus}

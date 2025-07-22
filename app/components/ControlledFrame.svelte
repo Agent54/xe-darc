@@ -454,24 +454,21 @@
         if (event?.url && tab.url) {
             const currentOrigin = origin(tab.url)
             const targetOrigin = origin(event.url)
+
+            // console.log('🔄 handleLoadStart event metadata:', {
+            //     event,
+            //     tab
+            // })
             
             // Skip origin check for about: pages and same-origin navigation
             if (event.isTopLevel && currentOrigin !== 'about' && currentOrigin !== 'unknown' && 
                 targetOrigin !== currentOrigin && targetOrigin !== 'about') {
+                
+                console.log(`🚫 Off-origin navigation detected: ${currentOrigin} → ${targetOrigin}  ${event.url}`)
 
-                    console.log('🔄 handleLoadStart event metadata:', {
-                        event,
-                        tab
-                    })
-                
-                console.log(`🚫 Off-origin navigation detected: ${currentOrigin} → ${targetOrigin}`)
-                console.log(`🛑 Blocking navigation to: ${event.url}`)
-                
-                // Stop the navigation
                 const frame = data.frames[tab.id]?.frame
                 if (frame?.stop) {
                     frame.stop()
-                    console.log('🛑 Navigation stopped via controlledFrame.stop()')
                 }
                 
                 // Create lightbox via parent function
@@ -482,13 +479,12 @@
             }
         }
         
-        // Normal navigation - proceed as before
         tab.loading = true
-        // Evaluate security state based on current certificate status
+
         evaluateSecurityState(tab)
     }
 
-    function handleLoadStop(tab) {
+    function handleLoadStop(tab, e) {
         const wasLoading = tab.loading
         tab.loading = false
         
@@ -496,9 +492,7 @@
         const currentNetworkErr = data.origins[originValue]?.networkError
         const currentCertErr = data.origins[originValue]?.certificateError
         
-        console.log(`🔄 handleLoadStop called for ${tab.url}`)
-        console.log(`🔄 Was loading (successful): ${wasLoading}`)
-        console.log(`🔄 Network error before processing:`, currentNetworkErr)
+        console.log(`handleLoadStop called for`, {tab, e, currentNetworkErr})
 
         tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
