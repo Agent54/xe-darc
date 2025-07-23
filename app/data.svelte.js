@@ -263,9 +263,8 @@ const changesFeed = db.changes({
     }
 })
 
-// Define activate function separately so it can be used internally
 function activate(tabId) {   
-    console.log('activate tab id ..', {tabId})
+    // console.log('activate tab id ..', {tabId})
 
     spaceMeta.activeTabId = tabId
 

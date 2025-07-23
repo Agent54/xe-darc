@@ -2476,7 +2476,7 @@
                 <span>Default</span>
                 {#if viewMode === 'default'}<span class="checkmark">•</span>{/if}
             </div>
-            <div class="view-mode-menu-item menu-item" 
+            <!-- <div class="view-mode-menu-item menu-item" 
                     class:active={viewMode === 'stage'}
                     role="button"
                     tabindex="0"
@@ -2487,7 +2487,7 @@
                 </span>
                 <span>Stage</span>
                 {#if viewMode === 'stage'}<span class="checkmark">•</span>{/if}
-            </div>
+            </div> -->
             <div class="view-mode-menu-item menu-item" 
                     class:active={viewMode === 'canvas'}
                     role="button"
