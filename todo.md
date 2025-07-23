@@ -621,3 +621,14 @@ mute/unmute on history
 mute others feature
 
 var reactivity/ perf fixes app.svelte
+
+characterization of urls (resource, download, export, api etc.)
+
+use my film collection to recomend
+
+backup all my igd games
+
+fix lightbox etc animations 
+
+seperate nav history with push and replace like jj/sapling
+

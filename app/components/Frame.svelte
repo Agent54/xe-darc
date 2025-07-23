@@ -19,6 +19,7 @@
         requestedResources = [],
         statusLightsEnabled = false,
         controlledFrameSupported = false,
+        observer
     } = $props()
 
     const tab = $derived(data.docs[tabId])
@@ -305,14 +306,15 @@
         }
     })
 
+    const pinnedPreviews = $state([])
+
     function startGlobalPreview() {
         // Clear any existing timeout
         if (globalHoverPreviewTimeout) {
             clearTimeout(globalHoverPreviewTimeout)
         }
         
-        // Set timeout to create preview node after 700ms
-        globalHoverPreviewTimeout = setTimeout(() => {
+        const createPreview = () => {
             if (!hoveredLink?.href) {
                 return
             }
@@ -322,10 +324,14 @@
             globalHoverPreview = hoveredLink
             globalHoverPreviewVisible = true
             
-            // Add delayed fade-in after node is created (let page load)
-            setTimeout(() => {
+            // If the preview is pinned, show immediately, otherwise wait for the page to load
+            if (globalHoverPreviewPinned) {
                 globalHoverPreviewShown = true
-            }, 1000) // 1000ms delay for page loading
+            } else {
+                setTimeout(() => {
+                    globalHoverPreviewShown = true
+                }, 1000) // 1000ms delay for page loading
+            }
             
             // Set timeout to hide global preview after 21 seconds (unless pinned)
             const autoHideTimeout = setTimeout(() => {
@@ -336,7 +342,15 @@
             
             // Store the auto-hide timeout so it can be cleared if needed
             globalHoverPreviewTimeout = autoHideTimeout
-        }, 700)
+        }
+
+        // Skip the show delay entirely if the preview is pinned
+        if (globalHoverPreviewPinned) {
+            createPreview()
+        } else {
+            // Set timeout to create preview node after 700ms
+            globalHoverPreviewTimeout = setTimeout(createPreview, 700)
+        }
     }
 
     $effect(() => {
@@ -379,6 +393,13 @@
 
     $effect(() => {
         data.frames[tab.id] ??= { frame: iframeFrame, wrapper: frameWrapper }
+        if (frameWrapper) {
+            observer?.observe(frameWrapper)
+        }
+    
+        return () => {
+            observer?.unobserve(frameWrapper)
+        }
     })
 
     // Calculate preview position to ensure it stays within window bounds

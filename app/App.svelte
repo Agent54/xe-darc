@@ -747,63 +747,51 @@
         hideContextMenu()
     }
 
-    function setupIntersectionObserver() {
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                const tabId = entry.target.id.replace('tab_', '')
-                const tab = tabs.find(t => t.id === tabId)
-                
-                if (entry.isIntersecting) {
-                    // Start timer when tab becomes visible
-                    const timer = setTimeout(() => {
-                        if (tabChangeFromScroll) {
-                            return
-                        }
-                        
-                        if (entry.isIntersecting && tab) {
-                            console.log('intersection observer activating tab:', tab.id)
-                            // Set flag BEFORE changing active tab to prevent race condition
-                            tabChangeFromScroll = true
-                            // Clear any existing timer to prevent multiple timers
-                            if (tabChangeFromScrollTimer) {
-                                clearTimeout(tabChangeFromScrollTimer)
-                            }
-                            // Change active tab directly (without untrack since we're using the flag)
-                            data.spaceMeta.activeTabId = tab.id
-                            // Reset flag after a longer delay to prevent race conditions with the effect
-                            tabChangeFromScrollTimer = setTimeout(() => {
-                                tabChangeFromScroll = false
-                                tabChangeFromScrollTimer = null
-                            }, 400)
-                        }
-                    }, 250)
-                    visibilityTimers.set(tabId, timer)
-                } else {
-                    // Clear timer when tab is no longer visible
-                    const timer = visibilityTimers.get(tabId)
-                    if (timer) {
-                        clearTimeout(timer)
-                        visibilityTimers.delete(tabId)
-                    }
-                }
-            })
-        }, {
-            threshold: 0.5, // Tab must be 50% visible
-            root: document.querySelector('.controlled-frame-container')
-        })
 
-        // Observe the wrapper divs with ID format "tab_{tab.id}" instead of the frame elements
-        tabs.forEach(tab => {
-            const wrapper = document.getElementById(`tab_${tab.id}`)
-            if (wrapper) {
-                observer.observe(wrapper)
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            const tabId = entry.target.id.replace('tab_', '')
+            const tab = data.docs[tabId]
+            
+            if (entry.isIntersecting) {
+                // Start timer when tab becomes visible
+                const timer = setTimeout(() => {
+                    if (tabChangeFromScroll) {
+                        return
+                    }
+                    
+                    if (entry.isIntersecting && tab) {
+                        console.log('intersection observer activating tab:', tab.id)
+                        // Set flag BEFORE changing active tab to prevent race condition
+                        tabChangeFromScroll = true
+                        // Clear any existing timer to prevent multiple timers
+                        if (tabChangeFromScrollTimer) {
+                            clearTimeout(tabChangeFromScrollTimer)
+                        }
+                        // Change active tab directly (without untrack since we're using the flag)
+                        data.spaceMeta.activeTabId = tab.id
+                        // Reset flag after a longer delay to prevent race conditions with the effect
+                        tabChangeFromScrollTimer = setTimeout(() => {
+                            tabChangeFromScroll = false
+                            tabChangeFromScrollTimer = null
+                        }, 400)
+                    }
+                }, 250)
+                visibilityTimers.set(tabId, timer)
+            } else {
+                // Clear timer when tab is no longer visible
+                const timer = visibilityTimers.get(tabId)
+                if (timer) {
+                    clearTimeout(timer)
+                    visibilityTimers.delete(tabId)
+                }
             }
         })
+    }, {
+        threshold: 0.5, // Tab must be 50% visible
+        root: document.querySelector('.controlled-frame-container')
+    })
 
-        return observer
-    }
-
-    let observer
     let tabChangeFromScroll = false
     let tabChangeFromScrollTimer = null
     let tabChangeFromScrollFailsafe = null
@@ -832,19 +820,6 @@
                 clearTimeout(tabChangeFromScrollFailsafe)
                 tabChangeFromScrollFailsafe = null
             }
-        }
-    })
-
-    $effect(() => {
-        if (tabs) {
-            console.log('fix: obeserver effect')
-            if (observer) {
-                observer.disconnect()
-            }
-            // Wait a tick to ensure DOM is updated
-            setTimeout(() => {
-                observer = setupIntersectionObserver()
-            }, 100)
         }
     })
 
@@ -3011,7 +2986,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                         </div>
                     {/key}
                     
-                    <Frame tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                 </div>
             {/if}
         {/key}
@@ -3054,7 +3029,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                                 </div>
                             {/key}
                             
-                            <Frame {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                            <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                         </div>
                     {/if}
                 {/key}
@@ -3080,7 +3055,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                             </div>
                         {/key}
                         
-                        <Frame tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/if}
             {/key}
