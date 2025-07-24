@@ -464,14 +464,13 @@
                     frame.stop()
                 }
                 
-                // Create lightbox via parent function
-                // createOffOriginLightbox(event.url, currentOrigin, targetOrigin) // isCommandKeyDown
+                // FIXME: createOffOriginLightbox(event.url, currentOrigin, targetOrigin) // isCommandKeyDown
                 data.newTab(data.spaceMeta.activeSpace, {
                     url: event.url,
                     title: '',
                     opener: tab.id,
                     lightbox: data.settings.lightboxModeEnabled,
-                    // shouldFocus: e.windowOpenDisposition !== "new_background_tab"
+                    shouldFocus: true   // e.windowOpenDisposition !== "new_background_tab"
                 })     
                 
                 // Don't set loading state since we're blocking navigation
