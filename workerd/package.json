@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "pnpm exec workerd serve --watch --inspector-addr=0.0.0.0:9229 --verbose ./config.capnp --socket-addr=ingest=0.0.0.0:5196"
+    "dev": "rm -f /var/run/workerd.sock && pnpm exec workerd serve --watch --inspector-addr=0.0.0.0:9229 --verbose ./config.capnp --socket-addr=ingest=0.0.0.0:5196"
   },
   "keywords": [],
   "author": "",

@@ -13,7 +13,6 @@
         style = '',
         headerPartOfMain,
         isScrolling,
-        captureTabScreenshot = () => {},
         onFrameFocus = () => {},
         onFrameBlur = () => {},
         userMods,
@@ -414,8 +413,76 @@
         }
     }
 
+    async function captureTabScreenshot(tab) {
+        let frame = null
+        if (!frame) {
+            frame = data.frames[tab.id]?.frame
+        }
+        if (!frame) {
+            console.log('Frame not found for tab:', tab.id)
+            return
+        }
+
+        if (typeof frame.captureVisibleRegion !== 'function') {
+            return
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
+        try {
+            let screenshot = null
+            
+            // Check if frame is ready and loaded
+            // const isFrameReady = () => {
+            //     return frame.src && 
+            //            !frame.src.includes('about:blank') && 
+            //            frame.contentWindow !== null
+            // }
+            
+            // Wait for frame to be ready if needed
+            // if (!isFrameReady()) {
+            //     console.log('Frame not ready for screenshot, waiting...')
+            //     await new Promise(resolve => setTimeout(resolve, 1000))
+            //     if (!isFrameReady()) {
+            //         console.log('Frame still not ready, skipping screenshot')
+            //         return null
+            //     }
+            // }
+            
+            // Retry mechanism for flaky captures
+            // for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    // console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
+                    screenshot = await frame.captureVisibleRegion({
+                        format: 'png',
+                        quality: 80
+                    })
+                    // if (screenshot) {
+                    //     console.log(`Screenshot successful on attempt ${attempt}`)
+                    //     // break
+                    // }
+                } catch (captureError) {
+                    console.log(`Capture failed:`, captureError)
+                    // if (attempt < 3) {
+                    //     // Wait before retry, increasing delay each time
+                    //     await new Promise(resolve => setTimeout(resolve, attempt * 500))
+                    // }
+                }
+            // }
+            
+            if (screenshot) {
+                // tab.screenshot = screenshot
+                data.updateTab(tab.id, { screenshot })
+            }
+        } catch (err) {
+            console.log('Error capturing screenshot:', err)
+        }
+    }
+
     function handleContentLoad(tab, event) {
-        setTimeout(() => updateTabMeta(tab), 100)
+        // setTimeout(() => updateTabMeta(tab), 100)
+        updateTabMeta(tab)
+        captureTabScreenshot(tab)
     }
 
     // todo cycle every 15 seconds to check audiostate?
@@ -526,10 +593,10 @@
         
         // Update title and capture screenshot after page loads (only if successful)
         if (wasLoading) {
-            setTimeout(async () => {
-                await updateTabMeta(tab)
-                await captureTabScreenshot(tab)
-            }, 2) // Wait a bit for the page to fully render
+            // setTimeout(async () => {
+                updateTabMeta(tab)
+                captureTabScreenshot(tab)
+            // }, 0)
         }
     }
 
@@ -620,20 +687,21 @@
         }
     }
 
-    async function updateTabMeta(tab, frame = null) {
+    async function updateTabMeta(tab) {
+        let frame = null
         if (!frame) {
             frame = data.frames[tab.id]?.frame
         }
         if (!frame) return
 
-        tab.url = frame.src
+        let url = frame.src || tab.url
 
         // Don't update meta from controlled frame for about: URLs
-        if (tab.url && tab.url.startsWith('about:')) {
+        if (url && tab.url.startsWith('about:')) {
             return
         }
 
-        tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
+        let favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
         try {
             let title = null
@@ -650,28 +718,26 @@
             }
 
             // Update the tab title directly
-            if (title) {
-                tab.title = title
-            } else {
+            if (!title) {
                 // Fallback to URL if no title is available
-                const url = tab.url
                 if (url) {
                     try {
                         const urlObj = new URL(url)
-                        tab.title = urlObj.origin || url
+                        title = urlObj.origin || url
                     } catch {
-                        tab.title = url
+                        title = url
                     }
                 }
             }
 
+            data.updateTab(tab.id, { favicon, title, url })
         } catch (err) {
-            console.log('Error updating tab title:', err)
+            console.log('Error updating tab meta:', err, tab)
         }
     }
 
 // Content script for window focus/blur handling
-function setupContentScripts(frame) {
+function setupContentScripts(frame) {        
         // First try a simple test script to verify content script injection works
         const systemInjections = [
             {
@@ -692,6 +758,8 @@ function setupContentScripts(frame) {
                 code: `
 window.addEventListener('focus', () => { console.log('iwa:focus') }, false);
 window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
+
+
 
 // Global keyboard event listener for controlled frame
 document.addEventListener('keydown', function(event) {
@@ -761,6 +829,29 @@ document.addEventListener('mouseup', function(event) {
 //         return false;
 //     }
 // }, { capture: true, passive: false });
+
+// Context menu protection - force native context menu when cmd/ctrl is held
+document.addEventListener('contextmenu', function(event) {
+    // Only force native context menu if cmd (Mac) or ctrl (Windows/Linux) key is held down
+    const forceNative = event.metaKey || event.ctrlKey;
+    
+    if (forceNative) {
+        // Stop any other handlers from running first
+        event.stopImmediatePropagation();
+        
+        // Override preventDefault to make it ineffective
+        const originalPreventDefault = event.preventDefault;
+        event.preventDefault = function() {
+            console.log('iwa:contextmenu-forced-native:${tab.id}');
+            // Don't actually prevent default - let native context menu show
+        };
+        
+        console.log('iwa:contextmenu-native-forced:${tab.id}');
+    }
+    // If cmd/ctrl not held, allow normal website context menu behavior
+}, { capture: true, passive: false });
+
+console.log('🛡️ Context menu protection installed in controlled frame ${tab.id}');
 
 // Track hovered anchor elements
 let currentHoveredAnchor = null;
@@ -1338,6 +1429,8 @@ document.addEventListener('input', function(event) {
     let currentInputText = $state('')
     let previousInputText = $state('')
 
+
+
     // Listen for messages from content scripts
     function setupMessageListener(frame) {
         const mytab = untrack(() => tab)
@@ -1610,6 +1703,10 @@ document.addEventListener('input', function(event) {
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
                     detail: { tabId }
                 }))
+            } else if (message.startsWith('iwa:contextmenu-forced-native:')) {
+                console.log(`🛡️ [CONTEXT MENU] Website preventDefault blocked - forcing native context menu in tab ${mytab.id}`)
+            } else if (message.startsWith('iwa:contextmenu-native-forced:')) {
+                console.log(`🖱️ [CONTEXT MENU] Native context menu forced with cmd/ctrl key in tab ${mytab.id}`)
             }
         })
     }

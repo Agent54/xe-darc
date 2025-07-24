@@ -16,6 +16,7 @@
     import data from './data.svelte.js'
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
+    window.darc = { data }
 
     // Proper detection of ControlledFrame API support
     function isControlledFrameSupported() {
@@ -900,75 +901,6 @@
         }
     })
 
-    async function captureTabScreenshot(tab, frame = null) {
-        if (!frame) {
-            frame = data.frames[tab.id]?.frame
-        }
-        if (!frame) {
-            console.log('Frame not found for tab:', tab.id)
-            return null
-        }
-        
-        // Only capture screenshots for controlledframes, not NewTab components
-        if (typeof frame.captureVisibleRegion !== 'function') {
-            console.log('Frame does not support screenshot capture:', tab.id)
-            return null
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        try {
-            let screenshot = null
-            
-            // Check if frame is ready and loaded
-            // const isFrameReady = () => {
-            //     return frame.src && 
-            //            !frame.src.includes('about:blank') && 
-            //            frame.contentWindow !== null
-            // }
-            
-            // Wait for frame to be ready if needed
-            // if (!isFrameReady()) {
-            //     console.log('Frame not ready for screenshot, waiting...')
-            //     await new Promise(resolve => setTimeout(resolve, 1000))
-            //     if (!isFrameReady()) {
-            //         console.log('Frame still not ready, skipping screenshot')
-            //         return null
-            //     }
-            // }
-            
-            // Retry mechanism for flaky captures
-            // for (let attempt = 1; attempt <= 3; attempt++) {
-                try {
-                    // console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
-                    screenshot = await frame.captureVisibleRegion({
-                        format: 'png',
-                        quality: 80
-                    })
-                    // if (screenshot) {
-                    //     console.log(`Screenshot successful on attempt ${attempt}`)
-                    //     // break
-                    // }
-                } catch (captureError) {
-                    console.log(`Capture failed:`, captureError)
-                    // if (attempt < 3) {
-                    //     // Wait before retry, increasing delay each time
-                    //     await new Promise(resolve => setTimeout(resolve, attempt * 500))
-                    // }
-                }
-            // }
-            
-            
-            if (screenshot) {
-                tab.screenshot = screenshot
-                return screenshot
-            }
-        } catch (err) {
-            console.log('Error capturing screenshot:', err)
-        }
-        return null
-    }
-
     function handleTabMouseEnter(tab, event) {
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
@@ -1006,9 +938,9 @@
             isTrashItemHover = false
             hoveredTab = tab
             hovercardShowTime = Date.now()
-            if (!tab.screenshot) {
-                captureTabScreenshot(tab)
-            }
+            // if (!tab.screenshot) {
+            //     captureTabScreenshot(tab)
+            // }
             
             // Mark hovercards as recently active
             hovercardRecentlyActive = true
@@ -3086,7 +3018,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                         </div>
                     {/key}
                     
-                    <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                 </div>
             {/if}
         {/key}
@@ -3114,7 +3046,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                             </div>
                         {/key}
                         
-                        <Frame tabId={tab.id} {controlledFrameSupported} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame tabId={tab.id} {controlledFrameSupported} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/key}
         {/each} -->
@@ -3129,7 +3061,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                                 </div>
                             {/key}
                             
-                            <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                            <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                         </div>
                     {/if}
                 {/key}
@@ -3155,7 +3087,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                             </div>
                         {/key}
                         
-                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/if}
             {/key}

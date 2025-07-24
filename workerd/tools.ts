@@ -166,28 +166,36 @@ export const executions = {
     // This will be handled by the client-side code when the tool is approved
     return `New tab opened${url ? ` with URL: ${url}` : ''}${title ? ` (${title})` : ''}`;
   },
-  displayHtml: async ({ html, title }: { html: string; title?: string }) => {
-    const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-    console.log(`Displaying HTML content in new tab${title ? ` with title: ${title}` : ''}`);
-    // Return JSON string for the client to parse
-    return JSON.stringify({ dataUrl, title: title || 'HTML Content' });
-  },
+  // displayHtml: async ({ html, title }: { html: string; title?: string }) => {
+  //   const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+  //   console.log(`Displaying HTML content in new tab${title ? ` with title: ${title}` : ''}`);
+  //   // Return JSON string for the client to parse
+  //   return JSON.stringify({ dataUrl, title: title || 'HTML Content' });
+  // },
   deployDocker: async ({ gitUrl, dockerfilePath }: { gitUrl: string; dockerfilePath?: string }) => {
     console.log(`Deploying Docker container from ${gitUrl}`);
     try {
-      const dockerPath = dockerfilePath || './Dockerfile';
+      const dockerPath = dockerfilePath //  || 'Dockerfile';
       
-      // Basic validation of git URL
-      if (!gitUrl.match(/^https?:\/\/(github\.com|gitlab\.com|bitbucket\.org)/)) {
-        return 'Error: Only GitHub, GitLab, and Bitbucket URLs are supported';
+      // Call the Docker service running on port 5196
+      const response = await fetch('http://localhost:5196/deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          gitUrl,
+          dockerfilePath: dockerPath
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        return `Docker deployment failed: ${result.error || 'Unknown error'}`;
       }
       
-      // Generate deployment ID
-      const deploymentId = `deploy-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      console.log(`Docker deployment initiated for ${gitUrl} using ${dockerPath}`);
-      
-      return `Docker deployment initiated for ${gitUrl} using ${dockerPath} (ID: ${deploymentId})`;
+      return `Docker deployment successful! Deployment ID: ${result.deploymentId}. Status: ${result.status}. ${result.message}`;
     } catch (error) {
       console.error('Deploy request failed:', error);
       return `Docker deployment failed: ${error.message}`;

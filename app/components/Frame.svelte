@@ -12,7 +12,6 @@
         tabId,
         headerPartOfMain,
         isScrolling,
-        captureTabScreenshot,
         onFrameFocus = () => {},
         onFrameBlur = () => {},
         userMods = { css: [], js: [] },
@@ -483,7 +482,6 @@
             {isScrolling}
             {tabId}
             {headerPartOfMain}
-            {captureTabScreenshot}
             {onFrameFocus}
             {onFrameBlur}
             {userMods}
@@ -873,7 +871,6 @@
                         class="lightbox-controlledframe"
                         tabId={lightboxChild?.id}
                         {headerPartOfMain}
-                        {captureTabScreenshot}
                         {onFrameFocus}
                         {onFrameBlur}
                         {userMods}

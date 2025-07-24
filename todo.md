@@ -647,3 +647,60 @@ disable svelt aria
 
 replace tmux with modern mouse etc supporting one without cryptic options
 
+universal link preview frame reuse 
+
+integrated hmtl / svelte/tailwind styles
+
+external html / style to whatever it needs
+
+slash commands, @mentions, # tags / memories
+
+cookie banner + summarize auto mode > add to website log for trail
+
+add summaries to standard context, make context md not json
+
+multi space folders (eg a youtube section in the dev space which also appears in the watching video space)
+
+a smart folder with youtube videos that collects all videos from all spaces
+
+todo pins for tabs (eg. list of messages in discord i need to work on)
+
+history to sidetabs instead of menu
+
+vscode web + workspace manager + container integration + jj integration
+
+containerd vs docker?
+
+
+labels?
+
+media breakpoints not using the open sidebar space!
+
+next deomo: can you run this for me with github, contqainers, claude code, terminal
+
+system prompt support
+
+tosdr, lofi rating, data rating
+
+rest client mode
+
+logs menu entry (elastic/clickhouse?)
+editor (vscode main container)
+
+! prefix command mode with toggle and immediate execution, in chat terminal for tuis
+
+edit all permission requests before and all running actions and all about to run data boxes
+
+ERR_EMPTY_RESPONSE
+
+terminal multiplexer with history and scrolling simple mode
+
+clipboard pate!
+
+open dev tools with supressed context menu?
+
+context menu disable permission/settings/ad hoc override
+
+copy paste support!!!!!
+
+secret exchange protocol for frame ipc without console log

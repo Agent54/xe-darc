@@ -212,10 +212,16 @@ const refresh = thottle(async function (spaceId) {
         // }
     }
 
-
     if (spaceMeta.activeTabId && !activeTabIdExists && spaces[spaceMeta.activeSpace]?.activeTabsOrder?.length > 0) {
-        spaces[spaceMeta.activeSpace].activeTabsOrder = spaces[spaceMeta.activeSpace].activeTabsOrder.filter(id => id !== spaceMeta.activeTabId)
-        spaceMeta.activeTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[0]
+        let previousIndex = 1
+        spaces[spaceMeta.activeSpace].activeTabsOrder = spaces[spaceMeta.activeSpace].activeTabsOrder.filter((id, i) => {
+            if (id === spaceMeta.activeTabId) {
+                i > previousIndex && (previousIndex = i)
+                return false
+            }
+            return true
+        })
+        spaceMeta.activeTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]
         console.log('setting active tab id b', spaceMeta.activeTabId)
     }
 
@@ -407,6 +413,11 @@ function loadSampleData () {
 }
 
 function hibernate (tabId) {
+    // remove background frames from dom node parking
+    const frame = frames[tabId]
+    if (frame.frame) {
+        frame.frame.remove()
+    }
     frames[tabId].frame = null
     frames[tabId].hibernated = Date.now()
 }
@@ -573,13 +584,23 @@ export default {
         return tab
     },
 
-    updateTab: (tabId, { canvas, lightbox, preview } = {}) => {
+    updateTab: (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url } = {}) => {
         const tab = docs[tabId]
        
         let newProps = {}
         if (canvas) {
             canvas = { ...(tab.canvas || {}), ...canvas }
             newProps.canvas = canvas
+        }
+
+        if (typeof favicon !== 'undefined' && favicon !== tab.favicon) {
+            newProps.favicon = favicon
+        }
+        if (typeof title !== 'undefined' && title !== tab.title) {
+            newProps.title = title
+        }
+        if (typeof url !== 'undefined' && url !== tab.url) {
+            newProps.url = url
         }
 
         if (typeof lightbox !== 'undefined') {
@@ -593,11 +614,24 @@ export default {
                 newProps.archive = undefined
             }
         }
+    
+        if (typeof screenshot !== 'undefined') {
+            newProps.screenshot = screenshot
 
-        db.put({
-            ...tab,
-            ...newProps
-        })
+            // TODO: newProps._attachments ??= {}
+
+            // newProps._attachments.screenshot = {
+			// 	content_type: "image/png",
+			// 	data: new Blob([yjs.encodeStateAsUpdate(winYDoc)], { type: 'image/png' })
+			// }
+        }
+
+        if (Object.keys(newProps).length > 0) {
+            db.put({
+                    ...tab,
+                    ...newProps
+                })
+        }
     },
 
     closeTab,

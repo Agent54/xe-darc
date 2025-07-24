@@ -1,6 +1,9 @@
 FROM node:23
 
-RUN npm install -g pnpm
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+# RUN npm install -g pnpm
 RUN npm install -g @anthropic-ai/claude-code
 
 ENV PATH=$PATH:/root/.cargo/bin
@@ -16,7 +19,8 @@ WORKDIR /app
 COPY . /app
 COPY .claude/claude.json /root/.claude.json
 
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store/v3 pnpm install
+# --mount=type=cache,id=pnpm,target=/pnpm/store pnpm has new bug, reenable store reuse
+RUN  pnpm install
 
 ENV container=true
 CMD pnpm dev

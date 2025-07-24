@@ -18,6 +18,7 @@ const config :Workerd.Config = (
 
   sockets = [
     ( name = "ingest", address = ":5196", http = (), service = "route-worker" ),
+    ( name = "docker-ingest", address = "unix:/var/run/workerd.sock", http = (), service = "route-worker" )
   ],
 );
 
