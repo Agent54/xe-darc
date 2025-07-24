@@ -640,3 +640,10 @@ conetx menu sidebar
 update and persisst url/title/favicon changes
 
 favicon server extension
+
+parallel chat
+
+disable svelt aria
+
+replace tmux with modern mouse etc supporting one without cryptic options
+

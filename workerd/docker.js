@@ -5,6 +5,63 @@ let myPort = 5196
 export default {
 	async fetch(request, env) {
 		const url = new URL(request.url)
+		
+		// Handle deploy endpoint
+		if (url.pathname === '/deploy' && request.method === 'POST') {
+			try {
+				const { gitUrl, dockerfilePath = './Dockerfile' } = await request.json();
+				
+				if (!gitUrl) {
+					return new Response(JSON.stringify({ error: 'Git URL is required' }), {
+						status: 400,
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+				
+				// Basic validation of git URL
+				if (!gitUrl.match(/^https?:\/\/(github\.com|gitlab\.com|bitbucket\.org)/)) {
+					return new Response(JSON.stringify({ 
+						error: 'Only GitHub, GitLab, and Bitbucket URLs are supported' 
+					}), {
+						status: 400,
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+				
+				console.log(`Deploying Docker container from ${gitUrl} using ${dockerfilePath}`);
+				
+				// Generate deployment ID
+				const deploymentId = `deploy-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+				
+				// In a real implementation, you would:
+				// 1. Clone the git repository
+				// 2. Build the Docker image using the specified Dockerfile
+				// 3. Deploy the container via Docker daemon
+				// For now, we simulate the deployment process
+				
+				return new Response(JSON.stringify({
+					success: true,
+					deploymentId,
+					gitUrl,
+					dockerfilePath,
+					status: 'initiated',
+					message: `Docker deployment initiated for ${gitUrl}`
+				}), {
+					status: 200,
+					headers: { 'Content-Type': 'application/json' }
+				});
+				
+			} catch (error) {
+				console.error('Docker deployment error:', error);
+				return new Response(JSON.stringify({ 
+					error: 'Failed to process deployment request',
+					details: error.message 
+				}), {
+					status: 500,
+					headers: { 'Content-Type': 'application/json' }
+				});
+			}
+		}
 		if (Date.now() - containerCacheTime > 20000) {
 			containers = null
 		}

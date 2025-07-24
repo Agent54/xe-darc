@@ -2,6 +2,19 @@ import { routeAgentRequest, type Schedule } from "agents";
 
 import { unstable_getSchedulePrompt } from "agents/schedule";
 
+// Add type definitions for Cloudflare Workers
+interface Env {
+  [key: string]: any;
+}
+
+interface ExecutionContext {
+  waitUntil(promise: Promise<any>): void;
+}
+
+interface ExportedHandler<Env = unknown> {
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
+}
+
 import { AIChatAgent  } from "agents/ai-chat-agent";
 import {
   createDataStreamResponse,
@@ -47,7 +60,17 @@ function addCorsHeaders(response: Response): Response {
 // claude-3-7-sonnet-20250219
 // claude-4-sonnet-20250514
 
-const model = anthropic('claude-3-5-haiku-20241022')
+// Function to get model instance only when needed
+function getModel(modelId: string = 'claude-4-sonnet-20250514') {
+  console.log('Using model:', modelId)
+  switch (modelId) {
+    case 'claude-4-sonnet-20250514':
+      return anthropic('claude-4-sonnet-20250514')
+    case 'claude-3-5-haiku-20241022':
+    default:
+      return anthropic('claude-4-sonnet-20250514')
+  }
+}
 
 // Cloudflare AI Gateway
 // const openai = createOpenAI({
@@ -63,7 +86,6 @@ export class Chat extends AIChatAgent<Env> {
    * Handles incoming chat messages and manages the response stream
    * @param onFinish - Callback function executed when streaming completes
    */
-
   async onChatMessage(
     onFinish: StreamTextOnFinishCallback<ToolSet>,
     _options?: { abortSignal?: AbortSignal }
@@ -76,8 +98,8 @@ export class Chat extends AIChatAgent<Env> {
     const allTools = {
       ...tools,
       ...this.mcp.unstable_getAITools(),
-    };
-
+    }
+    
     // Create a streaming response that handles both text and tool outputs
     const dataStreamResponse = createDataStreamResponse({
       execute: async (dataStream) => {
@@ -90,9 +112,16 @@ export class Chat extends AIChatAgent<Env> {
           executions,
         })
 
-        // Stream the AI response using GPT-4
+        // Use the model set by onMessage
+        const modelToUse = '' // FIXME: hwo to get this from the user? his.selectedModel;
+        
+        const selectedModel = getModel(modelToUse)
+
+        console.log('Using model:', {modelToUse, selectedModel})
+        
+        // Stream the AI response using the selected model
         const result = streamText({
-          model,
+          model: selectedModel,
           system: `You are a helpful assistant that can do various tasks... 
 
 ${unstable_getSchedulePrompt({ date: new Date() })}
