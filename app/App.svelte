@@ -116,6 +116,8 @@
     let certificateMonitorForTab = $state(null)
     let devModeEnabled = $state(false)
     let globalTabComplete = $state(true)
+    let lightboxModeEnabled = $state(true)
+    let tabsOpenRight = $state(true)
     
     // Window resize state for performance optimization
     let isWindowResizing = $state(false)
@@ -178,16 +180,19 @@
             const savedStatusLights = localStorage.getItem('statusLightsEnabled')
             if (savedStatusLights !== null) {
                 statusLightsEnabled = savedStatusLights === 'true'
+                data.settings.statusLightsEnabled = statusLightsEnabled
             }
 
             // Load dev mode setting
             const savedDevMode = localStorage.getItem('devModeEnabled')
             if (savedDevMode !== null) {
                 devModeEnabled = savedDevMode === 'true'
+                data.settings.devModeEnabled = devModeEnabled
                 
                 const savedShowLinkPreviews = localStorage.getItem('showLinkPreviews')
                 if (savedShowLinkPreviews !== null) {
                     data.spaceMeta.config.showLinkPreviews = savedShowLinkPreviews === 'true'
+                    data.settings.showLinkPreviews = data.spaceMeta.config.showLinkPreviews
                 }
             }
 
@@ -195,18 +200,62 @@
             const savedGlobalTabComplete = localStorage.getItem('globalTabComplete')
             if (savedGlobalTabComplete !== null) {
                 globalTabComplete = savedGlobalTabComplete === 'true'
+                data.settings.globalTabComplete = globalTabComplete
+            }
+
+            // Load lightbox mode setting
+            const savedLightboxMode = localStorage.getItem('lightboxModeEnabled')
+            if (savedLightboxMode !== null) {
+                lightboxModeEnabled = savedLightboxMode === 'true'
+                data.settings.lightboxModeEnabled = lightboxModeEnabled
+            }
+
+            // Load tabs open right setting
+            const savedTabsOpenRight = localStorage.getItem('tabsOpenRight')
+            if (savedTabsOpenRight !== null) {
+                tabsOpenRight = savedTabsOpenRight === 'true'
+                data.settings.tabsOpenRight = tabsOpenRight
             }
 
             // Load view mode settings
             const savedViewMode = localStorage.getItem('viewMode')
             if (savedViewMode !== null) {
                 viewMode = savedViewMode
+                data.settings.viewMode = viewMode
             }
 
             const savedLastUsedViewMode = localStorage.getItem('lastUsedViewMode')
             if (savedLastUsedViewMode !== null) {
                 lastUsedViewMode = savedLastUsedViewMode
+                data.settings.lastUsedViewMode = lastUsedViewMode
             }
+
+            // Load settings from Settings.svelte
+            const savedSearchEngine = localStorage.getItem('defaultSearchEngine')
+            if (savedSearchEngine) data.settings.defaultSearchEngine = savedSearchEngine
+
+            const savedNewTabUrl = localStorage.getItem('defaultNewTabUrl')
+            if (savedNewTabUrl) data.settings.defaultNewTabUrl = savedNewTabUrl
+
+            const savedAiProvider = localStorage.getItem('selectedAiProvider')
+            if (savedAiProvider) data.settings.selectedAiProvider = savedAiProvider
+
+            const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
+            if (savedCustomSearchUrl) data.settings.customSearchUrl = savedCustomSearchUrl
+
+            const savedCustomNewTabUrl = localStorage.getItem('customNewTabUrl')
+            if (savedCustomNewTabUrl) data.settings.customNewTabUrl = savedCustomNewTabUrl
+
+            const savedSyncServerUrl = localStorage.getItem('syncServerUrl')
+            if (savedSyncServerUrl) data.settings.syncServerUrl = savedSyncServerUrl
+
+            const savedSyncServerToken = localStorage.getItem('syncServerToken')
+            if (savedSyncServerToken) data.settings.syncServerToken = savedSyncServerToken
+
+            // Load other App.svelte settings that don't use localStorage yet
+            data.settings.darkMode = darkMode
+            data.settings.dataSaver = dataSaver
+            data.settings.batterySaver = batterySaver
 
             // Load open sidebars
             const savedOpenSidebars = localStorage.getItem('openSidebars')
@@ -1192,9 +1241,11 @@
         if (viewMode !== 'default') {
             lastUsedViewMode = viewMode
             localStorage.setItem('lastUsedViewMode', lastUsedViewMode)
+            data.settings.lastUsedViewMode = lastUsedViewMode
         }
         viewMode = mode
         localStorage.setItem('viewMode', viewMode)
+        data.settings.viewMode = viewMode
     }
     
     function toggleViewMode() {
@@ -1208,9 +1259,11 @@
         } else {
             lastUsedViewMode = viewMode
             localStorage.setItem('lastUsedViewMode', lastUsedViewMode)
+            data.settings.lastUsedViewMode = lastUsedViewMode
             viewMode = 'default'
         }
         localStorage.setItem('viewMode', viewMode)
+        data.settings.viewMode = viewMode
     }
     
     function getViewModeIcon(mode) {
@@ -1492,14 +1545,17 @@
     function toggleDarkMode() {
         darkMode = !darkMode
         document.documentElement.classList.toggle('dark-mode', darkMode)
+        data.settings.darkMode = darkMode
     }
     
     function toggleDataSaver() {
         dataSaver = !dataSaver
+        data.settings.dataSaver = dataSaver
     }
     
     function toggleBatterySaver() {
         batterySaver = !batterySaver
+        data.settings.batterySaver = batterySaver
     }
     
     function toggleSecondScreen() {
@@ -1543,21 +1599,37 @@
     function toggleStatusLights() {
         statusLightsEnabled = !statusLightsEnabled
         localStorage.setItem('statusLightsEnabled', statusLightsEnabled.toString())
+        data.settings.statusLightsEnabled = statusLightsEnabled
     }
 
     function toggleDevMode() {
         devModeEnabled = !devModeEnabled
         localStorage.setItem('devModeEnabled', devModeEnabled.toString())
+        data.settings.devModeEnabled = devModeEnabled
     }
 
     function toggleLinkPreviews() {
         data.spaceMeta.config.showLinkPreviews = !data.spaceMeta.config.showLinkPreviews
         localStorage.setItem('showLinkPreviews', data.spaceMeta.config.showLinkPreviews.toString())
+        data.settings.showLinkPreviews = data.spaceMeta.config.showLinkPreviews
+    }
+
+    function toggleLightboxMode() {
+        lightboxModeEnabled = !lightboxModeEnabled
+        localStorage.setItem('lightboxModeEnabled', lightboxModeEnabled.toString())
+        data.settings.lightboxModeEnabled = lightboxModeEnabled
+    }
+
+    function toggleTabsOpenRight() {
+        tabsOpenRight = !tabsOpenRight
+        localStorage.setItem('tabsOpenRight', tabsOpenRight.toString())
+        data.settings.tabsOpenRight = tabsOpenRight
     }
 
     function toggleGlobalTabComplete() {
         globalTabComplete = !globalTabComplete
         localStorage.setItem('globalTabComplete', globalTabComplete.toString())
+        data.settings.globalTabComplete = globalTabComplete
     }
 
     async function openTestSuite() {
@@ -2715,6 +2787,34 @@
                 </span>
                 <span>Link Previews</span>
                 {#if data.spaceMeta.config.showLinkPreviews}<span class="checkmark">•</span>{/if}
+            </div>
+
+            <div class="settings-menu-item menu-item" 
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleLightboxMode() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLightboxMode() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
+                    </svg>
+                </span>
+                <span>Lightbox Mode</span>
+                {#if lightboxModeEnabled}<span class="checkmark">•</span>{/if}
+            </div>
+
+            <div class="settings-menu-item menu-item" 
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleTabsOpenRight() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleTabsOpenRight() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12l-7.5 7.5M13.5 12H3" />
+                    </svg>
+                </span>
+                <span>Tabs Open Right</span>
+                {#if tabsOpenRight}<span class="checkmark">•</span>{/if}
             </div>
             
             <div class="settings-menu-separator"></div>

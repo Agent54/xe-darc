@@ -62,6 +62,7 @@
     let commandKeyPressed = $state(false)
 
     // Function to create off-origin tab (lightbox or normal tab based on command key)
+    // FIXME: move to proper place
     function createOffOriginLightbox(url, originalOrigin, targetOrigin, useCommandKey = false) {
         const shouldCreateNormalTab = commandKeyPressed || useCommandKey
         
@@ -398,7 +399,7 @@
         }
     
         return () => {
-            observer?.unobserve(frameWrapper)
+            frameWrapper && observer?.unobserve(frameWrapper)
         }
     })
 

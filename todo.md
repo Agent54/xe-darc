@@ -632,3 +632,11 @@ fix lightbox etc animations
 
 seperate nav history with push and replace like jj/sapling
 
+open new tabs next to their opener vs right of tabs
+
+url fallback in sidebar tabs
+conetx menu sidebar
+
+update and persisst url/title/favicon changes
+
+favicon server extension

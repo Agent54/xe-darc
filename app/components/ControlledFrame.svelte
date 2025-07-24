@@ -37,7 +37,7 @@
     let initialUrl = $state('')
     
     // Track command key state
-    let isCommandKeyDown = $state(false)
+    // let isCommandKeyDown = $state(false)
 
     // OAuth popup state
     let oauthPopup = $state(null) // { url, width, height, parentTab, event }
@@ -452,11 +452,6 @@
         if (event?.url && tab.url) {
             const currentOrigin = origin(tab.url)
             const targetOrigin = origin(event.url)
-
-            // console.log('🔄 handleLoadStart event metadata:', {
-            //     event,
-            //     tab
-            // })
             
             // Skip origin check for about: pages and same-origin navigation
             if (event.isTopLevel && currentOrigin !== 'about' && currentOrigin !== 'unknown' && 
@@ -470,7 +465,14 @@
                 }
                 
                 // Create lightbox via parent function
-                createOffOriginLightbox(event.url, currentOrigin, targetOrigin, isCommandKeyDown)
+                // createOffOriginLightbox(event.url, currentOrigin, targetOrigin) // isCommandKeyDown
+                data.newTab(data.spaceMeta.activeSpace, {
+                    url: event.url,
+                    title: '',
+                    opener: tab.id,
+                    lightbox: data.settings.lightboxModeEnabled,
+                    // shouldFocus: e.windowOpenDisposition !== "new_background_tab"
+                })     
                 
                 // Don't set loading state since we're blocking navigation
                 return
@@ -565,7 +567,13 @@
         if (isOAuthPopup) {
             handleOAuthPopup(tab, e)
         } else {
-            data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title, opener: tab.id, lightbox: !isCommandKeyDown })         
+            data.newTab(data.spaceMeta.activeSpace, {
+                url: e.targetUrl,
+                title: e.title,
+                opener: tab.id,
+                lightbox: data.settings.lightboxModeEnabled,
+                shouldFocus: e.windowOpenDisposition !== "new_background_tab"
+            })         
         }
     }
 
@@ -1371,22 +1379,22 @@ document.addEventListener('input', function(event) {
                 onFrameFocus()
             } else if (message === 'iwa:blur') {
                 onFrameBlur()
-            } else if (message.startsWith('iwa:command-key-down:')) {
-                // Track command key press from controlled frame
-                const tabId = message.substring('iwa:command-key-down:'.length)
-                if (tabId === mytab.id) {
-                    isCommandKeyDown = true
-                    commandKeyPressed = true
-                    console.log(`📌 Command key pressed in tab ${tabId}`)
-                }
-            } else if (message.startsWith('iwa:command-key-up:')) {
-                // Track command key release from controlled frame
-                const tabId = message.substring('iwa:command-key-up:'.length)
-                if (tabId === mytab.id) {
-                    isCommandKeyDown = false
-                    commandKeyPressed = false
-                    console.log(`📌 Command key released in tab ${tabId}`)
-                }
+            // } else if (message.startsWith('iwa:command-key-down:')) {
+            //     // Track command key press from controlled frame
+            //     const tabId = message.substring('iwa:command-key-down:'.length)
+            //     if (tabId === mytab.id) {
+            //         isCommandKeyDown = true
+            //         commandKeyPressed = true
+            //         console.log(`📌 Command key pressed in tab ${tabId}`)
+            //     }
+            // } else if (message.startsWith('iwa:command-key-up:')) {
+            //     // Track command key release from controlled frame
+            //     const tabId = message.substring('iwa:command-key-up:'.length)
+            //     if (tabId === mytab.id) {
+            //         isCommandKeyDown = false
+            //         commandKeyPressed = false
+            //         console.log(`📌 Command key released in tab ${tabId}`)
+            //     }
             } else if (message.startsWith('iwa:close-tab:')) {
                 // Extract tab ID from message - handle colons in tab ID
                 const tabId = message.substring('iwa:close-tab:'.length)

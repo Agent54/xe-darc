@@ -21,6 +21,7 @@ const activity = $state({})
 const resources = $state({})
 const frames = $state({})
 const previews = $state({})
+const settings = $state({})
 
 db.bulkDocs(bootstrap).then(async (res) => {
     db.createIndex({
@@ -419,6 +420,7 @@ export default {
     docs,
     frames,
     previews,
+    settings,
 
     activate,
     loadSampleData,
