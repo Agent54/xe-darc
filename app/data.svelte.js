@@ -2,7 +2,7 @@ import PouchDB from 'pouchdb-browser'
 import findPlugin from 'pouchdb-find'
 import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
-import { thottle } from './lib/utils.js'
+import { throttle } from './lib/utils.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
@@ -114,7 +114,7 @@ setInterval(() => {
 
 let initialLoad = true
 // TODO: disable leading ?
-const refresh = thottle(async function (spaceId) {
+const refresh = throttle(async function (spaceId) {
     const { docs: newDocs } = await db.find({
         selector: {
             archive: { $lt: 'deleted' },
@@ -242,7 +242,7 @@ const changesFeed = db.changes({
 }).on('change', async change => {
     lastLocalSeq = change.seq
 
-    // console.log('change', change)
+    console.log('xxx change', change)
     // if (change.doc instanceof type.errors) {
     //     console.error(change.doc.summary, change.doc)
     //     return
@@ -538,24 +538,29 @@ export default {
 
     navigate(tabId, url) {
         const tab = docs[tabId]
-       
-        db.put({
-            ...tab,
-            url
-        })
+        const frame = frames[tabId]
 
-        db.put({
-            _id: `darc:activity_${crypto.randomUUID()}`,
-            type: 'activity',
-            archive: 'history',
-            action: 'visit',
-            tabId: tab.id,
-            spaceId: tab.spaceId,
-            url,
-            title: url.split('/').pop(),
-            favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64`,
-            created: Date.now()
-        })
+        if (frame.frame) {
+            frame.frame.src = url
+        } else {
+            db.put({
+                ...tab,
+                url
+            })
+        }
+
+        // db.put({
+        //     _id: `darc:activity_${crypto.randomUUID()}`,
+        //     type: 'activity',
+        //     archive: 'history',
+        //     action: 'visit',
+        //     tabId: tab.id,
+        //     spaceId: tab.spaceId,
+        //     url,
+        //     title: url.split('/').pop(),
+        //     favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64`,
+        //     created: Date.now()
+        // })
     },
     
     newTab: (spaceId, { url, title, opener, preview, lightbox, shouldFocus } = {}) => {

@@ -1,17 +1,20 @@
-export function thottle (func, window = 100) {
+export function throttle (func, window = 100, { leading = true } = {}) {
   let lastCall = 0
   let timeoutId = null
   let pendingArgs = null
   let hasPendingCall = false
 
   return function (...args) {
+    // console.log('throttle', {leading, window})
     const now = Date.now()
     
     // First call or enough time has passed - execute immediately
     if (now - lastCall >= window) {
       lastCall = now
-      func.apply(this, args)
-      return
+      if (leading) {
+        func.apply(this, args)
+        return
+      }
     }
     
     // Store the latest call arguments

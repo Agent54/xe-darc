@@ -370,7 +370,7 @@
         console.log(`Received tab close request from controlled frame: ${tabId}`)
         
         // Find the tab with matching ID
-        const tab = tabs.find(t => t.id === tabId)
+        const tab = data.docs[tabId]
         if (tab) {
             console.log(`Closing tab: ${tab.title}`)
             closeTab(tab, event)
@@ -1835,7 +1835,6 @@
         } 
     }
 
-
     onMount(() => {
         // console.log('setting up app shell navigation')
         history.replaceState({ direction: 1 }, 'a', "#1")
@@ -1845,8 +1844,6 @@
 
         window.onpopstate = handleShellNavigation    
     })
-
-
 
     function toggleCertificateMonitor(tab) {
         if (!certificateMonitorForTab) {
@@ -1987,7 +1984,7 @@
         return openSidebars.size * data.spaceMeta.config.rightSidebarWidth
     })
     
-            // Total space taken by all UI elements (affects available width)
+    // Total space taken by all UI elements (affects available width)
     let spaceTaken = $derived.by(() => {
         let baseSpace = leftPinnedWidth + rightPinnedWidth + rightSidebarWidth
         
@@ -2269,10 +2266,12 @@
 <header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) focusModeHovered = true }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) focusModeHovered = false }}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 178px;' : 'right: 137px;'}"></div>
      
-            <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {devModeEnabled ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {devModeEnabled ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
-            {#each leftPinnedTabs as tab, i (tab.id)}
+            {#each leftPinnedTabs as tabPinned, i (tabPinned.id)}
+                {@const tab = data.docs[tabPinned.id]}
+                {@const frameData = data.frames[tab.id]}
                 {#if tab.type !== 'divider'}
                     <li 
                         bind:this={tabButtons[tab.id]}
@@ -2289,7 +2288,7 @@
                         onmouseleave={handleTabMouseLeave}
                         >
                         <div class="tab">
-                            {#if tab.loading}
+                            {#if frameData?.loading}
                                 <svg class="tab-loading-spinner" viewBox="0 0 16 16">
                                     <path d="M8 2 A6 6 0 0 1 14 8" 
                                         fill="none" 
@@ -2319,7 +2318,9 @@
                 </li>
             {/if}
 
-            {#each unpinnedTabs as tab, i (tab.id)}
+            {#each unpinnedTabs as unpinned, i (unpinned.id)}
+                {@const tab = data.docs[unpinned.id]}
+                {@const frameData = data.frames[tab.id]}
                 {#if tab.type === 'divider'}
                     <li class="tab-divider-container">
                         <div class="tab-divider-vertical"></div>
@@ -2340,7 +2341,7 @@
                         onmouseleave={handleTabMouseLeave}
                         >
                         <div class="tab">
-                            {#if tab.loading}
+                            {#if frameData?.loading}
                                 <svg class="tab-loading-spinner" viewBox="0 0 16 16">
                                     <path d="M8 2 A6 6 0 0 1 14 8" 
                                         fill="none" 
@@ -2370,7 +2371,10 @@
                 </li>
             {/if}
 
-            {#each rightPinnedTabs as tab, i (tab.id)}
+            {#each rightPinnedTabs as rightPinned, i (rightPinned.id)}
+                {@const tab = data.docs[rightPinned.id]}
+                {@const frameData = data.frames[tab.id]}
+                <!-- FIXME: restructure other frame instance metadata like audio etc. -->
                 {#if tab.type !== 'divider'}
                     <li 
                         bind:this={tabButtons[tab.id]}
@@ -2387,7 +2391,7 @@
                         onmouseleave={handleTabMouseLeave}
                         >
                         <div class="tab">
-                            {#if tab.loading}
+                            {#if frameData?.loading}
                                 <svg class="tab-loading-spinner" viewBox="0 0 16 16">
                                     <path d="M8 2 A6 6 0 0 1 14 8" 
                                         fill="none" 
@@ -3008,7 +3012,8 @@
 <div class="pinned-frames-left" class:window-controls-overlay={headerPartOfMain} 
 class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
 style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length};">
-    {#each leftPinnedTabs as tab (tab.id)}
+    {#each leftPinnedTabs as leftPinned (leftPinned.id)}
+        {@const tab = data.docs[leftPinned.id]}
         {#key userModsHash}
             {#if tab.type !== 'divider'}
                 <div>
@@ -3051,20 +3056,21 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                 {/key}
         {/each} -->
     {:else}
-        {#each unpinnedTabs as tab (tab.id)}
-                {#key userModsHash}
-                    {#if  tab.type !== 'divider'}
-                        <div class:tab-group={unpinnedTabs.length > 1} class:active={tab.id === data.spaceMeta.activeTabId}>
-                            {#key origin(tab.url)}
-                                <div class="url-display visible">
-                                    <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
-                                </div>
-                            {/key}
-                            
-                            <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
-                        </div>
-                    {/if}
-                {/key}
+        {#each unpinnedTabs as unpinned (unpinned.id)}
+            {@const tab = data.docs[unpinned.id]}
+            {#key userModsHash}
+                {#if  tab.type !== 'divider'}
+                    <div class:tab-group={unpinnedTabs.length > 1} class:active={tab.id === data.spaceMeta.activeTabId}>
+                        {#key origin(tab.url)}
+                            <div class="url-display visible">
+                                <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
+                            </div>
+                        {/key}
+                        
+                        <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    </div>
+                {/if}
+            {/key}
         {/each}
     {/if}    
 </div>
@@ -3077,7 +3083,8 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
     <div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
     class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
     style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px;">
-        {#each rightPinnedTabs as tab (tab.id)}
+        {#each rightPinnedTabs as rigthPinned (rigthPinned.id)}
+            {@const tab = data.docs[rigthPinned.id]}
             {#key userModsHash}
                 {#if  tab.type !== 'divider'}
                     <div>

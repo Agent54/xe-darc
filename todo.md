@@ -704,3 +704,9 @@ context menu disable permission/settings/ad hoc override
 copy paste support!!!!!
 
 secret exchange protocol for frame ipc without console log
+
+apos screen with docker services
+
+logs
+
+reload needs unhibernation
