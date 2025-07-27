@@ -487,7 +487,7 @@
     // function handleContentLoad(tab) {
     //     // setTimeout(() => updateTabMeta(tab), 100)
 
-    //     console.log('xxxxxx  handleContentLoad', data.frames[tab.id]?.frame?.src)
+    //     console.log('handleContentLoad', data.frames[tab.id]?.frame?.src)
     // }
 
     // todo cycle every 15 seconds to check audiostate?
@@ -505,20 +505,20 @@
     //     }
     // }
 
-    function handleLoadCommit(tab, event) {
-        if (!event.isTopLevel) {
-            return
-        }
+    // function handleLoadCommit(tab, event) {
+    //     if (!event.isTopLevel) {
+    //         return
+    //     }
 
         // fired on success stop.  stop fires for commit and abort
-        console.log('xxxxx handleLoadCommit:', event.url)
+        // console.log('handleLoadCommit:', event.url)
         
         // Update the URL immediately
         // tab.url = event.url
         
         // Update the favicon URL
         // tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${event.url}&size=64`
-    }
+    // }
 
     function handleLoadStart(tab, event) {
         if (!event.isTopLevel) {
@@ -527,7 +527,7 @@
 
         data.frames[tab.id].loading = true
 
-        console.log('xxxxx handleLoadStart', event.url)
+        // console.log('handleLoadStart', event.url)
         // TODO: try cancelling even prevent
         // Check if this is an off-origin navigation
         if (event?.url && tab.url) {
@@ -563,7 +563,7 @@
     }
 
     function handleLoadStop(tab) {
-        console.log('xxxxx handleLoadStop', data.frames[tab.id]?.frame?.src)
+        // console.log('handleLoadStop', data.frames[tab.id]?.frame?.src)
         const wasLoading = data.frames[tab.id].loading
         data.frames[tab.id].loading = false
         
@@ -743,10 +743,10 @@
                 }
             }
 
-            console.log('xxxxx updateTabMeta', {favicon, title, url})
+            // console.log('updateTabMeta', {favicon, title, url})
             data.updateTab(tab.id, { favicon, title, url })
         } catch (err) {
-            console.log('xxxxx Error updating tab meta:', err, tab)
+            console.log('Error updating tab meta:', err, tab)
         }
     }
 
@@ -1443,8 +1443,6 @@ document.addEventListener('input', function(event) {
     let currentInputText = $state('')
     let previousInputText = $state('')
 
-
-
     // Listen for messages from content scripts
     function setupMessageListener(frame) {
         const mytab = untrack(() => tab)
@@ -1844,8 +1842,8 @@ document.addEventListener('input', function(event) {
             // fired when navigation (including reloads and traversals) starts, for every navigable of the embedded document, but not same document navigation.
             controlledFrame.onloadstart = throttle( e => handleLoadStart(mytab, e), 500, {leading: false})
             
-             // fired when navigation has been completed.
-            controlledFrame.onloadcommit =  throttle(e => handleLoadCommit(mytab, e), 500, {leading: false})
+            // fired when navigation has been completed.
+            // controlledFrame.onloadcommit =  throttle(e => handleLoadCommit(mytab, e), 500, {leading: false})
             
             // fired when all pending navigations finish(either commit or abort). If a new navigation starts after, loadstop may fire again.
             controlledFrame.onloadstop = throttle(e => handleLoadStop(mytab, e), 500, {leading: false})
@@ -1862,7 +1860,7 @@ document.addEventListener('input', function(event) {
             controlledFrame.onexit = e => handleEvent('onexit',mytab, e)
             controlledFrame.onloadredirect = e => handleEvent('onloadredirect',mytab, e)
             // controlledFrame.onloadredirect= (e) => { 
-            //     console.log('xxxxx onloadredirect', e)
+            //     console.log(onloadredirect', e)
             //     //         handleEvent('onloadredirect',tab, e)
             //     //         // Update URL on redirect
             //     //         // if (e.newUrl) {

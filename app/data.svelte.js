@@ -175,10 +175,6 @@ const refresh = throttle(async function (spaceId) {
                 console.log('setting active tab id a', spaceMeta.activeTabId)
             }
 
-            if (doc.id === spaceMeta.activeTabId) {
-                activeTabIdExists = true
-            }
-
             if (!spaces[doc.spaceId]) {
                 spaces[doc.spaceId] = { _id: doc.spaceId, tabs: [] }
             }
@@ -194,6 +190,9 @@ const refresh = throttle(async function (spaceId) {
                 }
                 continue
             } else {
+                if (doc.id === spaceMeta.activeTabId) {
+                    activeTabIdExists = true
+                }
                 if (doc.preview || doc.lightbox) {
                     previews[doc.opener] ??= { lightbox: null, tabs: [] }
                     previews[doc.opener].tabs.push(doc)
@@ -212,6 +211,7 @@ const refresh = throttle(async function (spaceId) {
         // }
     }
 
+    console.log('setting active tab id b', { current : spaceMeta.activeTabId, activeTabIdExists, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
     if (spaceMeta.activeTabId && !activeTabIdExists && spaces[spaceMeta.activeSpace]?.activeTabsOrder?.length > 0) {
         let previousIndex = 1
         spaces[spaceMeta.activeSpace].activeTabsOrder = spaces[spaceMeta.activeSpace].activeTabsOrder.filter((id, i) => {
@@ -221,8 +221,9 @@ const refresh = throttle(async function (spaceId) {
             }
             return true
         })
+        console.log('setting active tab id b', { current : spaceMeta.activeTabId, next : spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1], previousIndex, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
         spaceMeta.activeTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]
-        console.log('setting active tab id b', spaceMeta.activeTabId)
+       
     }
 
     spaceMeta.closedTabs = closedTabs.sort((a, b) => b.modified - a.modified)
@@ -242,7 +243,7 @@ const changesFeed = db.changes({
 }).on('change', async change => {
     lastLocalSeq = change.seq
 
-    console.log('xxx change', change)
+    console.log('change', change)
     // if (change.doc instanceof type.errors) {
     //     console.error(change.doc.summary, change.doc)
     //     return
