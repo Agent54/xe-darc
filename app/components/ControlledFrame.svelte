@@ -710,7 +710,7 @@
         let url = frame.src || tab.url
 
         // Don't update meta from controlled frame for about: URLs
-        if (url && tab.url.startsWith('about:')) {
+        if (url.startsWith('about:')) {
             return
         }
 

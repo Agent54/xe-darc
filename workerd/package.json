@@ -2,6 +2,7 @@
   "name": "dev-server",
   "version": "1.0.0",
   "description": "docker dev proxy",
+  "packageManager": "pnpm@9.13.2",
   "main": "index.js",
   "type": "module",
   "scripts": {

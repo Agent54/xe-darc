@@ -3,7 +3,8 @@ services:
   proxy:
     restart: always
     build:
-      context: ./workerd
+      dockerfile: ./workerd/Dockerfile
+      context: .
     ports:
       # - "9229:9229"
       - "8080:8080"
