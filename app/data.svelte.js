@@ -16,7 +16,20 @@ const sortOrder = ['archive', 'spaceId', 'type', 'order']
 
 const docs = $state({})
 const origins = $state({})
-const spaces = $state({})
+const spaces = $state({
+    'darc:space_inbox': {
+        _id: 'darc:space_inbox',
+        type: 'space',
+        name: 'Inbox',
+        title: 'Inbox',
+        color: projectColors[3].color,
+        tabs: [],
+        order: Date.now() + 999999999,
+        created: Date.now(),
+        modified: Date.now(),
+        glyph: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-inbox"><path d="M22 12h-6l-2 2H8l-2-2H2"></path><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>'
+    }
+})
 const activity = $state({})
 const resources = $state({})
 const frames = $state({})
@@ -436,6 +449,40 @@ export default {
 
     activate,
     loadSampleData,
+
+    restoreClosedTab: (tabId) => {
+        // Remove from closed tabs
+        const closedIndex = data.spaceMeta.closedTabs.findIndex(t => t.id === tab.id)
+        if (closedIndex !== -1) {
+            data.spaceMeta.closedTabs.splice(closedIndex, 1)
+        }
+        
+        // Add back to the space (use active space if the original space doesn't exist)
+        const targetSpaceId = data.spaces[tab.spaceId] ? tab.spaceId : data.spaceMeta.activeSpace
+        if (targetSpaceId) {
+            // Clean up the tab object before adding back (remove closedAt and other closed-specific properties)
+            const { closedAt, ...cleanTab } = tab
+            const restoredTab = {
+                ...cleanTab,
+                _id: cleanTab._id || cleanTab.id,
+                id: cleanTab.id,
+                spaceId: targetSpaceId,
+                pinned: cleanTab.pinned || false,
+                muted: cleanTab.muted || false,
+                order: data.spaces[targetSpaceId]?.tabs?.length || 0
+            }
+            
+            if (!data.spaces[targetSpaceId].tabs) {
+                data.spaces[targetSpaceId].tabs = []
+            }
+            
+            data.spaces[targetSpaceId].tabs.push(restoredTab)
+            
+            // Set as active tab
+            data.spaceMeta.activeSpace = targetSpaceId
+            data.activate(cleanTab.id)
+        }
+    },
 
     readPage: async (tabId) => {
         const frame = frames[tabId]

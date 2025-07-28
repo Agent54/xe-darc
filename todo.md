@@ -774,3 +774,47 @@ do file edits etc. with sub agents to separate the context windows of main conte
 show new tabs as tab preview if errorring?
 
 html tab broken favicon and injections
+
+entering url always sets https even for localhost bug
+
+favicon overrides
+
+title change event websites + badge api
+
+add subsections for context sites. with tile parsing
+
+tab hud mode
+
+favicon update broken
+
+reduce scrolling animation overhead?
+
+scroll bug horizontal tab view frames
+
+how to resize frames
+
+notificaiton api
+
+max frame width slider
+
+close tab cleanup frames
+
+paste patch vscode
+
+scroll bug activation
+
+scroll bug reload and space switch
+
+repo in container
+
+menu items unhovered and inactive opacity
+
+docker rersource monitor and browser resource monitor
+
+xe launcher colima manager
+
+gvisor etc. for insecure workloads
+
+obsidian mode for code server
+
+window management

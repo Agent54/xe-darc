@@ -1,6 +1,6 @@
 **/node_modules
-**/.jj
-**/.git
+# **/.jj
+# **/.git
 **/data
 **/secrets
 

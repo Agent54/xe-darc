@@ -1438,11 +1438,11 @@
         backdrop-filter: none;
     }
 
-    @media (min-width: 1800px) {
+    /* @media (min-width: 1800px) {
         .lightbox-backdrop {
             max-width: 1411px;
         }
-    }
+    } */
 
     .lightbox-container {
         width: calc(100% - 80px);
