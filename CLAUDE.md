@@ -5,10 +5,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 Darc is an experimental next-generation browser built on Xenon and Svelte. It combines cutting-edge browser UI concepts from Arc, stacked browsing, and agentic browsers. The project focuses on UI innovation and expects high resource usage (10s-100s MB per day, 2GB+ memory).
 
+## Development Setup
+
+### Shared Development Environment
+The development server runs continuously in a detached session for efficient collaboration:
+- **Dtach session**: Contains the running `npm run dev` server on port 5193 at `./dtach/darc`
+- **Session reattachment**: Use `dtach -a ./dtach/darc` to view current console output and interact
+- **Real-time monitoring**: Vite HMR updates and console logs are visible in the detached session
+- **No need to start server**: Development server is most likely already running in watch mode, only start it after checking existing sessions and only using dtach yourself
+
+
+### Console Monitoring
+```bash
+# Check if dtach session exists
+ls -la ./dtach/darc 2>/dev/null && echo "Session exists" || echo "No session found"
+
+# Attach to existing session (Ctrl+\ to detach)
+dtach -a ./dtach/darc
+
+# Create new session with shell
+dtach -c ./dtach/darc zsh
+
+# Create new session if needed (Ctrl+\ to detach)
+dtach -c ./dtach/darc npm run dev
+
+# Attach to existing session or create new one
+dtach -A ./dtach/darc npm run dev
+```
+
 ## Development Commands
 
 ### Core Development
-- `npm run dev` - Start development server on port 5193
+- `npm run dev` - Start development server on port 5193 (already running in dtach session)
 - `npm run build` - Build for production 
 - `npm run preview` - Preview production build
 - `npm run bump-version` - Increment version using bump_version.js

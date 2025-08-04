@@ -6,23 +6,23 @@
     import NetworkErrorPage from './NetworkErrorPage.svelte'
     import NewTab from './NewTab.svelte'
     import { origin } from '../lib/utils.js'
-    // import { fade } from 'svelte/transition'
+    import { generateDiff, throttle } from '../lib/utils.js'
 
     let {
         tabId,
         style = '',
         headerPartOfMain,
         isScrolling,
-        captureTabScreenshot,
         onFrameFocus = () => {},
         onFrameBlur = () => {},
         userMods,
         requestedResources,
         statusLightsEnabled = false,
+        class: className = '',
+        createOffOriginLightbox = () => {},
 
         hoveredLink = $bindable(),
-        linkPreviewVisible = $bindable(),
-        linkPreviewTimeout = $bindable(),
+        commandKeyPressed = $bindable(),
         inputDiffVisible = $bindable(),
         inputDiffTimeout = $bindable(),
         inputDiffData = $bindable(),
@@ -30,9 +30,13 @@
 
     let tab = $derived(data.docs[tabId])
 
+    let linkPreviewTimeout = null
     let anchor = $state(null)
 
-    let initialUrl = $state('')
+    // let usedUrl = $state('')
+    
+    // Track command key state
+    // let isCommandKeyDown = $state(false)
 
     // OAuth popup state
     let oauthPopup = $state(null) // { url, width, height, parentTab, event }
@@ -132,8 +136,8 @@
 
     // Check if current tab has applicable user mods
     $effect(() => {
-        if (tab.url && tab.id === data.spaceMeta.activeTab?.id) {
-            console.log('checking for applicable mods', tab.url)
+        if (tab.url && tab.id === data.spaceMeta.activeTabId) {
+            // console.log('checking for applicable mods', tab.url)
             const applicableMods = getApplicableMods(tab.url)
             if (applicableMods.length > 0) {
                 showMockedActivation()
@@ -142,92 +146,69 @@
             }
         }
     })
-
-    function showPermissionRequest() {
-        permissionRequestActive = true
-        // This doesn't auto-hide, cleared when permission is handled
-    }
-
-    function hidePermissionRequest() {
-        permissionRequestActive = false
-    }
     
-    // Update initialUrl when tab URL changes
-    $effect(() => {
-        if (initialUrl !== tab.url) {
-            initialUrl = tab.url
-        }  
-
-        if (tab.url) {
-            // Update title if it's an about: page or if current title is empty/generic
-            if (tab.url.startsWith('about:')) {
-                if (tab.url.startsWith('about:newtab') || tab.url.startsWith('about:blank')) {
-                    tab.title = 'New Tab'
-                } else if (tab.url.startsWith('about:')) {
-                    tab.title = tab.url.charAt(6).toUpperCase() + tab.url.slice(7)
-                } else {
-                    // For regular URLs, extract origin as fallback title
-                    try {
-                        const urlObj = new URL(tab.url)
-                        tab.title = urlObj.origin || tab.url
-                    } catch {
-                        tab.title = tab.url
-                    }
-                }
-            } else {
-                tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
-            }
-        }
-    })
+    // Obsolete, remove when everything works for a while
+    // $effect(() => {
+        // if (tab.url) {
+        //     // Update title if it's an about: page or if current title is empty/generic
+        //     if (tab.url.startsWith('about:')) {
+        //         if (tab.url.startsWith('about:newtab') || tab.url.startsWith('about:blank')) {
+        //             tab.title = 'New Tab'
+        //         } else if (tab.url.startsWith('about:')) {
+        //             tab.title = tab.url.charAt(6).toUpperCase() + tab.url.slice(7)
+        //         } else {
+        //             // For regular URLs, extract origin as fallback title
+        //             try {
+        //                 const urlObj = new URL(tab.url)
+        //                 tab.title = urlObj.origin || tab.url
+        //             } catch {
+        //                 tab.title = tab.url
+        //             }
+        //         }
+        //     }
+        //  else {
+        //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
+        // }
+        // }
+    // })
 
     // Check if the current URL is about:newtab
     function isNewTabUrl(url) {
         return url?.startsWith('about:newtab') || url?.startsWith('about:blank')
     }
 
-    function handlePermissionRequest(eventName, tab, event) {
-        // Show orange LED for permission request
-        showPermissionRequest()
+    function handlePermissionRequest(tabId, event) {
+        permissionRequestActive = true
 
         requestedResources.push({
             permission: event.permission,
-            url: event.url || tab.url,
-            tabId: tab.id,
+            url: event.url,
+            tabId: tabId,
             timestamp: new Date().toISOString(),
-            userAgent: navigator.userAgent,
-            id: 'camera',
-            name: 'Camera',
-            icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-            </svg>`,
-            description: 'Camera access for photos and video capture',
-            lastUsed: 'now', status: 'Request'
+            id: event.permission,
+            lastUsed: 'now',
+            status: 'Request'
         })
 
-        console.log(`🔒 [Permission Request] Tab ${tab.id}: ${event.permission}`)
-        console.log('📋 Permission request details:', {
-            permission: event.permission,
-            url: event.url || tab.url,
-            tabId: tab.id,
-            timestamp: new Date().toISOString(),
-            userAgent: navigator.userAgent
+        console.log('📋 Permission request:', {
+            event,
+            tab
         })
         
-        // Grant all permissions but log them for monitoring
         try {
-            event.request.allow()
-            console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url || tab.url}`)
+            // event.request.allow()
+            // console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url}`)
+            event.request.deny()
             
             // Hide permission request LED after granting
             setTimeout(() => {
-                hidePermissionRequest()
+                permissionRequestActive = false
             }, 1000)
         } catch (error) {
             console.error(`❌ [Permission Error] Failed to grant ${event.permission}:`, error)
             // Hide permission request LED on error too
             setTimeout(() => {
-                hidePermissionRequest()
+                permissionRequestActive = false
             }, 1000)
         }
     }
@@ -379,13 +360,14 @@
 
     // Reload the current tab
     function reloadTab(tab) {
-        const frame = data.frames[tab.id]?.frame
+        const frameData = data.frames[tab.id]
+        const frame = frameData?.frame
         if (frame) {
             console.log(`🔄 User initiated reload for tab ${tab.id}`)
             clearNetworkError(tab)
             
             // Set loading state
-            tab.loading = true
+            frameData.loading = true
             
             // Reload the frame
             if (frame.reload) {
@@ -405,16 +387,26 @@
     function handleEvent(eventName, tab, event) {
         console.log(eventName, tab, event)
     }
+    function handleAudioStateChanged (tab, event) {
+        tab.audioPlaying = event.audible
+    }
 
     function handleLoadAbort(tab, event) {
-        console.log('🚨 onloadabort', event)
+        if (!event.isTopLevel) {
+            return
+        }
         
+        console.log('🚨 onloadabort', event)
+        if (!tab) {
+            return
+        }
+
         // Load failed, stop loading immediately
-        tab.loading = false
+        data.frames[tab.id].loading = false
         
         // Check if this is a certificate error
         if (event && event.reason) {
-            console.log(`🔍 Checking if "${event.reason}" is a certificate error...`)
+            // console.log(`🔍 Checking if "${event.reason}" is a certificate error...`)
             if (isCertificateError(event.reason)) {
                 console.log(`🔒 CERTIFICATE ERROR DETECTED: ${event.reason}`)
                 setCertificateError(tab, event.reason, event.url || tab.url)
@@ -422,17 +414,83 @@
                 console.log(`🌐 NETWORK ERROR DETECTED in loadabort: ${event.reason}`)
                 const errorCode = event.reason.replace('net::', '')
                 setNetworkError(tab, errorCode, event.url || tab.url)
-            } else {
-                console.log(`ℹ️ Not a certificate or network error: ${event.reason}`)
             }
         }
     }
 
-    function handleContentLoad(tab, event) {
-        setTimeout(() => updateTabMeta(tab), 100)
+    async function captureTabScreenshot(tab) {
+        let frame = null
+        if (!frame) {
+            frame = data.frames[tab.id]?.frame
+        }
+        if (!frame) {
+            console.log('Frame not found for tab:', tab.id)
+            return
+        }
+
+        if (typeof frame.captureVisibleRegion !== 'function') {
+            return
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
+        try {
+            let screenshot = null
+            
+            // Check if frame is ready and loaded
+            // const isFrameReady = () => {
+            //     return frame.src && 
+            //            !frame.src.includes('about:blank') && 
+            //            frame.contentWindow !== null
+            // }
+            
+            // Wait for frame to be ready if needed
+            // if (!isFrameReady()) {
+            //     console.log('Frame not ready for screenshot, waiting...')
+            //     await new Promise(resolve => setTimeout(resolve, 1000))
+            //     if (!isFrameReady()) {
+            //         console.log('Frame still not ready, skipping screenshot')
+            //         return null
+            //     }
+            // }
+            
+            // Retry mechanism for flaky captures
+            // for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    // console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
+                    screenshot = await frame.captureVisibleRegion({
+                        format: 'png',
+                        quality: 80
+                    })
+                    // if (screenshot) {
+                    //     console.log(`Screenshot successful on attempt ${attempt}`)
+                    //     // break
+                    // }
+                } catch (captureError) {
+                    console.log(`Capture failed:`, captureError)
+                    // if (attempt < 3) {
+                    //     // Wait before retry, increasing delay each time
+                    //     await new Promise(resolve => setTimeout(resolve, attempt * 500))
+                    // }
+                }
+            // }
+            
+            if (screenshot) {
+                // tab.screenshot = screenshot
+                data.updateTab(tab.id, { screenshot })
+            }
+        } catch (err) {
+            console.log('Error capturing screenshot:', err)
+        }
     }
 
-    // todo cycle every 5 seconds to non hibernated tabs to check audiostate 
+    // function handleContentLoad(tab) {
+    //     // setTimeout(() => updateTabMeta(tab), 100)
+
+    //     console.log('handleContentLoad', data.frames[tab.id]?.frame?.src)
+    // }
+
+    // todo cycle every 15 seconds to check audiostate?
     // function updateTabAudioState (frame) {
     //     if (frame && typeof frame.getAudioState === 'function') {
     //         frame.getAudioState().then(audible => {
@@ -447,37 +505,73 @@
     //     }
     // }
 
-    function handleLoadCommit(tab, event) {
-        // console.log('Page loaded:', event.url)
+    // function handleLoadCommit(tab, event) {
+    //     if (!event.isTopLevel) {
+    //         return
+    //     }
+
+        // fired on success stop.  stop fires for commit and abort
+        // console.log('handleLoadCommit:', event.url)
         
         // Update the URL immediately
         // tab.url = event.url
         
         // Update the favicon URL
         // tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${event.url}&size=64`
-    }
+    // }
 
-    function handleAudioStateChanged (tab, event) {
-        tab.audioPlaying = event.audible
-    }
+    function handleLoadStart(tab, event) {
+        if (!event.isTopLevel) {
+            return
+        }
 
-    function handleLoadStart(tab) {
-        tab.loading = true
-        // Evaluate security state based on current certificate status
+        data.frames[tab.id].loading = true
+
+        // console.log('handleLoadStart', event.url)
+        // TODO: try cancelling even prevent
+        // Check if this is an off-origin navigation
+        if (event?.url && tab.url) {
+            const currentOrigin = origin(tab.url)
+            const targetOrigin = origin(event.url)
+            
+            // Skip origin check for about: pages and same-origin navigation
+            if (event.isTopLevel && currentOrigin !== 'about' && currentOrigin !== 'unknown' && 
+                targetOrigin !== currentOrigin && targetOrigin !== 'about') {
+                
+                console.log(`🚫 Off-origin navigation detected: ${currentOrigin} → ${targetOrigin}  ${event.url}`)
+
+                const frame = data.frames[tab.id]?.frame
+                if (frame?.stop) {
+                    frame.stop()
+                }
+                
+                // FIXME: createOffOriginLightbox(event.url, currentOrigin, targetOrigin) // isCommandKeyDown
+                data.newTab(data.spaceMeta.activeSpace, {
+                    url: event.url,
+                    title: '',
+                    opener: tab.id,
+                    lightbox: data.settings.lightboxModeEnabled,
+                    shouldFocus: true   // e.windowOpenDisposition !== "new_background_tab"
+                })     
+                
+                // Don't set loading state since we're blocking navigation
+                return
+            }
+        }
+
         evaluateSecurityState(tab)
     }
 
     function handleLoadStop(tab) {
-        const wasLoading = tab.loading
-        tab.loading = false
+        // console.log('handleLoadStop', data.frames[tab.id]?.frame?.src)
+        const wasLoading = data.frames[tab.id].loading
+        data.frames[tab.id].loading = false
         
         const originValue = origin(tab.url)
         const currentNetworkErr = data.origins[originValue]?.networkError
         const currentCertErr = data.origins[originValue]?.certificateError
         
-        console.log(`🔄 handleLoadStop called for ${tab.url}`)
-        console.log(`🔄 Was loading (successful): ${wasLoading}`)
-        console.log(`🔄 Network error before processing:`, currentNetworkErr)
+        // console.log(`handleLoadStop called for`, {tab, e, currentNetworkErr})
 
         tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
@@ -495,7 +589,7 @@
                 console.log(`🔒 Certificate error cleared - successfully navigated to ${tab.url}`)
             }
             
-            console.log(`✅ Page loaded successfully: ${tab.url}`)
+            // console.log(`✅ Page loaded successfully: ${tab.url}`)
         } else {
             // Load failed - preserve errors
             console.log(`🚨 Load failed - preserving errors for ${tab.url}`)
@@ -507,16 +601,16 @@
             }
         }
         
-        const hasNetworkError = !!currentNetworkErr
-        const hasCertError = !!currentCertErr
+        // const hasNetworkError = !!currentNetworkErr
+        // const hasCertError = !!currentCertErr
         
         // Update title and capture screenshot after page loads (only if successful)
-        if (wasLoading) {
-            setTimeout(async () => {
-                await updateTabMeta(tab)
-                await captureTabScreenshot(tab)
-            }, 2) // Wait a bit for the page to fully render
-        }
+        // if (wasLoading) {
+            // setTimeout(async () => {
+        updateTabMeta(tab)
+        captureTabScreenshot(tab)
+            // }, 0)
+        // }
     }
 
     function handleNewWindow(tab, e) {
@@ -552,7 +646,13 @@
         if (isOAuthPopup) {
             handleOAuthPopup(tab, e)
         } else {
-            data.newTab(data.spaceMeta.activeSpace, { url: e.targetUrl, title: e.title, opener: tab.id })         
+            data.newTab(data.spaceMeta.activeSpace, {
+                url: e.targetUrl,
+                title: e.title,
+                opener: tab.id,
+                lightbox: data.settings.lightboxModeEnabled,
+                shouldFocus: e.windowOpenDisposition !== "new_background_tab"
+            })         
         }
     }
 
@@ -600,20 +700,21 @@
         }
     }
 
-    async function updateTabMeta(tab, frame = null) {
+    async function updateTabMeta(tab) {
+        let frame = null
         if (!frame) {
             frame = data.frames[tab.id]?.frame
         }
         if (!frame) return
 
-        tab.url = frame.src
+        let url = frame.src || tab.url
 
         // Don't update meta from controlled frame for about: URLs
-        if (tab.url && tab.url.startsWith('about:')) {
+        if (url && tab.url.startsWith('about:')) {
             return
         }
 
-        tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
+        let favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
 
         try {
             let title = null
@@ -630,28 +731,27 @@
             }
 
             // Update the tab title directly
-            if (title) {
-                tab.title = title
-            } else {
+            if (!title) {
                 // Fallback to URL if no title is available
-                const url = tab.url
                 if (url) {
                     try {
                         const urlObj = new URL(url)
-                        tab.title = urlObj.origin || url
+                        title = urlObj.origin || url
                     } catch {
-                        tab.title = url
+                        title = url
                     }
                 }
             }
 
+            // console.log('updateTabMeta', {favicon, title, url})
+            data.updateTab(tab.id, { favicon, title, url })
         } catch (err) {
-            console.log('Error updating tab title:', err)
+            console.log('Error updating tab meta:', err, tab)
         }
     }
 
 // Content script for window focus/blur handling
-function setupContentScripts(frame) {
+function setupContentScripts(frame) {        
         // First try a simple test script to verify content script injection works
         const systemInjections = [
             {
@@ -673,8 +773,15 @@ function setupContentScripts(frame) {
 window.addEventListener('focus', () => { console.log('iwa:focus') }, false);
 window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
 
+
+
 // Global keyboard event listener for controlled frame
 document.addEventListener('keydown', function(event) {
+    // Track command key state
+    if (event.metaKey || event.ctrlKey) {
+        console.log('iwa:command-key-down:${tab.id}');
+    }
+    
     // Check for Cmd+W (Mac) or Ctrl+W (Windows/Linux)
     if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
         console.log('iwa:close-tab:${tab.id}');
@@ -691,6 +798,13 @@ document.addEventListener('keydown', function(event) {
         event.stopPropagation();
         event.stopImmediatePropagation();
         return false;
+    }
+}, { capture: true, passive: false });
+
+document.addEventListener('keyup', function(event) {
+    // Track command key state
+    if (event.key === 'Meta' || event.key === 'Control') {
+        console.log('iwa:command-key-up:${tab.id}');
     }
 }, { capture: true, passive: false });
 
@@ -730,6 +844,29 @@ document.addEventListener('mouseup', function(event) {
 //     }
 // }, { capture: true, passive: false });
 
+// Context menu protection - force native context menu when cmd/ctrl is held
+document.addEventListener('contextmenu', function(event) {
+    // Only force native context menu if cmd (Mac) or ctrl (Windows/Linux) key is held down
+    const forceNative = event.metaKey || event.ctrlKey;
+    
+    if (forceNative) {
+        // Stop any other handlers from running first
+        event.stopImmediatePropagation();
+        
+        // Override preventDefault to make it ineffective
+        const originalPreventDefault = event.preventDefault;
+        event.preventDefault = function() {
+            console.log('iwa:contextmenu-forced-native:${tab.id}');
+            // Don't actually prevent default - let native context menu show
+        };
+        
+        console.log('iwa:contextmenu-native-forced:${tab.id}');
+    }
+    // If cmd/ctrl not held, allow normal website context menu behavior
+}, { capture: true, passive: false });
+
+console.log('🛡️ Context menu protection installed in controlled frame ${tab.id}');
+
 // Track hovered anchor elements
 let currentHoveredAnchor = null;
 
@@ -741,12 +878,25 @@ document.addEventListener('mouseover', function(event) {
     if (anchor && anchor !== currentHoveredAnchor) {
         currentHoveredAnchor = anchor;
         
-        // Log anchor enter with details
+        // Get anchor position relative to viewport
+        const rect = anchor.getBoundingClientRect();
+        
+        // Log anchor enter with details including position
         console.log('iwa:link-enter:${tab.id}:' + JSON.stringify({
             href: anchor.href || anchor.getAttribute('href') || '',
             target: anchor.target || anchor.getAttribute('target') || '',
             rel: anchor.rel || anchor.getAttribute('rel') || '',
-            title: anchor.title || anchor.getAttribute('title') || ''
+            title: anchor.title || anchor.getAttribute('title') || '',
+            position: {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2,
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+                width: rect.width,
+                height: rect.height
+            }
         }));
     } else if (!anchor && currentHoveredAnchor) {
         // Left the anchor element
@@ -972,15 +1122,13 @@ document.addEventListener('input', function(event) {
             })
         ]
 
-        console.log('trying' , tab.id)
-
         if (!frame.addContentScripts) {
-            initialUrl = untrack(() => tab.url)
+            frame.src = untrack(() => tab.url)
         } else {
             frame.addContentScripts([...systemInjections, ...userInjections]).then((res) => {
             console.log('✅ Injections added successfully', res)
 
-            initialUrl = untrack(() => tab.url)
+            frame.src  = untrack(() => tab.url)
             
             // Now add the focus/blur script
             // return frame.addContentScripts([contentScript])
@@ -1049,6 +1197,7 @@ document.addEventListener('input', function(event) {
                 || details.url.indexOf("googletagmanager.com") != -1
                 || details.url.indexOf("adservice.google.com") != -1
                 || details.url.indexOf("doubleclick.net") != -1
+                || details.url.indexOf('cdn.cookielaw.org') != -1
 
             if (block) {
                 // Show red LED for blocked requests
@@ -1210,7 +1359,7 @@ document.addEventListener('input', function(event) {
             
             // Check if this is a certificate error
             if (details.error) {
-                console.log(`🔍 Request error - checking if "${details.error}" is a certificate error...`)
+                // console.log(`🔍 Request error - checking if "${details.error}" is a certificate error...`)
                 if (isCertificateError(details.error)) {
                     // ANY certificate error (main frame OR subresource) compromises the entire page
                     console.log(`🔒 CERTIFICATE ERROR DETECTED: ${details.error} for ${details.url}`)
@@ -1219,7 +1368,7 @@ document.addEventListener('input', function(event) {
                     setCertificateError(tab, errorCode, details.url)
                     // Load failed due to certificate error
                     if (details.frameId === 0) {
-                        tab.loading = false
+                        data.frames[tab.id].loading = false
                     }
                 } else if (isNetworkError(details.error)) {
                     // Network error detected - only set for main frame errors
@@ -1230,11 +1379,12 @@ document.addEventListener('input', function(event) {
                     if (details.frameId === 0) {
                         setNetworkError(tab, errorCode, details.url)
                         // Load failed due to network error
-                        tab.loading = false
+                        data.frames[tab.id].loading = false
                     }
-                } else {
-                    console.log(`ℹ️ Not a certificate or network error: ${details.error}`)
-                }
+                } 
+                // else {
+                //     console.log(`ℹ️ Not a certificate or network error: ${details.error}`)
+                // }
             }
         }, allUrlsFilter)
     }
@@ -1271,11 +1421,12 @@ document.addEventListener('input', function(event) {
                 // console.log('📋 Tab data:', tab)
                 // console.groupEnd()
             }
-        }).then(() => {
-            console.log('✅ Context menu "Here" created successfully')
-        }).catch((err) => {
-            console.error('❌ Failed to create context menu:', err)
         })
+        // .then(() => {
+        //     console.log('✅ Context menu "Here" created successfully')
+        // }).catch((err) => {
+        //     console.error('❌ Failed to create context menu:', err)
+        // })
 
         // Also listen to onClicked event for additional logging
         frame.contextMenus.onClicked.addListener((info) => {
@@ -1294,6 +1445,7 @@ document.addEventListener('input', function(event) {
 
     // Listen for messages from content scripts
     function setupMessageListener(frame) {
+        const mytab = untrack(() => tab)
         // Listen for messages from the controlled frame's content window
         // if (frame.contentWindow) {
         //     frame.contentWindow.addEventListener('message', (event) => {
@@ -1331,6 +1483,22 @@ document.addEventListener('input', function(event) {
                 onFrameFocus()
             } else if (message === 'iwa:blur') {
                 onFrameBlur()
+            // } else if (message.startsWith('iwa:command-key-down:')) {
+            //     // Track command key press from controlled frame
+            //     const tabId = message.substring('iwa:command-key-down:'.length)
+            //     if (tabId === mytab.id) {
+            //         isCommandKeyDown = true
+            //         commandKeyPressed = true
+            //         console.log(`📌 Command key pressed in tab ${tabId}`)
+            //     }
+            // } else if (message.startsWith('iwa:command-key-up:')) {
+            //     // Track command key release from controlled frame
+            //     const tabId = message.substring('iwa:command-key-up:'.length)
+            //     if (tabId === mytab.id) {
+            //         isCommandKeyDown = false
+            //         commandKeyPressed = false
+            //         console.log(`📌 Command key released in tab ${tabId}`)
+            //     }
             } else if (message.startsWith('iwa:close-tab:')) {
                 // Extract tab ID from message - handle colons in tab ID
                 const tabId = message.substring('iwa:close-tab:'.length)
@@ -1340,7 +1508,7 @@ document.addEventListener('input', function(event) {
                 window.dispatchEvent(new CustomEvent('darc-close-tab-from-frame', {
                     detail: { 
                         tabId: tabId,
-                        sourceFrame: `tab_${tab.id}`
+                        sourceFrame: `tab_${tabId}`
                     }
                 }))
             } else if (message.startsWith('iwa:new-tab:')) {
@@ -1352,26 +1520,25 @@ document.addEventListener('input', function(event) {
                 window.dispatchEvent(new CustomEvent('darc-new-tab-from-frame', {
                     detail: { 
                         tabId: tabId,
-                        sourceFrame: `tab_${tab.id}`
+                        sourceFrame: `tab_${mytab.id}`
                     }
                 }))
             } else if (message.startsWith('iwa:link-enter:')) {
                 const prefix = 'iwa:link-enter:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const linkData = JSON.parse(dataPayload)
                         
                         if (linkData.href) {
                             hoveredLink = linkData
-                            linkPreviewVisible = true
                             
                             if (linkPreviewTimeout) {
                                 clearTimeout(linkPreviewTimeout)
@@ -1379,10 +1546,9 @@ document.addEventListener('input', function(event) {
                             }
 
                             linkPreviewTimeout = setTimeout(() => {
-                                linkPreviewVisible = false
                                 hoveredLink = null
                                 linkPreviewTimeout = null
-                            }, 5000)
+                            }, 7000)
                         }
                     } catch (error) {
                         console.error('Failed to parse link enter data:', error)
@@ -1392,17 +1558,16 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:link-leave:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const linkData = JSON.parse(dataPayload)
                         
-                        linkPreviewVisible = false
                         hoveredLink = null
 
                         if (linkPreviewTimeout) {
@@ -1418,12 +1583,12 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:input-text:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const inputData = JSON.parse(dataPayload)
@@ -1442,12 +1607,12 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:zoom:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract zoom direction after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract zoom direction after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     const zoomDirection = remainingMessage.substring(tabIdPattern.length)
                     
                     console.log(`[Tab ${tabId}] Zoom direction:`, zoomDirection)
@@ -1495,12 +1660,12 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:dragdrop:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const eventData = JSON.parse(dataPayload)
@@ -1517,12 +1682,12 @@ document.addEventListener('input', function(event) {
                 const prefix = 'iwa:dragdrop-data:'
                 const remainingMessage = message.substring(prefix.length)
                 
-                // Find the tab ID by looking for our known tab.id, then extract data after it
-                const tabIdPattern = tab.id + ':'
+                // Find the tab ID by looking for our known mytab.id, then extract data after it
+                const tabIdPattern = mytab.id + ':'
                 const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
                 
                 if (tabIdIndex === 0) {
-                    const tabId = tab.id
+                    const tabId = mytab.id
                     try {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const additionalData = JSON.parse(dataPayload)
@@ -1548,78 +1713,14 @@ document.addEventListener('input', function(event) {
                 
                 // Dispatch mouseup event to parent app
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
-                    detail: { tabId: tabId }
+                    detail: { tabId }
                 }))
+            } else if (message.startsWith('iwa:contextmenu-forced-native:')) {
+                console.log(`🛡️ [CONTEXT MENU] Website preventDefault blocked - forcing native context menu in tab ${mytab.id}`)
+            } else if (message.startsWith('iwa:contextmenu-native-forced:')) {
+                console.log(`🖱️ [CONTEXT MENU] Native context menu forced with cmd/ctrl key in tab ${mytab.id}`)
             }
         })
-    }
-
-    // Simple diff algorithm to generate additions/deletions
-    function generateDiff(oldText, newText) {
-        const diff = []
-        let i = 0, j = 0
-        
-        while (i < oldText.length || j < newText.length) {
-            if (i >= oldText.length) {
-                // Remaining characters are additions
-                diff.push({ type: 'add', char: newText[j] })
-                j++
-            } else if (j >= newText.length) {
-                // Remaining characters are deletions
-                diff.push({ type: 'delete', char: oldText[i] })
-                i++
-            } else if (oldText[i] === newText[j]) {
-                // Characters match
-                diff.push({ type: 'same', char: oldText[i] })
-                i++
-                j++
-            } else {
-                // Characters differ - look ahead to see if it's insert/delete/replace
-                let foundMatch = false
-                
-                // Check if next few chars in new text match current old char (insertion)
-                for (let k = j + 1; k < Math.min(j + 5, newText.length); k++) {
-                    if (newText[k] === oldText[i]) {
-                        // Found match - insert the characters before it
-                        for (let l = j; l < k; l++) {
-                            diff.push({ type: 'add', char: newText[l] })
-                        }
-                        diff.push({ type: 'same', char: oldText[i] })
-                        i++
-                        j = k + 1
-                        foundMatch = true
-                        break
-                    }
-                }
-                
-                if (!foundMatch) {
-                    // Check if next few chars in old text match current new char (deletion)
-                    for (let k = i + 1; k < Math.min(i + 5, oldText.length); k++) {
-                        if (oldText[k] === newText[j]) {
-                            // Found match - delete the characters before it
-                            for (let l = i; l < k; l++) {
-                                diff.push({ type: 'delete', char: oldText[l] })
-                            }
-                            diff.push({ type: 'same', char: newText[j] })
-                            i = k + 1
-                            j++
-                            foundMatch = true
-                            break
-                        }
-                    }
-                }
-                
-                if (!foundMatch) {
-                    // Treat as replacement
-                    diff.push({ type: 'delete', char: oldText[i] })
-                    diff.push({ type: 'add', char: newText[j] })
-                    i++
-                    j++
-                }
-            }
-        }
-        
-        return diff
     }
 
     // Generate random text changes for diff simulation
@@ -1699,12 +1800,12 @@ document.addEventListener('input', function(event) {
         if (!anchor || !frameWrapper) { 
             return
         }
-        
+
         let controlledFrame = data.frames[tab.id]?.frame
-        
+
         // If current URL is about:newtab, don't create/use controlled frame
-        // if (isNewTabUrl(initialUrl)) {
-        //     console.log('Skipping controlled frame creation for:', initialUrl)
+        // if (isNewTabUrl(tab.url)) {
+        //     console.log('Skipping controlled frame creation for:', tab.url)
         //     // Hide any existing controlled frame by moving it to background
         //     if (controlledFrame && attached) {
         //         const backgroundFrames = document.getElementById('backgroundFrames')
@@ -1719,59 +1820,72 @@ document.addEventListener('input', function(event) {
         
         // If transitioning from newtab to real URL, create frame if needed
 
+        data.frames[tabId] ??= {}
+        data.frames[tabId].wrapper = frameWrapper
+
         let addNode = false
         if (!controlledFrame) {
             controlledFrame = document.createElement('controlledframe')
+            const tabId = tab.id
+            const mytab = untrack(() => tab)
 
-            data.frames[tab.id] = { frame: controlledFrame, wrapper: frameWrapper }
+            data.frames[tabId].frame = controlledFrame
             addNode = true
 
             controlledFrame.classList.add('frame-instance')
 
             controlledFrame.partition = tab.partition || 'persist:myapp'
-            controlledFrame.onloadcommit = e => handleLoadCommit(tab, e)
-            controlledFrame.onnewwindow = e => handleNewWindow(tab, e)
-            controlledFrame.onaudiostatechanged = e => handleAudioStateChanged(tab, e)
-            controlledFrame.onloadstart = e => handleLoadStart(tab, e)
-            controlledFrame.onloadstop = e => handleLoadStop(tab, e)
-            controlledFrame.oncontentload = e => handleContentLoad(tab, e)
-            controlledFrame.onclose = e => handleEvent('onclose', tab, e)
-            controlledFrame.oncontentresize = e => handleEvent('oncontentresize',tab, e)
-            controlledFrame.ondialog = e => handleEvent('ondialog',tab, e)
-            controlledFrame.onexit = e => handleEvent('onexit',tab, e)
-            controlledFrame.onloadabort = e => handleLoadAbort(tab, e)
-            controlledFrame.onloadredirect = e => handleEvent('onloadredirect',tab, e)
-            //     onloadredirect={(e) => { 
-            //         handleEvent('onloadredirect',tab, e)
-            //         // Update URL on redirect
-            //         // if (e.newUrl) {
-            //         //     tab.url = e.newUrl
-            //         //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
-            //         // }
-            //         return false
-            //     }}
-            controlledFrame.onpermissionrequest = e => handlePermissionRequest('onpermissionrequest',tab, e)
-            controlledFrame.onresize = e => handleEvent('onresize',tab, e)
-            controlledFrame.onresponsive = e => handleEvent('onresponsive',tab, e)  
-            controlledFrame.onsizechanged = e => handleEvent('onsizechanged',tab, e)
-            controlledFrame.onunresponsive = e => handleEvent(tab, e, 'onunresponsive')
+
+            controlledFrame.onnewwindow = e => handleNewWindow(mytab, e)
+            controlledFrame.onaudiostatechanged = throttle(e => handleAudioStateChanged(mytab, e), 500, {leading: false})
+            
+            // fired when navigation (including reloads and traversals) starts, for every navigable of the embedded document, but not same document navigation.
+            controlledFrame.onloadstart = throttle( e => handleLoadStart(mytab, e), 500, {leading: false})
+            
+            // fired when navigation has been completed.
+            // controlledFrame.onloadcommit =  throttle(e => handleLoadCommit(mytab, e), 500, {leading: false})
+            
+            // fired when all pending navigations finish(either commit or abort). If a new navigation starts after, loadstop may fire again.
+            controlledFrame.onloadstop = throttle(e => handleLoadStop(mytab, e), 500, {leading: false})
+
+             // fired when the Window associated with embedded navigable fires a load event.
+            // controlledFrame.oncontentload =  throttle(e => handleContentLoad(mytab, e), 500, {leading: false})
+
+            // fired when navigation has exited before completion.
+            controlledFrame.onloadabort =  throttle(e => handleLoadAbort(mytab, e), 500, {leading: false})
+
+            controlledFrame.onclose = e => handleEvent('onclose', mytab, e)
+            controlledFrame.oncontentresize = e => handleEvent('oncontentresize',mytab, e)
+            controlledFrame.ondialog = e => handleEvent('ondialog',mytab, e)
+            controlledFrame.onexit = e => handleEvent('onexit',mytab, e)
+            controlledFrame.onloadredirect = e => handleEvent('onloadredirect',mytab, e)
+            // controlledFrame.onloadredirect= (e) => { 
+            //     console.log(onloadredirect', e)
+            //     //         handleEvent('onloadredirect',tab, e)
+            //     //         // Update URL on redirect
+            //     //         // if (e.newUrl) {
+            //     //         //     tab.url = e.newUrl
+            //     //         //     tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${e.newUrl}&size=64`
+            //     //         // }
+            //     //         return false
+            // }
+            controlledFrame.onpermissionrequest = e => handlePermissionRequest(tabId, e)
+            controlledFrame.onresize = e => handleEvent('onresize',mytab, e)
+            controlledFrame.onresponsive = e => handleEvent('onresponsive',mytab, e)  
+            controlledFrame.onsizechanged = e => handleEvent('onsizechanged',mytab, e)
+            controlledFrame.onunresponsive = e => handleEvent(mytab, e, 'onunresponsive')
             controlledFrame.allowscaling = true
             controlledFrame.autosize = true
             controlledFrame.allowtransparency = false
 
-            console.log('setting up frame', controlledFrame)
             controlledFrame.setZoomMode?.('disabled')
             setupRequestHandler(controlledFrame)
             setupMessageListener(controlledFrame)
             setupContentScripts(controlledFrame)
             setupContextMenu(controlledFrame)
+            // controlledFrame.src = usedUrl
         }
-
-        if (controlledFrame.src !== initialUrl) {
-            controlledFrame.src = initialUrl
-        }
-
-        console.log('controlledFrame', controlledFrame, { attached, initialUrl, addNode })
+        //  console.log('controlledFrame', controlledFrame, { attached, tab.url, addNode })
        
         if (addNode) {
             frameWrapper.insertBefore(controlledFrame, anchor)
@@ -1781,11 +1895,10 @@ document.addEventListener('input', function(event) {
         if (!attached) {
             try {
                 frameWrapper.moveBefore(controlledFrame, anchor)
-                data.frames[tab.id].wrapper = frameWrapper
                 attached = true
             } catch (err) {
-                console.error(err)
-                delete data.frames[tab.id]
+                console.error('Error attaching ControlledFrame:', err)
+                tab?.id && delete data.frames[tab.id]
                 setTimeout(() => {
                     retry = retry + 1
                 }, 10)
@@ -1795,12 +1908,10 @@ document.addEventListener('input', function(event) {
 
     let detached = false
     onDestroy(() => {
-        // console.log('ondestro', { tab, detached })
-        if (tab?.id && !detached && !tab.hibernated) {
+        if (tab?.id && !detached) {
             delete data.frames[tab.id]
         }
         
-        // Clean up LED indicator timeouts
         if (networkAccessTimeout) {
             clearTimeout(networkAccessTimeout)
             networkAccessTimeout = null
@@ -1809,11 +1920,15 @@ document.addEventListener('input', function(event) {
             clearTimeout(blockedRequestTimeout)
             blockedRequestTimeout = null
         }
+        if (linkPreviewTimeout) {
+            clearTimeout(linkPreviewTimeout)
+            linkPreviewTimeout = null
+        }
     })
     
     function detach () {
-        if (!tab?._id || tab.hibernated) {
-            delete data.frames[tab.id]
+        if (!tab?._id) {
+            tab?.id && delete data.frames[tab.id]
             return {
                 duration: 0
             }
@@ -2057,7 +2172,8 @@ document.addEventListener('input', function(event) {
         class:network-error={!!currentNetworkError}
         class:new-tab-page={isNewTabUrl(tab.url)}
         id="tab_{tab.id}"
-        class="frame"
+        class="frame {className}"
+
         role="tabpanel"
         tabindex="0"
         onmousedown={() => {
@@ -2074,7 +2190,7 @@ document.addEventListener('input', function(event) {
 
         <div class="hidden" bind:this={anchor}></div>
 
-        {#if tab.id === data.spaceMeta.activeTab?.id && statusLightsEnabled}
+        {#if tab.id === data.spaceMeta.activeTabId && statusLightsEnabled}
             <div class="led-indicator-array">
                 <div class="led-dot network-access" class:active={networkAccessActive}></div>
                 <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>
@@ -2099,7 +2215,7 @@ document.addEventListener('input', function(event) {
         {:else if isNewTabUrl(tab.url)}
             <NewTab
                 {tab}
-                isActive={tab.id === data.spaceMeta.activeTab?.id}
+                isActive={tab.id === data.spaceMeta.activeTabId}
             />
         {/if}
     </div>

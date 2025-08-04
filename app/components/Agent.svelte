@@ -220,6 +220,12 @@
 		}
 	}
 
+	function handleModelChange(event) {
+		console.log('Model changed to:', event.target.value)
+		selectedModel = event.target.value
+		localStorage.setItem('selectedModel', selectedModel)
+	}
+
 	async function handleStreamingChunk(data, { type } = {}) {
 		try {
 			console.log('handleStreamingChunk called with data:', data)
@@ -776,6 +782,48 @@
 		}
 	})
 
+	// Context metadata gathering function
+	function gatherContextMetadata(selectedTarget) {
+		const context = {
+			type: selectedTarget,
+			timestamp: new Date().toISOString()
+		}
+
+		if (selectedTarget === 'current-tab' && currentTab) {
+			context.currentTab = {
+				id: currentTab.id,
+				url: currentTab.url,
+				title: currentTab.title || 'Untitled Tab',
+				favicon: currentTab.favicon
+			}
+		} else if (selectedTarget === 'current-space' && data.spaceMeta.activeSpace) {
+			const activeSpace = data.spaces[data.spaceMeta.activeSpace]
+			context.currentSpace = {
+				id: data.spaceMeta.activeSpace,
+				name: activeSpace?.name || 'Unnamed Space',
+				tabs: activeSpace?.tabs?.map(tab => ({
+					id: tab.id,
+					url: tab.url,
+					title: tab.title || 'Untitled Tab'
+				})) || []
+			}
+		} else if (selectedTarget === 'all-spaces') {
+			context.allSpaces = Object.entries(data.spaces).map(([spaceId, space]) => ({
+				id: spaceId,
+				name: space.name || 'Unnamed Space',
+				tabCount: space.tabs?.length || 0,
+				tabs: space.tabs?.map(tab => ({
+					id: tab.id,
+					url: tab.url,
+					title: tab.title || 'Untitled Tab'
+				})) || []
+			}))
+			context.currentSpaceId = data.spaceMeta.activeSpace
+		}
+
+		return context
+	}
+
 	// Keep selectedHistoryId in sync with current state
 	$effect(() => {
 		if (currentChatId) {
@@ -892,6 +940,9 @@
 		// Track this message as known
 		knownMessageIds.add(messageId)
 
+		// Gather context metadata based on selected target
+		const contextMetadata = gatherContextMetadata(queueItem.selectedTarget)
+
         client.send(
 			JSON.stringify(
 				{
@@ -905,7 +956,8 @@
 									createdAt: new Date().toISOString(),
 									role: 'user',
 									content: queueItem.userMessage,
-									parts: [{ type: 'text', text: queueItem.userMessage }]
+									model: queueItem.selectedModel,
+									parts: [{ type: 'text', text: 'user context: ' + JSON.stringify(contextMetadata) + '\n\n' }, { type: 'text', text: queueItem.userMessage }]
 								}
 							]
 						}),
@@ -1370,16 +1422,44 @@
                 result += `\n---error---\nFailed to create new tab`
             }
         }
+        if (toolCallInfo.title === 'displayHtml') {
+            try {
+                // The result should contain dataUrl and title from the tool execution
+                const { html, title } = toolArgs;
+
+				const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(html)
+
+				console.log('displayHtml', {dataUrl, title, toolArgs, toolCallInfo })
+                const newTab = data.newTab(data.spaceMeta.activeSpace, { 
+                    url: dataUrl,
+                    title: title,
+					shouldFocus: true
+                })
+                // if (newTab) {
+                //     // Activate the new tab
+                //     data.activate(newTab.id)
+               result = `\n---HTML displayed in new tab---\nTab ID: ${newTab.id}\nTitle: ${title}`
+                // } else {
+                //     result = `\n---error---\nFailed to create HTML tab`
+                // }
+            } catch (parseError) {
+                console.error('Failed to parse displayHtml result:', parseError);
+                result = `\n---error---\nFailed to parse HTML display result: ${result}`
+            }
+        }
 		
 		// Construct the message payload with tool invocation result
+		console.log('Sending model to backend:', selectedModel)
 		const messagePayload = {
 			id: crypto.randomUUID(),
+			model: selectedModel,
 			messages: [
 				{
 					id: userMessage.id,
 					createdAt: userMessage.timestamp,
 					role: 'user',
 					content: userMessage.content,
+					model: selectedModel,
 					parts: [{
 						type: 'text',
 						text: userMessage.content
@@ -1499,14 +1579,17 @@
 		}
 		
 		// Construct the message payload with tool invocation result
+		console.log('Sending model to backend:', selectedModel)
 		const messagePayload = {
 			id: crypto.randomUUID(),
+			model: selectedModel,
 			messages: [
 				{
 					id: userMessage.id,
 					createdAt: userMessage.timestamp,
 					role: 'user',
 					content: userMessage.content,
+					model: selectedModel,
 					parts: [{
 						type: 'text',
 						text: userMessage.content
@@ -2116,6 +2199,15 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	onMount(() => {
+		// Load selected model from localStorage
+		if (typeof localStorage !== 'undefined') {
+			const savedModel = localStorage.getItem('selectedModel')
+			if (savedModel) {
+				selectedModel = savedModel
+				console.log('Loaded model from localStorage:', savedModel)
+			}
+		}
+		
 		// Auto-focus the input when sidebar opens
 		const input = document.querySelector('.agent-conversation-input')
 		if (input) {
@@ -2152,7 +2244,7 @@ The current system demonstrates strong performance and security characteristics.
 					{/if}
 				</select>
 
-				<select class="agent-model-select" bind:value={selectedModel}>
+				<select class="agent-model-select" bind:value={selectedModel} onchange={handleModelChange}>
 					{#each models as model}
 						<option value={model.id}>{model.name}</option>
 					{/each}

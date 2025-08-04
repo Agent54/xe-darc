@@ -531,3 +531,182 @@ new tab loop in excalidraw
 ai test selection blocking / non blocking test runs
 
 new tab menu
+
+mcp manager
+
+claude hoocks > worker > dashboard/ reflect canvas
+
+ERR_INTERNET_DISCONNECTED
+
+https://www.speedtest.net/th crashes in lightbox view
+
+active tab highlight
+
+tools/context/memory etc sidebar
+
+my data management (form fills on steroids)
+
+browser data delete + incognito
+
+login + cert manager
+
+A dotted circle appears around inactive/hibernated site icons
+
+always keep site active/ load site on startup
+
+web extensions
+
+images view/ sources/links view
+
+screenshot mode
+
+move mic/see to input box
+
+open ai from toolbar for discoverability
+
+share links for all data items on different levels eg tab groups, summaries reports etc.
+
+task manager memory/cpu etc.
+
+previewhovercard title actions show only on hover
+
+white google search initial page bug
+
+remove hibernate flag and default to hibernated
+
+
+context menu url copy + reload
+
+fix closed tabs and lighbox child zombies
+
+cmd click new tab in background
+
+context menu open new tab (in background)
+
+closing lightbox navigates parent bug
+
+naviagate to data:text/html,<html><head><
+
+todos, milestones, plan and voting/ feedback
+
+
+lightbox navigation and history, display, closed tabs handling
+
+spacemanager like multipreviews? next to lightbox
+
+docker build + start from github url > website + xterm + vscode?
+
+frames not in background frames but in frames array ?
+
+proper permission handling in sidebar
+
+cmd open link
+
+bug debug play bar behind drag handles
+
+copy link context menu
+
+clipboard copy/manager
+
+parallel chat stack/ closed chats menu/ context sidebar or top section
+
+load at startup option
+
+inputs + scroll pos restore
+
+diary and time summary breakdown from browsing and code and mails other sites
+
+mute/unmute on history
+
+mute others feature
+
+var reactivity/ perf fixes app.svelte
+
+characterization of urls (resource, download, export, api etc.)
+
+use my film collection to recomend
+
+backup all my igd games
+
+fix lightbox etc animations 
+
+seperate nav history with push and replace like jj/sapling
+
+open new tabs next to their opener vs right of tabs
+
+url fallback in sidebar tabs
+conetx menu sidebar
+
+update and persisst url/title/favicon changes
+
+favicon server extension
+
+parallel chat
+
+disable svelt aria
+
+replace tmux with modern mouse etc supporting one without cryptic options
+
+universal link preview frame reuse 
+
+integrated hmtl / svelte/tailwind styles
+
+external html / style to whatever it needs
+
+slash commands, @mentions, # tags / memories
+
+cookie banner + summarize auto mode > add to website log for trail
+
+add summaries to standard context, make context md not json
+
+multi space folders (eg a youtube section in the dev space which also appears in the watching video space)
+
+a smart folder with youtube videos that collects all videos from all spaces
+
+todo pins for tabs (eg. list of messages in discord i need to work on)
+
+history to sidetabs instead of menu
+
+vscode web + workspace manager + container integration + jj integration
+
+containerd vs docker?
+
+
+labels?
+
+media breakpoints not using the open sidebar space!
+
+next deomo: can you run this for me with github, contqainers, claude code, terminal
+
+system prompt support
+
+tosdr, lofi rating, data rating
+
+rest client mode
+
+logs menu entry (elastic/clickhouse?)
+editor (vscode main container)
+
+! prefix command mode with toggle and immediate execution, in chat terminal for tuis
+
+edit all permission requests before and all running actions and all about to run data boxes
+
+ERR_EMPTY_RESPONSE
+
+terminal multiplexer with history and scrolling simple mode
+
+clipboard pate!
+
+open dev tools with supressed context menu?
+
+context menu disable permission/settings/ad hoc override
+
+copy paste support!!!!!
+
+secret exchange protocol for frame ipc without console log
+
+apos screen with docker services
+
+logs
+
+reload needs unhibernation

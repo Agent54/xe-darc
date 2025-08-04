@@ -5,7 +5,7 @@
   import { Excalidraw as ExcalidrawReact } from '@excalidraw/excalidraw'
   import '@excalidraw/excalidraw/index.css'
   import FrameWrapper from './ReactFrameWrapper.js'
-  import { thottle } from '../lib/utils'
+  import { throttle } from '../lib/utils'
   import data from '../data.svelte.js'
   import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 
@@ -236,7 +236,7 @@
     root = ReactDOM.createRoot(container)
     const element = React.createElement(ExcalidrawReact, {
       initialData: excalidrawData,
-      onChange: thottle((elements, appState, files) => {
+      onChange: throttle((elements, appState, files) => {
         // Update zoom level for CSS custom property
         if (appState?.zoom?.value !== undefined) {
           currentZoom = appState.zoom.value

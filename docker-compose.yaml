@@ -6,6 +6,7 @@ services:
       context: ./workerd
     ports:
       # - "9229:9229"
+      - "8080:8080"
       - name: main
         target: 5196
         app_protocol: http
@@ -34,7 +35,7 @@ services:
       mode: replicated
       replicas: 3
     develop:
-      replicas: 3
+      # replicas: 3
       watch:
         - action: sync
           path: .

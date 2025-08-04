@@ -22,7 +22,7 @@
     let previousSpaceIndex = -1
     let scrollActiveSpaceTimeout = null
 
-    const globallyPinnedTabs = $derived(data.globalPins)
+    const globallyPinnedTabs = $derived(data.spaceMeta.globalPins)
     
     function handleMouseEnter() {
         isHovered = true
@@ -85,7 +85,7 @@
 
     function activateTab(tabId) {
         // If clicking on the currently active tab, switch to previous tab
-        if (tabId === data.spaceMeta.activeTab?.id) {
+        if (tabId === data.spaceMeta.activeTabId) {
             data.previous()
         } else {
             data.activate(tabId)
@@ -193,9 +193,9 @@
     
     function restoreClosedTab(tab) {
         // Remove from closed tabs
-        const closedIndex = data.closedTabs.findIndex(t => t.id === tab.id)
+        const closedIndex = data.spaceMeta.closedTabs.findIndex(t => t.id === tab.id)
         if (closedIndex !== -1) {
-            data.closedTabs.splice(closedIndex, 1)
+            data.spaceMeta.closedTabs.splice(closedIndex, 1)
         }
         
         // Add back to the space (use active space if the original space doesn't exist)
@@ -253,13 +253,13 @@
 
     // Watch for active tab changes and scroll to it in sidebar
     $effect(() => {
-        if (!data.spaceMeta.activeTab) {
+        if (!data.spaceMeta.activeTabId) {
             return
         }
         
         // Find the active tab element in the sidebar
         setTimeout(() => {
-            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTab?.id}"]`)
+            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTabId}"]`)
             if (activeTabElement) {
                 const tabsList = activeTabElement.closest('.tabs-list')
                 if (tabsList) {
@@ -275,7 +275,7 @@
 
     // Watch for new closed tabs and auto-show menu, might be a bit much?
     // $effect(() => {
-    //     const currentLength = data.closedTabs.length
+    //     const currentLength = data.spaceMeta.closedTabs.length
     //     if (currentLength > previousClosedTabsLength) {
     //         // New tab was closed, show menu
     //         if (closedTabsHideTimeout) {
@@ -311,8 +311,6 @@
 </script>
 
 <svelte:window onclick={handleClickOutside} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
-
-
 
 <div class="sidebar-box" 
      class:hovered={isHovered}
@@ -432,7 +430,7 @@
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
                                         {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
-                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTab} title={tab.url} onmousedown={() => activateTab(tab.id)}>
+                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} title={tab.url} onmousedown={() => activateTab(tab.id)}>
                                                 <Favicon {tab} showButton={false} />
                                             </button>
                                         {/each}
@@ -464,7 +462,7 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTab?.id} data-tab-id={tab.id}>
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} data-tab-id={tab.id}>
                                                 <button class="tab-item-main" title={tab.url} onmousedown={() => activateTab(tab.id)}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>
@@ -474,7 +472,7 @@
                                         {/if}
                                     {/each}
                                     
-                                    <div class="tab-group" title="April - 10 tabs">
+                                    <!-- TODO: <div class="tab-group" title="April - 10 tabs">
                                         <div class="tab-group-main">
                                             <div class="tab-group-favicons">
                                                 <div class="tab-group-favicon">
@@ -491,7 +489,7 @@
                                         </div>
                                         <span class="tab-group-count">10</span>
                                         <button class="tab-group-close" aria-label="Close tab group">×</button>
-                                    </div>
+                                    </div> -->
                                 </div>
                             </div>
                         {/each}
@@ -501,7 +499,7 @@
         </div>
         
         
-        {#if data.closedTabs.length > 0}
+        {#if data.spaceMeta.closedTabs.length > 0}
             <div class="closed-tabs-section"
                  onmouseenter={handleClosedTabsMouseEnter}
                  onmouseleave={handleClosedTabsMouseLeave}
@@ -511,11 +509,11 @@
                         onclick={() => { data.clearClosedTabs(); handleClosedTabsMouseLeave() }}
                         aria-label="Clear all recently closed tabs">
                     <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
-                    <span class="closed-tabs-count">{data.closedTabs.length}</span>
+                    <span class="closed-tabs-count">{data.spaceMeta.closedTabs.length}</span>
                 </button>
                 <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
-                        {#each data.closedTabs as tab}
+                        {#each data.spaceMeta.closedTabs as tab}
                             <button class="closed-tab-item" title={tab.url} onmousedown={() => restoreClosedTab(tab)}>
                                 <Favicon {tab} showButton={false} />
                                 <div class="tab-text">

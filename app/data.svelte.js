@@ -2,6 +2,7 @@ import PouchDB from 'pouchdb-browser'
 import findPlugin from 'pouchdb-find'
 import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
+import { throttle } from './lib/utils.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
@@ -14,6 +15,13 @@ const db = new PouchDB('darc', { adapter: 'idb' })
 const sortOrder = ['archive', 'spaceId', 'type', 'order']
 
 const docs = $state({})
+const origins = $state({})
+const spaces = $state({})
+const activity = $state({})
+const resources = $state({})
+const frames = $state({})
+const previews = $state({})
+const settings = $state({})
 
 db.bulkDocs(bootstrap).then(async (res) => {
     db.createIndex({
@@ -72,37 +80,41 @@ if (remote) {
     })
 }
 
-const closedTabs = $state([])
-const origins = $state({})
-const spaces = $state({})
-const globalPins = $state([])
-const activity = $state({})
-const resources = $state({})
-const frames = {}
-
-
-console.log('starting garbage collector')
-// garbage collect instances that are not in the tabs array every 15 minutes
-setInterval(() => {
-    Object.entries(frames).forEach(instance => {
-        console.log('inspecting for gb instance', instance)
-    })
-}, 900000)
-
 const spaceMeta = $state({
-    activeSpace: localStorage.getItem('activeSpace') || null,
+    activeSpace: localStorage.getItem('activeSpaceId') || null,
     spaceOrder: [],
-    activeTab: null,
+    closedTabs: [],
+    activeTabId: localStorage.getItem('activeTabId') || null, // FIXME: use _local/ persistent active tab array
+    globalPins: [],
     config: {
         leftPinnedTabWidth: 400,
         rightPinnedTabWidth: 350,
         leftSidebarWidth: 320,
-        rightSidebarWidth: 340
+        rightSidebarWidth: 340,
+        showLinkPreviews: true
     }
 })
 
+// Cleanup frame instances
+setInterval(() => {
+    Object.entries(frames).sort((a, b) => b[1].active - a[1].active).forEach(([id, frameData], i) => {
+        if (!frameData.frame || docs[id]?.pinned || spaceMeta.activeTabId === id) {
+            return
+        }
+
+        if (frameData.active && ((Date.now() - frameData.active) > 172800000)) {
+            console.log('hibernating > 2 days', frameData)
+            hibernate(id)
+        } else if (i > 40) {
+            console.log('hibernating > 40', frameData)
+            hibernate(id)
+        }
+    })
+}, 900000)
+
 let initialLoad = true
-async function refresh(spaceId) {
+// TODO: disable leading ?
+const refresh = throttle(async function (spaceId) {
     const { docs: newDocs } = await db.find({
         selector: {
             archive: { $lt: 'deleted' },
@@ -117,11 +129,18 @@ async function refresh(spaceId) {
         console.error('approaching max data size, needs paging and partition support now')
     }
 
-    console.log({newDocs})
+    console.log({ newDocs, docs })
+
+    let activeTabIdExists = false
 
     if (spaceId) {
         spaces[spaceId] ??= {}
         spaces[spaceId].tabs = []
+    }
+    const closedTabs = []
+    for (const previewTabId of Object.keys(previews)) {
+        previews[previewTabId].lightbox = null
+        previews[previewTabId].tabs = []
     }
 
     for (const refreshDoc of newDocs) {
@@ -150,6 +169,12 @@ async function refresh(spaceId) {
            
         } else if (doc.type === 'tab') {
             doc.id = doc._id // legacy compat, remove this later
+
+            if (!spaceMeta.activeTabId && doc.spaceId === spaceMeta.activeSpace) {
+                spaceMeta.activeTabId = doc.id
+                console.log('setting active tab id a', spaceMeta.activeTabId)
+            }
+
             if (!spaces[doc.spaceId]) {
                 spaces[doc.spaceId] = { _id: doc.spaceId, tabs: [] }
             }
@@ -159,22 +184,24 @@ async function refresh(spaceId) {
             }
 
             if (doc.archive) {
-                console.log(doc)
+                // console.log(doc)
                 if (doc.archive === 'closed') {
                     closedTabs.push(doc)
                 }
+                continue
             } else {
-                spaces[doc.spaceId].tabs.push(doc)
-                
-                // If this tab is the active tab and has shouldFocus, ensure it stays set
-                if (spaceMeta.activeTab?.id === doc.id && doc.shouldFocus) {
-                    spaceMeta.activeTab.shouldFocus = true
+                if (doc.id === spaceMeta.activeTabId) {
+                    activeTabIdExists = true
                 }
-            }
-            
-
-            if (!spaceMeta.activeTab && doc.spaceId === spaceMeta.activeSpace) {
-                spaceMeta.activeTab = doc
+                if (doc.preview || doc.lightbox) {
+                    previews[doc.opener] ??= { lightbox: null, tabs: [] }
+                    previews[doc.opener].tabs.push(doc)
+                    if (doc.lightbox) {
+                        previews[doc.opener].lightbox = doc._id
+                    }
+                    continue
+                }
+                spaces[doc.spaceId].tabs.push(doc)
             }
         }
         //  else if (doc.type === 'activity') {
@@ -184,18 +211,31 @@ async function refresh(spaceId) {
         // }
     }
 
-    sortSpaces()
-    initialLoad = false
-}
+    console.log('setting active tab id b', { current : spaceMeta.activeTabId, activeTabIdExists, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
+    if (spaceMeta.activeTabId && !activeTabIdExists && spaces[spaceMeta.activeSpace]?.activeTabsOrder?.length > 0) {
+        let previousIndex = 1
+        spaces[spaceMeta.activeSpace].activeTabsOrder = spaces[spaceMeta.activeSpace].activeTabsOrder.filter((id, i) => {
+            if (id === spaceMeta.activeTabId) {
+                i > previousIndex && (previousIndex = i)
+                return false
+            }
+            return true
+        })
+        console.log('setting active tab id b', { current : spaceMeta.activeTabId, next : spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1], previousIndex, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
+        spaceMeta.activeTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]
+       
+    }
 
-function sortSpaces () {
+    spaceMeta.closedTabs = closedTabs.sort((a, b) => b.modified - a.modified)
     spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
-}
+    
+    initialLoad = false
+}, 200)
 
 let lastLocalSeq = null
 let changes = []
 let editingId = null
-db.changes({
+const changesFeed = db.changes({
     live: true,
     since: 'now',
     include_docs: true,
@@ -203,6 +243,7 @@ db.changes({
 }).on('change', async change => {
     lastLocalSeq = change.seq
 
+    console.log('change', change)
     // if (change.doc instanceof type.errors) {
     //     console.error(change.doc.summary, change.doc)
     //     return
@@ -216,11 +257,11 @@ db.changes({
         // fixme: deep comp
         for (const key of ['canvas', 'pinned', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
-                if (change.doc.spaceId && change.doc.type !== 'space') {
+                if (change.doc.spaceId && change.doc.type !== 'space' && change.doc.type !== 'activity') {
                     refresh(change.doc.spaceId)
                 } else if (change.doc.type === 'space') {
                     spaces[change.doc._id] = { ...spaces[change.doc._id], ...change.doc }
-                    sortSpaces()
+                    spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
                 } else {
                     console.warn('unknown change', change)
                 }
@@ -230,61 +271,140 @@ db.changes({
     }
 })
 
-// Define activate function separately so it can be used internally
-function activate(tabId) {    
-    // Find the tab and set shouldFocus if it's a new tab
+function activate(tabId) {   
+    // console.log('activate tab id ..', {tabId})
+
+    spaceMeta.activeTabId = tabId
+
     const activeSpace = spaces[spaceMeta.activeSpace]
-    if (activeSpace && activeSpace.tabs) {
-        const tab = activeSpace.tabs.find(t => t.id === tabId)
 
-        activeSpace.activeTabsOrder ??= []
-        activeSpace.activeTabsOrder = [tabId, ...activeSpace.activeTabsOrder]
-
-        if (tab) {
-            spaceMeta.activeTab = tab
-            if (tab.url === 'about:newtab') {
-                tab.shouldFocus = true
-            }
-            return tab
-        }
-    }
+    activeSpace.activeTabsOrder ??= []
     
-    // If tab not found in spaces, still set it as active (it might be loading)
-    // This ensures new tabs get activated even if they haven't been loaded yet
+    activeSpace.activeTabsOrder = activeSpace.activeTabsOrder[0] === tabId ? activeSpace.activeTabsOrder : [tabId, ...activeSpace.activeTabsOrder]
+
+    if (frames[tabId]) {
+        frames[tabId].active = Date.now()
+    }  
+
     const tabDoc = docs[tabId]
     if (tabDoc) {
-        spaceMeta.activeTab = tabDoc
-        if (tabDoc.url === 'about:newtab') {
-            tabDoc.shouldFocus = true
-        }
-        return tabDoc
+        return tabDoc || tabId // TODO: deprecate returning tab
     }
     
     return null
 }
 
-$effect.root(() => {
+function closeTab (spaceId, tabId) {
+    const tab = docs[tabId]
+
+    frames[tabId].frame = null
+   
+    db.bulkDocs([
+        ...(previews[tabId]?.tabs.map(prev => {
+            if (frames[prev.id])  {
+                frames[prev.id].frame = null
+            }
+            
+            return {
+                ...prev,
+                closed: true, // legacy
+                archive: 'closed',
+                modified: Date.now()
+            }
+        }) || []),
+        {
+            ...tab,
+            closed: true, // legacy > make timestamp
+            archive: 'closed',
+            modified: Date.now()
+        },
+        // {
+        //     _id: `darc:activity_${crypto.randomUUID()}`,
+        //     tabId: tab.id,
+        //     spaceId: tab.spaceId,
+        //     type: 'activity',
+        //     archive: 'history',
+        //     action: 'close',
+        //     url: tab.url,
+        //     title: tab.title,
+        //     favicon: tab.favicon,
+        //     created: Date.now()
+        // }
+    ])
+
+    // const space = spaces[spaceId]
+    // if (!space || !space.tabs) {
+    //     return { success: false, wasLastTab: false }
+    // }
+    // const tabIndex = space.tabs.findIndex(tab => tab.id === tabId)
+    // if (tabIndex === -1) {
+    //     return { success: false, wasLastTab: false }
+    // }
+    // const tab = space.tabs[tabIndex]
+    // const wasLastTab = space.tabs.length === 1
+    // // Add to closed tabs before removing
+    // closedTabs.push({
+    //     ...tab,
+    //     closedAt: Date.now(),
+    //     spaceId // Ensure spaceId is preserved
+    // })
+    // space.tabs.splice(tabIndex, 1)
+    // // If we closed the active tab, need to set a new active tab
+    // if (spaceMeta.activeTabId === tabId) {
+    //     if (space.tabs.length > 0) {
+    //         // Set the next tab as active, or the previous one if this was the last
+    //         const newActiveIndex = Math.min(tabIndex, space.tabs.length - 1)
+    //         const newActiveTabId = space.tabs[newActiveIndex]?.id || space.tabs[0]?.id
+    //         activate(newActiveTabId)
+    //     } else {
+    //         spaceMeta.activeTab = null
+    //     }
+    // }
+    // return { success: true, wasLastTab }
+}
+
+const destroy = $effect.root(() => {
     $effect(() => {
         if (!spaceMeta.activeSpace && Object.keys(spaces).length > 0) {
             // Set the first space as active
             const firstSpaceId = Object.keys(spaces)[0]
             spaceMeta.activeSpace = firstSpaceId
-            
-            // Set the first tab of that space as active
-            const firstSpace = spaces[firstSpaceId]
-            if (firstSpace?.tabs?.length > 0) {
-                spaceMeta.activeTab = firstSpace.tabs[0]
-            }
+
+           
+            // FIXME: // Set the first tab of that space as active
+            // const firstSpace = spaces[firstSpaceId]
+            // if (firstSpace?.tabs?.length > 0) {
+            //     spaceMeta.activeTab = firstSpace.tabs[0]
+            // }
         }
     })
 
     // Save active space to localStorage whenever it changes
     $effect(() => {
         if (spaceMeta.activeSpace) {
-            localStorage.setItem('activeSpace', spaceMeta.activeSpace)
+            localStorage.setItem('activeSpaceId', spaceMeta.activeSpace)
         }
     })
+
+    $effect(() => {
+        if (spaceMeta.activeTabId) {
+            localStorage.setItem('activeTabId', spaceMeta.activeTabId)
+        }
+    })
+
+    return () => {
+        // console.log('---- unsubscribing from changes feed ----')
+        changesFeed.cancel()
+    }
 })
+
+if (import.meta.hot) {
+    import.meta.hot.accept((newModule) => {
+        if (newModule) {
+            destroy()
+        }
+    })
+}
 
 function loadSampleData () {
     db.bulkDocs(testData).then((res) => {
@@ -293,16 +413,26 @@ function loadSampleData () {
     })
 }
 
+function hibernate (tabId) {
+    // remove background frames from dom node parking
+    const frame = frames[tabId]
+    if (frame.frame) {
+        frame.frame.remove()
+    }
+    frames[tabId].frame = null
+    frames[tabId].hibernated = Date.now()
+}
+
 export default {
     origins,
     spaceMeta,
-    closedTabs,
-    globalPins,
     spaces,
     activity,
     resources,
     docs,
     frames,
+    previews,
+    settings,
 
     activate,
     loadSampleData,
@@ -318,6 +448,17 @@ export default {
 
         return result[0]
     },
+
+    hibernateOthers: (keepTabId) => {
+        for (const tabId of Object.keys(frames)) {
+            if (!docs[tabId].pinned && tabId !== keepTabId) {
+                frames[tabId].frame = null
+                frames[tabId].hibernated = Date.now()
+            }
+        }
+    },
+
+    hibernate,
 
     previous: () => {
         const activeSpace = spaces[spaceMeta.activeSpace]
@@ -342,7 +483,11 @@ export default {
         activeSpace.activeTabsOrder.shift()
         
         // Set the previous tab as active
-        spaceMeta.activeTab = previousTab
+        spaceMeta.activeTabId = previousTab.id
+
+        if (frames[previousTab]) {
+            frames[previousTab].active = Date.now()
+        }
         
         return true
     },
@@ -364,6 +509,7 @@ export default {
         db.put({
             _id: `darc:activity_${crypto.randomUUID()}`,
             type: 'activity',
+            archive: 'history',
             action: 'space_create',
             spaceId: _id,
             name: 'Space ' + (Object.keys(spaces).length + 1),
@@ -393,25 +539,32 @@ export default {
 
     navigate(tabId, url) {
         const tab = docs[tabId]
-        db.put({
-            ...tab,
-            url
-        })
+        const frame = frames[tabId]
 
-        db.put({
-            _id: `darc:activity_${crypto.randomUUID()}`,
-            type: 'activity',
-            action: 'visit',
-            tabId: tab.id,
-            spaceId: tab.spaceId,
-            url,
-            title: url.split('/').pop(),
-            favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64`,
-            created: Date.now()
-        })
+        if (frame.frame) {
+            frame.frame.src = url
+        } else {
+            db.put({
+                ...tab,
+                url
+            })
+        }
+
+        // db.put({
+        //     _id: `darc:activity_${crypto.randomUUID()}`,
+        //     type: 'activity',
+        //     archive: 'history',
+        //     action: 'visit',
+        //     tabId: tab.id,
+        //     spaceId: tab.spaceId,
+        //     url,
+        //     title: url.split('/').pop(),
+        //     favicon: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64`,
+        //     created: Date.now()
+        // })
     },
     
-    newTab: (spaceId, { url, title, opener } = {}) => {
+    newTab: (spaceId, { url, title, opener, preview, lightbox, shouldFocus } = {}) => {
         const _id = `darc:tab_${crypto.randomUUID()}`
 
         const tab = {
@@ -424,14 +577,20 @@ export default {
             title: url ? title : 'New Tab',
             order: Date.now(),
             opener,
-            shouldFocus: !url || url === 'about:newtab' // Add shouldFocus for new tabs
+            preview: !!preview,
+            archive: preview ? 'preview' : undefined,
+            lightbox: !!lightbox
         }
-        
+
+        if (shouldFocus) {
+            activate(_id)
+        }
+
         db.put(tab)
         return tab
     },
 
-    updateTab: (tabId, { canvas } = {}) => {
+    updateTab: (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url } = {}) => {
         const tab = docs[tabId]
        
         let newProps = {}
@@ -440,71 +599,56 @@ export default {
             newProps.canvas = canvas
         }
 
-        db.put({
-            ...tab,
-            ...newProps
-        })
+        if (typeof favicon !== 'undefined' && favicon !== tab.favicon) {
+            newProps.favicon = favicon
+        }
+        if (typeof title !== 'undefined' && title !== tab.title) {
+            newProps.title = title
+        }
+        if (typeof url !== 'undefined' && url !== tab.url) {
+            newProps.url = url
+        }
+
+        if (typeof lightbox !== 'undefined') {
+            newProps.lightbox = lightbox
+        }
+        if (typeof preview !== 'undefined') {
+            newProps.preview = preview
+            if (preview) {
+                newProps.archive = 'preview'
+            } else {
+                newProps.archive = undefined
+            }
+        }
+    
+        if (typeof screenshot !== 'undefined') {
+            newProps.screenshot = screenshot
+
+            // TODO: newProps._attachments ??= {}
+
+            // newProps._attachments.screenshot = {
+			// 	content_type: "image/png",
+			// 	data: new Blob([yjs.encodeStateAsUpdate(winYDoc)], { type: 'image/png' })
+			// }
+        }
+
+        if (Object.keys(newProps).length > 0) {
+            db.put({
+                    ...tab,
+                    ...newProps
+                })
+        }
     },
 
-    closeTab: (spaceId, tabId) => {
-        const tab = docs[tabId]
-       
-        db.put({
-            ...tab,
-            closed: true, // legacy
-            archive: 'closed',
-            frame: undefined,
-            wrapper: undefined
-        })
-
-        db.put({
-            _id: `darc:activity_${crypto.randomUUID()}`,
-            tabId: tab.id,
-            spaceId: tab.spaceId,
-            type: 'activity',
-            action: 'close',
-            url: tab.url,
-            title: tab.title,
-            favicon: tab.favicon,
-            created: Date.now()
-        })
-        // const space = spaces[spaceId]
-        // if (!space || !space.tabs) {
-        //     return { success: false, wasLastTab: false }
-        // }
-        // const tabIndex = space.tabs.findIndex(tab => tab.id === tabId)
-        // if (tabIndex === -1) {
-        //     return { success: false, wasLastTab: false }
-        // }
-        // const tab = space.tabs[tabIndex]
-        // const wasLastTab = space.tabs.length === 1
-        // // Add to closed tabs before removing
-        // closedTabs.push({
-        //     ...tab,
-        //     closedAt: Date.now(),
-        //     spaceId // Ensure spaceId is preserved
-        // })
-        // space.tabs.splice(tabIndex, 1)
-        // // If we closed the active tab, need to set a new active tab
-        // if (spaceMeta.activeTab?.id === tabId) {
-        //     if (space.tabs.length > 0) {
-        //         // Set the next tab as active, or the previous one if this was the last
-        //         const newActiveIndex = Math.min(tabIndex, space.tabs.length - 1)
-        //         const newActiveTabId = space.tabs[newActiveIndex]?.id || space.tabs[0]?.id
-        //         activate(newActiveTabId)
-        //     } else {
-        //         spaceMeta.activeTab = null
-        //     }
-        // }
-        // return { success: true, wasLastTab }
-    },
+    closeTab,
 
     clearClosedTabs: () => {
         // Update each closed tab to be marked as deleted
-        const docsToUpdate = closedTabs.map(tab => ({
+        const docsToUpdate = spaceMeta.closedTabs.map(tab => ({
             ...tab,
             deleted: true,
-            archive: 'deleted'
+            archive: 'deleted',
+            modified: Date.now()
         }))
         
         if (docsToUpdate.length > 0) {
@@ -516,7 +660,8 @@ export default {
         }
         
         // Clear the closedTabs array
-        closedTabs.length = 0
+        // closedTabs = []
+        // closedTabs.length = 0
     },
 
     previousSpace: () => {
@@ -542,7 +687,7 @@ export default {
             if (newSpace?.tabs?.length > 0) {
                 activate(newSpace.tabs[0].id)
             } else {
-                spaceMeta.activeTab = null
+                spaceMeta.activeTabId = null
             }
             
             return true
@@ -573,7 +718,7 @@ export default {
             if (newSpace?.tabs?.length > 0) {
                 activate(newSpace.tabs[0].id)
             } else {
-                spaceMeta.activeTab = null
+                spaceMeta.activeTabId = null
             }
             
             return true

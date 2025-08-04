@@ -16,33 +16,14 @@
     import data from './data.svelte.js'
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
+    window.darc = { data }
 
     // Proper detection of ControlledFrame API support
     function isControlledFrameSupported() {
         // Method 1: Check if the custom element is defined
-        if (typeof customElements !== 'undefined' && customElements.get('controlledframe')) {
-            console.log('✅ ControlledFrame API detected via customElements.get()')
+        if (typeof window.HTMLControlledFrameElement !== 'undefined' || (typeof customElements !== 'undefined' && customElements.get('controlledframe'))) {
+            // console.log('✅ ControlledFrame API detected via customElements.get()')
             return true
-        }
-        
-        // Method 2: Check if the global constructor exists
-        if (typeof window.HTMLControlledFrameElement !== 'undefined') {
-            console.log('✅ ControlledFrame API detected via HTMLControlledFrameElement constructor')
-            return true
-        }
-        
-        // Method 3: Try to create element and check for API methods
-        try {
-            const testElement = document.createElement('controlledframe')
-            const hasApiMethods = typeof testElement.setZoomMode === 'function' || 
-                                 typeof testElement.back === 'function' ||
-                                 typeof testElement.forward === 'function'
-            if (hasApiMethods) {
-                console.log('✅ ControlledFrame API detected via element methods')
-                return true
-            }
-        } catch (error) {
-            console.log('❌ ControlledFrame element creation failed:', error)
         }
         
         console.log('❌ ControlledFrame API not available - falling back to iframe')
@@ -62,7 +43,9 @@
     const requestedResources = $state([])
 
    window.getScreenDetails().then(screen => {
-        console.log('screen control error', screen)
+       // console.log('screen control success', screen)
+   }).catch(err => {
+        console.log('screen control error. FIXME: needs to be triggered on user action for the first time, needs to be integrated into welcome screen/setup modal', err)
    })
 
     // handle permission change
@@ -134,6 +117,8 @@
     let certificateMonitorForTab = $state(null)
     let devModeEnabled = $state(false)
     let globalTabComplete = $state(true)
+    let lightboxModeEnabled = $state(true)
+    let tabsOpenRight = $state(true)
     
     // Window resize state for performance optimization
     let isWindowResizing = $state(false)
@@ -196,30 +181,82 @@
             const savedStatusLights = localStorage.getItem('statusLightsEnabled')
             if (savedStatusLights !== null) {
                 statusLightsEnabled = savedStatusLights === 'true'
+                data.settings.statusLightsEnabled = statusLightsEnabled
             }
 
             // Load dev mode setting
             const savedDevMode = localStorage.getItem('devModeEnabled')
             if (savedDevMode !== null) {
                 devModeEnabled = savedDevMode === 'true'
+                data.settings.devModeEnabled = devModeEnabled
+                
+                const savedShowLinkPreviews = localStorage.getItem('showLinkPreviews')
+                if (savedShowLinkPreviews !== null) {
+                    data.spaceMeta.config.showLinkPreviews = savedShowLinkPreviews === 'true'
+                    data.settings.showLinkPreviews = data.spaceMeta.config.showLinkPreviews
+                }
             }
 
             // Load global tab complete setting
             const savedGlobalTabComplete = localStorage.getItem('globalTabComplete')
             if (savedGlobalTabComplete !== null) {
                 globalTabComplete = savedGlobalTabComplete === 'true'
+                data.settings.globalTabComplete = globalTabComplete
+            }
+
+            // Load lightbox mode setting
+            const savedLightboxMode = localStorage.getItem('lightboxModeEnabled')
+            if (savedLightboxMode !== null) {
+                lightboxModeEnabled = savedLightboxMode === 'true'
+                data.settings.lightboxModeEnabled = lightboxModeEnabled
+            }
+
+            // Load tabs open right setting
+            const savedTabsOpenRight = localStorage.getItem('tabsOpenRight')
+            if (savedTabsOpenRight !== null) {
+                tabsOpenRight = savedTabsOpenRight === 'true'
+                data.settings.tabsOpenRight = tabsOpenRight
             }
 
             // Load view mode settings
             const savedViewMode = localStorage.getItem('viewMode')
             if (savedViewMode !== null) {
                 viewMode = savedViewMode
+                data.settings.viewMode = viewMode
             }
 
             const savedLastUsedViewMode = localStorage.getItem('lastUsedViewMode')
             if (savedLastUsedViewMode !== null) {
                 lastUsedViewMode = savedLastUsedViewMode
+                data.settings.lastUsedViewMode = lastUsedViewMode
             }
+
+            // Load settings from Settings.svelte
+            const savedSearchEngine = localStorage.getItem('defaultSearchEngine')
+            if (savedSearchEngine) data.settings.defaultSearchEngine = savedSearchEngine
+
+            const savedNewTabUrl = localStorage.getItem('defaultNewTabUrl')
+            if (savedNewTabUrl) data.settings.defaultNewTabUrl = savedNewTabUrl
+
+            const savedAiProvider = localStorage.getItem('selectedAiProvider')
+            if (savedAiProvider) data.settings.selectedAiProvider = savedAiProvider
+
+            const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
+            if (savedCustomSearchUrl) data.settings.customSearchUrl = savedCustomSearchUrl
+
+            const savedCustomNewTabUrl = localStorage.getItem('customNewTabUrl')
+            if (savedCustomNewTabUrl) data.settings.customNewTabUrl = savedCustomNewTabUrl
+
+            const savedSyncServerUrl = localStorage.getItem('syncServerUrl')
+            if (savedSyncServerUrl) data.settings.syncServerUrl = savedSyncServerUrl
+
+            const savedSyncServerToken = localStorage.getItem('syncServerToken')
+            if (savedSyncServerToken) data.settings.syncServerToken = savedSyncServerToken
+
+            // Load other App.svelte settings that don't use localStorage yet
+            data.settings.darkMode = darkMode
+            data.settings.dataSaver = dataSaver
+            data.settings.batterySaver = batterySaver
 
             // Load open sidebars
             const savedOpenSidebars = localStorage.getItem('openSidebars')
@@ -333,7 +370,7 @@
         console.log(`Received tab close request from controlled frame: ${tabId}`)
         
         // Find the tab with matching ID
-        const tab = tabs.find(t => t.id === tabId)
+        const tab = data.docs[tabId]
         if (tab) {
             console.log(`Closing tab: ${tab.title}`)
             closeTab(tab, event)
@@ -362,17 +399,9 @@
     window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
 
-    function openNewTab() {
-        // Use data module to create new tab in current active space
-        if (!data.spaceMeta.activeSpace) {
-            console.warn('No active space to create tab in')
-            return
-        }
-        
-        const newTab = data.newTab(data.spaceMeta.activeSpace)
+    function openNewTab() {        
+        const newTab = data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (newTab) {
-            // Set this tab as the active tab using the data store function
-            data.activate(newTab.id)
             setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
         }
     }
@@ -416,19 +445,18 @@
     }
 
     function handleZoomReset() {
-        if (tabs.length > 0 && data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                const frame = data.frames[activeTab.id]?.frame
+        if (tabs.length > 0 && data.spaceMeta.activeTabId) {
+            if (data.frames[data.spaceMeta.activeTabId]) {
+                const frame = data.frames[data.spaceMeta.activeTabId]?.frame
                 
                 if (frame && frame.setZoom) {
                     frame.setZoom(1.0).then(() => {
-                        console.log(`[Tab ${activeTab.id}] Zoom reset to 100%`)
+                        console.log(`[Tab ${data.spaceMeta.activeTabId}] Zoom reset to 100%`)
                     }).catch((error) => {
-                        console.error(`[Tab ${activeTab.id}] Failed to reset zoom:`, error)
+                        console.error(`[Tab ${data.spaceMeta.activeTabId}] Failed to reset zoom:`, error)
                     })
                 } else if (frame && !frame.setZoom) {
-                    console.warn(`[Tab ${activeTab.id}] setZoom API not available on this frame`)
+                    console.warn(`[Tab ${data.spaceMeta.activeTabId}] setZoom API not available on this frame`)
                 } else {
                     console.warn('No active frame available for zoom reset')
                 }
@@ -441,9 +469,8 @@
     }
 
     function handleTabClose(event) {
-        console.log('Handling tab close request')
-        if (tabs.length > 0 && data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
+        if (tabs.length > 0 && data.spaceMeta.activeTabId) {
+            const activeTab = data.docs[data.spaceMeta.activeTabId]
             if (activeTab) {
                 closeTab(activeTab, event)
             }
@@ -464,7 +491,7 @@
         }
         
         // If clicking on the currently active tab, switch to previous tab
-        if (tab.id === data.spaceMeta.activeTab?.id) {
+        if (tab.id === data.spaceMeta.activeTabId) {
             data.previous()
         } else {
             // Set this tab as active using the data store function
@@ -480,19 +507,19 @@
 
     let tabButtons = $state({})
 
+
     // Effect to handle scrolling to active tab when it changes or when sidebars are toggled
     $effect(() => {
         // Watch for changes to active tab and sidebar state
-        const activeTab = data.spaceMeta.activeTab
-        const sidebarCount = openSidebars.size
-        
-        if (!activeTab) {
+        const sidebarCount = openSidebars.size // just for triggering effect
+        const activeFrameWrapper = data.frames[data.spaceMeta.activeTabId]?.wrapper
+
+        if (!activeFrameWrapper) {
             return
         }
         
-        console.log('scroll effect triggered for tab:', activeTab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
-        const activeFrameWrapper = data.frames[activeTab.id]?.wrapper
-        console.log('activeFrameWrapper exists:', activeFrameWrapper)
+        console.log('scroll effect triggered for tab:', data.spaceMeta.activeTabId, 'tabChangeFromScroll:', {tabChangeFromScroll})
+
         // Don't scroll if tab change was caused by scrolling
         // if (tabChangeFromScroll) {
         //     return
@@ -505,19 +532,19 @@
         if (!tabChangeFromScroll) {
             setTimeout(() => {
                 if (activeFrameWrapper) {
-                    console.log('calling scrollIntoView for tab:', activeTab.id)
+                    console.log('calling scrollIntoView for tab:', data.spaceMeta.activeTabId)
                     activeFrameWrapper.scrollIntoView({ 
                         behavior: isWindowResizing ? 'auto' : 'smooth' 
                     })
                 } else {
-                    console.warn('Frame wrapper not available for tab:', activeTab.id)
+                    console.warn('Frame wrapper not available for tab:', data.spaceMeta.activeTabId)
                 }
             }, 10)
         }
         
         setTimeout(() => {
-            if (tabButtons[activeTab.id]) {
-                tabButtons[activeTab.id].scrollIntoView({
+            if (tabButtons[data.spaceMeta.activeTabId]) {
+                tabButtons[data.spaceMeta.activeTabId].scrollIntoView({
                     behavior: isWindowResizing ? 'auto' : 'smooth',
                     inline: 'nearest',
                     block: 'nearest'
@@ -536,19 +563,18 @@
         const leftCount = leftPinnedTabs.length
         const rightCount = rightPinnedTabs.length
 
-        // console.log({leftCount, rightCount, tabChangeFromScroll})
+        console.log({leftCount, rightCount, tabChangeFromScroll})
         
         if (tabChangeFromScroll || !pinsInit) {
+            pinsInit = true
             return
         }
-
-        pinsInit = true
     
         untrack(() => {
              // Find the active tab in unpinned tabs
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                const activeFrameWrapper = data.frames[activeTab.id]?.wrapper
+            if (data.spaceMeta.activeTabId) {
+                console.log('pins effect triggered for tab:', data.spaceMeta.activeTabId)
+                const activeFrameWrapper = data.frames[data.spaceMeta.activeTabId]?.wrapper
                 // Scroll the active unpinned tab into view after pinned tabs layout change
                 setTimeout(() => {
                     if (activeFrameWrapper) {
@@ -587,11 +613,10 @@
             closedTabPlaceholderCount++
         }
         
-        setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
+        setTimeout(checkTabListOverflow, 100) // Check overflow after DOM update
     }
 
     // function restoreTab(tab) {
-    //     tab.shouldFocus = true
     //     // tabs.push(tab)
     //     // closed = closed.filter(t => t !== tab)
         
@@ -689,25 +714,23 @@
             return
         }
 
-        if (data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                const frame = data.frames[activeTab.id]?.frame
-                frame.back?.()
-                // if (frame && typeof frame.back === 'function') {
-                //     // Check if the frame can go back
-                //     // if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
-                //     //     // No back navigation available, set to start page
-                //     //     activeTab.url = 'about:newtab'
-                //     // } else {
-                //     frame.back()
-                //     // }
-                // } else if (activeTab.url !== 'about:newtab') {
-                //     // Frame doesn't support navigation or is not a controlled frame
-                //     // Set to start page
-                //     activeTab.url = 'about:newtab'
-                // }
-            }
+        if (data.spaceMeta.activeTabId) {
+
+            const frame = data.frames[data.spaceMeta.activeTabId]?.frame
+            frame.back?.()
+            // if (frame && typeof frame.back === 'function') {
+            //     // Check if the frame can go back
+            //     // if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
+            //     //     // No back navigation available, set to start page
+            //     //     activeTab.url = 'about:newtab'
+            //     // } else {
+            //     frame.back()
+            //     // }
+            // } else if (activeTab.url !== 'about:newtab') {
+            //     // Frame doesn't support navigation or is not a controlled frame
+            //     // Set to start page
+            //     activeTab.url = 'about:newtab'
+            // }
         }
     }
 
@@ -718,78 +741,33 @@
             return
         }
 
-        if (data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                const frame = data.frames[activeTab.id]?.frame
-                if (frame && typeof frame.forward === 'function') {
-                    frame.forward()
-                }
+        if (data.spaceMeta.activeTabId) {
+            const frame = data.frames[data.spaceMeta.activeTabId]?.frame
+            if (frame && typeof frame.forward === 'function') {
+                frame.forward()
             }
         }
     }
 
     function reloadActiveTab() {
-        if (data.spaceMeta.activeTab) {
-            const activeTab = data.spaceMeta.activeTab
-            if (activeTab) {
-                reloadTab(activeTab)
-            }
+        if (data.spaceMeta.activeTabId) {
+            reloadTab(data.spaceMeta.activeTabId)
         }
-    }
-
-    function togglePinTab(tab) {
-        if (!data.spaceMeta.activeSpace || !tab) return
-        
-        // Find the tab in the current space and toggle its pinned state
-        // const space = data.spaces[data.spaceMeta.activeSpace]
-        // if (space && space.tabs) {
-        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-        //     if (tabIndex !== -1) {
-        //         space.tabs[tabIndex].pinned = space.tabs[tabIndex].pinned ? null : 'left'
-        //     }
-        // }
-        data.pin({ tabId: tab.id, pinned: tab.pinned ? null : 'left' })
-        hideContextMenu()
     }
 
     function pinTabLeft(tab) {
         if (!data.spaceMeta.activeSpace || !tab) return
-        
-        // const space = data.spaces[data.spaceMeta.activeSpace]
-        // if (space && space.tabs) {
-        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-        //     if (tabIndex !== -1) {
-        //         space.tabs[tabIndex].pinned = 'left'
-        //     }
-        // }
+
         data.pin({ tabId: tab.id, pinned: 'left' })
         hideContextMenu()
     }
 
     function pinTabRight(tab) {
-        // if (!data.spaceMeta.activeSpace || !tab) return
-        
-        // const space = data.spaces[data.spaceMeta.activeSpace]
-        // if (space && space.tabs) {
-        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-        //     if (tabIndex !== -1) {
-        //         space.tabs[tabIndex].pinned = 'right'
-        //     }
-        // }
         data.pin({ tabId: tab.id, pinned: 'right' })
         hideContextMenu()
     }
 
     function unpinTab(tab) {
-        // if (!data.spaceMeta.activeSpace || !tab) return
-        // const space = data.spaces[data.spaceMeta.activeSpace]
-        // if (space && space.tabs) {
-        //     const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-        //     if (tabIndex !== -1) {
-        //         space.tabs[tabIndex].pinned = null
-        //     }
-        // }
         data.pin({ tabId: tab.id, pinned: null })
         hideContextMenu()
     }
@@ -819,63 +797,51 @@
         hideContextMenu()
     }
 
-    function setupIntersectionObserver() {
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                const tabId = entry.target.id.replace('tab_', '')
-                const tab = tabs.find(t => t.id === tabId)
-                
-                if (entry.isIntersecting) {
-                    // Start timer when tab becomes visible
-                    const timer = setTimeout(() => {
-                        if (tabChangeFromScroll) {
-                            return
-                        }
-                        
-                        if (entry.isIntersecting && tab) {
-                            console.log('intersection observer activating tab:', tab.id)
-                            // Set flag BEFORE changing active tab to prevent race condition
-                            tabChangeFromScroll = true
-                            // Clear any existing timer to prevent multiple timers
-                            if (tabChangeFromScrollTimer) {
-                                clearTimeout(tabChangeFromScrollTimer)
-                            }
-                            // Change active tab directly (without untrack since we're using the flag)
-                            data.spaceMeta.activeTab = tab
-                            // Reset flag after a longer delay to prevent race conditions with the effect
-                            tabChangeFromScrollTimer = setTimeout(() => {
-                                tabChangeFromScroll = false
-                                tabChangeFromScrollTimer = null
-                            }, 400)
-                        }
-                    }, 250)
-                    visibilityTimers.set(tabId, timer)
-                } else {
-                    // Clear timer when tab is no longer visible
-                    const timer = visibilityTimers.get(tabId)
-                    if (timer) {
-                        clearTimeout(timer)
-                        visibilityTimers.delete(tabId)
-                    }
-                }
-            })
-        }, {
-            threshold: 0.5, // Tab must be 50% visible
-            root: document.querySelector('.controlled-frame-container')
-        })
 
-        // Observe the wrapper divs with ID format "tab_{tab.id}" instead of the frame elements
-        tabs.forEach(tab => {
-            const wrapper = document.getElementById(`tab_${tab.id}`)
-            if (wrapper) {
-                observer.observe(wrapper)
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            const tabId = entry.target.id.replace('tab_', '')
+            const tab = data.docs[tabId]
+            
+            if (entry.isIntersecting) {
+                // Start timer when tab becomes visible
+                const timer = setTimeout(() => {
+                    if (tabChangeFromScroll) {
+                        return
+                    }
+                    
+                    if (entry.isIntersecting && tab) {
+                        console.log('intersection observer activating tab:', tab.id)
+                        // Set flag BEFORE changing active tab to prevent race condition
+                        tabChangeFromScroll = true
+                        // Clear any existing timer to prevent multiple timers
+                        if (tabChangeFromScrollTimer) {
+                            clearTimeout(tabChangeFromScrollTimer)
+                        }
+                        // Change active tab directly (without untrack since we're using the flag)
+                        data.spaceMeta.activeTabId = tab.id
+                        // Reset flag after a longer delay to prevent race conditions with the effect
+                        tabChangeFromScrollTimer = setTimeout(() => {
+                            tabChangeFromScroll = false
+                            tabChangeFromScrollTimer = null
+                        }, 400)
+                    }
+                }, 250)
+                visibilityTimers.set(tabId, timer)
+            } else {
+                // Clear timer when tab is no longer visible
+                const timer = visibilityTimers.get(tabId)
+                if (timer) {
+                    clearTimeout(timer)
+                    visibilityTimers.delete(tabId)
+                }
             }
         })
+    }, {
+        threshold: 0.5, // Tab must be 50% visible
+        root: document.querySelector('.controlled-frame-container')
+    })
 
-        return observer
-    }
-
-    let observer
     let tabChangeFromScroll = false
     let tabChangeFromScrollTimer = null
     let tabChangeFromScrollFailsafe = null
@@ -907,19 +873,6 @@
         }
     })
 
-    $effect(() => {
-        if (tabs) {
-            console.log('fix: obeserver effect')
-            if (observer) {
-                observer.disconnect()
-            }
-            // Wait a tick to ensure DOM is updated
-            setTimeout(() => {
-                observer = setupIntersectionObserver()
-            }, 100)
-        }
-    })
-
     // Cleanup on component destroy
     $effect(() => {
         return () => {
@@ -947,77 +900,6 @@
             window.removeEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
         }
     })
-
-    async function captureTabScreenshot(tab, frame = null) {
-        if (!frame) {
-            frame = data.frames[tab.id]?.frame
-        }
-        if (!frame) {
-            console.log('Frame not found for tab:', tab.id)
-            return null
-        }
-        
-        // Only capture screenshots for controlledframes, not NewTab components
-        if (typeof frame.captureVisibleRegion !== 'function') {
-            console.log('Frame does not support screenshot capture:', tab.id)
-            return null
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        try {
-            let screenshot = null
-            
-            // Check if frame is ready and loaded
-            const isFrameReady = () => {
-                return frame.src && 
-                       !frame.src.includes('about:blank') && 
-                       frame.contentWindow !== null
-            }
-            
-            // Wait for frame to be ready if needed
-            if (!isFrameReady()) {
-                console.log('Frame not ready for screenshot, waiting...')
-                await new Promise(resolve => setTimeout(resolve, 1000))
-                if (!isFrameReady()) {
-                    console.log('Frame still not ready, skipping screenshot')
-                    return null
-                }
-            }
-            
-            const imageDetails = {
-                format: 'png',
-                quality: 80
-            }
-            
-            // Retry mechanism for flaky captures
-            for (let attempt = 1; attempt <= 3; attempt++) {
-                try {
-                    console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
-                    screenshot = await frame.captureVisibleRegion(imageDetails)
-                    if (screenshot) {
-                        console.log(`Screenshot successful on attempt ${attempt}`)
-                        break
-                    }
-                } catch (captureError) {
-                    console.log(`Capture attempt ${attempt} failed:`, captureError.message)
-                    if (attempt < 3) {
-                        // Wait before retry, increasing delay each time
-                        await new Promise(resolve => setTimeout(resolve, attempt * 500))
-                    }
-                }
-            }
-            
-            
-            if (screenshot) {
-                tab.screenshot = screenshot
-                return screenshot
-            }
-        } catch (err) {
-            console.log('Error capturing screenshot:', err)
-        }
-        return null
-    }
 
     function handleTabMouseEnter(tab, event) {
         if (hoverTimeout) {
@@ -1056,9 +938,9 @@
             isTrashItemHover = false
             hoveredTab = tab
             hovercardShowTime = Date.now()
-            if (!tab.screenshot) {
-                captureTabScreenshot(tab)
-            }
+            // if (!tab.screenshot) {
+            //     captureTabScreenshot(tab)
+            // }
             
             // Mark hovercards as recently active
             hovercardRecentlyActive = true
@@ -1291,9 +1173,11 @@
         if (viewMode !== 'default') {
             lastUsedViewMode = viewMode
             localStorage.setItem('lastUsedViewMode', lastUsedViewMode)
+            data.settings.lastUsedViewMode = lastUsedViewMode
         }
         viewMode = mode
         localStorage.setItem('viewMode', viewMode)
+        data.settings.viewMode = viewMode
     }
     
     function toggleViewMode() {
@@ -1307,14 +1191,19 @@
         } else {
             lastUsedViewMode = viewMode
             localStorage.setItem('lastUsedViewMode', lastUsedViewMode)
+            data.settings.lastUsedViewMode = lastUsedViewMode
             viewMode = 'default'
         }
         localStorage.setItem('viewMode', viewMode)
+        data.settings.viewMode = viewMode
     }
     
     function getViewModeIcon(mode) {
         switch (mode) {
             case 'default': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" /></svg>`
+            case 'stage': return `<svg  class="w-4 h-4"  xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="1 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
+            </svg>`
             case 'tile': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>`
             case 'squat': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" /></svg>`
             case 'canvas': return `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 0 1-1.125-1.125v-3.75ZM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-8.25ZM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-2.25Z" /></svg>`
@@ -1324,6 +1213,7 @@
     }
 
     function checkTabListOverflow() {
+        console.log('checkTabListOverflow')
         const tabList = document.querySelector('.tab-list')
         if (tabList) {
             isTabListOverflowing = tabList.scrollWidth > tabList.clientWidth
@@ -1369,6 +1259,7 @@
 
     // Check overflow when tabs change
     $effect(() => {
+        // FIXME: fix all effects
         if (tabs) {
             // Use longer timeout to ensure DOM is fully updated
             setTimeout(checkTabListOverflow, 100)
@@ -1400,7 +1291,7 @@
         // Make the focused tab active
         if (focusedTabId) {
             // Set the active tab using the data store function
-            if (focusedTabId !== data.spaceMeta.activeTab?.id) {
+            if (focusedTabId !== data.spaceMeta.activeTabId) {
                 data.activate(focusedTabId)
             }
         }
@@ -1586,14 +1477,17 @@
     function toggleDarkMode() {
         darkMode = !darkMode
         document.documentElement.classList.toggle('dark-mode', darkMode)
+        data.settings.darkMode = darkMode
     }
     
     function toggleDataSaver() {
         dataSaver = !dataSaver
+        data.settings.dataSaver = dataSaver
     }
     
     function toggleBatterySaver() {
         batterySaver = !batterySaver
+        data.settings.batterySaver = batterySaver
     }
     
     function toggleSecondScreen() {
@@ -1637,16 +1531,37 @@
     function toggleStatusLights() {
         statusLightsEnabled = !statusLightsEnabled
         localStorage.setItem('statusLightsEnabled', statusLightsEnabled.toString())
+        data.settings.statusLightsEnabled = statusLightsEnabled
     }
 
     function toggleDevMode() {
         devModeEnabled = !devModeEnabled
         localStorage.setItem('devModeEnabled', devModeEnabled.toString())
+        data.settings.devModeEnabled = devModeEnabled
+    }
+
+    function toggleLinkPreviews() {
+        data.spaceMeta.config.showLinkPreviews = !data.spaceMeta.config.showLinkPreviews
+        localStorage.setItem('showLinkPreviews', data.spaceMeta.config.showLinkPreviews.toString())
+        data.settings.showLinkPreviews = data.spaceMeta.config.showLinkPreviews
+    }
+
+    function toggleLightboxMode() {
+        lightboxModeEnabled = !lightboxModeEnabled
+        localStorage.setItem('lightboxModeEnabled', lightboxModeEnabled.toString())
+        data.settings.lightboxModeEnabled = lightboxModeEnabled
+    }
+
+    function toggleTabsOpenRight() {
+        tabsOpenRight = !tabsOpenRight
+        localStorage.setItem('tabsOpenRight', tabsOpenRight.toString())
+        data.settings.tabsOpenRight = tabsOpenRight
     }
 
     function toggleGlobalTabComplete() {
         globalTabComplete = !globalTabComplete
         localStorage.setItem('globalTabComplete', globalTabComplete.toString())
+        data.settings.globalTabComplete = globalTabComplete
     }
 
     async function openTestSuite() {
@@ -1887,8 +1802,6 @@
             logDragDropEvent('dragend', event)
             window.dragEventCounter = 0 // Reset counter
         }, { capture: true })
-
-        console.log('🎯 Global drag and drop event listeners installed')
     }
 
     // Initialize drag and drop listeners
@@ -1922,7 +1835,6 @@
         } 
     }
 
-
     onMount(() => {
         // console.log('setting up app shell navigation')
         history.replaceState({ direction: 1 }, 'a', "#1")
@@ -1932,8 +1844,6 @@
 
         window.onpopstate = handleShellNavigation    
     })
-
-
 
     function toggleCertificateMonitor(tab) {
         if (!certificateMonitorForTab) {
@@ -1956,9 +1866,10 @@
 
     // URL editing functions
     function startEditingUrl() {
-        if (!data.spaceMeta.activeTab) return
+        if (!data.spaceMeta.activeTabId) return
         isEditingUrl = true
-        editingUrlValue = data.spaceMeta.activeTab.url || ''
+        const activeTab = data.docs[data.spaceMeta.activeTabId]
+        editingUrlValue = activeTab.url || ''
         // Focus the input after it's rendered
         setTimeout(() => {
             if (urlInput) {
@@ -1975,16 +1886,14 @@
 
     function handleUrlSubmit(event) {
         event.preventDefault()
-        if (!editingUrlValue.trim() || !data.spaceMeta.activeTab) {
+        if (!editingUrlValue.trim() || !data.spaceMeta.activeTabId) {
             stopEditingUrl()
             return
         }
         
-        const activeTab = data.spaceMeta.activeTab
-        
         try {
             let url = new URL(editingUrlValue)
-            data.navigate(activeTab.id, url.href)
+            data.navigate(data.spaceMeta.activeTabId, url.href)
         } catch {
             // Not a valid URL, treat as search
             const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
@@ -1999,7 +1908,7 @@
                     if (customUrl) {
                         try {
                             searchUrl = new URL(customUrl + encodeURIComponent(editingUrlValue))
-                            data.navigate(activeTab.id, searchUrl.href)
+                            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
                             stopEditingUrl()
                             return
                         } catch {
@@ -2016,7 +1925,7 @@
             }
             
             searchUrl.searchParams.set('q', editingUrlValue)
-            data.navigate(activeTab.id, searchUrl.href)
+            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
         }
         
         stopEditingUrl()
@@ -2075,7 +1984,7 @@
         return openSidebars.size * data.spaceMeta.config.rightSidebarWidth
     })
     
-            // Total space taken by all UI elements (affects available width)
+    // Total space taken by all UI elements (affects available width)
     let spaceTaken = $derived.by(() => {
         let baseSpace = leftPinnedWidth + rightPinnedWidth + rightSidebarWidth
         
@@ -2198,23 +2107,59 @@
             </span>
             <span>{menu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
         </div>
+
+        <!-- TODO: -->
         <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => { menu.tab.hibernated = !menu.tab.hibernated; onHide(); }}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); menu.tab.hibernated = !menu.tab.hibernated; onHide(); } }}>
+                role="menuitem"
+                tabindex="0"
+                onmouseup={() => toggleMuteTab(menu.tab)}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(menu.tab) } }}>
             <span class="context-menu-icon">
-                {#if menu.tab.hibernated}
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+            </span>
+            <span>Load at startup</span>
+        </div>
+
+        {#if data.frames[menu.tab.id]?.frame && data.spaceMeta.activeTabId !== menu.tab.id}
+            <div class="context-menu-item" 
+                role="menuitem"
+                tabindex="0"
+                onmouseup={() => { data.hibernate(menu.tab.id); onHide(); }}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.hibernate(menu.tab.id); onHide(); } }}>
+                <span class="context-menu-icon">
+                    <!-- {#if menu.tab.hibernated}
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+                        </svg>
+                    {:else} -->
+                    
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+                    </svg>  
+                </span>
+                <span>Hibernate</span>
+            </div>
+        {/if}
+
+        <div class="context-menu-item" 
+            role="menuitem"
+            tabindex="0"
+            onmouseup={() => {  data.hibernateOthers(menu.tab.id); onHide(); }}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault();  data.hibernateOthers(menu.tab.id); onHide(); } }}>
+            <span class="context-menu-icon">
+                <!-- {#if menu.tab.hibernated}
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
                     </svg>
-                {:else}
+                {:else} -->
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
                     </svg>
-                {/if}
+                <!-- {/if} -->
             </span>
-            <span>{menu.tab.hibernated ? 'Wake Up' : 'Hibernate'}</span>
+            <span>Hibernate others</span>
         </div>
 
         <div class="context-menu-item has-submenu" 
@@ -2313,21 +2258,25 @@
     onresize={handleResize}
     onfocus={updateWindowFocusState}
     onblur={updateWindowFocusState}
-    onvisibilitychange={() => { console.log('visibilitychange', document.visibilityState) }}
+    onvisibilitychange={() => { 
+        // console.log('visibilitychange', document.visibilityState) 
+    }}
 />
 
 <header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) focusModeHovered = true }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) focusModeHovered = false }}>
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 178px;' : 'right: 137px;'}"></div>
      
-            <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {devModeEnabled ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {devModeEnabled ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
-            {#each leftPinnedTabs as tab, i (tab.id)}
+            {#each leftPinnedTabs as tabPinned, i (tabPinned.id)}
+                {@const tab = data.docs[tabPinned.id]}
+                {@const frameData = data.frames[tab.id]}
                 {#if tab.type !== 'divider'}
                     <li 
                         bind:this={tabButtons[tab.id]}
                         class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTab?.id} 
+                        class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
@@ -2339,7 +2288,7 @@
                         onmouseleave={handleTabMouseLeave}
                         >
                         <div class="tab">
-                            {#if tab.loading}
+                            {#if frameData?.loading}
                                 <svg class="tab-loading-spinner" viewBox="0 0 16 16">
                                     <path d="M8 2 A6 6 0 0 1 14 8" 
                                         fill="none" 
@@ -2369,7 +2318,9 @@
                 </li>
             {/if}
 
-            {#each unpinnedTabs as tab, i (tab.id)}
+            {#each unpinnedTabs as unpinned, i (unpinned.id)}
+                {@const tab = data.docs[unpinned.id]}
+                {@const frameData = data.frames[tab.id]}
                 {#if tab.type === 'divider'}
                     <li class="tab-divider-container">
                         <div class="tab-divider-vertical"></div>
@@ -2378,7 +2329,7 @@
                     <li 
                         bind:this={tabButtons[tab.id]}
                         class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTab?.id} 
+                        class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
@@ -2390,7 +2341,7 @@
                         onmouseleave={handleTabMouseLeave}
                         >
                         <div class="tab">
-                            {#if tab.loading}
+                            {#if frameData?.loading}
                                 <svg class="tab-loading-spinner" viewBox="0 0 16 16">
                                     <path d="M8 2 A6 6 0 0 1 14 8" 
                                         fill="none" 
@@ -2420,12 +2371,15 @@
                 </li>
             {/if}
 
-            {#each rightPinnedTabs as tab, i (tab.id)}
+            {#each rightPinnedTabs as rightPinned, i (rightPinned.id)}
+                {@const tab = data.docs[rightPinned.id]}
+                {@const frameData = data.frames[tab.id]}
+                <!-- FIXME: restructure other frame instance metadata like audio etc. -->
                 {#if tab.type !== 'divider'}
                     <li 
                         bind:this={tabButtons[tab.id]}
                         class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTab?.id} 
+                        class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
@@ -2437,7 +2391,7 @@
                         onmouseleave={handleTabMouseLeave}
                         >
                         <div class="tab">
-                            {#if tab.loading}
+                            {#if frameData?.loading}
                                 <svg class="tab-loading-spinner" viewBox="0 0 16 16">
                                     <path d="M8 2 A6 6 0 0 1 14 8" 
                                         fill="none" 
@@ -2505,6 +2459,18 @@
                 <span>Default</span>
                 {#if viewMode === 'default'}<span class="checkmark">•</span>{/if}
             </div>
+            <!-- <div class="view-mode-menu-item menu-item" 
+                    class:active={viewMode === 'stage'}
+                    role="button"
+                    tabindex="0"
+                    onclick={(e) => { e.stopPropagation(); selectViewMode('stage') }}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('stage') } }}>
+                <span class="view-mode-icon-item menu-icon-item">
+                    {@html getViewModeIcon('stage')}
+                </span>
+                <span>Stage</span>
+                {#if viewMode === 'stage'}<span class="checkmark">•</span>{/if}
+            </div> -->
             <div class="view-mode-menu-item menu-item" 
                     class:active={viewMode === 'canvas'}
                     role="button"
@@ -2745,6 +2711,48 @@
                 {#if devModeEnabled}<span class="checkmark">•</span>{/if}
             </div>
             
+            <div class="settings-menu-item menu-item" 
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleLinkPreviews() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLinkPreviews() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                    </svg>
+                </span>
+                <span>Link Previews</span>
+                {#if data.spaceMeta.config.showLinkPreviews}<span class="checkmark">•</span>{/if}
+            </div>
+
+            <div class="settings-menu-item menu-item" 
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleLightboxMode() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLightboxMode() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
+                    </svg>
+                </span>
+                <span>Lightbox Mode</span>
+                {#if lightboxModeEnabled}<span class="checkmark">•</span>{/if}
+            </div>
+
+            <div class="settings-menu-item menu-item" 
+                 role="button"
+                 tabindex="0"
+                 onclick={(e) => { e.stopPropagation(); toggleTabsOpenRight() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleTabsOpenRight() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12l-7.5 7.5M13.5 12H3" />
+                    </svg>
+                </span>
+                <span>Tabs Open Right</span>
+                {#if tabsOpenRight}<span class="checkmark">•</span>{/if}
+            </div>
+            
             <div class="settings-menu-separator"></div>
             
             <div class="settings-menu-item menu-item" 
@@ -2933,7 +2941,7 @@
 <TabSidebar {isDragEnabled} />
 
 
-<div class="frame-title-bar" class:window-controls-overlay={headerPartOfMain}>
+<div class="frame-title-bar" class:window-controls-overlay={headerPartOfMain} class:editing-url={isEditingUrl}>
     <div class="frame-header-controls">
         <button class="frame-button" title="Back" aria-label="Back" onclick={goBack}>
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
@@ -2951,7 +2959,7 @@
             </svg>
         </button>
     </div>
-    
+
     <div class="frame-header-url-container">
         <div class="frame-header-url">
             {#if isEditingUrl}
@@ -2968,7 +2976,7 @@
                 </form>
             {:else}
                 <button class="url-display-button" onclick={startEditingUrl} title="Click to edit URL">
-                    <UrlRenderer url={getDisplayUrl(data.spaceMeta.activeTab?.url)} variant="compact" />
+                    <UrlRenderer url={getDisplayUrl(data.docs[data.spaceMeta.activeTabId]?.url)} variant="compact" />
                 </button>
             {/if}
         </div>
@@ -2992,7 +3000,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
             </svg>
         </button>
-        <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onclick={(e) => closeTab(data.spaceMeta.activeTab, e)}>
+        <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onclick={(e) => closeTab(data.docs[data.spaceMeta.activeTabId], e)}>
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -3004,7 +3012,8 @@
 <div class="pinned-frames-left" class:window-controls-overlay={headerPartOfMain} 
 class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
 style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length};">
-    {#each leftPinnedTabs as tab (tab.id)}
+    {#each leftPinnedTabs as leftPinned (leftPinned.id)}
+        {@const tab = data.docs[leftPinned.id]}
         {#key userModsHash}
             {#if tab.type !== 'divider'}
                 <div>
@@ -3014,7 +3023,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                         </div>
                     {/key}
                     
-                    <Frame tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                 </div>
             {/if}
         {/key}
@@ -3032,7 +3041,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
      style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
     {#if viewMode === 'canvas'}
         <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
-    {:else if viewMode === 'reading'}
+    <!-- {:else if viewMode === 'reading'}
         {#each tabs as tab, tabIndex (tab.id)}
                 {#key userModsHash}
                     <div class="reading-mode">
@@ -3042,25 +3051,26 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                             </div>
                         {/key}
                         
-                        <Frame tabId={tab.id} {controlledFrameSupported} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame tabId={tab.id} {controlledFrameSupported} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/key}
-        {/each}
+        {/each} -->
     {:else}
-        {#each unpinnedTabs as tab (tab.id)}
-                {#key userModsHash}
-                    {#if  tab.type !== 'divider'}
-                        <div>
-                            {#key origin(tab.url)}
-                                <div class="url-display visible">
-                                    <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
-                                </div>
-                            {/key}
-                            
-                            <Frame {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
-                        </div>
-                    {/if}
-                {/key}
+        {#each unpinnedTabs as unpinned (unpinned.id)}
+            {@const tab = data.docs[unpinned.id]}
+            {#key userModsHash}
+                {#if  tab.type !== 'divider'}
+                    <div class:tab-group={unpinnedTabs.length > 1} class:active={tab.id === data.spaceMeta.activeTabId}>
+                        {#key origin(tab.url)}
+                            <div class="url-display visible">
+                                <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
+                            </div>
+                        {/key}
+                        
+                        <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    </div>
+                {/if}
+            {/key}
         {/each}
     {/if}    
 </div>
@@ -3069,25 +3079,28 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
     bind:certificateMonitorForTab={certificateMonitorForTab} 
 />
 
-<div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
-class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
-style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px;">
-    {#each rightPinnedTabs as tab (tab.id)}
-        {#key userModsHash}
-            {#if  tab.type !== 'divider'}
-                <div>
-                    {#key origin(tab.url)}
-                        <div class="url-display visible">
-                            <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
-                        </div>
-                    {/key}
-                    
-                    <Frame tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling} {captureTabScreenshot} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
-                </div>
-            {/if}
-        {/key}
-    {/each}
-</div>
+{#if rightPinnedTabs.length > 0}
+    <div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
+    class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
+    style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px;">
+        {#each rightPinnedTabs as rigthPinned (rigthPinned.id)}
+            {@const tab = data.docs[rigthPinned.id]}
+            {#key userModsHash}
+                {#if  tab.type !== 'divider'}
+                    <div>
+                        {#key origin(tab.url)}
+                            <div class="url-display visible">
+                                <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
+                            </div>
+                        {/key}
+                        
+                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    </div>
+                {/if}
+            {/key}
+        {/each}
+    </div>
+{/if}
 
 <!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->
 <div class="sidebar-right" role="region" >
@@ -3152,7 +3165,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          switchToAgent={switchToAIAgent}
                          {userMods}
                          onUpdateUserMods={updateUserMods}
-                         currentTab={data.spaceMeta.activeTab} />
+                         currentTab={data.docs[data.spaceMeta.activeTabId]} />
             </div>
         {/if}
         
@@ -3166,7 +3179,7 @@ style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightP
                          {switchToActivity}
                          {switchToAIAgent}
                          {viewMode}
-                         currentTab={data.spaceMeta.activeTab} />
+                         currentTab={data.docs[data.spaceMeta.activeTabId]} />
             </div>
         {/if}
         

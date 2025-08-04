@@ -3,11 +3,22 @@ if (typeof window !== 'undefined' && window.trustedTypes && window.trustedTypes.
   try {
     // Create the policy directly - if it already exists, the browser will throw an error
     window.trustedTypes.createPolicy('default', {
-      createHTML: (input) => input,
-      createScript: (input) => input,
-      createScriptURL: (input) => input,
+      createHTML: (input) => {
+        // console.log('createHTML', input)
+        return input // DOMPurify.sanitize(input)
+      }, 
+      createScript: (input) => { 
+        console.log('createScript', input)
+        return input
+      },
+      createScriptURL: (url) => { 
+        console.log('trusted origin check', url)
+        // if( url.startsWith('https://') || url.startsWith('http://') || url.startsWith('isolated-app://')) {
+        return url
+        // }
+        // throw new Error('Untrusted script URL blocked')
+      }
     })
-    console.log('Default trusted types policy created')
   } catch (e) {
     // If the error is because the policy already exists, that's fine
     if (e.name === 'TypeError' && e.message.includes('already exists')) {
@@ -19,7 +30,6 @@ if (typeof window !== 'undefined' && window.trustedTypes && window.trustedTypes.
 }
 
 document.addEventListener('touchmove', function (event) {
-  console.log(event)
   if (event.scale !== 1) { event.preventDefault() }
 }, { passive: false })
 
@@ -27,7 +37,6 @@ document.addEventListener("wheel", e => {
   if (e.ctrlKey) {
     e.preventDefault()
   }
-
 }, { passive: false })
 
 
@@ -74,5 +83,5 @@ if ('serviceWorker' in navigator) {
 
 
 if (typeof window !== 'undefined' && window.location.protocol === 'isolated-app:') { 
-  import(/* @vite-ignore */ `isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac/${'app'}/test.js`).then(({default: test}) => console.log(test()))
+  import(/* @vite-ignore */ `isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac/${'app'}/test.js`).then(({default: test}) => test())
 }

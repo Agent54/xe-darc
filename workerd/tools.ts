@@ -132,6 +132,22 @@ export const tools = {
     }),
     // Omitting execute function makes this tool require human confirmation
   }),
+  displayHtml: tool({
+    description: "display pure HTML content in a new tab using a data: URL",
+    parameters: z.object({
+      html: z.string().describe("The HTML content to display"),
+      title: z.optional(z.string()).describe("Title for the new tab")
+    }),
+    // Omitting execute function makes this tool require human confirmation
+  }),
+  deployDocker: tool({
+    description: "deploy a Docker container from a git repository URL",
+    parameters: z.object({
+      gitUrl: z.string().describe("Git/GitHub URL to deploy from"),
+      dockerfilePath: z.optional(z.string()).describe("Path to Dockerfile in repo (defaults to ./Dockerfile)")
+    }),
+    // Omitting execute function makes this tool require human confirmation
+  }),
 };
 
 /**
@@ -149,5 +165,40 @@ export const executions = {
     console.log(`Opening new tab with URL: ${url || 'about:newtab'}`);
     // This will be handled by the client-side code when the tool is approved
     return `New tab opened${url ? ` with URL: ${url}` : ''}${title ? ` (${title})` : ''}`;
+  },
+  // displayHtml: async ({ html, title }: { html: string; title?: string }) => {
+  //   const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+  //   console.log(`Displaying HTML content in new tab${title ? ` with title: ${title}` : ''}`);
+  //   // Return JSON string for the client to parse
+  //   return JSON.stringify({ dataUrl, title: title || 'HTML Content' });
+  // },
+  deployDocker: async ({ gitUrl, dockerfilePath }: { gitUrl: string; dockerfilePath?: string }) => {
+    console.log(`Deploying Docker container from ${gitUrl}`);
+    try {
+      const dockerPath = dockerfilePath //  || 'Dockerfile';
+      
+      // Call the Docker service running on port 5196
+      const response = await fetch('http://localhost:5196/deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          gitUrl,
+          dockerfilePath: dockerPath
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        return `Docker deployment failed: ${result.error || 'Unknown error'}`;
+      }
+      
+      return `Docker deployment successful! Deployment ID: ${result.deploymentId}. Status: ${result.status}. ${result.message}`;
+    } catch (error) {
+      console.error('Deploy request failed:', error);
+      return `Docker deployment failed: ${error.message}`;
+    }
   },
 };

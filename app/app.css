@@ -961,7 +961,6 @@ ul::-webkit-scrollbar {
 
 :global(.frame) {
   width: calc(100vw - var(--space-taken, 0px) - 18px);
-  /* width: calc(100vw - 18px); */
   height: calc(100vh - 18px);
   border: none;
   display: block;
@@ -969,13 +968,26 @@ ul::-webkit-scrollbar {
   border-radius: 8px;
   overflow: hidden;
   flex: 0 0 auto;
-  /* -webkit-app-region: no-drag; */
   -webkit-app-region: no-drag;
   user-select: none;
   scroll-snap-align: start;
   scroll-snap-stop: normal;
   border: 1px solid #ffffff12;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, border-color 0.3s ease;
+}
+
+@media (min-width: 1800px) {
+    :global(.tab-group .frame) {
+        max-width: 1400px !important;
+    }
+
+    :global(.tab-group .link-preview), :global(.tab-group .url-display) {
+        max-width: calc(1400px - 20px) !important;
+    }
+}
+
+:global(.tab-group .active .frame){
+    border: 1px solid #74747466;
 }
 
 .has-right-pins :global(.frame) {
@@ -1592,10 +1604,17 @@ ul::-webkit-scrollbar {
 .frame-title-bar {
     position: fixed;
     top: -35px;
-    left: 9px;
+    /* left: 9px; */
     height: 34px;
-    width: calc(100% - 18px);
-    background: #111111ef;
+    /* width: calc(100% - 18px);
+    background: #111111ef; */
+
+    left: 0px;
+    border: 1px solid #000000c9;
+    right: 0px;
+    box-sizing: border-box;
+    background: #000000b9;
+
     backdrop-filter: blur(16px);
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
@@ -1616,7 +1635,8 @@ ul::-webkit-scrollbar {
     top: 13px;
 }
 
-.frame-title-bar:hover {
+.frame-title-bar:hover,
+.frame-title-bar.editing-url {
     top: -10px;
     z-index: 100;
     opacity: 1;
@@ -1624,7 +1644,8 @@ ul::-webkit-scrollbar {
     box-shadow: 0 6px 35px 5px rgb(0 0 0 / 36%);
 }
 
-.frame-title-bar.window-controls-overlay:hover {
+.frame-title-bar.window-controls-overlay:hover,
+.frame-title-bar.window-controls-overlay.editing-url {
     top: 28px;
 }
 

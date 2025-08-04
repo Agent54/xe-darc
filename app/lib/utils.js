@@ -1,17 +1,20 @@
-export function thottle (func, window = 100) {
+export function throttle (func, window = 100, { leading = true } = {}) {
   let lastCall = 0
   let timeoutId = null
   let pendingArgs = null
   let hasPendingCall = false
 
   return function (...args) {
+    // console.log('throttle', {leading, window})
     const now = Date.now()
     
     // First call or enough time has passed - execute immediately
     if (now - lastCall >= window) {
       lastCall = now
-      func.apply(this, args)
-      return
+      if (leading) {
+        func.apply(this, args)
+        return
+      }
     }
     
     // Store the latest call arguments
@@ -34,15 +37,13 @@ export function thottle (func, window = 100) {
 }
 
 export function origin(url) {
+  if (url?.startsWith('about:')) {
+    return 'about'
+  }
   try {
     return new URL(url).origin
-  } catch (error) {
-    // Handle internal pages with proper origin designators
-    if (url?.startsWith('about:')) {
-      return 'about'
-    }
-    // Return a fallback for invalid URLs
-    return 'unknown'
+  } catch (error) {   
+    return 'null'
   }
 }
 
@@ -68,3 +69,71 @@ export const colors = [
   { name: "Ocean Blue", color: "#155f8b" },
   { name: "Pink", color: "#ee61f0" },
 ]
+
+ // Simple diff algorithm to generate additions/deletions
+export function generateDiff(oldText, newText) {
+    const diff = []
+    let i = 0, j = 0
+    
+    while (i < oldText.length || j < newText.length) {
+        if (i >= oldText.length) {
+            // Remaining characters are additions
+            diff.push({ type: 'add', char: newText[j] })
+            j++
+        } else if (j >= newText.length) {
+            // Remaining characters are deletions
+            diff.push({ type: 'delete', char: oldText[i] })
+            i++
+        } else if (oldText[i] === newText[j]) {
+            // Characters match
+            diff.push({ type: 'same', char: oldText[i] })
+            i++
+            j++
+        } else {
+            // Characters differ - look ahead to see if it's insert/delete/replace
+            let foundMatch = false
+            
+            // Check if next few chars in new text match current old char (insertion)
+            for (let k = j + 1; k < Math.min(j + 5, newText.length); k++) {
+                if (newText[k] === oldText[i]) {
+                    // Found match - insert the characters before it
+                    for (let l = j; l < k; l++) {
+                        diff.push({ type: 'add', char: newText[l] })
+                    }
+                    diff.push({ type: 'same', char: oldText[i] })
+                    i++
+                    j = k + 1
+                    foundMatch = true
+                    break
+                }
+            }
+            
+            if (!foundMatch) {
+                // Check if next few chars in old text match current new char (deletion)
+                for (let k = i + 1; k < Math.min(i + 5, oldText.length); k++) {
+                    if (oldText[k] === newText[j]) {
+                        // Found match - delete the characters before it
+                        for (let l = i; l < k; l++) {
+                            diff.push({ type: 'delete', char: oldText[l] })
+                        }
+                        diff.push({ type: 'same', char: newText[j] })
+                        i = k + 1
+                        j++
+                        foundMatch = true
+                        break
+                    }
+                }
+            }
+            
+            if (!foundMatch) {
+                // Treat as replacement
+                diff.push({ type: 'delete', char: oldText[i] })
+                diff.push({ type: 'add', char: newText[j] })
+                i++
+                j++
+            }
+        }
+    }
+    
+    return diff
+}

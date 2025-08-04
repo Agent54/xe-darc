@@ -768,7 +768,6 @@
                         pinned: tab.pinned,
                         muted: tab.muted,
                         audioPlaying: tab.audioPlaying,
-                        hibernated: tab.hibernated,
                         partition: tab.partition
                     })),
                     closed: closed.map(tab => ({
@@ -780,7 +779,7 @@
                         muted: tab.muted,
                         audioPlaying: tab.audioPlaying
                     })),
-                    activeTabId: data.spaceMeta.activeTab?.id || tabs[0]?.id || null
+                    activeTabId: data.spaceMeta.activeTabId || tabs[0]?.id || null
                 },
                 localStorage: { ...localStorage },
                 version: '1.0.0'
