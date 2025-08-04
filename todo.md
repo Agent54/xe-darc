@@ -818,3 +818,24 @@ gvisor etc. for insecure workloads
 obsidian mode for code server
 
 window management
+
+https://github.com/anthropics/claude-code/blob/main/.devcontainer/init-firewall.sh
+
+copy paste 
+
+yt dlp
+
+vscode theme header color
+
+cmd w in vscode close tab setup
+
+updaate at start of nav not just end
+
+js patch of dropdown
+
+resize sidebar
+
+
+jj [git]
+fetch = ["upstream", "origin"]
+push = "origin"

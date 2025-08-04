@@ -7,7 +7,7 @@
   import FrameWrapper from './ReactFrameWrapper.js'
   import { throttle } from '../lib/utils'
   import data from '../data.svelte.js'
-  import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
+  // import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 
   let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs.filter(tab => !tab.pinned)) || []))
   

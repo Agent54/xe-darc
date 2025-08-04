@@ -451,37 +451,31 @@ export default {
     loadSampleData,
 
     restoreClosedTab: (tabId) => {
-        // Remove from closed tabs
-        const closedIndex = data.spaceMeta.closedTabs.findIndex(t => t.id === tab.id)
-        if (closedIndex !== -1) {
-            data.spaceMeta.closedTabs.splice(closedIndex, 1)
-        }
-        
-        // Add back to the space (use active space if the original space doesn't exist)
-        const targetSpaceId = data.spaces[tab.spaceId] ? tab.spaceId : data.spaceMeta.activeSpace
-        if (targetSpaceId) {
-            // Clean up the tab object before adding back (remove closedAt and other closed-specific properties)
-            const { closedAt, ...cleanTab } = tab
-            const restoredTab = {
-                ...cleanTab,
-                _id: cleanTab._id || cleanTab.id,
-                id: cleanTab.id,
-                spaceId: targetSpaceId,
-                pinned: cleanTab.pinned || false,
-                muted: cleanTab.muted || false,
-                order: data.spaces[targetSpaceId]?.tabs?.length || 0
-            }
-            
-            if (!data.spaces[targetSpaceId].tabs) {
-                data.spaces[targetSpaceId].tabs = []
-            }
-            
-            data.spaces[targetSpaceId].tabs.push(restoredTab)
-            
-            // Set as active tab
-            data.spaceMeta.activeSpace = targetSpaceId
-            data.activate(cleanTab.id)
-        }
+        const tab = docs[tabId]
+    
+        db.bulkDocs([
+            // TODO: handle previews and tab groups
+            // ...(previews[tabId]?.tabs.map(prev => {
+            //     if (frames[prev.id])  {
+            //         frames[prev.id].frame = null
+            //     }
+                
+            //     return {
+            //         ...prev,
+            //         closed: false, // legacy
+            //         archive: null,
+            //         modified: Date.now()
+            //     }
+            // }) || []),
+            {
+                ...tab,
+                closed: false,
+                archive: null,
+                modified: Date.now()
+            },
+        ])
+
+        activate(tabId)
     },
 
     readPage: async (tabId) => {

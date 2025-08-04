@@ -534,7 +534,7 @@
                 if (activeFrameWrapper) {
                     console.log('calling scrollIntoView for tab:', data.spaceMeta.activeTabId)
                     activeFrameWrapper.scrollIntoView({ 
-                        behavior: isWindowResizing ? 'auto' : 'smooth' 
+                        behavior:  'instant' // isWindowResizing ? 'auto' : 'smooth' 
                     })
                 } else {
                     console.warn('Frame wrapper not available for tab:', data.spaceMeta.activeTabId)
@@ -579,7 +579,7 @@
                 setTimeout(() => {
                     if (activeFrameWrapper) {
                         activeFrameWrapper.scrollIntoView({ 
-                            behavior: isWindowResizing ? 'auto' : 'smooth' 
+                            behavior: 'instant' // isWindowResizing ? 'auto' : 'smooth' 
                         })
                     } else {
                         // If no specific active tab, scroll to the beginning of unpinned section
@@ -587,7 +587,7 @@
                         const wrapper = data.frames[firstUnpinnedTab.id]?.wrapper
                         if (wrapper) {
                             wrapper.scrollIntoView({ 
-                                behavior: isWindowResizing ? 'auto' : 'smooth' 
+                                behavior: 'instant' // isWindowResizing ? 'auto' : 'smooth' 
                             })
                         }
                     }
@@ -2860,8 +2860,8 @@
                 <div class="dev-menu-item" 
                         role="button"
                         tabindex="0"
-                        onclick={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:8080/logs', shouldFocus: true }) }}
-                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:8080/logs', shouldFocus: true }) } }}>
+                        onclick={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) }}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) } }}>
                     <span class="dev-menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
