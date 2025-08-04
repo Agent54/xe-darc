@@ -5,7 +5,7 @@ services:
     build:
       context: .
     ports:
-      - 5193
+      - 5193:5193
       # - name: main
       #   target: 8086
       #   app_protocol: http
@@ -13,13 +13,17 @@ services:
       #   mode: host # or ingress for load balanced
     deploy:
       mode: replicated
-      replicas: 3
+      replicas: 1
     develop:
       # replicas: 3
       watch:
         - action: sync
           path: .
           target: /app
+          ignore:
+            - "**/.git/**"
+            - "**/.jj/**"
+            - "**/node_modules/**"
         - action: rebuild
           path: ./package.json
         - action: rebuild

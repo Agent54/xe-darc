@@ -166,10 +166,12 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5193,
     strictPort: true,
-    ...(process.env.container === 'true' && { allowedHosts: true }),
+    // ...(process.env.container === 'true' && { allowedHosts: true }),
     hmr: {
       protocol: 'ws', 
-      ...(process.env.container !== 'true' && { clientPort: 5193,  host: 'localhost' }),
+      clientPort: 5193,
+      host: 'localhost' 
+      // ...(process.env.container !== 'true' && { clientPort: 5193,  host: 'localhost' }),
     },
     watch: {
       ignored: ['**/todo.md']
