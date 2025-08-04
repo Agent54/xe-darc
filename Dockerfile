@@ -19,7 +19,7 @@ RUN mkdir /app
 WORKDIR /app
 
 COPY . /app
-COPY .claude/claude.json /root/.claude.json
+# COPY .claude/claude.json /root/.claude.json
 
 # --mount=type=cache,id=pnpm,target=/pnpm/store
 RUN pnpm install

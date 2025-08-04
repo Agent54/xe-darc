@@ -839,3 +839,6 @@ resize sidebar
 jj [git]
 fetch = ["upstream", "origin"]
 push = "origin"
+
+# Cloudflare AI Gateway https://developers.cloudflare.com/ai-gateway/
+# GATEWAY_BASE_URL=https://gateway.ai.cloudflare.com/v1/..
