@@ -25,8 +25,8 @@ import {
 } from "ai"
 import { anthropic } from "@ai-sdk/anthropic"; // createAnthropic
 // import { openai } from "@ai-sdk/openai";
-import { processToolCalls } from "./utils";
-import { tools, executions } from "./tools";
+import { processToolCalls } from "./utils"
+import { tools, executions } from "./tools"
 // import { env } from "cloudflare:workers";
 
 function addCorsHeaders(response: Response): Response {
@@ -38,7 +38,7 @@ function addCorsHeaders(response: Response): Response {
     status: response.status,
     statusText: response.statusText,
     headers
-  });
+  })
 }
 
 // const anthropic = createAnthropic({
@@ -99,7 +99,7 @@ export class Chat extends AIChatAgent<Env> {
       ...tools,
       ...this.mcp.unstable_getAITools(),
     }
-    
+
     // Create a streaming response that handles both text and tool outputs
     const dataStreamResponse = createDataStreamResponse({
       execute: async (dataStream) => {
@@ -169,17 +169,6 @@ export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/check-open-ai-key") {
-      const hasOpenAIKey = !!process.env.ANTHROPIC_API_KEY;
-      return Response.json({
-        success: hasOpenAIKey,
-      });
-    }
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.error(
-        "ANTHROPIC_API_KEY is not set, don't forget to set it locally in .dev.vars, and use `wrangler secret bulk .dev.vars` to upload it to production"
-      );
-    }
     return (
       // Route the request to our agent or return 404 if not found
       (await routeAgentRequest(request, env)) ||

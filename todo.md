@@ -710,3 +710,132 @@ apos screen with docker services
 logs
 
 reload needs unhibernation
+
+use as standard browser open
+
+do not archive closed tabs without history and only about:new
+
+not scrolling into view called bug
+search broken + url edit broken bug
+
+disable scrolling on reload and mode switch and space switch not working
+
+sidebar hoverdetect sticks onto frame bug!
+
+.zsh
+    ports
+    ll
+    dtach default
+    alias compose docker compose
+    alias code code-server
+
+extensions/setup:
+    no user menu
+    thunder client alternative...
+    gtihub dark default theme  warmer
+    atreyu syntax theme
+    smooth curret 
+    smooth scroll
+    smooth terminal
+    pane border transparency
+    getting started
+    default workspace manager/ view
+    cline/roo/copilot/darc agent?
+    lanes tasks
+    gh review
+    icon theme
+    visual jj
+    repo for everything
+    docker
+    claude code/qwen coder/ aider etc.
+    terminal caret
+    terminal status char $:
+    disable syntax and default extension
+    default user folder
+    tailwind
+    svelte
+    
+To run Docker as a non-privileged user, consider setting up the
+#28 31.75 Docker daemon in rootless mode for your user:
+#28 31.75 
+#28 31.75     dockerd-rootless-setuptool.sh install
+#28 31.75 
+#28 31.75 Visit https://docs.docker.com/go/rootless/ to learn about rootless mode.
+#28 31.75 
+#28 31.75 
+#28 31.75 To run the Docker daemon as a fully privileged service, but granting non-root
+#28 31.75 users access, refer to https://docs.docker.com/go/daemon-access/
+
+saved cliplboards and text inputs for websites
+scroll pos handling
+
+do file edits etc. with sub agents to separate the context windows of main contexts
+
+show new tabs as tab preview if errorring?
+
+html tab broken favicon and injections
+
+entering url always sets https even for localhost bug
+
+favicon overrides
+
+title change event websites + badge api
+
+add subsections for context sites. with tile parsing
+
+tab hud mode
+
+favicon update broken
+
+reduce scrolling animation overhead?
+
+scroll bug horizontal tab view frames
+
+how to resize frames
+
+notificaiton api
+
+max frame width slider
+
+close tab cleanup frames
+
+paste patch vscode
+
+scroll bug activation
+
+scroll bug reload and space switch
+
+repo in container
+
+menu items unhovered and inactive opacity
+
+docker rersource monitor and browser resource monitor
+
+xe launcher colima manager
+
+gvisor etc. for insecure workloads
+
+obsidian mode for code server
+
+window management
+
+https://github.com/anthropics/claude-code/blob/main/.devcontainer/init-firewall.sh
+
+copy paste 
+
+yt dlp
+
+vscode theme header color
+
+cmd w in vscode close tab setup
+
+updaate at start of nav not just end
+
+js patch of dropdown
+
+resize sidebar
+
+
+jj [git]
+fetch = ["upstream", "origin"]
+push = "origin"

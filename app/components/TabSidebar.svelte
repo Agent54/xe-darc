@@ -191,40 +191,6 @@
         closedTabsHovered = false
     }
     
-    function restoreClosedTab(tab) {
-        // Remove from closed tabs
-        const closedIndex = data.spaceMeta.closedTabs.findIndex(t => t.id === tab.id)
-        if (closedIndex !== -1) {
-            data.spaceMeta.closedTabs.splice(closedIndex, 1)
-        }
-        
-        // Add back to the space (use active space if the original space doesn't exist)
-        const targetSpaceId = data.spaces[tab.spaceId] ? tab.spaceId : data.spaceMeta.activeSpace
-        if (targetSpaceId) {
-            // Clean up the tab object before adding back (remove closedAt and other closed-specific properties)
-            const { closedAt, ...cleanTab } = tab
-            const restoredTab = {
-                ...cleanTab,
-                _id: cleanTab._id || cleanTab.id,
-                id: cleanTab.id,
-                spaceId: targetSpaceId,
-                pinned: cleanTab.pinned || false,
-                muted: cleanTab.muted || false,
-                order: data.spaces[targetSpaceId]?.tabs?.length || 0
-            }
-            
-            if (!data.spaces[targetSpaceId].tabs) {
-                data.spaces[targetSpaceId].tabs = []
-            }
-            
-            data.spaces[targetSpaceId].tabs.push(restoredTab)
-            
-            // Set as active tab
-            data.spaceMeta.activeSpace = targetSpaceId
-            data.activate(cleanTab.id)
-        }
-    }
-    
     // onMount(() => {
     //     scrollToCurrentSpace('instant')
     //     previousSpaceIndex = data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace)
@@ -361,16 +327,16 @@
                             <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
                                 <button class="space-item" 
                                         class:active={data.spaceMeta.activeSpace === spaceId}
-                                        data-space-id={spaceId}
-                                        onmousedown={(e) => handleSpaceClick(e, spaceId)}
-                                        oncontextmenu={(e) => e.preventDefault()}
-                                        aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
-                       {#if data.spaces[spaceId]?.glyph}
-                            <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
-                        {:else}
-                            <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>
-                        {/if}
-                                </button>
+                                            data-space-id={spaceId}
+                                            onmousedown={(e) => handleSpaceClick(e, spaceId)}
+                                            oncontextmenu={(e) => e.preventDefault()}
+                                            aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
+                                {#if data.spaces[spaceId]?.glyph}
+                                    <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
+                                {:else}
+                                    <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>
+                                {/if}
+                                    </button>
                             </Tooltip>
                         {/each}
                     </div>
@@ -514,7 +480,7 @@
                 <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
                         {#each data.spaceMeta.closedTabs as tab}
-                            <button class="closed-tab-item" title={tab.url} onmousedown={() => restoreClosedTab(tab)}>
+                            <button class="closed-tab-item" title={tab.url} onmousedown={() => data.restoreClosedTab(tab.id)}>
                                 <Favicon {tab} showButton={false} />
                                 <div class="tab-text">
                                     <span class="tab-title">{tab.title}</span>
@@ -539,7 +505,7 @@
         left: 0px;
         transition: transform 190ms 340ms cubic-bezier(.78,-0.01,.34,1.04);
         padding-right: 15px;
-        transform: translateX(-248px);
+        transform: translateX(-255px);
         backface-visibility: hidden;
         padding-left: 9px;
         width: 263px;

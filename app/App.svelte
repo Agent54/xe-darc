@@ -534,7 +534,7 @@
                 if (activeFrameWrapper) {
                     console.log('calling scrollIntoView for tab:', data.spaceMeta.activeTabId)
                     activeFrameWrapper.scrollIntoView({ 
-                        behavior: isWindowResizing ? 'auto' : 'smooth' 
+                        behavior:  'instant' // isWindowResizing ? 'auto' : 'smooth' 
                     })
                 } else {
                     console.warn('Frame wrapper not available for tab:', data.spaceMeta.activeTabId)
@@ -579,7 +579,7 @@
                 setTimeout(() => {
                     if (activeFrameWrapper) {
                         activeFrameWrapper.scrollIntoView({ 
-                            behavior: isWindowResizing ? 'auto' : 'smooth' 
+                            behavior: 'instant' // isWindowResizing ? 'auto' : 'smooth' 
                         })
                     } else {
                         // If no specific active tab, scroll to the beginning of unpinned section
@@ -587,7 +587,7 @@
                         const wrapper = data.frames[firstUnpinnedTab.id]?.wrapper
                         if (wrapper) {
                             wrapper.scrollIntoView({ 
-                                behavior: isWindowResizing ? 'auto' : 'smooth' 
+                                behavior: 'instant' // isWindowResizing ? 'auto' : 'smooth' 
                             })
                         }
                     }
@@ -1574,6 +1574,11 @@
         } catch (error) {
             console.error('❌ Error opening test suite:', error)
         }
+    }
+
+    function openVSCodeWorkspace() {
+        const url = 'http://localhost:8080/?workspace=/workspace/.vscode/orchestrator.code-workspace'
+        data.newTab(data.spaceMeta.activeSpace, { url, shouldFocus: true, shouldFocus: true })
     }
 
     // Check for encrypted sync token on app startup
@@ -2823,8 +2828,8 @@
             title="Dev Menu"
             style="right: 133px;"
             class:hidden={focusModeEnabled && !focusModeHovered}>
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9.75 16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 1 3.75 6v12A2.25 2.25 0 0 1 6 20.25Z" />
+            <svg class="w-4 h-4" fill="none" viewBox="1 1 21 21" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
             </svg>
             <div class="dev-menu">
                 <div class="dev-menu-header">Developer</div>
@@ -2851,6 +2856,30 @@
                         </svg>
                     </span>
                     <span>Open Test Suite</span>
+                </div>
+                <div class="dev-menu-item" 
+                        role="button"
+                        tabindex="0"
+                        onclick={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) }}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) } }}>
+                    <span class="dev-menu-icon-item">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                    </span>
+                    <span>Logs</span>
+                </div>
+                <div class="dev-menu-item" 
+                     role="button"
+                     tabindex="0"
+                     onclick={(e) => { e.stopPropagation(); openVSCodeWorkspace() }}
+                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openVSCodeWorkspace() } }}>
+                    <span class="dev-menu-icon-item">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/>
+                        </svg>
+                    </span>
+                    <span>Code</span>
                 </div>
             </div>
         </div>

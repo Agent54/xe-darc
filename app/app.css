@@ -940,7 +940,7 @@ ul::-webkit-scrollbar {
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   scroll-snap-type: x proximity;
-  scroll-padding-left: 9px;
+  scroll-padding: 9px;
   transition: width 0.3s ease;
   width: calc(100% - var(--space-taken, 0px));
   left: var(--left-pinned-width, 0px);
@@ -976,7 +976,7 @@ ul::-webkit-scrollbar {
   transition: width 0.3s ease, border-color 0.3s ease;
 }
 
-@media (min-width: 1800px) {
+/* @media (min-width: 1800px) {
     :global(.tab-group .frame) {
         max-width: 1400px !important;
     }
@@ -984,7 +984,7 @@ ul::-webkit-scrollbar {
     :global(.tab-group .link-preview), :global(.tab-group .url-display) {
         max-width: calc(1400px - 20px) !important;
     }
-}
+} */
 
 :global(.tab-group .active .frame){
     border: 1px solid #74747466;

@@ -16,7 +16,20 @@ const sortOrder = ['archive', 'spaceId', 'type', 'order']
 
 const docs = $state({})
 const origins = $state({})
-const spaces = $state({})
+const spaces = $state({
+    'darc:space_inbox': {
+        _id: 'darc:space_inbox',
+        type: 'space',
+        name: 'Inbox',
+        title: 'Inbox',
+        color: projectColors[3].color,
+        tabs: [],
+        order: Date.now() + 999999999,
+        created: Date.now(),
+        modified: Date.now(),
+        glyph: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-inbox"><path d="M22 12h-6l-2 2H8l-2-2H2"></path><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>'
+    }
+})
 const activity = $state({})
 const resources = $state({})
 const frames = $state({})
@@ -436,6 +449,34 @@ export default {
 
     activate,
     loadSampleData,
+
+    restoreClosedTab: (tabId) => {
+        const tab = docs[tabId]
+    
+        db.bulkDocs([
+            // TODO: handle previews and tab groups
+            // ...(previews[tabId]?.tabs.map(prev => {
+            //     if (frames[prev.id])  {
+            //         frames[prev.id].frame = null
+            //     }
+                
+            //     return {
+            //         ...prev,
+            //         closed: false, // legacy
+            //         archive: null,
+            //         modified: Date.now()
+            //     }
+            // }) || []),
+            {
+                ...tab,
+                closed: false,
+                archive: null,
+                modified: Date.now()
+            },
+        ])
+
+        activate(tabId)
+    },
 
     readPage: async (tabId) => {
         const frame = frames[tabId]
