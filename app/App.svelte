@@ -2860,6 +2860,18 @@
                 <div class="dev-menu-item" 
                         role="button"
                         tabindex="0"
+                        onclick={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5196', shouldFocus: true }) }}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5196', shouldFocus: true }) } }}>
+                    <span class="dev-menu-icon-item">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
+                        </svg>
+                    </span>
+                    <span>Apps</span>
+                </div>
+                <div class="dev-menu-item" 
+                        role="button"
+                        tabindex="0"
                         onclick={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) } }}>
                     <span class="dev-menu-icon-item">
