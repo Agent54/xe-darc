@@ -835,10 +835,69 @@ js patch of dropdown
 
 resize sidebar
 
+[git]
+auto-local-bookmark = true ?
+abandon-unreachable-commits = false
+fetch = ["sync", "origin"]
 
-jj [git]
-fetch = ["upstream", "origin"]
-push = "origin"
 
 # Cloudflare AI Gateway https://developers.cloudflare.com/ai-gateway/
 # GATEWAY_BASE_URL=https://gateway.ai.cloudflare.com/v1/..
+
+
+inactive menu items too bright/ too hard to discern
+
+ai folder select for bookmark
+
+aider #ai #dev
+
+docker context/ remote context
+integrate all in apps page
+
+show how many times link opened and open tabs with same url links form preview and hvoer preview card
+
+save bookmark cosmos like and ipfs like and patreon like
+
+active app tab on top left when sidebar collapsed
+
+hard pin deps for orchestrator and darc
+
+fix error page injections
+
+cmd w for wep app tabs instead of browser tabs /vscode
+
+html color black for vscode server/ copy paste
+
+set html as default black and make white background fixable in mods?
+
+window management
+
+discord bug report feature lanes/ xenon
+
+github issues/ gh mcp
+
+yt dlp integratino #data
+
+lethal trifaecta, porompt injection, image exfiltration hardening !!! #sec
+
+packgage shopsquat, canvas etc as apps for discovery/ mental stickiness
+
+eamil/tab group checks/ auto groups that are optimized to check as a group for deletion/cleanup. eg google searches/ spam with certain senders or subjects that repat/ quora/ youtube etc. empty new tabs etc. gamified?
+
+
+mastra/ vs low level cf agent sdk
+
+ai playlist gen for spotify #usecase
+
+shopsquat _ plywore #usecase
+
+sidebar voice agent poc
+
+code server no onboarding flow/welcome
+
+
+inactive menu items too bright/ too hard to discern
+
+ai folder select for bookmark
+
+aider

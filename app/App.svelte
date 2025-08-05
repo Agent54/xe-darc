@@ -1577,7 +1577,7 @@
     }
 
     function openVSCodeWorkspace() {
-        const url = 'http://localhost:8080/?workspace=/workspace/.vscode/orchestrator.code-workspace'
+        const url = 'http://localhost:8086/?workspace=/workspace/.vscode/orchestrator.code-workspace'
         data.newTab(data.spaceMeta.activeSpace, { url, shouldFocus: true, shouldFocus: true })
     }
 
