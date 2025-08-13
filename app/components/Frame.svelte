@@ -526,6 +526,7 @@
             {requestedResources}
             {statusLightsEnabled}
             {createOffOriginLightbox}
+            {observer}
             bind:commandKeyPressed
             bind:hoveredLink
            

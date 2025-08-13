@@ -27,6 +27,7 @@
         inputDiffVisible = $bindable(),
         inputDiffTimeout = $bindable(),
         inputDiffData = $bindable(),
+        observer,
     } = $props()
 
     let tab = $derived(data.docs[tabId])

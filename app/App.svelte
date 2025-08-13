@@ -798,48 +798,47 @@
     }
 
 
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            const tabId = entry.target.id.replace('tab_', '')
-            const tab = data.docs[tabId]
-            
-            if (entry.isIntersecting) {
-                // Start timer when tab becomes visible
-                const timer = setTimeout(() => {
-                    if (tabChangeFromScroll) {
-                        return
-                    }
-                    
-                    if (entry.isIntersecting && tab) {
-                        console.log('intersection observer activating tab:', tab.id)
-                        // Set flag BEFORE changing active tab to prevent race condition
-                        tabChangeFromScroll = true
-                        // Clear any existing timer to prevent multiple timers
-                        if (tabChangeFromScrollTimer) {
-                            clearTimeout(tabChangeFromScrollTimer)
+    let observer = $state(null)
+    let scrollContainer = null
+    onMount(() => {
+        console.log('scrollContainer', scrollContainer)
+        observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const tabId = entry.target.id.replace('tab_', '')
+                const tab = data.docs[tabId]
+                
+                if (entry.isIntersecting) {
+                    const timer = setTimeout(() => {
+                        if (tabChangeFromScroll) {
+                            return
                         }
-                        // Change active tab directly (without untrack since we're using the flag)
-                        data.spaceMeta.activeTabId = tab.id
-                        // Reset flag after a longer delay to prevent race conditions with the effect
-                        tabChangeFromScrollTimer = setTimeout(() => {
-                            tabChangeFromScroll = false
-                            tabChangeFromScrollTimer = null
-                        }, 400)
+                        
+                        if (entry.isIntersecting && tab) {
+                            console.log('intersection observer activating tab:', tab.id)
+                            tabChangeFromScroll = true
+                            if (tabChangeFromScrollTimer) {
+                                clearTimeout(tabChangeFromScrollTimer)
+                            }
+                            data.spaceMeta.activeTabId = tab.id
+                            tabChangeFromScrollTimer = setTimeout(() => {
+                                tabChangeFromScroll = false
+                                tabChangeFromScrollTimer = null
+                            }, 400)
+                        }
+                    }, 450)
+                    visibilityTimers.set(tabId, timer)
+                } else {
+                    const timer = visibilityTimers.get(tabId)
+                    if (timer) {
+                        clearTimeout(timer)
+                        visibilityTimers.delete(tabId)
                     }
-                }, 250)
-                visibilityTimers.set(tabId, timer)
-            } else {
-                // Clear timer when tab is no longer visible
-                const timer = visibilityTimers.get(tabId)
-                if (timer) {
-                    clearTimeout(timer)
-                    visibilityTimers.delete(tabId)
                 }
-            }
+            })
+        }, {
+            threshold: 0.6,
+            root: scrollContainer
         })
-    }, {
-        threshold: 0.5, // Tab must be 50% visible
-        root: document.querySelector('.controlled-frame-container')
     })
 
     let tabChangeFromScroll = false
@@ -3079,6 +3078,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
      class:has-left-pins={leftPinnedTabs.length > 0}
      class:has-right-pins={rightPinnedTabs.length > 0}
      onscroll={handleScroll} 
+     bind:this={scrollContainer}
      style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
     {#if viewMode === 'canvas'}
         <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
