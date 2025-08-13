@@ -937,3 +937,5 @@ warn on missing backups or exportability
 history with screenshots and details
 
 global command center mix of alfred and vcscode cmd shift p
+
+overlap of top of page by page nav bug

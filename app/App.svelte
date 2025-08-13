@@ -12,6 +12,7 @@
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import Favicon from './components/Favicon.svelte'
     import UrlRenderer from './components/UrlRenderer.svelte'
+    import Apps from './components/Apps.svelte'
     import { onMount, untrack } from 'svelte'
     import data from './data.svelte.js'
     import { origin } from './lib/utils.js'
@@ -107,6 +108,7 @@
     let sidebarStateLoaded = $state(false)
     let focusModeEnabled = $state(false)
     let focusModeHovered = $state(false)
+    let showAppsOverlay = $state(false)
     let contentAreaScrimActive = $state(false)
     let hasLeftToggle = $state(false)
     let darkMode = $state(true)
@@ -398,6 +400,7 @@
     window.addEventListener('darc-new-tab-from-frame', handleFrameNewTab)
     window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
+    window.addEventListener('close-apps-overlay', () => { showAppsOverlay = false })
 
     function openNewTab() {        
         const newTab = data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
@@ -441,6 +444,10 @@
             event.stopPropagation()
             event.stopImmediatePropagation()
             handleZoomReset()
+        }
+        if (event.key === 'Escape' && showAppsOverlay) {
+            event.preventDefault()
+            showAppsOverlay = false
         }
     }
 
@@ -1448,6 +1455,10 @@
             openSidebars.add('aiAgent')
             openSidebars = new Set(openSidebars)
         }
+    }
+
+    function toggleAppsOverlay() {
+        showAppsOverlay = !showAppsOverlay
     }
 
     function toggleFocusMode() {
@@ -2978,7 +2989,7 @@
     </div>
 {/if}
 
-<TabSidebar {isDragEnabled} />
+<TabSidebar {isDragEnabled} onShowApps={toggleAppsOverlay} />
 
 
 <div class="frame-title-bar" class:window-controls-overlay={headerPartOfMain} class:editing-url={isEditingUrl}>
@@ -3240,6 +3251,18 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
     </div>
 {/if}
 
+{#if showAppsOverlay}
+    <div class="apps-overlay" 
+         role="dialog" 
+         aria-label="All Apps"
+         tabindex="-1"
+         onmousedown={(e) => { if (e.target === e.currentTarget) showAppsOverlay = false }}>        
+        <div class="apps-overlay-content">
+            <Apps />
+        </div>
+    </div>
+{/if}
+
 <style>
     @import "app.css";
     
@@ -3267,5 +3290,33 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    .apps-overlay {
+        border-top: 10px solid black;
+        position: fixed;
+        top: 33px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(12px);
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 80px 60px 20px 60px;
+    }
+
+    .apps-overlay-content {
+        width: 80%;
+        height: 80%;
+        background: rgb(0, 0, 0);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        position: absolute;
+        overflow: visible;
     }
 </style>

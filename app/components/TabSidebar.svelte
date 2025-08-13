@@ -1,6 +1,7 @@
 <script>
     // Tab sidebar component with Firefox-like hover behavior
     // let { isDragEnabled = true } = $props()
+    let { onShowApps = () => {} } = $props()
     import data from '../data.svelte.js'
     import Favicon from './Favicon.svelte'
     import Tooltip from './Tooltip.svelte'
@@ -274,6 +275,10 @@
         spaceContextMenuId = null
     }
 
+    function handleAppsToggle() {
+        onShowApps()
+    }
+
 </script>
 
 <svelte:window onclick={handleClickOutside} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
@@ -308,17 +313,23 @@
 {/if}
 
         <div class="sidebar-content">
-            {#if globallyPinnedTabs.length > 0}
-                <div class="section global-pins-section">
-                    <div class="pinned-tabs-grid">
-                        {#each globallyPinnedTabs as tab}
-                            <button class="pinned-tab" title={tab.url}>
-                                <Favicon {tab} showButton={false} />
-                            </button>
-                        {/each}
-                    </div>
+            <div class="section global-pins-section">
+                <div class="pinned-tabs-grid">
+                    <button class="pinned-tab all-apps-tab" 
+                            title="All Apps"
+                            onmousedown={(e) => { e.stopPropagation(); handleAppsToggle(); }}
+                            aria-label="Show all apps">
+                        <svg class="all-apps-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                        </svg>
+                    </button>
+                    {#each globallyPinnedTabs as tab}
+                        <button class="pinned-tab" title={tab.url}>
+                            <Favicon {tab} showButton={false} />
+                        </button>
+                    {/each}
                 </div>
-            {/if}
+            </div>
 
             <div class="section">
                 <div class="spaces-container">
@@ -704,6 +715,8 @@
         line-height: 1;
         color: rgba(255, 255, 255, 0.3);
     }
+
+
     
     .new-space-menu-dropdown {
         position: absolute;
@@ -928,6 +941,20 @@
     
     .pinned-tab:hover :global(.favicon-wrapper) {
         opacity: 1;
+    }
+
+    .all-apps-tab {
+        position: relative;
+    }
+
+    .all-apps-icon {
+        width: 16px;
+        height: 16px;
+        color: rgba(255, 255, 255, 0.3);
+    }
+
+    .all-apps-tab:hover .all-apps-icon {
+        color: rgba(255, 255, 255, 0.7);
     }
     
     .app-tab :global(.favicon-wrapper) {
