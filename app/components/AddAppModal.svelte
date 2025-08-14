@@ -15,12 +15,12 @@
         githubUrl: '',
         branch: 'main',
         githubToken: '',
-        dockerfilePath: '',
-        composePath: '',
-        indexPath: ''
+        pathType: 'compose',
+        path: ''
     })
     
     let showPartitionDropdown = $state(false)
+    let activeTooltip = $state(null)
     
     const availablePartitions = [
         { id: 'current', name: 'Current Space Partition', description: 'Default partition for this workspace' },
@@ -36,9 +36,7 @@
     }
 
     function selectCatalogApp(app) {
-        // Pre-fill form with catalog app data
-        appFormData.name = app.name
-        // Don't prefill icon URL, let it come from manifest
+        // Don't prefill name or icon URL, let them come from manifest
         // Switch to appropriate tab based on app type
         if (app.type === 'docker') {
             activeTab = 'repo'
@@ -66,9 +64,8 @@
             githubUrl: '',
             branch: 'main',
             githubToken: '',
-            dockerfilePath: '',
-            composePath: '',
-            indexPath: ''
+            pathType: 'compose',
+            path: ''
         })
         activeTab = 'catalog'
         onClose()
@@ -78,6 +75,11 @@
         if (e.target === e.currentTarget) {
             handleClose()
         }
+    }
+
+    function handleModalClick() {
+        // Close partition dropdown when clicking elsewhere in modal
+        showPartitionDropdown = false
     }
 
     function togglePartition(partitionId) {
@@ -95,6 +97,14 @@
             .map(id => availablePartitions.find(p => p.id === id)?.name)
             .filter(Boolean)
             .join(', ')
+    }
+
+    function showTooltip(tooltipId) {
+        activeTooltip = tooltipId
+    }
+
+    function hideTooltip() {
+        activeTooltip = null
     }
 
     // Catalog apps data
@@ -116,14 +126,15 @@
 
 {#if show}
     <div 
-        class="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/60 backdrop-blur-sm"
+        class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm"
+        style="padding-top: 15vh;"
         onmousedown={handleBackdropClick}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
         tabindex="-1"
     >
-        <div class="bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl">
+        <div class="bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] shadow-2xl" onmousedown={handleModalClick}>
             <!-- Header -->
             <div class="flex items-center justify-between p-6 border-b border-white/10">
                 <h2 id="modal-title" class="text-xl font-semibold text-white/90">Add New App</h2>
@@ -161,13 +172,13 @@
             </div>
 
             <!-- Content -->
-            <div class="px-6 pt-4 pb-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+            <div class="px-6 pt-4 pb-6 overflow-visible max-h-[calc(90vh-200px)]">
                 {#if activeTab === 'catalog'}
                     <!-- Catalog Tab -->
                     <div class="space-y-6">
                         <p class="text-white/70 text-sm">Choose from our curated collection of apps</p>
                         
-                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto max-h-[60vh]">
                             {#each catalogApps as app}
                                 <div 
                                     class="group relative p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all cursor-pointer hover:border-white/20 h-40"
@@ -203,12 +214,12 @@
                         <div class="space-y-4 p-4 rounded-xl border border-white/10 bg-white/5">
                             <h3 class="text-lg font-medium text-white/90">Web Application URL</h3>
                             <div>
-                                <label for="app-url" class="block text-sm font-medium text-white/70 mb-2">Application URL</label>
+                                <label for="app-url" class="block text-sm font-medium text-white/70 mb-2">Application URL (required)</label>
                                 <input 
                                     id="app-url"
                                     type="url" 
                                     bind:value={appFormData.url}
-                                    placeholder="https://example.com"
+                                    placeholder="https://app.example.com"
                                     class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
                                 />
                             </div>
@@ -226,7 +237,7 @@
                             
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label for="github-url" class="block text-sm font-medium text-white/70 mb-2">GitHub URL</label>
+                                    <label for="github-url" class="block text-sm font-medium text-white/70 mb-2">GitHub URL (required)</label>
                                     <input 
                                         id="github-url"
                                         type="url" 
@@ -249,7 +260,7 @@
                             </div>
                             
                             <div>
-                                <label for="github-token" class="block text-sm font-medium text-white/70 mb-2">GitHub Token (optional)</label>
+                                <label for="github-token" class="block text-sm font-medium text-white/70 mb-2">GitHub Token</label>
                                 <input 
                                     id="github-token"
                                     type="password" 
@@ -259,36 +270,61 @@
                                 />
                             </div>
                             
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="space-y-4">
                                 <div>
-                                    <label for="dockerfile-path" class="block text-sm font-medium text-white/70 mb-2">Dockerfile Path</label>
-                                    <input 
-                                        id="dockerfile-path"
-                                        type="text" 
-                                        bind:value={appFormData.dockerfilePath}
-                                        placeholder="Dockerfile"
-                                        class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
-                                    />
+                                    <label class="block text-sm font-medium text-white/70 mb-3">Application Type</label>
+                                    <div class="flex items-center gap-6">
+                                        <div class="flex items-center">
+                                            <input 
+                                                id="path-compose"
+                                                type="radio" 
+                                                name="pathType"
+                                                value="compose"
+                                                bind:group={appFormData.pathType}
+                                                class="w-4 h-4 bg-white/10 border border-white/30 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-0 checked:bg-green-600 checked:border-green-600"
+                                            />
+                                            <label for="path-compose" class="ml-2 text-sm text-white/80">Docker Compose</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input 
+                                                id="path-dockerfile"
+                                                type="radio" 
+                                                name="pathType"
+                                                value="dockerfile"
+                                                bind:group={appFormData.pathType}
+                                                class="w-4 h-4 bg-white/10 border border-white/30 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-0 checked:bg-green-600 checked:border-green-600"
+                                            />
+                                            <label for="path-dockerfile" class="ml-2 text-sm text-white/80">Dockerfile</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input 
+                                                id="path-static"
+                                                type="radio" 
+                                                name="pathType"
+                                                value="static"
+                                                bind:group={appFormData.pathType}
+                                                class="w-4 h-4 bg-white/10 border border-white/30 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-0 checked:bg-green-600 checked:border-green-600"
+                                            />
+                                            <label for="path-static" class="ml-2 text-sm text-white/80">Static HTML</label>
+                                        </div>
+                                    </div>
                                 </div>
                                 
                                 <div>
-                                    <label for="compose-path" class="block text-sm font-medium text-white/70 mb-2">Compose File Path</label>
+                                    <label for="app-path" class="block text-sm font-medium text-white/70 mb-2">
+                                        {#if appFormData.pathType === 'compose'}
+                                            Compose File Path
+                                        {:else if appFormData.pathType === 'dockerfile'}
+                                            Dockerfile Path
+                                        {:else}
+                                            Index HTML Path
+                                        {/if}
+                                    </label>
                                     <input 
-                                        id="compose-path"
+                                        id="app-path"
                                         type="text" 
-                                        bind:value={appFormData.composePath}
-                                        placeholder="docker-compose.yml"
-                                        class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
-                                    />
-                                </div>
-                                
-                                <div>
-                                    <label for="index-path" class="block text-sm font-medium text-white/70 mb-2">Index.html Path</label>
-                                    <input 
-                                        id="index-path"
-                                        type="text" 
-                                        bind:value={appFormData.indexPath}
-                                        placeholder="index.html"
+                                        bind:value={appFormData.path}
+                                        placeholder={appFormData.pathType === 'compose' ? 'docker-compose.yml' : appFormData.pathType === 'dockerfile' ? 'Dockerfile' : 'index.html'}
                                         class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
                                     />
                                 </div>
@@ -326,18 +362,18 @@
         <h3 class="text-lg font-medium text-white/90">App Settings</h3>
         
         <div>
-            <label for="app-name" class="block text-sm font-medium text-white/70 mb-2">App Name (optional)</label>
+            <label for="app-name" class="block text-sm font-medium text-white/70 mb-2">App Name</label>
             <input 
                 id="app-name"
                 type="text" 
                 bind:value={appFormData.name}
-                placeholder="My Custom App"
+                placeholder="Use from manifest or webpage"
                 class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
             />
         </div>
         
         <div>
-            <label for="icon-url" class="block text-sm font-medium text-white/70 mb-2">Custom Icon URL (optional)</label>
+            <label for="icon-url" class="block text-sm font-medium text-white/70 mb-2">Custom Icon URL</label>
             <input 
                 id="icon-url"
                 type="url" 
@@ -348,14 +384,52 @@
         </div>
         
         <div class="space-y-3">
-            <div class="flex items-center">
-                <input 
-                    id="pin-to-apps" 
-                    type="checkbox" 
-                    bind:checked={appFormData.pinToAppPins}
-                    class="w-4 h-4 bg-white/10 border border-white/30 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-0 checked:bg-green-600 checked:border-green-600"
-                />
-                <label for="pin-to-apps" class="ml-2 text-sm text-white/80">Pin to app pins</label>
+            <div class="space-y-2">
+                <div class="flex items-center">
+                    <input 
+                        id="pin-to-apps" 
+                        type="checkbox" 
+                        bind:checked={appFormData.pinToAppPins}
+                        class="w-4 h-4 bg-white/10 border border-white/30 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-0 checked:bg-green-600 checked:border-green-600"
+                    />
+                    <label for="pin-to-apps" class="ml-2 text-sm text-white/80 flex items-center gap-2">
+                        Pin to app pins
+                        <div class="relative">
+                            <svg 
+                                class="w-3.5 h-3.5 text-white/50 hover:text-white/70 cursor-help" 
+                                onmouseenter={() => showTooltip('pin-to-apps-info')}
+                                onmouseleave={hideTooltip}
+                                fill="none" 
+                                viewBox="0 0 24 24" 
+                                stroke="currentColor"
+                                role="button"
+                                aria-label="Show pin to apps info"
+                                tabindex="0"
+                            >
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {#if activeTooltip === 'pin-to-apps-info'}
+                                <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 p-3 bg-black/90 border border-white/20 rounded-lg shadow-xl z-50">
+                                    <div class="text-xs text-white/90 mb-2 font-medium">Pin to App Pins</div>
+                                    <img src="/placeholder-pin-to-apps.png" alt="Pin to app pins explanation" class="w-full h-32 object-cover rounded border border-white/10 mb-2" />
+                                    <div class="text-xs text-white/70">Shows app in the quick access pin bar for easy launching</div>
+                                </div>
+                            {/if}
+                        </div>
+                    </label>
+                </div>
+                
+                {#if appFormData.pinToAppPins}
+                    <div class="ml-6 flex items-center">
+                        <input 
+                            id="start-browser" 
+                            type="checkbox" 
+                            bind:checked={appFormData.startOnBrowserStart}
+                            class="w-4 h-4 bg-white/10 border border-white/30 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-0 checked:bg-green-600 checked:border-green-600"
+                        />
+                        <label for="start-browser" class="ml-2 text-sm text-white/80">Always start on browser start</label>
+                    </div>
+                {/if}
             </div>
             
             <div class="flex items-center">
@@ -365,50 +439,105 @@
                     bind:checked={appFormData.openInMenu}
                     class="w-4 h-4 bg-white/10 border border-white/30 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-0 checked:bg-green-600 checked:border-green-600"
                 />
-                <label for="open-in-menu" class="ml-2 text-sm text-white/80">Open in menu</label>
+                <label for="open-in-menu" class="ml-2 text-sm text-white/80 flex items-center gap-2">
+                    Open in menu
+                    <div class="relative">
+                        <svg 
+                            class="w-3.5 h-3.5 text-white/50 hover:text-white/70 cursor-help" 
+                            onmouseenter={() => showTooltip('open-in-menu-info')}
+                            onmouseleave={hideTooltip}
+                            fill="none" 
+                            viewBox="0 0 24 24" 
+                            stroke="currentColor"
+                            role="button"
+                            aria-label="Show open in menu info"
+                            tabindex="0"
+                        >
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {#if activeTooltip === 'open-in-menu-info'}
+                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 p-3 bg-black/90 border border-white/20 rounded-lg shadow-xl z-50">
+                                <div class="text-xs text-white/90 mb-2 font-medium">Open in Menu</div>
+                                <img src="/placeholder-open-in-menu.png" alt="Open in menu explanation" class="w-full h-32 object-cover rounded border border-white/10 mb-2" />
+                                <div class="text-xs text-white/70">App opens in a dropdown menu instead of a new tab or window</div>
+                            </div>
+                        {/if}
+                    </div>
+                </label>
             </div>
         </div>
         
         <div>
-            <label for="data-partitions" class="block text-sm font-medium text-white/70 mb-2">Data Container Partitions</label>
-            <div id="data-partitions" class="p-3 bg-white/5 border border-white/10 rounded-lg">
-                <p class="text-xs text-white/60">Configure data partitions for app isolation (coming soon)</p>
-            </div>
-        </div>
-        
-        <div class="space-y-3">
-            <div class="flex items-center">
-                <input 
-                    id="start-browser" 
-                    type="checkbox" 
-                    bind:checked={appFormData.startOnBrowserStart}
-                    disabled={!appFormData.pinToAppPins}
-                    class="w-4 h-4 bg-white/10 border border-white/30 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-0 checked:bg-green-600 checked:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-                <label for="start-browser" class="ml-2 text-sm text-white/80 {!appFormData.pinToAppPins ? 'opacity-50' : ''}">
-                    Always start on browser start
-                </label>
-                {#if !appFormData.pinToAppPins}
-                    <div class="ml-2 group relative">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-white/40">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 3 3 0 1 1 2.871 5.026v.345a.75.75 0 0 1-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 1 0 8.94 6.94ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd"/>
-                        </svg>
-                        <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-black/90 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                            Only available when app is pinned
+            <label for="data-partitions" class="flex items-center gap-2 text-sm font-medium text-white/70 mb-2">
+                Data Container Partitions
+                <div class="relative">
+                    <svg 
+                        class="w-3.5 h-3.5 text-white/50 hover:text-white/70 cursor-help" 
+                        onmouseenter={() => showTooltip('data-partitions-info')}
+                        onmouseleave={hideTooltip}
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                        role="button"
+                        aria-label="Show data partitions info"
+                        tabindex="0"
+                    >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {#if activeTooltip === 'data-partitions-info'}
+                        <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 p-3 bg-black/90 border border-white/20 rounded-lg shadow-xl z-50">
+                            <div class="text-xs text-white/90 mb-2 font-medium">Data Container Partitions</div>
+                            <img src="/placeholder-data-partitions.png" alt="Data partitions explanation" class="w-full h-32 object-cover rounded border border-white/10 mb-2" />
+                            <div class="text-xs text-white/70">Isolate app data into separate containers for security and organization</div>
                         </div>
+                    {/if}
+                </div>
+            </label>
+            <div class="relative">
+                <button
+                    type="button"
+                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-left focus:outline-none focus:border-green-500 focus:bg-white/15 flex items-center justify-between cursor-pointer"
+                    onmousedown={(e) => {
+                        e.stopPropagation()
+                        showPartitionDropdown = !showPartitionDropdown
+                    }}
+                >
+                    <span class="text-sm">{getSelectedPartitionNames()}</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-white/60">
+                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+                
+                {#if showPartitionDropdown}
+                    <div class="absolute top-full left-0 right-0 mt-1 bg-black/90 border border-white/20 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+                        {#each availablePartitions as partition}
+                            <div 
+                                class="px-3 py-2 hover:bg-white/10 cursor-pointer flex items-center justify-between"
+                                onmousedown={(e) => {
+                                    e.stopPropagation()
+                                    togglePartition(partition.id)
+                                }}
+                            >
+                                <div class="flex-1">
+                                    <div class="text-sm text-white/90 font-medium">{partition.name}</div>
+                                    <div class="text-xs text-white/60">{partition.description}</div>
+                                </div>
+                                <div class="ml-3">
+                                    {#if appFormData.dataPartitions.includes(partition.id)}
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-green-500">
+                                            <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
+                                        </svg>
+                                    {:else}
+                                        <div class="w-4 h-4 border border-white/30 rounded"></div>
+                                    {/if}
+                                </div>
+                            </div>
+                        {/each}
                     </div>
                 {/if}
             </div>
-            
-            <div class="flex items-center">
-                <input 
-                    id="start-first-use" 
-                    type="checkbox" 
-                    bind:checked={appFormData.startOnFirstUse}
-                    class="w-4 h-4 bg-white/10 border border-white/30 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-0 checked:bg-green-600 checked:border-green-600"
-                />
-                <label for="start-first-use" class="ml-2 text-sm text-white/80">Start on first use</label>
-            </div>
         </div>
+        
+
     </div>
 {/snippet}

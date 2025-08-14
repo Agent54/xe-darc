@@ -1,6 +1,8 @@
 <script>
     import AddAppModal from './AddAppModal.svelte'
     
+    let { onClose = () => {} } = $props()
+    
     const hoverState = $state({})
     const collapsedSections = $state({})
     let showAddAppModal = $state(false)
@@ -11,11 +13,11 @@
         { id: 'default2', name: 'Browser', iconUrl: '/embed-icons/observable.png', type: 'weblink' },
         { id: 'default3', name: 'Files', iconUrl: '/embed-icons/felt.png', type: 'static' },
         
-        { id: 'a1', name: 'Dashboard', iconUrl: '/embed-icons/observable.png', type: 'docker', composeService: 'webapp', category: 'Productivity', partition: { name: 'Work', color: '#a3e635' } },
-        { id: 'a2', name: 'Reports', iconUrl: '/embed-icons/google_slides.png', type: 'docker', composeService: 'webapp', category: 'Analytics', partition: { name: 'Finance', color: '#22d3ee' } },
-        { id: 'a3', name: 'User Admin', iconUrl: '/embed-icons/github_gist.png', type: 'docker', composeService: 'webapp', category: 'Admin' },
-        { id: 'a4', name: 'Postgres UI', iconUrl: '/embed-icons/replit.png', type: 'docker', composeService: 'db', category: 'Databases' },
-        { id: 'a5', name: 'Redis Monitor', iconUrl: '/embed-icons/codepen.png', type: 'docker', composeService: 'db', category: 'Databases' },
+        { id: 'a1', name: 'Dashboard', iconUrl: '/embed-icons/observable.png', type: 'docker', category: 'Productivity', partition: { name: 'Work', color: '#a3e635' } },
+        { id: 'a2', name: 'Reports', iconUrl: '/embed-icons/google_slides.png', type: 'docker', category: 'Analytics', partition: { name: 'Finance', color: '#22d3ee' } },
+        { id: 'a3', name: 'User Admin', iconUrl: '/embed-icons/github_gist.png', type: 'docker', category: 'Admin' },
+        { id: 'a4', name: 'Postgres UI', iconUrl: '/embed-icons/replit.png', type: 'docker', category: 'Databases' },
+        { id: 'a5', name: 'Redis Monitor', iconUrl: '/embed-icons/codepen.png', type: 'docker', category: 'Databases' },
         { id: 'a6', name: 'Excalidraw', iconUrl: '/embed-icons/excalidraw.png', type: 'weblink', category: 'Design', partition: { name: 'Personal', color: '#f472b6' } },
         { id: 'a7', name: 'Figma', iconUrl: '/embed-icons/figma.png', type: 'pwa', category: 'Design' },
         { id: 'a8', name: 'Tldraw', iconUrl: '/embed-icons/tldraw.png', type: 'static', category: 'Design' },
@@ -69,7 +71,7 @@
         
         const timer = setTimeout(() => {
             hoverState[appId] = { timer: null, visible: true }
-        }, 1000)
+        }, 500)
         hoverState[appId] = { timer, visible: false }
     }
 
@@ -131,7 +133,7 @@
         onmousedown={(e) => openApp(e, app)}
         aria-label={`Open ${app.name}`}
     >
-        <div class="flex flex-col items-center justify-center text-center gap-2 pt-3 pb-5 px-1">
+        <div class="flex flex-col items-center justify-center text-center gap-1 pt-3 pb-5 px-1">
             {#if app.iconUrl}
                 <img src={app.iconUrl} alt="{app.name} icon" class="w-16 h-16 rounded-lg object-cover" />
             {:else}
@@ -145,7 +147,7 @@
             </div>
         </div>
 
-        <div class="absolute bottom-2 left-2 right-2 flex items-center gap-1 z-10">
+        <div class="absolute bottom-1 left-1 right-1 flex items-center gap-1 z-10">
             {#if typeLabel(app.type)}
                 <span class="px-1.5 py-1 rounded text-[10px] leading-none border border-white/20 bg-white/10 text-white/70 flex-shrink-0">
                     {typeLabel(app.type)}
@@ -166,28 +168,25 @@
             {/if}
         </div>
 
-        {#if hs?.visible}
-            <div class="absolute inset-0 flex items-center justify-center gap-1 bg-black/60 rounded-xl"
-                style="opacity:{hs?.visible ? 1 : 0}; transition: opacity 150ms ease"
-                aria-hidden={!hs?.visible}
-            >
-                <button title="Settings" aria-label="Settings"
-                    onmousedown={(e) => actionSettings(e, app)}
-                    class="p-1.5 rounded-md bg-black/70 border border-white/20 text-white/80 hover:text-white hover:bg-black/80 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><path d="M11.78 2.25c-.29 0-.57.02-.85.05a.75.75 0 0 0-.64.85l.13 1.03a8.97 8.97 0 0 0-1.84 1.06l-.9-.51a.75.75 0 0 0-1.02.27c-.26.45-.48.92-.66 1.41a.75.75 0 0 0 .36.92l.9.52c-.12.59-.18 1.2-.18 1.82 0 .62.06 1.23.18 1.82l-.9.52a.75.75 0 0 0-.36.92c.18.49.4.96.66 1.41.2.34.64.46 1.02.27l.9-.51c.57.42 1.2.77 1.84 1.06l-.13 1.03a.75.75 0 0 0 .64.85c.28.03.56.05.85.05.29 0 .57-.02.85-.05a.75.75 0 0 0 .64-.85l-.13-1.03c.64-.29 1.27-.64 1.84-1.06l.9.51a.75.75 0 0 0 1.02-.27c.26-.45.48-.92.66-1.41a.75.75 0 0 0-.36-.92l-.9-.52c.12-.59.18-1.2.18-1.82 0-.62-.06-1.23-.18-1.82l.9-.52a.75.75 0 0 0 .36-.92 8 8 0 0 0-.66-1.41.75.75 0 0 0-1.02-.27l-.9.51a8.97 8.97 0 0 0-1.84-1.06l.13-1.03a.75.75 0 0 0-.64-.85 9.7 9.7 0 0 0-1.7 0Zm.22 5.5a3.25 3.25 0 1 1 0 6.5 3.25 3.25 0 0 1 0-6.5Z"/></svg>
-                </button>
-                <button title="Logs" aria-label="Logs"
-                    onmousedown={(e) => actionLogs(e, app)}
-                    class="p-1.5 rounded-md bg-black/70 border border-white/20 text-white/80 hover:text-white hover:bg-black/80 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><path d="M19.5 14.25v-2.878a2.25 2.25 0 0 0-.659-1.591l-4.622-4.622A2.25 2.25 0 0 0 12.628 4.5H8.25A2.25 2.25 0 0 0 6 6.75v10.5A2.25 2.25 0 0 0 8.25 19.5h7.5a2.25 2.25 0 0 0 2.25-2.25Zm-6.75-9v3.375a.375.375 0 0 0 .375.375H16.5"/><path d="M8.25 15.75h7.5m-7.5-3h7.5m-7.5-3h3.75"/></svg>
-                </button>
-                <button title="Edit" aria-label="Edit"
-                    onmousedown={(e) => actionEdit(e, app)}
-                    class="p-1.5 rounded-md bg-black/70 border border-white/20 text-white/80 hover:text-white hover:bg-black/80 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><path d="M21.731 2.269a2.625 2.625 0 0 0-3.713 0l-1.157 1.157 3.713 3.713 1.157-1.157a2.625 2.625 0 0 0 0-3.713Z"/><path d="M3 21v-3.75a2.25 2.25 0 0 1 .659-1.591l9.75-9.75 3.713 3.713-9.75 9.75A2.25 2.25 0 0 1 6.75 21H3Z"/></svg>
-                </button>
-            </div>
-        {/if}
+        <div class="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:delay-500"
+            aria-hidden={!hs?.visible}
+        >
+            <button title="Settings" aria-label="Settings"
+                onmousedown={(e) => actionSettings(e, app)}
+                class="p-1.5 rounded-md bg-black/80 border border-white/20 text-white/80 hover:text-white hover:bg-black/90 transition-colors backdrop-blur-sm cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><path d="M11.78 2.25c-.29 0-.57.02-.85.05a.75.75 0 0 0-.64.85l.13 1.03a8.97 8.97 0 0 0-1.84 1.06l-.9-.51a.75.75 0 0 0-1.02.27c-.26.45-.48.92-.66 1.41a.75.75 0 0 0 .36.92l.9.52c-.12.59-.18 1.2-.18 1.82 0 .62.06 1.23.18 1.82l-.9.52a.75.75 0 0 0-.36.92c.18.49.4.96.66 1.41.2.34.64.46 1.02.27l.9-.51c.57.42 1.2.77 1.84 1.06l-.13 1.03a.75.75 0 0 0 .64.85c.28.03.56.05.85.05.29 0 .57-.02.85-.05a.75.75 0 0 0 .64-.85l-.13-1.03c.64-.29 1.27-.64 1.84-1.06l.9.51a.75.75 0 0 0 1.02-.27c.26-.45.48-.92.66-1.41a.75.75 0 0 0-.36-.92l-.9-.52c.12-.59.18-1.2.18-1.82 0-.62-.06-1.23-.18-1.82l.9-.52a.75.75 0 0 0 .36-.92 8 8 0 0 0-.66-1.41.75.75 0 0 0-1.02-.27l-.9.51a8.97 8.97 0 0 0-1.84-1.06l.13-1.03a.75.75 0 0 0-.64-.85 9.7 9.7 0 0 0-1.7 0Zm.22 5.5a3.25 3.25 0 1 1 0 6.5 3.25 3.25 0 0 1 0-6.5Z"/></svg>
+            </button>
+            <button title="Logs" aria-label="Logs"
+                onmousedown={(e) => actionLogs(e, app)}
+                class="p-1.5 rounded-md bg-black/80 border border-white/20 text-white/80 hover:text-white hover:bg-black/90 transition-colors backdrop-blur-sm cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" /></svg>
+            </button>
+            <button title="Edit" aria-label="Edit"
+                onmousedown={(e) => actionEdit(e, app)}
+                class="p-1.5 rounded-md bg-black/80 border border-white/20 text-white/80 hover:text-white hover:bg-black/90 transition-colors backdrop-blur-sm cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><path d="M21.731 2.269a2.625 2.625 0 0 0-3.713 0l-1.157 1.157 3.713 3.713 1.157-1.157a2.625 2.625 0 0 0 0-3.713Z"/><path d="M3 21v-3.75a2.25 2.25 0 0 1 .659-1.591l9.75-9.75 3.713 3.713-9.75 9.75A2.25 2.25 0 0 1 6.75 21H3Z"/></svg>
+            </button>
+        </div>
     </div>
 {/snippet}
 
@@ -210,7 +209,7 @@
 
     <button 
         class="p-2 text-white/70 hover:text-white/90 mr-[-30px] mb-[-20px] opacity-50 hover:opacity-100 rounded-lg transition-colors cursor-pointer" 
-        onmousedown={() => showAppsOverlay = false}
+        onmousedown={onClose}
         aria-label="Close Apps"
         title="Close Apps"
     >
@@ -221,7 +220,7 @@
 </div>
 
 
-<div class="w-full h-full px-6 pt-6 pb-4 select-none overflow-y-auto relative" style="transform: translateZ(0); will-change: scroll-position;">
+<div class="w-full h-full px-6 pt-6 pb-4 select-none overflow-y-auto relative apps-content" style="transform: translateZ(0); will-change: scroll-position;">
     <!-- Default section without header -->
     {#if defaultApps.length > 0}
         <section class="mb-6">
@@ -279,3 +278,27 @@
     show={showAddAppModal} 
     onClose={closeAddAppModal} 
 />
+
+<style>
+    .apps-content {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+    
+    .apps-content::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .apps-content::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .apps-content::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+
+    .apps-content::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+</style>

@@ -3258,7 +3258,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
          tabindex="-1"
          onmousedown={(e) => { if (e.target === e.currentTarget) showAppsOverlay = false }}>        
         <div class="apps-overlay-content">
-            <Apps />
+            <Apps onClose={() => showAppsOverlay = false} />
         </div>
     </div>
 {/if}
@@ -3309,8 +3309,8 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
     }
 
     .apps-overlay-content {
-        width: 80%;
-        height: 80%;
+        width: 67%;
+        height: 67%;
         background: rgb(0, 0, 0);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 16px;
@@ -3318,5 +3318,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         position: absolute;
         overflow: visible;
+        max-width: 1250px;
+        max-height: 1125px;
     }
 </style>
