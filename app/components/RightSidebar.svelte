@@ -1,5 +1,5 @@
 <script>
-    let { title, onClose, children, openSidebars = new Set(), switchToResources, switchToSettings, switchToUserMods, switchToActivity, switchToAgent } = $props()
+    let { title, padding = true, onClose, children, openSidebars = new Set(), switchToResources, switchToSettings, switchToUserMods, switchToActivity, switchToAgent } = $props()
 </script>
 
 <div class="sidebar">
@@ -73,7 +73,7 @@
         </div>
     </div>
 
-    <div class="sidebar-content">
+    <div class="sidebar-content" class:no-padding={!padding}>
         {@render children()}
     </div>
 </div>
@@ -193,6 +193,10 @@
         padding-top: 0;
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+
+    .sidebar-content.no-padding {
+        padding: 0;
     }
 
     .sidebar-content::-webkit-scrollbar {

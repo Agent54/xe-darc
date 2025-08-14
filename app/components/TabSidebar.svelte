@@ -21,7 +21,10 @@
 
     let isManualScroll = false
     let previousSpaceIndex = -1
-    let scrollActiveSpaceTimeout = null
+    // let scrollActiveSpaceTimeout = null
+
+
+    // TODO: active tab on tab title and track active tabs per space, show active tab in each space
 
     const globallyPinnedTabs = $derived(data.spaceMeta.globalPins)
     
@@ -84,15 +87,18 @@
         }
     }
 
-    function activateTab(tabId) {
+    function activateTab(tabId, spaceId) {
         // If clicking on the currently active tab, switch to previous tab
+        data.spaceMeta.activeSpace = spaceId
         if (tabId === data.spaceMeta.activeTabId) {
             data.previous()
         } else {
             data.activate(tabId)
-        }
+        }   
     }
-    
+
+    let currentScrolledSpace = $state(null)
+
     function handleTabScroll(event) {
         if (!tabListRef) return
         
@@ -101,26 +107,29 @@
         const spaceWidth = containerWidth + 20
         const newIndex = Math.floor((scrollLeft + spaceWidth / 2) / spaceWidth)
         
-        if (newIndex !== data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace) && newIndex >= 0 && newIndex < data.spaceMeta.spaceOrder.length) {
-            if (scrollActiveSpaceTimeout) {
-                clearTimeout(scrollActiveSpaceTimeout)
-            }
+        if ( newIndex >= 0 && newIndex < data.spaceMeta.spaceOrder.length) {
+            currentScrolledSpace = data.spaceMeta.spaceOrder[newIndex]
+    //         if (scrollActiveSpaceTimeout) {
+    //             clearTimeout(scrollActiveSpaceTimeout)
+    //         }
             
-            scrollActiveSpaceTimeout = setTimeout(() => {
-                // Double-check that we're still on the same space after the delay
-                const currentScrollLeft = tabListRef.scrollLeft
-                const currentContainerWidth = tabListRef.clientWidth
-                const currentSpaceWidth = currentContainerWidth + 20
-                const currentIndex = Math.floor((currentScrollLeft + currentSpaceWidth / 2) / currentSpaceWidth)
+    //         scrollActiveSpaceTimeout = setTimeout(() => {
+    //             // Double-check that we're still on the same space after the delay
+    //             const currentScrollLeft = tabListRef.scrollLeft
+    //             const currentContainerWidth = tabListRef.clientWidth
+    //             const currentSpaceWidth = currentContainerWidth + 20
+    //             const currentIndex = Math.floor((currentScrollLeft + currentSpaceWidth / 2) / currentSpaceWidth)
                 
-                if (currentIndex === newIndex && currentIndex >= 0 && currentIndex < data.spaceMeta.spaceOrder.length) {
-                    isManualScroll = true
-                    data.spaceMeta.activeSpace = data.spaceMeta.spaceOrder[currentIndex]
-                    setTimeout(() => { isManualScroll = false }, 1500)
-                }
+    //             if (currentIndex === newIndex && currentIndex >= 0 && currentIndex < data.spaceMeta.spaceOrder.length) {
+    //                 isManualScroll = true
+    //                 data.spaceMeta.activeSpace = data.spaceMeta.spaceOrder[currentIndex]
+    //                 setTimeout(() => { isManualScroll = false }, 1500)
+    //             }
                 
-                scrollActiveSpaceTimeout = null
-            }, 340)
+    //             scrollActiveSpaceTimeout = null
+    //         }, 340)
+        } else {
+            // currentScrolledSpace = null
         }
     }
     
@@ -311,7 +320,6 @@
         </div>
     </div>
 {/if}
-
         <div class="sidebar-content">
             <div class="section global-pins-section">
                 <div class="pinned-tabs-grid">
@@ -319,6 +327,10 @@
                             title="All Apps"
                             onmousedown={(e) => { e.stopPropagation(); handleAppsToggle(); }}
                             aria-label="Show all apps">
+
+                            <!-- <svg class="all-apps-icon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
+                            </svg> -->
                         <svg class="all-apps-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
                         </svg>
@@ -338,10 +350,11 @@
                             <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
                                 <button class="space-item" 
                                         class:active={data.spaceMeta.activeSpace === spaceId}
-                                            data-space-id={spaceId}
-                                            onmousedown={(e) => handleSpaceClick(e, spaceId)}
-                                            oncontextmenu={(e) => e.preventDefault()}
-                                            aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
+                                        class:scrolled={currentScrolledSpace === spaceId}
+                                        data-space-id={spaceId}
+                                        onmousedown={(e) => handleSpaceClick(e, spaceId)}
+                                        oncontextmenu={(e) => e.preventDefault()}
+                                        aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
                                 {#if data.spaces[spaceId]?.glyph}
                                     <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
                                 {:else}
@@ -373,9 +386,11 @@
             </div>
 
             <div class="section flex-1">
+
                 <div class="tab-content-container" 
                      bind:this={tabListRef}
-                     onscroll={handleTabScroll}>
+                     onscroll={handleTabScroll}
+                    >
                     <div class="tab-content-track">
                         {#each data.spaceMeta.spaceOrder as spaceId (spaceId)}
                             <div class="space-content" data-space-id={spaceId}>
@@ -407,7 +422,7 @@
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
                                         {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
-                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} title={tab.url} onmousedown={() => activateTab(tab.id)}>
+                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} title={tab.url} onmousedown={() => activateTab(tab.id, spaceId)}>
                                                 <Favicon {tab} showButton={false} />
                                             </button>
                                         {/each}
@@ -440,7 +455,7 @@
                                             </div>
                                         {:else}
                                             <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} data-tab-id={tab.id}>
-                                                <button class="tab-item-main" title={tab.url} onmousedown={() => activateTab(tab.id)}>
+                                                <button class="tab-item-main" title={tab.url} onmousedown={() => activateTab(tab.id, spaceId)}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>
                                                 </button>
@@ -865,8 +880,15 @@
         background: rgba(255, 255, 255, 0.15);
     }
 
+    .space-item.scrolled:after {
+        border: 1px solid rgb(138 138 138);
+        display: block;
+        content: ' ';
+        width: 48%;
+        position: absolute;
+        bottom: 1px;
+    }
 
-    
     /* Horizontal Tab Content */
     .tab-content-container {
         overflow-x: auto;

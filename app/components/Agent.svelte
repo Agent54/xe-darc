@@ -5,81 +5,35 @@
 	import * as smd from 'streaming-markdown'
 	import { AgentClient } from 'agents/client'
 
-	const client = new AgentClient({
-		agent: 'chat',
-		name: 'default',
-		host: 'localhost:5193'
-	})
-
-	client.onopen = () => {
-		console.log('Connected to agent')
-		// Send an initial message
-		// client.send(JSON.stringify({ type: "join", user: "user123" }));
+	let client
+	let conv = $state(false)
+	async function startVoice() {
+		conv = true
 	}
 
-	client.onmessage = (event) => {
-		// Handle incoming messages
-		const data = JSON.parse(event.data)
-		console.log('Received message:', data)
-
-
-        // { "mcp": { "prompts": [], "resources": [], "servers": {}, "tools": [] }, "type": "cf_agent_mcp_servers" }
-
-        // "body": "f:{\"messageId\":\"msg-AI9pv13V8IEr5o6jevyUFeAL\"}\n", "done": false, "id": "LdxkiFBI
-        //  { "body": "0:\" you've typed \\\"asdf\\\" - that doesn't seem to be a specific\"\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
-
-        //{ "body": "e:{\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":1287,\"completionTokens\":124},\"isContinued\":false}\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
-
-		// Ignore empty status messages - these are just completion signals
-		if (data.type === 'cf_agent_use_chat_response' && (!data.body || data.body.trim() === '')) {
-			console.log('Ignoring empty status message:', data)
-			return
-		}
-
-		// Check if this is a streaming message chunk
-		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('0:')) {
-			handleStreamingChunk(data, { type: 'message' })
-			return
-		}
-
-		// Check if this is a stream completion message
-		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('e:')) {
-			handleStreamingChunk(data, { type: 'completion' })
-			return
-		}
-
-		// Check if this is a tool call message
-		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('9:')) {
-			handleToolCall(data)
-			return
-		}
-
-		// Check if this is a tool result message
-		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('a:')) {
-			handleToolResult(data)
-			return
-		}
-
-		// Check if this is a response summary
-		if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('d:')) {
-			handleResponseSummary(data)
-			return
-		}
-
-		// Handle complete message updates
-		if (data.type === 'cf_agent_chat_messages') {
-			handleChatMessages(data)
-			return
-		}
-
-		if (data.type === 'state_update') {
-			// Update local UI with new state
-			//updateUI(data.state);
-            console.log('state upd', data)
-		}
+	async function stopVoice() {
+		conv = false
 	}
 
-	client.onclose = () => console.log('Disconnected from agent')
+	// const conversation = await Conversation.startSession({ signedUrl });
+	// 	app.get('/signed-url', yourAuthMiddleware, async (req, res) => {
+	//   const response = await fetch(
+	//     `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${process.env.AGENT_ID}`,
+	//     {
+	//       method: 'GET',
+	//       headers: {
+	//         // Requesting a signed url requires your ElevenLabs API key
+	//         // Do NOT expose your API key to the client!
+	//         'xi-api-key': process.env.XI_API_KEY,
+	//       },
+	//     }
+	//   );
+	//   if (!response.ok) {
+	//     return res.status(500).send('Failed to get signed URL');
+	//   }
+	//   const body = await response.json();
+	//   res.send(body.signed_url);
+	// });
 
 	// // Send messages to the Agent
 	// setTimeout(() => {
@@ -172,6 +126,17 @@
 					<path fill="currentColor" d="M22.282 9.821a6 6 0 0 0-.516-4.91a6.05 6.05 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a6 6 0 0 0-3.998 2.9a6.05 6.05 0 0 0 .743 7.097a5.98 5.98 0 0 0 .51 4.911a6.05 6.05 0 0 0 6.515 2.9A6 6 0 0 0 13.26 24a6.06 6.06 0 0 0 5.772-4.206a6 6 0 0 0 3.997-2.9a6.06 6.06 0 0 0-.747-7.073M13.26 22.43a4.48 4.48 0 0 1-2.876-1.04l.141-.081l4.779-2.758a.8.8 0 0 0 .392-.681v-6.737l2.02 1.168a.07.07 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494M3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085l4.783 2.759a.77.77 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646M2.34 7.896a4.5 4.5 0 0 1 2.366-1.973V11.6a.77.77 0 0 0 .388.677l5.815 3.354l-2.02 1.168a.08.08 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.08.08 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667m2.01-3.023l-.141-.085l-4.774-2.782a.78.78 0 0 0-.785 0L9.409 9.23V6.897a.07.07 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.8.8 0 0 0-.393.681zm1.097-2.365l2.602-1.5l2.607 1.5v2.999l-2.597 1.5l-2.607-1.5Z"/>
 				</svg>
 			`
+		},
+		{
+			name: 'ElevenLabs Voice',
+			id: 'elevenlabs-voice',
+			avatarTitle: '11',
+			icon: `
+				<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+					<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+					<circle cx="12" cy="12" r="3" fill="currentColor"/>
+				</svg>
+			`
 		}
 	]
 
@@ -193,6 +158,22 @@
 		const parser = smd.parser(renderer)
 
 		return { renderer, parser }
+	}
+
+	function initializeNonStreamingMessage(messageId, content) {
+		// Find the streaming element for this message
+		const messageElement = document.querySelector(`[data-message-id="${messageId}"]`)
+		if (!messageElement) return
+
+		const contentElement = messageElement.querySelector('.agent-markdown-streaming')
+		if (!contentElement) return
+
+		// Initialize streaming markdown and render the content immediately
+		const { renderer, parser } = initializeStreamingMarkdown(contentElement)
+		if (parser && content) {
+			smd.parser_write(parser, content)
+			smd.parser_end(parser)
+		}
 	}
 
 	function startMarkdownStream(messageId) {
@@ -1678,8 +1659,13 @@
 				conversation = conversation || 'remember '
 				break
 			case 'listen':
-				conversation = conversation || 'listen to '
-				break
+				// conversation = conversation || 'listen to '
+				if (!conv) {
+					startVoice()
+				} else {
+					stopVoice()
+				}
+				return
 			case 'see':
 				conversation = conversation || 'show me '
 				break
@@ -1894,7 +1880,7 @@
 		generateTestMarkdownDocumentForTest()
 	}
 
-	function handleTestMessage() {
+	async function handleTestMessage() {
 		// Add user message
 		const userMessage = {
 			id: Date.now().toString(),
@@ -1919,6 +1905,10 @@
 		chatHistory = [...chatHistory, assistantMessage]
 		knownMessageIds.add(assistantMessage.id)
 		updateCurrentChatTimestamp()
+
+		// Wait for DOM to update, then initialize content for non-streaming message
+		await tick()
+		initializeNonStreamingMessage(assistantMessage.id, assistantMessage.rawContent)
 	}
 
 	async function generateTestMarkdownDocumentForTest() {
@@ -2199,6 +2189,117 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	onMount(() => {
+		client = new AgentClient({
+			agent: 'chat',
+			name: 'default',
+			host: 'localhost:5193'
+		})
+
+		client.onopen = () => {
+			console.log('Connected to agent')
+			// Send an initial message
+			// client.send(JSON.stringify({ type: "join", user: "user123" }));
+		}
+
+		// Listen for messages from ElevenLabs voice agent iframe
+		async function handleAgentMessage(event) {
+			if (event.data.type === 'agent-message') {
+				const message = event.data.data
+				console.log('Received agent message:', message)
+				console.log('Message source:', message.source)
+				console.log('Message content:', message.message)
+				
+				// Add message to chat history
+				const messageId = crypto.randomUUID()
+				const content = message.message || message.text || message.content || JSON.stringify(message)
+				const agentMessage = {
+					id: messageId,
+					role: message.source === 'user' ? 'user' : 'assistant',
+					content: content,
+					rawContent: content,
+					timestamp: Date.now(),
+					streaming: false,
+					model: 'elevenlabs-voice'
+				}
+				
+				console.log('Created agent message:', agentMessage)
+				chatHistory = [...chatHistory, agentMessage]
+				knownMessageIds.add(messageId)
+
+				// Initialize content for non-streaming assistant messages
+				if (agentMessage.role === 'assistant') {
+					await tick()
+					initializeNonStreamingMessage(messageId, content)
+				}
+			}
+		}
+
+		window.addEventListener('message', handleAgentMessage)
+
+		client.onmessage = (event) => {
+			// Handle incoming messages
+			const data = JSON.parse(event.data)
+			console.log('Received message:', data)
+
+
+			// { "mcp": { "prompts": [], "resources": [], "servers": {}, "tools": [] }, "type": "cf_agent_mcp_servers" }
+
+			// "body": "f:{\"messageId\":\"msg-AI9pv13V8IEr5o6jevyUFeAL\"}\n", "done": false, "id": "LdxkiFBI
+			//  { "body": "0:\" you've typed \\\"asdf\\\" - that doesn't seem to be a specific\"\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
+
+			//{ "body": "e:{\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":1287,\"completionTokens\":124},\"isContinued\":false}\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
+
+			// Ignore empty status messages - these are just completion signals
+			if (data.type === 'cf_agent_use_chat_response' && (!data.body || data.body.trim() === '')) {
+				console.log('Ignoring empty status message:', data)
+				return
+			}
+
+			// Check if this is a streaming message chunk
+			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('0:')) {
+				handleStreamingChunk(data, { type: 'message' })
+				return
+			}
+
+			// Check if this is a stream completion message
+			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('e:')) {
+				handleStreamingChunk(data, { type: 'completion' })
+				return
+			}
+
+			// Check if this is a tool call message
+			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('9:')) {
+				handleToolCall(data)
+				return
+			}
+
+			// Check if this is a tool result message
+			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('a:')) {
+				handleToolResult(data)
+				return
+			}
+
+			// Check if this is a response summary
+			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('d:')) {
+				handleResponseSummary(data)
+				return
+			}
+
+			// Handle complete message updates
+			if (data.type === 'cf_agent_chat_messages') {
+				handleChatMessages(data)
+				return
+			}
+
+			if (data.type === 'state_update') {
+				// Update local UI with new state
+				//updateUI(data.state);
+				console.log('state upd', data)
+			}
+		}
+
+		client.onclose = () => console.log('Disconnected from agent')
+		
 		// Load selected model from localStorage
 		if (typeof localStorage !== 'undefined') {
 			const savedModel = localStorage.getItem('selectedModel')
@@ -2216,11 +2317,21 @@ The current system demonstrates strong performance and security characteristics.
 
 		// Initialize empty history (no localStorage persistence)
 		chatHistoryList = []
+
+		return () => {
+
+			window.removeEventListener('message', handleAgentMessage)
+
+			if (client) {
+				client.close()
+			}
+		}
 	})
 </script>
 
 <RightSidebar
 	title="Agent"
+	padding={false}
 	{onClose}
 	{openSidebars}
 	{switchToResources}
@@ -2261,6 +2372,11 @@ The current system demonstrates strong performance and security characteristics.
 					</select>
 				</div>
 			</div>
+
+			{#if conv}
+				<!-- TODO: orange microphone indicator and background mic when sidebar closed, secure uri -->
+				<iframe style="background-color: #000; height: 100px;" title="voice-agent" src="https://localhost:5194/agent" allow="microphone; screen-wake-lock 'self'"></iframe>
+			{/if}
 		</div>
 
 		<div class="agent-chat-container">
@@ -2867,12 +2983,12 @@ The current system demonstrates strong performance and security characteristics.
 				</div>
 
 				<div class="agent-action-buttons">
-					<button class="agent-quick-action" onmouseup={() => handleActionButton('search')}>search</button>
-					<button class="agent-quick-action" onmouseup={() => handleActionButton('ask')}>ask</button>
-					<button class="agent-quick-action" onmouseup={() => handleActionButton('do')}>do</button>
-					<button class="agent-quick-action" onmouseup={() => handleActionButton('remember')}>remember</button>
-					<button class="agent-quick-action" onmouseup={() => handleActionButton('listen')}>listen</button>
-					<button class="agent-quick-action" onmouseup={() => handleActionButton('see')}>see</button>
+					<button class="agent-quick-action" onmousedown={() => handleActionButton('search')}>search</button>
+					<button class="agent-quick-action" onmousedown={() => handleActionButton('ask')}>ask</button>
+					<button class="agent-quick-action" onmousedown={() => handleActionButton('do')}>do</button>
+					<button class="agent-quick-action" onmousedown={() => handleActionButton('remember')}>remember</button>
+					<button class="agent-quick-action" onmousedown={() => handleActionButton('listen')}>listen</button>
+					<button class="agent-quick-action" onmousedown={() => handleActionButton('see')}>see</button>
 				</div>
 			</div>
 		</div>
@@ -2900,6 +3016,8 @@ The current system demonstrates strong performance and security characteristics.
 		border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 		margin: 0 0 12px 0;
 		top: 0px;
+		padding-left: 20px;
+		padding-right: 20px;
 	}
 
 	.agent-sticky-header::after {
@@ -3136,6 +3254,8 @@ The current system demonstrates strong performance and security characteristics.
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
+		padding-left: 20px;
+		padding-right: 20px;
 	}
 
 	.agent-chat-history {
@@ -3285,6 +3405,8 @@ The current system demonstrates strong performance and security characteristics.
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+		/* padding-left: 20px;
+		padding-right: 20px; */
 	}
 
 	.agent-model-select {

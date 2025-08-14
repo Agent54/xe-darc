@@ -1632,7 +1632,7 @@ ul::-webkit-scrollbar {
 }
 
 .frame-title-bar.window-controls-overlay {
-    top: 13px;
+    top: 0;
 }
 
 .frame-title-bar:hover,

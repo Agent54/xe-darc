@@ -938,4 +938,20 @@ history with screenshots and details
 
 global command center mix of alfred and vcscode cmd shift p
 
-overlap of top of page by page nav bug
+preshared mutual certs for secure worker browser communication! #security #critical
+
+unhibernating apps breaks the hhover obeserver
+
+remote mode for darc code to replace ui of forje
+
+rename to operator
+
+screenshots to attachments!!! + import / export
+
+personal data stores for movie music and other metadata
+
+badge api + aggregate batch api for folders
+
+disign portfolio ispo
+
+fix broken hmr due to app import init with sideeffects
