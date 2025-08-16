@@ -226,12 +226,39 @@
             }
         }
         
+        // Get agent ID and token from query parameters
+        function getAgentIdFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search)
+            return urlParams.get('agent_id') || ''
+        }
+        
+        // function getTokenFromUrl() {
+        //     const urlParams = new URLSearchParams(window.location.search)
+        //     return urlParams.get('token') || ''
+        // }
+        
         async function startAgent() {
             try {
-                statusEl.textContent = 'Starting conversation.....'
+                const agentId = getAgentIdFromUrl()
+                // const token = getTokenFromUrl()
+                
+                if (!agentId) {
+                    statusEl.textContent = 'No agent ID provided in URL'
+                    statusEl.className = 'status error'
+                    return
+                }
+                
+                // if (!token) {
+                //     statusEl.textContent = 'No Eleven Labs token provided'
+                //     statusEl.className = 'status error'
+                //     return
+                // }
+                
+                statusEl.textContent = `Starting conversation with agent ${agentId}...`
                 
                 const conv = await Conversation.startSession({
-                    agentId: 'agent_01jy7j0a1nez3stmzkr9qnvxhw', // Add your agent ID here
+                    agentId: agentId,
+                    // apiKey: token,
                     // onConnect - handler called when the conversation websocket connection is established.
                     // onDisconnect - handler called when the conversation websocket connection is ended.
                     // onMessage - handler called when a new text message is received. These can be tentative or final transcriptions of user voice, replies produced by LLM. Primarily used for handling conversation transcription.

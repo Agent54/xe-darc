@@ -17,6 +17,14 @@
     let exportStatus = $state('')
     let isLoadingDirectory = $state(true)
 
+    // AI provider tokens
+    let aiTokens = $state({
+        gemini: '',
+        openai: '',
+        anthropic: '',
+        elevenlabs: ''
+    })
+
     // Biometric authentication state
     let isAuthenticating = $state(false)
     let authError = $state('')
@@ -67,40 +75,49 @@
             id: 'writer', 
             name: 'Writer API (Gemini Nano)', 
             description: 'Local agent model running in browser',
-            status: 'available',
             icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64'
         },
         { 
             id: 'gemini', 
             name: 'Google Gemini', 
             description: 'Google\'s advanced multimodal agent',
-            status: 'disabled',
             icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64'
         },
         { 
             id: 'openai', 
             name: 'OpenAI GPT', 
             description: 'Cloud-based agent model',
-            status: 'disabled',
             icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://openai.com&size=64'
         },
         { 
             id: 'anthropic', 
             name: 'Anthropic Claude', 
             description: 'Cloud-based agent model',
-            status: 'disabled',
             icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anthropic.com&size=64'
+        },
+        { 
+            id: 'elevenlabs', 
+            name: 'Eleven Labs', 
+            description: 'AI voice generation and speech synthesis',
+            icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://elevenlabs.io&size=64'
         },
         { 
             id: 'disabled', 
             name: 'Disabled', 
             description: 'Turn off agent models',
-            status: 'available',
             icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
             </svg>`
         }
     ]
+
+    // Derived state: which providers are enabled (have tokens or are built-in)
+    const enabledProviders = $derived.by(() => {
+        return aiProviders.filter(provider => {
+            if (provider.id === 'writer' || provider.id === 'disabled') return true
+            return aiTokens[provider.id]?.trim()
+        })
+    })
 
     // WebAuthn credential options
     const credentialOptions = {
@@ -404,15 +421,26 @@
     }
 
     function handleAiProviderChange(providerId) {
-        // Find the provider to check if it's disabled
-        const provider = aiProviders.find(p => p.id === providerId)
-        if (provider && provider.status === 'disabled') {
-            console.log('Cannot select disabled AI provider:', providerId)
-            return // Prevent selection of disabled providers
+        // Only allow selection of enabled providers
+        const isEnabled = enabledProviders.some(p => p.id === providerId)
+        if (!isEnabled) {
+            console.log('Cannot select provider without token:', providerId)
+            return
         }
         
         selectedAiProvider = providerId
         localStorage.setItem('selectedAiProvider', providerId)
+    }
+
+    function handleAiTokenChange(providerId, token) {
+        aiTokens[providerId] = token
+        localStorage.setItem(`aiToken_${providerId}`, token)
+        
+        // If the currently selected provider's token is cleared, switch to writer
+        if (selectedAiProvider === providerId && !token.trim()) {
+            selectedAiProvider = 'writer'
+            localStorage.setItem('selectedAiProvider', 'writer')
+        }
     }
 
     function handleSyncServerUrlChange(url) {
@@ -841,6 +869,12 @@ To import this data back into DARC, use the import function in Settings.
         customNewTabUrl = ''
         syncServerUrl = 'https://darc.cloudless.one'
         syncServerToken = ''
+        aiTokens = {
+            gemini: '',
+            openai: '',
+            anthropic: '',
+            elevenlabs: ''
+        }
         
         localStorage.removeItem('defaultSearchEngine')
         localStorage.removeItem('defaultNewTabUrl')
@@ -849,6 +883,11 @@ To import this data back into DARC, use the import function in Settings.
         localStorage.removeItem('customNewTabUrl')
         localStorage.removeItem('syncServerUrl')
         localStorage.removeItem('syncServerToken')
+        
+        // Clear AI tokens
+        Object.keys(aiTokens).forEach(providerId => {
+            localStorage.removeItem(`aiToken_${providerId}`)
+        })
         
         // Clear biometric authentication
         clearBiometricAuth()
@@ -869,6 +908,14 @@ To import this data back into DARC, use the import function in Settings.
         if (savedCustomSearchUrl) customSearchUrl = savedCustomSearchUrl
         if (savedCustomNewTabUrl) customNewTabUrl = savedCustomNewTabUrl
         if (savedSyncServerUrl) syncServerUrl = savedSyncServerUrl
+        
+        // Load AI tokens
+        Object.keys(aiTokens).forEach(providerId => {
+            const savedToken = localStorage.getItem(`aiToken_${providerId}`)
+            if (savedToken) {
+                aiTokens[providerId] = savedToken
+            }
+        })
         
         // Check for stored credential
         hasStoredCredential = !!localStorage.getItem('darc-credential-id')
@@ -897,7 +944,8 @@ To import this data back into DARC, use the import function in Settings.
             <h3 class="section-title">Agent Models</h3>
             <div class="setting-cards">
                 {#each aiProviders as provider}
-                    <div class="setting-card {selectedAiProvider === provider.id ? 'selected' : ''} {provider.status === 'disabled' ? 'disabled' : ''}" 
+                    {@const isEnabled = enabledProviders.some(p => p.id === provider.id)}
+                    <div class="setting-card {selectedAiProvider === provider.id ? 'selected' : ''}" 
                          role="button" 
                          tabindex="0"
                          onclick={() => handleAiProviderChange(provider.id)}
@@ -916,9 +964,23 @@ To import this data back into DARC, use the import function in Settings.
                             </div>
                         </div>
                         <div class="setting-status">
-                            <span class="status-indicator {provider.status}"></span>
-                            <span class="status-text">{provider.status === 'available' ? 'Available' : 'Coming Soon'}</span>
+                            <span class="status-indicator {isEnabled ? 'available' : 'disabled'}"></span>
+                            <span class="status-text">{isEnabled ? 'Available' : (provider.id === 'writer' || provider.id === 'disabled' ? 'Built-in' : 'Token Required')}</span>
                         </div>
+                        {#if provider.id !== 'writer' && provider.id !== 'disabled'}
+                            <div class="token-input-section" 
+                                 onclick={(e) => e.stopPropagation()}
+                                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+                                 role="presentation">
+                                <input 
+                                    type="password"
+                                    bind:value={aiTokens[provider.id]}
+                                    oninput={(e) => handleAiTokenChange(provider.id, e.target.value)}
+                                    placeholder="API Token"
+                                    class="ai-token-input"
+                                />
+                            </div>
+                        {/if}
                         {#if selectedAiProvider === provider.id}
                             <div class="selected-indicator">
                                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -1635,5 +1697,33 @@ To import this data back into DARC, use the import function in Settings.
 
     .animate-spin {
         animation: spin 1s linear infinite;
+    }
+
+    /* AI Token Input Styles */
+    .token-input-section {
+        margin-top: 8px;
+        width: 100%;
+    }
+
+    .ai-token-input {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 4px;
+        padding: 6px 8px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 11px;
+        font-family: 'SF Mono', Consolas, monospace;
+        width: 100%;
+        transition: all 0.2s ease;
+    }
+
+    .ai-token-input:focus {
+        outline: none;
+        border-color: rgba(59, 130, 246, 0.3);
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .ai-token-input::placeholder {
+        color: rgba(255, 255, 255, 0.4);
     }
 </style>

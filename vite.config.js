@@ -191,7 +191,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
-        agent: './agent.html',
+        // agent: './agent.html',
         // web_request_test: './web_request_test.html',
         // tldraw_webview: './tldraw_webview.html'
       }

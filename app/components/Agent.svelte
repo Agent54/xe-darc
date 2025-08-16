@@ -127,18 +127,100 @@
 				</svg>
 			`
 		},
+		
+		{
+			name: 'Mark (ElevenLabs)',
+			id: 'elevenlabs-mark',
+			avatarTitle: 'M',
+			icon: `
+				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#3b82f6" viewBox="100 100 680 680" fill="none">
+				<path d="M468 292H528V584H468V292Z" fill="#3b82f6"/>
+				<path d="M348 292H408V584H348V292Z" fill="#3b82f6"/>
+				</svg>
+			`
+		},
+		{
+			name: 'River (ElevenLabs)',
+			id: 'elevenlabs-dana',
+			avatarTitle: 'D',
+			icon: `
+				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#ec4899" viewBox="100 100 680 680" fill="none">
+				<path d="M468 292H528V584H468V292Z" fill="#ec4899"/>
+				<path d="M348 292H408V584H348V292Z" fill="#ec4899"/>
+				</svg>
+			`
+		},
+		{
+			name: 'River (ElevenLabs)',
+			id: 'elevenlabs-river-slow',
+			avatarTitle: 'Rs',
+			icon: `
+				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#ec4899" viewBox="100 100 680 680" fill="none">
+				<path d="M468 292H528V584H468V292Z" fill="#ec4899"/>
+				<path d="M348 292H408V584H348V292Z" fill="#ec4899"/>
+				</svg>
+			`
+		},
+		{
+			name: 'River (ElevenLabs)',
+			id: 'elevenlabs-river-fast',
+			avatarTitle: 'Rf',
+			icon: `
+				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#ec4899" viewBox="100 100 680 680" fill="none">
+				<path d="M468 292H528V584H468V292Z" fill="#ec4899"/>
+				<path d="M348 292H408V584H348V292Z" fill="#ec4899"/>
+				</svg>
+			`
+		},
+		{
+			name: 'River (ElevenLabs)',
+			id: 'elevenlabs-river',
+			avatarTitle: 'R',
+			icon: `
+				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#ec4899" viewBox="100 100 680 680" fill="none">
+				<path d="M468 292H528V584H468V292Z" fill="#ec4899"/>
+				<path d="M348 292H408V584H348V292Z" fill="#ec4899"/>
+				</svg>
+			`
+		},
 		{
 			name: 'ElevenLabs Voice',
 			id: 'elevenlabs-voice',
-			avatarTitle: '11',
 			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-					<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-					<circle cx="12" cy="12" r="3" fill="currentColor"/>
+				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="white"viewBox="100 100 680 680" fill="none">
+				<path d="M468 292H528V584H468V292Z" fill="white"/>
+				<path d="M348 292H408V584H348V292Z" fill="white"/>
 				</svg>
 			`
 		}
 	]
+
+	// Function to parse XML tags and determine model
+	function parseVoiceContent(content) {
+		// Check for <mark>...</mark> tags
+		const markMatch = content.match(/<mark>(.*?)<\/mark>/s)
+		if (markMatch) {
+			return {
+				model: 'elevenlabs-mark',
+				cleanContent: markMatch[1]
+			}
+		}
+		
+		// Check for <river>...</river> tags
+		const riverMatch = content.match(/<river>(.*?)<\/river>/s)
+		if (riverMatch) {
+			return {
+				model: 'elevenlabs-river',
+				cleanContent: riverMatch[1]
+			}
+		}
+		
+		// No XML tags found, return original content with default voice model
+		return {
+			model: 'elevenlabs-voice',
+			cleanContent: content
+		}
+	}
 
 	// Streaming markdown state
 	let streamingRenderer = $state(null)
@@ -2188,6 +2270,22 @@ The current system demonstrates strong performance and security characteristics.
 		setTimeout(streamNextChunk, 350)
 	}
 
+	// Create agent iframe URL with Eleven Labs token
+	const agentIframeUrl = $derived.by(() => {
+		if (typeof localStorage === 'undefined') {
+			return 'https://localhost:5194/agent'
+		}
+		
+		const elevenlabsToken = localStorage.getItem('aiToken_elevenlabs')
+		if (!elevenlabsToken) {
+			return 'https://localhost:5194/agent'
+		}
+		
+		const url = new URL('https://localhost:5194/agent')
+		url.searchParams.set('agent_id', elevenlabsToken)
+		return url.toString()
+	})
+
 	onMount(() => {
 		client = new AgentClient({
 			agent: 'chat',
@@ -2201,6 +2299,15 @@ The current system demonstrates strong performance and security characteristics.
 			// client.send(JSON.stringify({ type: "join", user: "user123" }));
 		}
 
+		// Load selected model from localStorage
+		if (typeof localStorage !== 'undefined') {
+			const savedModel = localStorage.getItem('selectedModel')
+			if (savedModel) {
+				selectedModel = savedModel
+				console.log('Loaded model from localStorage:', savedModel)
+			}
+		}
+
 		// Listen for messages from ElevenLabs voice agent iframe
 		async function handleAgentMessage(event) {
 			if (event.data.type === 'agent-message') {
@@ -2212,14 +2319,21 @@ The current system demonstrates strong performance and security characteristics.
 				// Add message to chat history
 				const messageId = crypto.randomUUID()
 				const content = message.message || message.text || message.content || JSON.stringify(message)
+				
+				// Parse XML tags for voice agent responses (only for assistant messages)
+				let parsedContent = { model: 'elevenlabs-voice', cleanContent: content }
+				if (message.source !== 'user') {
+					parsedContent = parseVoiceContent(content)
+				}
+				
 				const agentMessage = {
 					id: messageId,
 					role: message.source === 'user' ? 'user' : 'assistant',
-					content: content,
-					rawContent: content,
+					content: parsedContent.cleanContent,
+					rawContent: parsedContent.cleanContent,
 					timestamp: Date.now(),
 					streaming: false,
-					model: 'elevenlabs-voice'
+					model: message.source === 'user' ? 'elevenlabs-voice' : parsedContent.model
 				}
 				
 				console.log('Created agent message:', agentMessage)
@@ -2229,7 +2343,7 @@ The current system demonstrates strong performance and security characteristics.
 				// Initialize content for non-streaming assistant messages
 				if (agentMessage.role === 'assistant') {
 					await tick()
-					initializeNonStreamingMessage(messageId, content)
+					initializeNonStreamingMessage(messageId, parsedContent.cleanContent)
 				}
 			}
 		}
@@ -2300,15 +2414,6 @@ The current system demonstrates strong performance and security characteristics.
 
 		client.onclose = () => console.log('Disconnected from agent')
 		
-		// Load selected model from localStorage
-		if (typeof localStorage !== 'undefined') {
-			const savedModel = localStorage.getItem('selectedModel')
-			if (savedModel) {
-				selectedModel = savedModel
-				console.log('Loaded model from localStorage:', savedModel)
-			}
-		}
-		
 		// Auto-focus the input when sidebar opens
 		const input = document.querySelector('.agent-conversation-input')
 		if (input) {
@@ -2375,7 +2480,7 @@ The current system demonstrates strong performance and security characteristics.
 
 			{#if conv}
 				<!-- TODO: orange microphone indicator and background mic when sidebar closed, secure uri -->
-				<iframe style="background-color: #000; height: 100px;" title="voice-agent" src="https://localhost:5194/agent" allow="microphone; screen-wake-lock 'self'"></iframe>
+				<iframe style="background-color: #000; height: 100px;" title="voice-agent" src={agentIframeUrl} allow="microphone; clipboard-read; clipboard-write; screen-wake-lock 'self'"></iframe>
 			{/if}
 		</div>
 

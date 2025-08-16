@@ -2461,7 +2461,7 @@
     <div class="header-icon-button view-mode-icon" 
         role="button"
         tabindex="0"
-        onclick={toggleViewMode}
+        onmousedown={toggleViewMode}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleViewMode() } }}
         class:hidden={focusModeEnabled && !focusModeHovered}>
         {@html getViewModeIcon(viewMode)}

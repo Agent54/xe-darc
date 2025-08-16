@@ -955,3 +955,5 @@ badge api + aggregate batch api for folders
 disign portfolio ispo
 
 fix broken hmr due to app import init with sideeffects
+
+vscode iframe clipboard move/ iframe support for frames for testing and internal apps
