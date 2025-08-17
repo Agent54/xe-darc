@@ -957,3 +957,33 @@ disign portfolio ispo
 fix broken hmr due to app import init with sideeffects
 
 vscode iframe clipboard move/ iframe support for frames for testing and internal apps
+
+dictate mode
+
+vorlesen und cobrowsing. 
+
+personality with common expressions and websites they read.
+
+agent tools: pricing/quota insights and limits , sidebar etc, read background pages, background tab group, reminders
+
+fix the readpage textonly
+
+
+talk feedback: chrome slide not convincing > is this bad? doe we solve this > losing audience
+
+captured by their ai > point out the opportunity to make uers agents again, slide before that users had their data!, taking data ownership in cloud world failed
+
+launcher bad name
+
+design base instructions for html output
+
+app create workflow with voice agent and then edit and then modify the browser itself
+
+programmatic access to data and concepts
+
+voice references with "here" and mouse pointer
+
+
+fix chrome 39!
+
+taints: personal data, external inputs (safe/unsafe), exfiltration targets, trusted models

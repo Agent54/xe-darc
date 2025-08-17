@@ -26,3 +26,4 @@ self.addEventListener('fetch', (e) => {
 // console.log('sw loaded')
 
 // isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac
+

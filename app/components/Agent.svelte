@@ -206,6 +206,33 @@
 			}
 		}
 		
+		// Check for <dana>...</dana> tags
+		const danaMatch = content.match(/<dana>(.*?)<\/dana>/s)
+		if (danaMatch) {
+			return {
+				model: 'elevenlabs-dana',
+				cleanContent: danaMatch[1]
+			}
+		}
+		
+		// Check for <riverslow>...</riverslow> tags
+		const riverslowMatch = content.match(/<river_slow>(.*?)<\/river_slow>/s)
+		if (riverslowMatch) {
+			return {
+				model: 'elevenlabs-river-slow',
+				cleanContent: riverslowMatch[1]
+			}
+		}
+		
+		// Check for <riverfast>...</riverfast> tags
+		const riverfastMatch = content.match(/<river_fast>(.*?)<\/river_fast>/s)
+		if (riverfastMatch) {
+			return {
+				model: 'elevenlabs-river-fast',
+				cleanContent: riverfastMatch[1]
+			}
+		}
+		
 		// Check for <river>...</river> tags
 		const riverMatch = content.match(/<river>(.*?)<\/river>/s)
 		if (riverMatch) {
@@ -3045,56 +3072,58 @@ The current system demonstrates strong performance and security characteristics.
 				</div>
 			{/if}
 
-			<div class="agent-chat-input-container">
-				<div class="agent-textarea-container">
-					<textarea
-						class="agent-conversation-input"
-						bind:value={conversation}
-						onkeydown={handleKeyDown}
-						placeholder="We can do anything..."
-						rows="3"
-					></textarea>
-					{#if isProcessing}
-						<button
-							class="agent-stop-button"
-							onmousedown={stopCurrentTask}
-							title="Stop Current Task"
-							aria-label="Stop Current Task"
-						>
-							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z"
-								/>
-							</svg>
-						</button>
-					{/if}
+				</div>
+
+	<div class="agent-bottom-sticky">
+		<div class="agent-chat-input-container">
+			<div class="agent-textarea-container">
+				<textarea
+					class="agent-conversation-input"
+					bind:value={conversation}
+					onkeydown={handleKeyDown}
+					placeholder="We can do anything..."
+					rows="3"
+				></textarea>
+				{#if isProcessing}
 					<button
-						class="agent-send-button"
-						onmouseup={sendMessage}
-						disabled={!conversation.trim()}
-						title="Send (Enter)"
-						aria-label="Send (Enter)"
+						class="agent-stop-button"
+						onmousedown={stopCurrentTask}
+						title="Stop Current Task"
+						aria-label="Stop Current Task"
 					>
 						<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
-								d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"
+								d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z"
 							/>
 						</svg>
 					</button>
-				</div>
+				{/if}
+				<button
+					class="agent-send-button"
+					onmouseup={sendMessage}
+					disabled={!conversation.trim()}
+					title="Send (Enter)"
+					aria-label="Send (Enter)"
+				>
+					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"
+						/>
+					</svg>
+				</button>
+			</div>
 
-				<div class="agent-action-buttons">
-					<button class="agent-quick-action" onmousedown={() => handleActionButton('search')}>search</button>
-					<button class="agent-quick-action" onmousedown={() => handleActionButton('ask')}>ask</button>
-					<button class="agent-quick-action" onmousedown={() => handleActionButton('do')}>do</button>
-					<button class="agent-quick-action" onmousedown={() => handleActionButton('remember')}>remember</button>
-					<button class="agent-quick-action" onmousedown={() => handleActionButton('listen')}>listen</button>
-					<button class="agent-quick-action" onmousedown={() => handleActionButton('see')}>see</button>
-				</div>
+			<div class="agent-action-buttons">
+				<button class="agent-quick-action" onmousedown={() => handleActionButton('search')}>search</button>
+				<button class="agent-quick-action" onmousedown={() => handleActionButton('ask')}>ask</button>
+				<button class="agent-quick-action" onmousedown={() => handleActionButton('do')}>do</button>
+				<button class="agent-quick-action" onmousedown={() => handleActionButton('remember')}>remember</button>
+				<button class="agent-quick-action" onmousedown={() => handleActionButton('listen')}>listen</button>
+				<button class="agent-quick-action" onmousedown={() => handleActionButton('see')}>see</button>
 			</div>
 		</div>
 
@@ -3103,6 +3132,7 @@ The current system demonstrates strong performance and security characteristics.
 				<button class="agent-clear-button" onmouseup={clearHistory}> New </button>
 			</div>
 		{/if}
+	</div>
 
 		<!-- Scroll padding for bringing input to top -->
 		{#if chatHistory.length > 0}
@@ -3504,14 +3534,22 @@ The current system demonstrates strong performance and security characteristics.
 		}
 	}
 
+	.agent-bottom-sticky {
+		position: sticky;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.95);
+		backdrop-filter: blur(20px);
+		z-index: 10;
+	}
+
 	.agent-chat-input-container {
 		padding: 16px 0;
 		border-top: 1px solid rgba(255, 255, 255, 0.04);
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
-		/* padding-left: 20px;
-		padding-right: 20px; */
+		padding-left: 20px;
+		padding-right: 20px;
 	}
 
 	.agent-model-select {
@@ -3535,10 +3573,6 @@ The current system demonstrates strong performance and security characteristics.
 		background: rgba(255, 255, 255, 0.08);
 		border-color: rgba(255, 255, 255, 0.12);
 	}
-
-
-
-
 
 	.agent-chat-message[class*='queued'] {
 		opacity: 0.6;
