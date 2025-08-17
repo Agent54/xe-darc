@@ -14,3 +14,9 @@ secrets.json
 .claude/claude.json
 .wrangler
 .dev.vars
+certs/device.key
+certs/rootCA.pem
+certs/rootCA.key
+certs/localhost.csr
+certs/rootCA.srl
+certs/localhost.crt

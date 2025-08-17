@@ -128,6 +128,26 @@ setInterval(() => {
 let initialLoad = true
 // TODO: disable leading ?
 const refresh = throttle(async function (spaceId) {
+
+    // db.viewCleanup().then(function (result) {
+    //    console.log('viewCleanup', result)
+    //   }).catch(function (err) {
+    //     console.log(err)
+    //   })
+
+    // const explain = await db.explain({
+    //     selector: {
+    //         archive: { $lt: 'deleted' },
+    //         spaceId: spaceId ? spaceId : { $exists: true },
+    //     },
+    //     fields: initialLoad ? undefined : ['_id'],
+    //     sort: sortOrder.map(key => ({ [key] : 'asc' })),
+    //     limit: 4000
+    // }).catch(err => console.error(err))
+    // console.log('explain', explain)
+
+    // console.time('qry')
+    // console.timeLog('updt', 'exec refresh')
     const { docs: newDocs } = await db.find({
         selector: {
             archive: { $lt: 'deleted' },
@@ -138,11 +158,16 @@ const refresh = throttle(async function (spaceId) {
         limit: 4000
     }).catch(err => console.error(err))
 
+    // console.timeEnd('qry')
+    // console.log('qry', newDocs.length)
+
+    // console.timeLog('updt', 'exec received docs')
+
     if (newDocs.length > 3000) {
         console.error('approaching max data size, needs paging and partition support now')
     }
 
-    console.log({ newDocs, docs })
+    // console.log({ newDocs, docs })
 
     let activeTabIdExists = false
 
@@ -243,6 +268,7 @@ const refresh = throttle(async function (spaceId) {
     spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
     
     initialLoad = false
+    // console.timeEnd('updt')
 }, 200)
 
 let lastLocalSeq = null
@@ -256,13 +282,14 @@ const changesFeed = db.changes({
 }).on('change', async change => {
     lastLocalSeq = change.seq
 
-    console.log('change', change)
+    // console.log('change', change)
+    // console.timeLog('updt', 'change')
     // if (change.doc instanceof type.errors) {
     //     console.error(change.doc.summary, change.doc)
     //     return
     // }
 
-    const oldDoc = docs[change.id]
+    const oldDoc = docs[change.id]?._rev ? docs[change.id] : null
     changes = [change, ...changes]
     if (editingId !== change.id) {
         docs[change.id] = change.doc
@@ -271,6 +298,7 @@ const changesFeed = db.changes({
         for (const key of ['canvas', 'pinned', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
                 if (change.doc.spaceId && change.doc.type !== 'space' && change.doc.type !== 'activity') {
+                    console.log('refreshing', change.doc.spaceId)
                     refresh(change.doc.spaceId)
                 } else if (change.doc.type === 'space') {
                     spaces[change.doc._id] = { ...spaces[change.doc._id], ...change.doc }
@@ -288,6 +316,8 @@ function activate(tabId) {
     // console.log('activate tab id ..', {tabId})
 
     spaceMeta.activeTabId = tabId
+
+    // console.timeLog('updt', 'activate')
 
     const activeSpace = spaces[spaceMeta.activeSpace]
 
@@ -606,6 +636,7 @@ export default {
     },
     
     newTab: (spaceId, { url, title, opener, preview, lightbox, shouldFocus } = {}) => {
+        // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
 
         const tab = {
@@ -623,11 +654,19 @@ export default {
             lightbox: !!lightbox
         }
 
-        if (shouldFocus) {
+        if (!preview && !lightbox) {
+            spaces[spaceId].tabs.push(tab)
+            docs[tab._id] = tab
+        }
+
+        if (shouldFocus && !preview && !lightbox) {
             activate(_id)
         }
 
-        db.put(tab)
+        setTimeout(() => {
+            db.put(tab)
+        },1000)
+
         return tab
     },
 

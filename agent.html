@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #000;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            text-align: center;
+            padding: 1rem;
+        }
+        
+        .status {
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .connecting {
+            opacity: 0.7;
+        }
+        
+        .connected {
+            color: #10b981;
+        }
+        
+        .error {
+            color: #ef4444;
+        }
+        
+        .controls {
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            justify-content: center;
+            height: 40px;
+        }
+        
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        .volume-slider {
+            width: 60px;
+            height: 3px;
+            background: #333;
+            border-radius: 2px;
+            outline: none;
+            appearance: none;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #10b981;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .volume-slider::-moz-range-thumb {
+            width: 12px;
+            height: 12px;
+            background: #10b981;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .audiometers {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .meter {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        .meter-label {
+            font-size: 0.6rem;
+            opacity: 0.7;
+            min-width: 20px;
+        }
+        
+        .meter-bar {
+            width: 30px;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .meter-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: linear-gradient(to right, #10b981, #22c55e, #eab308, #ef4444);
+            transition: width 0.1s ease;
+            border-radius: 3px;
+        }
+        
+        .volume-label {
+            font-size: 0.6rem;
+            opacity: 0.7;
+        }
+        
+        .volume-value {
+            font-size: 0.6rem;
+            opacity: 0.7;
+            min-width: 25px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="status" class="status connecting">Connecting to agent...</div>
+        
+        <div id="controls" class="controls" style="display: none;">
+            <div class="volume-control">
+                <span class="volume-label">Volume:</span>
+                <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.01" value="0.5">
+                <span id="volumeValue" class="volume-value">50%</span>
+            </div>
+            
+            <div class="audiometers">
+                <div class="meter">
+                    <div class="meter-label">Input</div>
+                    <div class="meter-bar">
+                        <div id="inputMeter" class="meter-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="meter">
+                    <div class="meter-label">Output</div>
+                    <div class="meter-bar">
+                        <div id="outputMeter" class="meter-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { Conversation } from '@elevenlabs/client'
+        
+        const statusEl = document.getElementById('status')
+        const controlsEl = document.getElementById('controls')
+        const volumeSlider = document.getElementById('volumeSlider')
+        const volumeValue = document.getElementById('volumeValue')
+        const inputMeter = document.getElementById('inputMeter')
+        const outputMeter = document.getElementById('outputMeter')
+        
+        let conversation = null
+        let volumePollingInterval = null
+        
+        // Update volume display
+        function updateVolumeDisplay(value) {
+            volumeValue.textContent = Math.round(value * 100) + '%'
+        }
+        
+        // Update meter display
+        function updateMeter(element, volume) {
+            const percentage = Math.min(volume * 100, 100)
+            element.style.width = percentage + '%'
+        }
+        
+        // Volume slider handler
+        volumeSlider.addEventListener('input', async (e) => {
+            const volume = parseFloat(e.target.value)
+            updateVolumeDisplay(volume)
+            
+            if (conversation) {
+                try {
+                    await conversation.setVolume({ volume: volume })
+                    console.log('Volume set to:', volume)
+                } catch (error) {
+                    console.error('Failed to set volume:', error)
+                }
+            }
+        })
+        
+        // Start volume polling
+        function startVolumePolling() {
+            if (volumePollingInterval) {
+                clearInterval(volumePollingInterval)
+            }
+            
+            volumePollingInterval = setInterval(async () => {
+                if (conversation) {
+                    try {
+                        const inputVolume = await conversation.getInputVolume()
+                        const outputVolume = await conversation.getOutputVolume()
+                        
+                        updateMeter(inputMeter, inputVolume)
+                        updateMeter(outputMeter, outputVolume)
+                    } catch (error) {
+                        console.error('Failed to get volume levels:', error)
+                    }
+                }
+            }, 100) // Poll every 100ms for smooth animation
+        }
+        
+        // Stop volume polling
+        function stopVolumePolling() {
+            if (volumePollingInterval) {
+                clearInterval(volumePollingInterval)
+                volumePollingInterval = null
+            }
+        }
+        
+        // Get agent ID and token from query parameters
+        function getAgentIdFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search)
+            return urlParams.get('agent_id') || ''
+        }
+        
+        // function getTokenFromUrl() {
+        //     const urlParams = new URLSearchParams(window.location.search)
+        //     return urlParams.get('token') || ''
+        // }
+        
+        async function startAgent() {
+            try {
+                const agentId = getAgentIdFromUrl()
+                // const token = getTokenFromUrl()
+                
+                if (!agentId) {
+                    statusEl.textContent = 'No agent ID provided in URL'
+                    statusEl.className = 'status error'
+                    return
+                }
+                
+                // if (!token) {
+                //     statusEl.textContent = 'No Eleven Labs token provided'
+                //     statusEl.className = 'status error'
+                //     return
+                // }
+                
+                statusEl.textContent = `Starting conversation with agent ${agentId}...`
+                
+                const conv = await Conversation.startSession({
+                    agentId: agentId,
+                    // apiKey: token,
+                    // onConnect - handler called when the conversation websocket connection is established.
+                    // onDisconnect - handler called when the conversation websocket connection is ended.
+                    // onMessage - handler called when a new text message is received. These can be tentative or final transcriptions of user voice, replies produced by LLM. Primarily used for handling conversation transcription.
+                    // onError - handler called when an error is encountered.
+                    // onStatusChange - handler called whenever connection status changes. Can be connected, connecting and disconnected (initial).
+                    // onModeChange - handler called when a status changes, eg. agent switches from speaking to listening, or the other way around.
+                    onConnect: () => {
+                        console.log('onConnect')
+                    },
+                    onDisconnect: () => {
+                        console.log('onDisconnect')
+                        stopVolumePolling()
+                        controlsEl.style.display = 'none'
+                    },
+                    
+                    onMessage: (message) => {
+                        console.log('onMessage', message)
+                        // Send message to parent frame
+                        window.parent.postMessage({
+                            type: 'agent-message',
+                            data: message
+                        }, '*')
+                    },
+                    onError: (error) => {
+                        console.log('onError', error)
+                    },
+                    onStatusChange: (status) => {
+                        console.log('onStatusChange', status)
+                    },
+                    onModeChange: (mode) => {
+                        console.log('onModeChange', mode)
+                    }
+                })
+                
+                conversation = conv
+                statusEl.textContent = 'Voice Agent connected'
+                statusEl.className = 'status connected'
+                
+                // Show controls and start volume polling
+                controlsEl.style.display = 'flex'
+                startVolumePolling()
+                
+                // Set initial volume
+                await conversation.setVolume({ volume: 0.5 })
+                
+                // Auto-cleanup on page unload
+                window.addEventListener('beforeunload', async () => {
+                    stopVolumePolling()
+                    await conv.endSession()
+                })
+                
+            } catch (error) {
+                console.error('Failed to start agent:', error)
+                statusEl.textContent = 'Failed to connect to agent'
+                statusEl.className = 'status error'
+            }
+        }
+        
+        // Start immediately when loaded
+        startAgent()
+    </script>
+</body>
+</html>

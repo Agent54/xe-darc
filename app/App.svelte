@@ -12,7 +12,8 @@
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import Favicon from './components/Favicon.svelte'
     import UrlRenderer from './components/UrlRenderer.svelte'
-    import { onMount, untrack } from 'svelte'
+    import Apps from './components/Apps.svelte'
+    import { onMount, untrack, tick } from 'svelte'
     import data from './data.svelte.js'
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
@@ -74,8 +75,10 @@
         'ephemeral:3'
     ]
 
+    const closed = $state({})
+
     // Get all tabs from the current active space
-    let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs) || []))
+    let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs?.filter(tab => !closed[tab._rev])) || []))
     let visibilityTimers = new Map()
     let hoveredTab = $state(null)
     let hoverTimeout = null
@@ -107,6 +110,7 @@
     let sidebarStateLoaded = $state(false)
     let focusModeEnabled = $state(false)
     let focusModeHovered = $state(false)
+    let showAppsOverlay = $state(false)
     let contentAreaScrimActive = $state(false)
     let hasLeftToggle = $state(false)
     let darkMode = $state(true)
@@ -398,8 +402,10 @@
     window.addEventListener('darc-new-tab-from-frame', handleFrameNewTab)
     window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
+    window.addEventListener('close-apps-overlay', () => { showAppsOverlay = false })
 
-    function openNewTab() {        
+    function openNewTab() {  
+        collapseAndRemovePlaceholders()      
         const newTab = data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (newTab) {
             setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
@@ -442,6 +448,10 @@
             event.stopImmediatePropagation()
             handleZoomReset()
         }
+        if (event.key === 'Escape' && showAppsOverlay) {
+            event.preventDefault()
+            showAppsOverlay = false
+        }
     }
 
     function handleZoomReset() {
@@ -468,7 +478,7 @@
         }
     }
 
-    function handleTabClose(event) {
+    function handleTabClose (event) {
         if (tabs.length > 0 && data.spaceMeta.activeTabId) {
             const activeTab = data.docs[data.spaceMeta.activeTabId]
             if (activeTab) {
@@ -479,8 +489,8 @@
         }
     }
 
-    function openTab(tab, index) {
-        console.log('openTab called for tab:', tab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
+    async function activateTab (tab, index) {
+        // console.log('activateTab called for tab:', tab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
         // Clear the tabChangeFromScroll flag when user explicitly clicks a tab
         if (tabChangeFromScroll) {
             tabChangeFromScroll = false
@@ -495,7 +505,9 @@
             data.previous()
         } else {
             // Set this tab as active using the data store function
-            console.log('calling data.activate for tab:', tab.id)
+            // console.log('calling data.activate for tab:', tab.id)
+            data.spaceMeta.activeTabId = tab.id  
+            await tick()
             data.activate(tab.id)
         }
         
@@ -507,7 +519,6 @@
 
     let tabButtons = $state({})
 
-
     // Effect to handle scrolling to active tab when it changes or when sidebars are toggled
     $effect(() => {
         // Watch for changes to active tab and sidebar state
@@ -518,7 +529,7 @@
             return
         }
         
-        console.log('scroll effect triggered for tab:', data.spaceMeta.activeTabId, 'tabChangeFromScroll:', {tabChangeFromScroll})
+        // console.log('scroll effect triggered for tab:', data.spaceMeta.activeTabId, 'tabChangeFromScroll:', {tabChangeFromScroll})
 
         // Don't scroll if tab change was caused by scrolling
         // if (tabChangeFromScroll) {
@@ -530,19 +541,19 @@
         
         // Only scroll frame into view if tab change was NOT caused by scrolling
         if (!tabChangeFromScroll) {
-            setTimeout(() => {
+            // setTimeout(() => {
                 if (activeFrameWrapper) {
-                    console.log('calling scrollIntoView for tab:', data.spaceMeta.activeTabId)
+                    // console.log('calling scrollIntoView for tab:', data.spaceMeta.activeTabId)
                     activeFrameWrapper.scrollIntoView({ 
                         behavior:  'instant' // isWindowResizing ? 'auto' : 'smooth' 
                     })
                 } else {
                     console.warn('Frame wrapper not available for tab:', data.spaceMeta.activeTabId)
                 }
-            }, 10)
+            // }, 0)
         }
         
-        setTimeout(() => {
+        // setTimeout(() => {
             if (tabButtons[data.spaceMeta.activeTabId]) {
                 tabButtons[data.spaceMeta.activeTabId].scrollIntoView({
                     behavior: isWindowResizing ? 'auto' : 'smooth',
@@ -550,7 +561,7 @@
                     block: 'nearest'
                 })
             }
-        }, 10)
+        // }, 0)
         
         // Reset flag after scroll animation completes (longer delay for smooth scrolling)
         // setTimeout(() => {
@@ -563,7 +574,7 @@
         const leftCount = leftPinnedTabs.length
         const rightCount = rightPinnedTabs.length
 
-        console.log({leftCount, rightCount, tabChangeFromScroll})
+        // console.log({leftCount, rightCount, tabChangeFromScroll})
         
         if (tabChangeFromScroll || !pinsInit) {
             pinsInit = true
@@ -573,10 +584,10 @@
         untrack(() => {
              // Find the active tab in unpinned tabs
             if (data.spaceMeta.activeTabId) {
-                console.log('pins effect triggered for tab:', data.spaceMeta.activeTabId)
+                // console.log('pins effect triggered for tab:', data.spaceMeta.activeTabId)
                 const activeFrameWrapper = data.frames[data.spaceMeta.activeTabId]?.wrapper
                 // Scroll the active unpinned tab into view after pinned tabs layout change
-                setTimeout(() => {
+                // setTimeout(() => {
                     if (activeFrameWrapper) {
                         activeFrameWrapper.scrollIntoView({ 
                             behavior: 'instant' // isWindowResizing ? 'auto' : 'smooth' 
@@ -584,14 +595,14 @@
                     } else {
                         // If no specific active tab, scroll to the beginning of unpinned section
                         const firstUnpinnedTab = unpinnedTabs[0]
-                        const wrapper = data.frames[firstUnpinnedTab.id]?.wrapper
+                        const wrapper = data.frames[firstUnpinnedTab?.id]?.wrapper
                         if (wrapper) {
                             wrapper.scrollIntoView({ 
                                 behavior: 'instant' // isWindowResizing ? 'auto' : 'smooth' 
                             })
                         }
                     }
-                }, 200)
+                // }, 200)
             }
         })
        
@@ -601,6 +612,7 @@
         if (event) event.stopPropagation()
 
         data.closeTab(data.spaceMeta.activeSpace, tab.id)
+        closed[tab._rev] = Date.now()
 
         // TODO: find better approahc If closing the last tab, open a new tab
         // if (result.wasLastTab) {
@@ -798,48 +810,47 @@
     }
 
 
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            const tabId = entry.target.id.replace('tab_', '')
-            const tab = data.docs[tabId]
-            
-            if (entry.isIntersecting) {
-                // Start timer when tab becomes visible
-                const timer = setTimeout(() => {
-                    if (tabChangeFromScroll) {
-                        return
-                    }
-                    
-                    if (entry.isIntersecting && tab) {
-                        console.log('intersection observer activating tab:', tab.id)
-                        // Set flag BEFORE changing active tab to prevent race condition
-                        tabChangeFromScroll = true
-                        // Clear any existing timer to prevent multiple timers
-                        if (tabChangeFromScrollTimer) {
-                            clearTimeout(tabChangeFromScrollTimer)
+    let observer = $state(null)
+    let scrollContainer = null
+    onMount(() => {
+        console.log('scrollContainer', scrollContainer)
+        observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const tabId = entry.target.id.replace('tab_', '')
+                const tab = data.docs[tabId]
+                
+                if (entry.isIntersecting) {
+                    const timer = setTimeout(() => {
+                        if (tabChangeFromScroll) {
+                            return
                         }
-                        // Change active tab directly (without untrack since we're using the flag)
-                        data.spaceMeta.activeTabId = tab.id
-                        // Reset flag after a longer delay to prevent race conditions with the effect
-                        tabChangeFromScrollTimer = setTimeout(() => {
-                            tabChangeFromScroll = false
-                            tabChangeFromScrollTimer = null
-                        }, 400)
+                        
+                        if (entry.isIntersecting && tab) {
+                            console.log('intersection observer activating tab:', tab.id)
+                            tabChangeFromScroll = true
+                            if (tabChangeFromScrollTimer) {
+                                clearTimeout(tabChangeFromScrollTimer)
+                            }
+                            data.spaceMeta.activeTabId = tab.id
+                            tabChangeFromScrollTimer = setTimeout(() => {
+                                tabChangeFromScroll = false
+                                tabChangeFromScrollTimer = null
+                            }, 400)
+                        }
+                    }, 450)
+                    visibilityTimers.set(tabId, timer)
+                } else {
+                    const timer = visibilityTimers.get(tabId)
+                    if (timer) {
+                        clearTimeout(timer)
+                        visibilityTimers.delete(tabId)
                     }
-                }, 250)
-                visibilityTimers.set(tabId, timer)
-            } else {
-                // Clear timer when tab is no longer visible
-                const timer = visibilityTimers.get(tabId)
-                if (timer) {
-                    clearTimeout(timer)
-                    visibilityTimers.delete(tabId)
                 }
-            }
+            })
+        }, {
+            threshold: 0.6,
+            root: scrollContainer
         })
-    }, {
-        threshold: 0.5, // Tab must be 50% visible
-        root: document.querySelector('.controlled-frame-container')
     })
 
     let tabChangeFromScroll = false
@@ -1449,6 +1460,10 @@
             openSidebars.add('aiAgent')
             openSidebars = new Set(openSidebars)
         }
+    }
+
+    function toggleAppsOverlay() {
+        showAppsOverlay = !showAppsOverlay
     }
 
     function toggleFocusMode() {
@@ -2286,8 +2301,8 @@
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
                         tabindex="0"
-                        onclick={() => openTab(tab, i)}
-                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTab(tab, i) } }}
+                        onmousedown={() => activateTab(tab, i)}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
                         oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
                         onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                         onmouseleave={handleTabMouseLeave}
@@ -2311,7 +2326,7 @@
                             {:else if tab.muted}
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" onclick={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
+                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
                         </div>
                     </li>
                 {/if}
@@ -2339,8 +2354,8 @@
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
                         tabindex="0"
-                        onclick={() => openTab(tab, i)}
-                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTab(tab, i) } }}
+                        onmousedown={() => activateTab(tab, i)}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
                         oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
                         onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                         onmouseleave={handleTabMouseLeave}
@@ -2364,7 +2379,7 @@
                             {:else if tab.muted}
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" onclick={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
+                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
                         </div>
                     </li>
                 {/if}
@@ -2389,8 +2404,8 @@
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
                         tabindex="0"
-                        onclick={() => openTab(tab, i)}
-                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTab(tab, i) } }}
+                        onmousedown={() => activateTab(tab, i)}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
                         oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
                         onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                         onmouseleave={handleTabMouseLeave}
@@ -2414,7 +2429,7 @@
                             {:else if tab.muted}
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" onclick={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
+                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
                         </div>
                     </li>
                 {/if}
@@ -2446,7 +2461,7 @@
     <div class="header-icon-button view-mode-icon" 
         role="button"
         tabindex="0"
-        onclick={toggleViewMode}
+        onmousedown={toggleViewMode}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleViewMode() } }}
         class:hidden={focusModeEnabled && !focusModeHovered}>
         {@html getViewModeIcon(viewMode)}
@@ -2456,7 +2471,7 @@
                  class:active={viewMode === 'default'}
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); selectViewMode('default') }}
+                 onmousedown={(e) => { e.stopPropagation(); selectViewMode('default') }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('default') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('default')}
@@ -2468,7 +2483,7 @@
                     class:active={viewMode === 'stage'}
                     role="button"
                     tabindex="0"
-                    onclick={(e) => { e.stopPropagation(); selectViewMode('stage') }}
+                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('stage') }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('stage') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('stage')}
@@ -2480,7 +2495,7 @@
                     class:active={viewMode === 'canvas'}
                     role="button"
                     tabindex="0"
-                    onclick={(e) => { e.stopPropagation(); selectViewMode('canvas') }}
+                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('canvas') }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('canvas') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('canvas')}
@@ -2492,7 +2507,7 @@
                     class:active={viewMode === 'tile'}
                     role="button"
                     tabindex="0"
-                    onclick={(e) => { e.stopPropagation(); selectViewMode('tile') }}
+                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('tile') }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('tile') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('tile')}
@@ -2504,7 +2519,7 @@
                     class:active={viewMode === 'reading'}
                     role="button"
                     tabindex="0"
-                    onclick={(e) => { e.stopPropagation(); selectViewMode('reading') }}
+                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('reading') }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('reading') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('reading')}
@@ -2516,7 +2531,7 @@
                  class:active={viewMode === 'squat'}
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); selectViewMode('squat') }}
+                 onmousedown={(e) => { e.stopPropagation(); selectViewMode('squat') }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('squat') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('squat')}
@@ -2528,7 +2543,7 @@
                 class:active={viewMode === 'notebook'}
                 role="button"
                 tabindex="0"
-                onclick={(e) => { e.stopPropagation(); selectViewMode('notebook') }}
+                onmousedown={(e) => { e.stopPropagation(); selectViewMode('notebook') }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('notebook') } }}>
             <span class="view-mode-icon-item menu-icon-item">
                 {@html getViewModeIcon('notebook')}
@@ -2591,7 +2606,7 @@
     <div class="header-icon-button focus-mode-icon" 
         role="button"
         tabindex="0"
-        onclick={toggleFocusMode}
+        onmousedown={toggleFocusMode}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFocusMode() } }}
         onmouseenter={() => { if (focusModeEnabled && hasLeftToggle) { focusModeHovered = true; contentAreaScrimActive = true; } }}
         title="Toggle Focus Mode">
@@ -2621,7 +2636,7 @@
             <div class="settings-menu-item menu-item" 
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleDarkMode() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleDarkMode() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDarkMode() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2634,7 +2649,7 @@
             <div class="settings-menu-item menu-item" 
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleGlobalTabComplete() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleGlobalTabComplete() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleGlobalTabComplete() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2648,7 +2663,7 @@
                  class:active={batterySaver}
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleBatterySaver() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleBatterySaver() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleBatterySaver() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2662,7 +2677,7 @@
                  class:active={dataSaver}
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleDataSaver() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleDataSaver() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDataSaver() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2676,7 +2691,7 @@
                 class:active={secondScreenActive}
                 role="button"
                 tabindex="0"
-                onclick={(e) => { e.stopPropagation(); toggleSecondScreen() }}
+                onmousedown={(e) => { e.stopPropagation(); toggleSecondScreen() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSecondScreen() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2690,7 +2705,7 @@
                 class:active={statusLightsEnabled}
                 role="button"
                 tabindex="0"
-                onclick={(e) => { e.stopPropagation(); toggleStatusLights() }}
+                onmousedown={(e) => { e.stopPropagation(); toggleStatusLights() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleStatusLights() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2705,7 +2720,7 @@
                 class:active={devModeEnabled}
                 role="button"
                 tabindex="0"
-                onclick={(e) => { e.stopPropagation(); toggleDevMode() }}
+                onmousedown={(e) => { e.stopPropagation(); toggleDevMode() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDevMode() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2719,7 +2734,7 @@
             <div class="settings-menu-item menu-item" 
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleLinkPreviews() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleLinkPreviews() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLinkPreviews() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2733,7 +2748,7 @@
             <div class="settings-menu-item menu-item" 
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleLightboxMode() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleLightboxMode() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLightboxMode() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2747,7 +2762,7 @@
             <div class="settings-menu-item menu-item" 
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleTabsOpenRight() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleTabsOpenRight() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleTabsOpenRight() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2764,7 +2779,7 @@
                  class:active={openSidebars.has('resources')}
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleResourcesSidebar() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleResourcesSidebar() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleResourcesSidebar() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2778,7 +2793,7 @@
                  class:active={openSidebars.has('activity')}
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleActivitySidebar() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleActivitySidebar() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleActivitySidebar() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2792,7 +2807,7 @@
                  class:active={openSidebars.has('userMods')}
                  role="button"
                  tabindex="0"
-                 onclick={(e) => { e.stopPropagation(); toggleUserModsSidebar() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleUserModsSidebar() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleUserModsSidebar() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2807,7 +2822,7 @@
                 class:active={openSidebars.has('settings')}
                 role="button"
                 tabindex="0"
-                onclick={(e) => { e.stopPropagation(); toggleSettingsSidebar() }}
+                onmousedown={(e) => { e.stopPropagation(); toggleSettingsSidebar() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSettingsSidebar() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2836,7 +2851,7 @@
                 <div class="dev-menu-item" 
                      role="button"
                      tabindex="0"
-                     onclick={(e) => { e.stopPropagation(); data.loadSampleData() }}
+                     onmousedown={(e) => { e.stopPropagation(); data.loadSampleData() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.loadSampleData() } }}>
                     <span class="dev-menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2848,7 +2863,7 @@
                 <div class="dev-menu-item" 
                      role="button"
                      tabindex="0"
-                     onclick={(e) => { e.stopPropagation(); openTestSuite() }}
+                     onmousedown={(e) => { e.stopPropagation(); openTestSuite() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openTestSuite() } }}>
                     <span class="dev-menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2860,19 +2875,7 @@
                 <div class="dev-menu-item" 
                         role="button"
                         tabindex="0"
-                        onclick={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5196', shouldFocus: true }) }}
-                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5196', shouldFocus: true }) } }}>
-                    <span class="dev-menu-icon-item">
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
-                        </svg>
-                    </span>
-                    <span>Apps</span>
-                </div>
-                <div class="dev-menu-item" 
-                        role="button"
-                        tabindex="0"
-                        onclick={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) }}
+                        onmousedown={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) } }}>
                     <span class="dev-menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2884,7 +2887,7 @@
                 <div class="dev-menu-item" 
                      role="button"
                      tabindex="0"
-                     onclick={(e) => { e.stopPropagation(); openVSCodeWorkspace() }}
+                     onmousedown={(e) => { e.stopPropagation(); openVSCodeWorkspace() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openVSCodeWorkspace() } }}>
                     <span class="dev-menu-icon-item">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -2913,7 +2916,7 @@
          role="button"
          tabindex="0"
          onmouseenter={hideContentAreaScrim}
-         onclick={hideContentAreaScrim}
+         onmousedown={hideContentAreaScrim}
          onkeydown={(e) => { if (e.key === 'Escape') hideContentAreaScrim() }}
          oncontextmenu={hideContentAreaScrim}></div>
 {/if}
@@ -2979,7 +2982,7 @@
     </div>
 {/if}
 
-<TabSidebar {isDragEnabled} />
+<TabSidebar {isDragEnabled} onShowApps={toggleAppsOverlay} />
 
 
 <div class="frame-title-bar" class:window-controls-overlay={headerPartOfMain} class:editing-url={isEditingUrl}>
@@ -3041,7 +3044,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
             </svg>
         </button>
-        <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onclick={(e) => closeTab(data.docs[data.spaceMeta.activeTabId], e)}>
+        <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onmousedown={(e) => closeTab(data.docs[data.spaceMeta.activeTabId], e)}>
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -3079,6 +3082,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
      class:has-left-pins={leftPinnedTabs.length > 0}
      class:has-right-pins={rightPinnedTabs.length > 0}
      onscroll={handleScroll} 
+     bind:this={scrollContainer}
      style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
     {#if viewMode === 'canvas'}
         <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
@@ -3108,7 +3112,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                             </div>
                         {/key}
                         
-                        <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/if}
             {/key}
@@ -3240,6 +3244,18 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
     </div>
 {/if}
 
+{#if showAppsOverlay}
+    <div class="apps-overlay" 
+         role="dialog" 
+         aria-label="All Apps"
+         tabindex="-1"
+         onmousedown={(e) => { if (e.target === e.currentTarget) showAppsOverlay = false }}>        
+        <div class="apps-overlay-content">
+            <Apps onClose={() => showAppsOverlay = false} />
+        </div>
+    </div>
+{/if}
+
 <style>
     @import "app.css";
     
@@ -3267,5 +3283,35 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    .apps-overlay {
+        border-top: 10px solid black;
+        position: fixed;
+        top: 33px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(12px);
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 80px 60px 20px 60px;
+    }
+
+    .apps-overlay-content {
+        width: 67%;
+        height: 67%;
+        background: rgb(0, 0, 0);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        position: absolute;
+        overflow: visible;
+        max-width: 1250px;
+        max-height: 1125px;
     }
 </style>

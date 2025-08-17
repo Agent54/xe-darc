@@ -7,6 +7,7 @@
     import NewTab from './NewTab.svelte'
     import { origin } from '../lib/utils.js'
     import { generateDiff, throttle } from '../lib/utils.js'
+    import select from '../inject/select.js?raw'
 
     let {
         tabId,
@@ -26,6 +27,7 @@
         inputDiffVisible = $bindable(),
         inputDiffTimeout = $bindable(),
         inputDiffData = $bindable(),
+        observer,
     } = $props()
 
     let tab = $derived(data.docs[tabId])
@@ -773,7 +775,7 @@ function setupContentScripts(frame) {
 window.addEventListener('focus', () => { console.log('iwa:focus') }, false);
 window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
 
-
+${select}
 
 // Global keyboard event listener for controlled frame
 document.addEventListener('keydown', function(event) {
@@ -880,23 +882,35 @@ document.addEventListener('mouseover', function(event) {
         
         // Get anchor position relative to viewport
         const rect = anchor.getBoundingClientRect();
+        // Compute viewport origin in screen coords using the event
+        const vpx = (typeof event.screenX === 'number' && typeof event.clientX === 'number') ? (event.screenX - event.clientX) : 0;
+        const vpy = (typeof event.screenY === 'number' && typeof event.clientY === 'number') ? (event.screenY - event.clientY) : 0;
         
-        // Log anchor enter with details including position
+        // Log anchor enter with details including position and screen coordinates
+        // Use the link's right edge as the reference to avoid preview overlapping the cursor on long links
         console.log('iwa:link-enter:${tab.id}:' + JSON.stringify({
             href: anchor.href || anchor.getAttribute('href') || '',
             target: anchor.target || anchor.getAttribute('target') || '',
             rel: anchor.rel || anchor.getAttribute('rel') || '',
             title: anchor.title || anchor.getAttribute('title') || '',
             position: {
-                x: rect.left + rect.width / 2,
+                x: rect.right,
                 y: rect.top + rect.height / 2,
-                left: rect.left,
+                left: rect.right,
                 top: rect.top,
                 right: rect.right,
                 bottom: rect.bottom,
                 width: rect.width,
                 height: rect.height
-            }
+            },
+            absolute: {
+                left: vpx + rect.left,
+                top: vpy + rect.top,
+                right: vpx + rect.right,
+                bottom: vpy + rect.bottom
+            },
+            screenX: window.screenX || 0,
+            screenY: window.screenY || 0
         }));
     } else if (!anchor && currentHoveredAnchor) {
         // Left the anchor element
@@ -1098,7 +1112,8 @@ document.addEventListener('input', function(event) {
 `,
             },
             runAt: 'document-end',
-            allFrames: true
+            allFrames: true,
+            matchAboutBlank: true
         }]
 
         const userInjections = [
@@ -1198,6 +1213,7 @@ document.addEventListener('input', function(event) {
                 || details.url.indexOf("adservice.google.com") != -1
                 || details.url.indexOf("doubleclick.net") != -1
                 || details.url.indexOf('cdn.cookielaw.org') != -1
+                || details.url.indexOf('pagead2.googlesyndication.com') != -1
 
             if (block) {
                 // Show red LED for blocked requests
@@ -1349,13 +1365,17 @@ document.addEventListener('input', function(event) {
         }, allUrlsFilter)
 
         frame.request.onErrorOccurred.addListener((details) => {
-            console.error('❌ Request Error:', {
-                requestId: details.requestId,
-                url: details.url,
-                error: details.error,
-                fromCache: details.fromCache,
-                ip: details.ip
-            })
+            // details.error !== 'net::ERR_BLOCKED_BY_ORB' &&
+            if (details.error !== 'net::ERR_BLOCKED_BY_CLIENT') {
+                    console.error('❌ Request Error:', {
+                    requestId: details.requestId,
+                    url: details.url,
+                    error: details.error,
+                    fromCache: details.fromCache,
+                    ip: details.ip
+                })
+            }
+            
             
             // Check if this is a certificate error
             if (details.error) {
@@ -2057,7 +2077,8 @@ document.addEventListener('input', function(event) {
                         `
                     },
                     runAt: 'document-start',
-                    allFrames: true
+                    allFrames: true,
+                    matchAboutBlank: true
                 }
                 
                 // Add content script to patch window.opener

@@ -403,50 +403,88 @@
     })
 
     // Calculate preview position to ensure it stays within window bounds
-    function calculatePreviewLeft(position) {
+    function calculatePreviewLeft(preview) {
         const previewWidth = 280
-        const padding = 150 // Reduced to 2px for much closer positioning
-        
-        // Try positioning to the right of the link first
-        let left = position.left + padding
-        
-        // If it would overflow the right edge, position to the left
-        if (left + previewWidth > window.innerWidth - padding) {
-            left = position.left - previewWidth - padding
+        const padding = 20
+
+        const position = preview?.position || preview || {}
+        const abs = preview?.absolute
+        const previewScreenX = preview?.screenX
+        const controlledFrameScreenX = window.screenX || 0
+        const isFromIframe = typeof previewScreenX === 'number' && Math.abs(previewScreenX - controlledFrameScreenX) > 12
+        const deltaX = isFromIframe ? (previewScreenX - controlledFrameScreenX) : 0
+
+        if (abs && typeof abs.right === 'number') {
+            const viewportOriginX = (window.screenX || 0)
+            let left = (abs.right - viewportOriginX) + padding
+            const absLeft = (typeof abs.left === 'number') ? abs.left : (abs.right - (position.width ?? 0))
+            if (left + previewWidth > window.innerWidth - padding) {
+                left = (absLeft - viewportOriginX) - previewWidth - padding
+            }
+            left = Math.round(left)
+            if (left < 5) left = 5
+            if (left + previewWidth > window.innerWidth - 5) left = window.innerWidth - previewWidth - 5
+            console.log('hoverLeftAbs', left)
+            return Math.max(5, left)
         }
-        
-        // If it would still overflow the left edge, clamp to left edge
+
+        const anchorRight = (position.right ?? ((position.left ?? 0) + (position.width ?? 0)))
+        const anchorLeft = (position.left ?? (anchorRight - (position.width ?? 0)))
+
+        let left = anchorRight - deltaX + padding
+
+        if (left + previewWidth > window.innerWidth - padding) {
+            left = anchorLeft - deltaX - previewWidth - padding
+        }
+
+        left = Math.round(left)
         if (left < 5) {
             left = 5
         }
-        
-        // Final check: if preview is too wide for viewport, clamp to right edge
+
         if (left + previewWidth > window.innerWidth - 5) {
             left = window.innerWidth - previewWidth - 5
         }
-        
-        return Math.max(5, left)
+
+        const out = Math.max(5, left)
+        return out
     }
     
-    function calculatePreviewTop(position) {
-        const totalPreviewHeight = previewHeight + 32 // container height + header height
-        const padding = 10 // Reduced from 40 to bring preview closer
-        
-        // Try positioning at the top of the link first
-        let top = position.top - padding
-        
-        // If it would overflow the top edge, position below the link
-        if (top < padding) {
-            top = position.bottom + padding
+    function calculatePreviewTop(preview) {
+        const totalPreviewHeight = previewHeight + 32
+        const padding = 10
+
+        const position = preview?.position || preview || {}
+        const abs = preview?.absolute
+        const previewScreenY = preview?.screenY
+        const controlledFrameScreenY = window.screenY || 0
+        const isFromIframe = typeof previewScreenY === 'number' && Math.abs(previewScreenY - controlledFrameScreenY) > 12
+        const deltaY = isFromIframe ? (previewScreenY - controlledFrameScreenY) : 0
+
+        if (abs && typeof abs.top === 'number' && typeof abs.bottom === 'number') {
+            const viewportOriginY = (window.screenY || 0)
+            let top = (abs.top - viewportOriginY) - padding
+            if (top < padding) top = (abs.bottom - viewportOriginY) + padding
+            top = Math.round(top)
+            if (top + totalPreviewHeight > window.innerHeight - padding) top = window.innerHeight - totalPreviewHeight - padding
+            const outAbs = Math.max(20, top)
+            console.log('hoverTopAbs', outAbs)
+            return outAbs
         }
-        
-        // If it would overflow the bottom edge, clamp to bottom
+
+        let top = (position.top ?? 0) - deltaY - padding
+
+        if (top < padding) {
+            top = (position.bottom ?? (position.top ?? 0)) - deltaY + padding
+        }
+
+        top = Math.round(top)
         if (top + totalPreviewHeight > window.innerHeight - padding) {
             top = window.innerHeight - totalPreviewHeight - padding
         }
-        
-        // Final check: ensure minimum distance from top (keep some space from window edge)
-        return Math.max(20, top)
+
+        const out = Math.max(20, top)
+        return out
     }
 </script>
 
@@ -488,6 +526,7 @@
             {requestedResources}
             {statusLightsEnabled}
             {createOffOriginLightbox}
+            {observer}
             bind:commandKeyPressed
             bind:hoveredLink
            
@@ -628,7 +667,7 @@
                 class="global-hover-preview" 
                 class:shown={globalHoverPreviewShown}
                 style={globalHoverPreview?.position ? 
-                    `margin-left: ${calculatePreviewLeft(globalHoverPreview.position)}px; top: ${calculatePreviewTop(globalHoverPreview.position)}px;` : 
+                    `margin-left: ${calculatePreviewLeft(globalHoverPreview)}px; top: ${calculatePreviewTop(globalHoverPreview)}px;` : 
                     ''}
                 role="dialog"
                 aria-label="Link preview"

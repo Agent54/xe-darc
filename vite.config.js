@@ -20,6 +20,7 @@ import path from 'path';
 import injectHTML from 'vite-plugin-html-inject';
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { cloudflare } from "@cloudflare/vite-plugin";
+// import fs from 'node:fs';
 
 // import wbn from 'rollup-plugin-webbundle';
 // import * as wbnSign from 'wbn-sign';
@@ -166,6 +167,10 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5193,
     strictPort: true,
+    // https: {
+    //   key: fs.readFileSync('./certs/localhost-key.pem'),
+    //   cert: fs.readFileSync('./certs/certificate.pem'),
+    // },
     // ...(process.env.container === 'true' && { allowedHosts: true }),
     hmr: {
       protocol: 'ws', 
@@ -186,6 +191,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
+        // agent: './agent.html',
         // web_request_test: './web_request_test.html',
         // tldraw_webview: './tldraw_webview.html'
       }

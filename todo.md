@@ -901,3 +901,59 @@ inactive menu items too bright/ too hard to discern
 ai folder select for bookmark
 
 aider
+
+fix secret store ubuntu/vscode
+
+https://svelteflow.dev/examples/styling/turbo-flow
+
+Ask users directly in the software for donations, once a year in december.
+
+shared claude setup similar to https://www.dzombak.com/blog/2025/08/getting-good-results-from-claude-code/
+
+fix iframe srcdoc injections eg. https://interactive-examples.mdn.mozilla.net/pages/tabbed/select.html
+
+add native select dropdown tests 
+
+ifraome preview position bug
+
+autofill with ai and memeory sidebar
+
+extract/ import sidebar with plugin/ scripting/ ai and storage , transforms
+
+usecase: make a story page that loooks unique for your screenshots
+
+usecase: arrange screenshots and tabs by some grouping wiht ai support but no permanent moving of the main folders etc.
+
+usecase: web as social network, one click get domain/ atproto/ homepage etc.
+
+tos dr / data rating compliance 
+
+report site 
+
+annotation layer?
+
+warn on missing backups or exportability
+
+history with screenshots and details
+
+global command center mix of alfred and vcscode cmd shift p
+
+preshared mutual certs for secure worker browser communication! #security #critical
+
+unhibernating apps breaks the hhover obeserver
+
+remote mode for darc code to replace ui of forje
+
+rename to operator
+
+screenshots to attachments!!! + import / export
+
+personal data stores for movie music and other metadata
+
+badge api + aggregate batch api for folders
+
+disign portfolio ispo
+
+fix broken hmr due to app import init with sideeffects
+
+vscode iframe clipboard move/ iframe support for frames for testing and internal apps
