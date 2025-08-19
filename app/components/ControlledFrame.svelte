@@ -1175,8 +1175,34 @@ document.addEventListener('input', function(event) {
         // Get the app's own origin for CSP injection
         const appOrigin = window.location.origin
 
+
+        // monkey patch the old api back again to get it working in chrome 139+
+        // todo: replace with single createWebRequestInterceptor interceptor object for all events if url patterns are the same 
+
+        const requestEvents = ['onBeforeRequest', 'onHeadersReceived', 'onAuthRequired', 'onBeforeRedirect', 'onResponseStarted', 'onCompleted', 'onErrorOccurred'];
+        requestEvents.forEach(event => {
+            if(frame.request[event] === undefined) {
+                frame.request[event] = {
+                addListener: (callback, urlPatterns, options) => {
+                    const _resourceTypes = ['csp_report', 'font', 'image', 'main_frame', 'media', 'object', 'other', 'ping', 'script', 'stylesheet', 'sub_frame', 'webbundle', 'websocket', 'xmlhttprequest']
+                    const interceptor = frame.request.createWebRequestInterceptor({
+                        urlPatterns: urlPatterns.urls,
+                        //resourceTypes: resourceTypes.filter(type => _resourceTypes.includes(type)), 
+                        blocking: options && options.includes('blocking'),
+                        includeRequestBody: options && options.includes('requestBody') 
+                        // includeHeaders: options.includes('headers') // "none", "same-origin", or "cross-origin"
+                    });
+                    console.log('WebRequest API not available')
+                    interceptor.addEventListener(event.replace('on', '').toLowerCase(), callback);
+                }
+            } 
+            }
+        });
+
+
         // Log all request events with full details
         frame.request.onBeforeRequest.addListener((details) => {
+            console.log('onBeforeRequest', details)
             const url = new URL(details.url)
             // console.group(`🌐 onBeforeRequest: ${details.method}`, url)
             // console.log('📋 Request Details:', {

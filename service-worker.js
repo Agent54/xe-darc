@@ -1,7 +1,7 @@
 self.addEventListener('fetch', (e) => {
     // console.log('sw fetch', e.request)
 
-    if (e.request.url == 'isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac/app/test.js') {
+    if (e.request.url == 'isolated-app://552ri3hvzev7yl5zlmuitxuyuzeqhwi5w5q5zyd7fycf4qkhu32aaaac/app/test.js') {
         const response = new Response(`export default function test() {
     console.log('dynamic loading of js module successful')
 }`, {
@@ -25,4 +25,4 @@ self.addEventListener('fetch', (e) => {
 
 // console.log('sw loaded')
 
-// isolated-app://q7gwzstrnayerkwkmc37jaj3dtytlmwtg3skjal6bmqkhcedq6mqaaac
+// isolated-app://552ri3hvzev7yl5zlmuitxuyuzeqhwi5w5q5zyd7fycf4qkhu32aaaac
