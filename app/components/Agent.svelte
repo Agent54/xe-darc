@@ -2297,18 +2297,10 @@ The current system demonstrates strong performance and security characteristics.
 		setTimeout(streamNextChunk, 350)
 	}
 
-	// Create agent iframe URL with Eleven Labs token
 	const agentIframeUrl = $derived.by(() => {
-		if (typeof localStorage === 'undefined') {
-			return 'https://localhost:5194/agent'
-		}
-		
 		const elevenlabsToken = localStorage.getItem('aiToken_elevenlabs')
-		if (!elevenlabsToken) {
-			return 'https://localhost:5194/agent'
-		}
-		
-		const url = new URL('https://localhost:5194/agent')
+
+		const url = new URL('https://localhost:5193/agent_app')
 		url.searchParams.set('agent_id', elevenlabsToken)
 		return url.toString()
 	})
@@ -2317,7 +2309,8 @@ The current system demonstrates strong performance and security characteristics.
 		client = new AgentClient({
 			agent: 'chat',
 			name: 'default',
-			host: 'localhost:5193'
+			host: 'localhost:5193',
+			protocol: 'wss'
 		})
 
 		client.onopen = () => {

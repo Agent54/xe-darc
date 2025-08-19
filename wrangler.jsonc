@@ -9,6 +9,7 @@
   // "assets": {
   //   "directory": "public"
   // },
+  // "route": "*/agents",
   "durable_objects": {
     "bindings": [
       {

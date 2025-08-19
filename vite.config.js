@@ -19,8 +19,8 @@ import { defineConfig } from 'vite';
 import path from 'path';
 import injectHTML from 'vite-plugin-html-inject';
 import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { cloudflare } from "@cloudflare/vite-plugin";
-// import fs from 'node:fs';
+// import { cloudflare } from "@cloudflare/vite-plugin";
+import fs from 'node:fs';
 
 // import wbn from 'rollup-plugin-webbundle';
 // import * as wbnSign from 'wbn-sign';
@@ -30,7 +30,7 @@ import tailwindcss from '@tailwindcss/vite'
 // dotenv.config();
 
 const plugins = [
-  cloudflare(),
+  // cloudflare(),
   {
     name: 'patch-link-color',
     transform(code, id) {      
@@ -167,13 +167,30 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5193,
     strictPort: true,
-    // https: {
-    //   key: fs.readFileSync('./certs/localhost-key.pem'),
-    //   cert: fs.readFileSync('./certs/certificate.pem'),
-    // },
+    https: {
+      key: fs.readFileSync('./certs/device.key'),
+      cert: fs.readFileSync('./certs/localhost.crt'),
+    },
+    cors: { 
+      origin: '*' // /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/ 
+    },
+    proxy: {
+      '/agents': {
+        target: 'ws://localhost:8787',
+        ws: true,
+        rewriteWsOrigin: true,
+      }
+      
+     // 'http://localhost:8787',
+    },
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      // 'Cross-Origin-Opener-Policy': 'cross-origin',
+      'cross-origin-resource-policy': 'cross-origin'
+    },
     // ...(process.env.container === 'true' && { allowedHosts: true }),
     hmr: {
-      protocol: 'ws', 
+      protocol: 'wss', 
       clientPort: 5193,
       host: 'localhost' 
       // ...(process.env.container !== 'true' && { clientPort: 5193,  host: 'localhost' }),
@@ -191,7 +208,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
-        // agent: './agent.html',
+        agent_app: './agent_app.html',
         // web_request_test: './web_request_test.html',
         // tldraw_webview: './tldraw_webview.html'
       }

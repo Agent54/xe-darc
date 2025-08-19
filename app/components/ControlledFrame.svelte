@@ -7,7 +7,9 @@
     import NewTab from './NewTab.svelte'
     import { origin } from '../lib/utils.js'
     import { generateDiff, throttle } from '../lib/utils.js'
-    import select from '../inject/select.js?raw'
+    import select from '../inject/select-patch.js?raw'
+    import ipc from '../inject/ipc.js?raw'
+    import contextMenu from '../inject/context-menu.js?raw'
 
     let {
         tabId,
@@ -20,14 +22,14 @@
         requestedResources,
         statusLightsEnabled = false,
         class: className = '',
-        createOffOriginLightbox = () => {},
+        // createOffOriginLightbox = () => {},
 
         hoveredLink = $bindable(),
         commandKeyPressed = $bindable(),
         inputDiffVisible = $bindable(),
         inputDiffTimeout = $bindable(),
         inputDiffData = $bindable(),
-        observer,
+        // observer,
     } = $props()
 
     let tab = $derived(data.docs[tabId])
@@ -758,7 +760,7 @@ function setupContentScripts(frame) {
         const systemInjections = [
             {
                 name: 'system-css',
-                matches: ['<all_urls>', 'http://*/*', 'https://*/*'],
+                urlPatterns: [ 'http://*/*', 'https://*/*'], // '<all_urls>',
                 css: {
                     // fix scroll bug in PWA/IWA that makes scroll janky on child element scrolling
                     code: `* {
@@ -769,105 +771,17 @@ function setupContentScripts(frame) {
 
         {
             name: 'system-script',
-            matches: ['<all_urls>', 'http://*/*', 'https://*/*'],
+            urlPatterns: ['http://*/*', 'https://*/*'], // '<all_urls>', 
             js: {
                 code: `
-window.addEventListener('focus', () => { console.log('iwa:focus') }, false);
-window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
+const tabId = '${tab.id}';
+
+${ipc}
 
 ${select}
 
-// Global keyboard event listener for controlled frame
-document.addEventListener('keydown', function(event) {
-    // Track command key state
-    if (event.metaKey || event.ctrlKey) {
-        console.log('iwa:command-key-down:${tab.id}');
-    }
-    
-    // Check for Cmd+W (Mac) or Ctrl+W (Windows/Linux)
-    if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
-        console.log('iwa:close-tab:${tab.id}');
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        return false;
-    }
-    
-    // Check for Cmd+T (Mac) or Ctrl+T (Windows/Linux) 
-    if ((event.metaKey || event.ctrlKey) && event.key === 't') {
-        console.log('iwa:new-tab:${tab.id}');
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        return false;
-    }
-}, { capture: true, passive: false });
+${contextMenu}
 
-document.addEventListener('keyup', function(event) {
-    // Track command key state
-    if (event.key === 'Meta' || event.key === 'Control') {
-        console.log('iwa:command-key-up:${tab.id}');
-    }
-}, { capture: true, passive: false });
-
-// Global mouse event listeners for controlled frame
-document.addEventListener('mousedown', function(event) {
-    // console.log('🖱️ [CONTROLLED-FRAME] mousedown detected in tab ${tab.id}', {
-    //     button: event.button,
-    //     target: event.target?.tagName,
-    //     clientX: event.clientX,
-    //     clientY: event.clientY
-    // });
-    console.log('iwa:mousedown:${tab.id}');
-}, { capture: true, passive: true });
-
-document.addEventListener('mouseup', function(event) {
-    // console.log('🖱️ [CONTROLLED-FRAME] mouseup detected in tab ${tab.id}', {
-    //     button: event.button,
-    //     target: event.target?.tagName,
-    //     clientX: event.clientX,
-    //     clientY: event.clientY
-    // });
-    console.log('iwa:mouseup:${tab.id}');
-}, { capture: true, passive: true });
-
-// Global wheel event listener for controlled frame zoom control
-// document.onwheel = function(event) {
-//     // Check for Ctrl key (Windows/Linux) or Cmd key (Mac) - same as zoom prevention in main app
-//     if (event.ctrlKey || event.metaKey) {
-//         event.preventDefault();
-//         event.stopPropagation();
-//         event.stopImmediatePropagation();       
-//         // Determine zoom direction based on deltaY
-//         const zoomDirection = event.deltaY < 0 ? 'in' : 'out';
-//         // Log zoom direction to console IPC system
-//         console.log('iwa:zoom:${tab.id}:' + zoomDirection);
-//         return false;
-//     }
-// }, { capture: true, passive: false });
-
-// Context menu protection - force native context menu when cmd/ctrl is held
-document.addEventListener('contextmenu', function(event) {
-    // Only force native context menu if cmd (Mac) or ctrl (Windows/Linux) key is held down
-    const forceNative = event.metaKey || event.ctrlKey;
-    
-    if (forceNative) {
-        // Stop any other handlers from running first
-        event.stopImmediatePropagation();
-        
-        // Override preventDefault to make it ineffective
-        const originalPreventDefault = event.preventDefault;
-        event.preventDefault = function() {
-            console.log('iwa:contextmenu-forced-native:${tab.id}');
-            // Don't actually prevent default - let native context menu show
-        };
-        
-        console.log('iwa:contextmenu-native-forced:${tab.id}');
-    }
-    // If cmd/ctrl not held, allow normal website context menu behavior
-}, { capture: true, passive: false });
-
-console.log('🛡️ Context menu protection installed in controlled frame ${tab.id}');
 
 // Track hovered anchor elements
 let currentHoveredAnchor = null;
@@ -1120,7 +1034,7 @@ document.addEventListener('input', function(event) {
             ...userMods.css.map(mod => {
                 return {
                     name: mod.name,
-                    matches: [mod.pattern.replace(/^\*/g, '<all_urls>')],
+                    urlPatterns: [mod.pattern], // .replace(/^\*/g, '<all_urls>')
                     css: {
                         code: mod.content
                     }
@@ -1129,7 +1043,7 @@ document.addEventListener('input', function(event) {
             ...userMods.js.map(mod => {
                 return {
                     name: mod.name,
-                    matches: [mod.pattern.replace(/^\*/g, '<all_urls>')],
+                    urlPatterns: [mod.pattern], // replace(/^\*/g, '<all_urls>')
                     js: {
                         code: mod.content
                     }
@@ -1175,8 +1089,32 @@ document.addEventListener('input', function(event) {
         // Get the app's own origin for CSP injection
         const appOrigin = window.location.origin
 
+        // monkey patch the old api back again to get it working in chrome 139+
+        // todo: replace with single createWebRequestInterceptor interceptor object for all events if url patterns are the same 
+
+        const requestEvents = ['onBeforeRequest', 'onHeadersReceived', 'onAuthRequired', 'onBeforeRedirect', 'onResponseStarted', 'onCompleted', 'onErrorOccurred']
+
+        requestEvents.forEach(event => {
+            if(frame.request[event] === undefined) {
+                frame.request[event] = {
+                    addListener: (callback, urlPatterns, options) => {
+                        const _resourceTypes = ['csp_report', 'font', 'image', 'main_frame', 'media', 'object', 'other', 'ping', 'script', 'stylesheet', 'sub_frame', 'webbundle', 'websocket', 'xmlhttprequest']
+                        const interceptor = frame.request.createWebRequestInterceptor({
+                            urlPatterns: urlPatterns.urls.map(url => url === '<all_urls>' ? '*://*/*' : url),
+                            //resourceTypes: resourceTypes.filter(type => _resourceTypes.includes(type)), 
+                            blocking: options && options.includes('blocking'),
+                            includeRequestBody: options && options.includes('requestBody') 
+                            // includeHeaders: options.includes('headers') // "none", "same-origin", or "cross-origin"
+                        })
+                        interceptor.addEventListener(event.replace('on', '').toLowerCase(), callback)
+                    }
+                } 
+            }
+        })
+
         // Log all request events with full details
         frame.request.onBeforeRequest.addListener((details) => {
+            // console.log('onBeforeRequest', details)
             const url = new URL(details.url)
             // console.group(`🌐 onBeforeRequest: ${details.method}`, url)
             // console.log('📋 Request Details:', {

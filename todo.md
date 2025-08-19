@@ -975,7 +975,8 @@ captured by their ai > point out the opportunity to make uers agents again, slid
 
 launcher bad name
 
-design base instructions for html output
+design base instructions for html output + favicon + exfiltration protection
+
 
 app create workflow with voice agent and then edit and then modify the browser itself
 
@@ -987,3 +988,37 @@ voice references with "here" and mouse pointer
 fix chrome 39!
 
 taints: personal data, external inputs (safe/unsafe), exfiltration targets, trusted models
+
+
+open settings on gear click, keep hover menus open with margin
+
+what is needed to support a "super app"?
+
+https://wicg.github.io/controlled-frame/
+
+
+close tabs in other spaces bug
+
+tab wake up glitch flash
+
+background audi agent sidebar
+
+https://googlechrome.github.io/samples/async-clipboard/
+
+add link preview test with links in iframes
+
+
+context menu triggers click on tab bug
+
+integrate http://localhost:5196/ into apps
+
+fix screenshots
+
+activate on tab restore
+
+sidebar hovercards + menus
+
+
+clear closed tabs ui update
+
+real tab history impl

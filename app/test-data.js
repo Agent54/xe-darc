@@ -403,7 +403,7 @@ export default [
 // },
 // {
 //     _id: '5',
-//     url: `isolated-app://kxhwjzichcfrfquwsmlthx2rhpjc75si7v22zajhnudxktjbvvtqaaac/public/test.html`,
+//     url: `isolated-app://asd/public/test.html`,
 //     title: 'Test',
 //     audioPlaying: false,
 //     // favicon: 'file://photon_logo.png',

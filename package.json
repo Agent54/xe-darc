@@ -5,9 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:agent": "vite --config vite.agent.config.js",
+    "dev:agent": "pnpm exec wrangler dev --port 8787",
     "build": "vite build",
-    "build:agent": "vite build --config vite.agent.config.js",
     "preview": "vite preview",
     "bump-version": "node ./bump_version.js"
   },
@@ -42,7 +41,7 @@
     "vite": "6.3.5",
     "vite-plugin-html-inject": "1.1.2",
     "wbn-sign": "0.2.1",
-    "wrangler": "^4.20.5",
+    "wrangler": "4.32.0",
     "zod": "^3.25.67"
   }
 }
