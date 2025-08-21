@@ -10,6 +10,7 @@
     import select from '../inject/select-patch.js?raw'
     import ipc from '../inject/ipc.js?raw'
     import contextMenu from '../inject/context-menu.js?raw'
+	import { DetachedBindMode } from 'three'
 
     let {
         tabId,
@@ -1115,7 +1116,7 @@ document.addEventListener('input', function(event) {
         // Log all request events with full details
         frame.request.onBeforeRequest.addListener((details) => {
             // console.log('onBeforeRequest', details)
-            const url = new URL(details.url)
+            const url = new URL(details.url || details.request.url)
             // console.group(`🌐 onBeforeRequest: ${details.method}`, url)
             // console.log('📋 Request Details:', {
             //     requestId: details.requestId,
@@ -1146,17 +1147,17 @@ document.addEventListener('input', function(event) {
                 }
             }
 
-            const block = details.url.indexOf("google-analytics.com") != -1 
-                || details.url.indexOf("googletagmanager.com") != -1
-                || details.url.indexOf("adservice.google.com") != -1
-                || details.url.indexOf("doubleclick.net") != -1
-                || details.url.indexOf('cdn.cookielaw.org') != -1
-                || details.url.indexOf('pagead2.googlesyndication.com') != -1
+            const block = url.hostname.indexOf("google-analytics.com") != -1 
+                || url.hostname.indexOf("googletagmanager.com") != -1
+                || url.hostname.indexOf("adservice.google.com") != -1
+                || url.hostname.indexOf("doubleclick.net") != -1
+                || url.hostname.indexOf('cdn.cookielaw.org') != -1
+                || url.hostname.indexOf('pagead2.googlesyndication.com') != -1
 
             if (block) {
                 // Show red LED for blocked requests
                 showBlockedRequest()
-                // block && console.log('blocking', details.url)
+                // block && console.log('blocking', url)
                 return { cancel: block }
             } else {
                 // Show green LED for allowed network access
@@ -1354,46 +1355,36 @@ document.addEventListener('input', function(event) {
             return
         }
 
+        // Set up event handlers using the new API
+        frame.contextMenus.onclick = (event) => {
+            console.log('🎯 Context menu clicked:', {
+                menuItem: event.menuItem,
+                frameId: event.frameId,
+                frameURL: event.frameURL,
+                pageURL: event.pageURL,
+                editable: event.editable,
+                linkURL: event.linkURL,
+                mediaType: event.mediaType,
+                selectionText: event.selectionText,
+                srcURL: event.srcURL
+            })
+        }
+
+        frame.contextMenus.onshow = (event) => {
+            console.log('👁️ Context menu shown:', event)
+        }
+
         // Create a context menu item called "Here"
         frame.contextMenus.create({
             id: 'here',
             title: 'Here',
             contexts: ['all'], // Show on all types of content
-            onclick: (info) => {
-                // console.group('🎯 Context Menu "Here" clicked!')
-                // console.log('📋 OnClickData:', {
-                //     checked: info.checked,
-                //     editable: info.editable,
-                //     frameId: info.frameId,
-                //     frameUrl: info.frameUrl,
-                //     linkUrl: info.linkUrl,
-                //     mediaType: info.mediaType,
-                //     menuItemId: info.menuItemId,
-                //     pageUrl: info.pageUrl,
-                //     parentMenuId: info.parentMenuId,
-                //     selectionText: info.selectionText,
-                //     srcUrl: info.srcUrl,
-                //     wasChecked: info.wasChecked
-                // })
-                // console.log('📋 Raw info object:', info)
-                // console.log('📋 Tab data:', tab)
-                // console.groupEnd()
-            }
-        })
-        // .then(() => {
-        //     console.log('✅ Context menu "Here" created successfully')
-        // }).catch((err) => {
-        //     console.error('❌ Failed to create context menu:', err)
-        // })
-
-        // Also listen to onClicked event for additional logging
-        frame.contextMenus.onClicked.addListener((info) => {
-            console.log('🎯 Context menu onClicked event:', info)
-        })
-
-        // Listen to onShow event
-        frame.contextMenus.onShow.addListener((info) => {
-            console.log('👁️ Context menu onShow event:', info)
+            enabled: true,
+            type: 'normal'
+        }).then(() => {
+            console.log('✅ Context menu "Here" created successfully')
+        }).catch((err) => {
+            console.error('❌ Failed to create context menu:', err)
         })
     }
 
