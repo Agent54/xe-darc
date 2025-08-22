@@ -171,9 +171,11 @@ const refresh = throttle(async function (spaceId) {
 
     let activeTabIdExists = false
 
+    // Build new tabs arrays to avoid clearing existing ones (prevents flicker)
+    const newSpaceTabs = {}
     if (spaceId) {
         spaces[spaceId] ??= {}
-        spaces[spaceId].tabs = []
+        newSpaceTabs[spaceId] = []
     }
     const closedTabs = []
     for (const previewTabId of Object.keys(previews)) {
@@ -217,8 +219,9 @@ const refresh = throttle(async function (spaceId) {
                 spaces[doc.spaceId] = { _id: doc.spaceId, tabs: [] }
             }
 
-            if (!spaces[doc.spaceId].tabs) {
-                spaces[doc.spaceId].tabs = []
+            // Initialize new tabs array for this space if not already done
+            if (!newSpaceTabs[doc.spaceId]) {
+                newSpaceTabs[doc.spaceId] = []
             }
 
             if (doc.archive) {
@@ -239,7 +242,7 @@ const refresh = throttle(async function (spaceId) {
                     }
                     continue
                 }
-                spaces[doc.spaceId].tabs.push(doc)
+                newSpaceTabs[doc.spaceId].push(doc)
             }
         }
         //  else if (doc.type === 'activity') {
@@ -249,19 +252,14 @@ const refresh = throttle(async function (spaceId) {
         // }
     }
 
-    console.log('setting active tab id b', { current : spaceMeta.activeTabId, activeTabIdExists, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
+    // Assign new tabs arrays to spaces (prevents flicker by avoiding intermediate empty state)
+    for (const spaceId of Object.keys(newSpaceTabs)) {
+        spaces[spaceId].tabs = newSpaceTabs[spaceId]
+    }
+
+    console.log('setting active tab id b', { current : spaceMeta.activeTabId, activeTabIdExists, list :spaces[spaceMeta.activeSpace]?.activeTabsOrder })
     if (spaceMeta.activeTabId && !activeTabIdExists && spaces[spaceMeta.activeSpace]?.activeTabsOrder?.length > 0) {
-        let previousIndex = 1
-        spaces[spaceMeta.activeSpace].activeTabsOrder = spaces[spaceMeta.activeSpace].activeTabsOrder.filter((id, i) => {
-            if (id === spaceMeta.activeTabId) {
-                i > previousIndex && (previousIndex = i)
-                return false
-            }
-            return true
-        })
-        console.log('setting active tab id b', { current : spaceMeta.activeTabId, next : spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1], previousIndex, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
-        spaceMeta.activeTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]
-       
+        removedActiveTabId(spaceMeta.activeTabId)
     }
 
     spaceMeta.closedTabs = closedTabs.sort((a, b) => b.modified - a.modified)
@@ -271,11 +269,32 @@ const refresh = throttle(async function (spaceId) {
     // console.timeEnd('updt')
 }, 200)
 
+function removedActiveTabId (previousActiveTabId) {
+    let previousIndex = 1
+
+    if (!spaces[spaceMeta.activeSpace].activeTabsOrder) {
+        spaces[spaceMeta.activeSpace].activeTabsOrder = []
+    }
+    if (spaces[spaceMeta.activeSpace].activeTabsOrder.length === 0) {
+        return
+    }
+
+    spaces[spaceMeta.activeSpace].activeTabsOrder = spaces[spaceMeta.activeSpace].activeTabsOrder.filter((id, i) => {
+        if (id === previousActiveTabId) {
+            i > previousIndex && (previousIndex = i)
+            return false
+        }
+        return true
+    })
+    console.log('setting active tab id b', { current : spaceMeta.activeTabId, next : spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1], previousIndex, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
+    spaceMeta.activeTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]
+}
+
 let lastLocalSeq = null
 let changes = []
 let editingId = null
 const changesFeed = db.changes({
-    live: true,
+live: true,
     since: 'now',
     include_docs: true,
     filter: doc => !doc._id.startsWith('_design/')
@@ -341,6 +360,8 @@ function closeTab (spaceId, tabId) {
     const tab = docs[tabId]
 
     frames[tabId].frame = null
+
+    removedActiveTabId(tabId)
    
     db.bulkDocs([
         ...(previews[tabId]?.tabs.map(prev => {
@@ -425,13 +446,17 @@ const destroy = $effect.root(() => {
     // Save active space to localStorage whenever it changes
     $effect(() => {
         if (spaceMeta.activeSpace) {
-            localStorage.setItem('activeSpaceId', spaceMeta.activeSpace)
+            setTimeout(() => {
+                localStorage.setItem('activeSpaceId', spaceMeta.activeSpace)
+            }, 10)
         }
     })
 
     $effect(() => {
         if (spaceMeta.activeTabId) {
-            localStorage.setItem('activeTabId', spaceMeta.activeTabId)
+            setTimeout(() => {
+                localStorage.setItem('activeTabId', spaceMeta.activeTabId)
+            }, 10)
         }
     })
 
@@ -730,6 +755,8 @@ export default {
             archive: 'deleted',
             modified: Date.now()
         }))
+
+        spaceMeta.closedTabs = []
         
         if (docsToUpdate.length > 0) {
             db.bulkDocs(docsToUpdate).then((res) => {

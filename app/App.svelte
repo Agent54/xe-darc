@@ -2634,6 +2634,7 @@
             <div class="settings-menu-header menu-header">Options</div>
             
             <div class="settings-menu-item menu-item" 
+                 class:active={darkMode}
                  role="button"
                  tabindex="0"
                  onmousedown={(e) => { e.stopPropagation(); toggleDarkMode() }}
@@ -2647,6 +2648,7 @@
                 {#if darkMode}<span class="checkmark">•</span>{/if}
             </div>
             <div class="settings-menu-item menu-item" 
+                 class:active={globalTabComplete}
                  role="button"
                  tabindex="0"
                  onmousedown={(e) => { e.stopPropagation(); toggleGlobalTabComplete() }}
@@ -2732,6 +2734,7 @@
             </div>
             
             <div class="settings-menu-item menu-item" 
+                 class:active={data.spaceMeta.config.showLinkPreviews}
                  role="button"
                  tabindex="0"
                  onmousedown={(e) => { e.stopPropagation(); toggleLinkPreviews() }}
@@ -2746,6 +2749,7 @@
             </div>
 
             <div class="settings-menu-item menu-item" 
+                 class:active={lightboxModeEnabled}
                  role="button"
                  tabindex="0"
                  onmousedown={(e) => { e.stopPropagation(); toggleLightboxMode() }}
@@ -2760,6 +2764,7 @@
             </div>
 
             <div class="settings-menu-item menu-item" 
+                 class:active={tabsOpenRight}
                  role="button"
                  tabindex="0"
                  onmousedown={(e) => { e.stopPropagation(); toggleTabsOpenRight() }}
@@ -2848,48 +2853,48 @@
             </svg>
             <div class="dev-menu hover-menu">
                 <div class="dev-menu-header">Developer</div>
-                <div class="dev-menu-item" 
+                <div class="dev-menu-item menu-item" 
                      role="button"
                      tabindex="0"
                      onmousedown={(e) => { e.stopPropagation(); data.loadSampleData() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.loadSampleData() } }}>
-                    <span class="dev-menu-icon-item">
+                    <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
                         </svg>
                     </span>
                     <span>Load Sample Data</span>
                 </div>
-                <div class="dev-menu-item" 
+                <div class="dev-menu-item menu-item" 
                      role="button"
                      tabindex="0"
                      onmousedown={(e) => { e.stopPropagation(); openTestSuite() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openTestSuite() } }}>
-                    <span class="dev-menu-icon-item">
+                    <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
                         </svg>
                     </span>
                     <span>Open Test Suite</span>
                 </div>
-                <div class="dev-menu-item" 
+                <div class="dev-menu-item menu-item" 
                         role="button"
                         tabindex="0"
                         onmousedown={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) } }}>
-                    <span class="dev-menu-icon-item">
+                    <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                         </svg>
                     </span>
                     <span>Logs</span>
                 </div>
-                <div class="dev-menu-item" 
+                <div class="dev-menu-item menu-item" 
                      role="button"
                      tabindex="0"
                      onmousedown={(e) => { e.stopPropagation(); openVSCodeWorkspace() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openVSCodeWorkspace() } }}>
-                    <span class="dev-menu-icon-item">
+                    <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/>
                         </svg>
