@@ -1461,12 +1461,12 @@
 				}
 			}
 		}
-		
+
 		if (!toolCallInfo) {
 			console.error('Could not find tool call information for:', toolCallId)
 			return
 		}
-		
+
 		// Find the most recent user message and assistant response
 		const userMessage = [...chatHistory].reverse().find(msg => msg.role === 'user')
 		const assistantMessage = [...chatHistory].reverse().find(msg => msg.role === 'assistant' || msg.role === 'assistant-doc')
@@ -1496,7 +1496,7 @@
         let result = 'Yes, confirmed.'
 
         if (toolCallInfo.title === 'readPageContent') {
-            result += `\n---page content---\n${await data.readPage(currentTab.id)}` 
+            result += `\n---page content---\n${await data.readPage(currentTab.id, { textOnly: toolArgs?.textOnly || false })}` 
         }
 
         if (toolCallInfo.title === 'openNewTab') {
@@ -1537,7 +1537,7 @@
                 result = `\n---error---\nFailed to parse HTML display result: ${result}`
             }
         }
-		
+
 		// Construct the message payload with tool invocation result
 		console.log('Sending model to backend:', selectedModel)
 		const messagePayload = {

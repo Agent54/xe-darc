@@ -970,6 +970,7 @@ fix the readpage textonly
 
 
 talk feedback: chrome slide not convincing > is this bad? doe we solve this > losing audience
+history section too long
 
 captured by their ai > point out the opportunity to make uers agents again, slide before that users had their data!, taking data ownership in cloud world failed
 
@@ -1022,3 +1023,45 @@ sidebar hovercards + menus
 clear closed tabs ui update
 
 real tab history impl
+
+immediately close hovercards and previews on tab close or lightbox opens
+
+alt + 1 - 0 for app shortcuts
+
+
+undo tree files
+
+history tree navigation
+
+mew tab command vs new tab tab name
+
+share website i worked on with someone
+
+turn around card backend  / hypercard inspiration
+
+inspect element with naming/ identity and element turn around
+
+this and here for voice mode
+
+chee rabbits
+12:25
+https://www.ppig.org/files/2017-PPIG-28th-basman.pdf
+chee rabbits
+12:35
+https://monthofaibugs.com/
+chee rabbits
+12:49
+https://dockview.dev/
+chee rabbits
+12:57
+https://addons.mozilla.org/en-GB/firefox/addon/javascript/
+chee rabbits
+13:28
+https://www.forethink.ai/
+https://www.colelawrence.com/
+
+hydrogen/emacs world view in darc editor
+
+starting vscode extension
+
+ai that ads spoilers to catchy thumbnails and titles

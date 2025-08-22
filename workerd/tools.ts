@@ -147,8 +147,8 @@ export const tools = {
       dockerfilePath: z.optional(z.string()).describe("Path to Dockerfile in repo (defaults to ./Dockerfile)")
     }),
     // Omitting execute function makes this tool require human confirmation
-  }),
-};
+  })
+}
 
 /**
  * Implementation of confirmation-required tools
@@ -201,4 +201,4 @@ export const executions = {
       return `Docker deployment failed: ${error.message}`;
     }
   },
-};
+}

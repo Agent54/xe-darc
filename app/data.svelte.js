@@ -508,14 +508,14 @@ export default {
         activate(tabId)
     },
 
-    readPage: async (tabId) => {
+    readPage: async (tabId, { textOnly = false } = {}) => {
         const frame = frames[tabId]
 
         if (!frame?.frame) {
             return 'Error: frame not active'
         }
 
-        const result = await frame.frame.executeScript({code: 'document.body.innerHTML'})
+        const result = await frame.frame.executeScript({code: textOnly ? 'document.body.innerText' : 'document.body.innerHTML'})
 
         return result[0]
     },

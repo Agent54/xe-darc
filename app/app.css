@@ -311,7 +311,7 @@ ul::-webkit-scrollbar {
 }
 
 .favicon-button .favicon {
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 .favicon-button .favicon:hover {
@@ -472,18 +472,19 @@ ul::-webkit-scrollbar {
     justify-content: center;
     cursor: pointer;
     font-size: 12px;
-        opacity: 0.7;
-    transition: opacity 0.2s ease; 
-    /* , transform 0.2s ease; */
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
     color: white;
 }
 
-.header-icon-button:hover {
+.header-icon-button > svg {
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.header-icon-button:hover > svg {
     opacity: 1;
-    /* transform: scale(1.05); */
 }
 
 .view-mode-icon {
@@ -506,17 +507,13 @@ ul::-webkit-scrollbar {
     justify-content: center;
     cursor: pointer;
     font-size: 12px;
-    opacity: 0.7;
-    transition: opacity 0.2s ease;
     z-index: 10000;
     user-select: none;
     -webkit-app-region: no-drag;
     color: white;
 }
 
-.dev-menu-icon:hover {
-    opacity: 1;
-}
+
 
 .dev-menu {
     z-index: 10010;
@@ -535,19 +532,16 @@ ul::-webkit-scrollbar {
         0 12px 32px rgba(0, 0, 0, 0.6),
         0 4px 12px rgba(0, 0, 0, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    opacity: 0;
-    visibility: hidden;
     transform: translateY(-8px) scale(0.96);
-    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
-    pointer-events: none;
     overflow: hidden;
 }
 
-.dev-menu-icon:hover .dev-menu, .dev-menu:hover {
-    opacity: 1;
-    visibility: visible;
+.dev-menu-icon:hover .dev-menu {
     transform: translateY(0) scale(1);
-    pointer-events: auto;
+}
+
+.dev-menu:hover {
+    transform: translateY(0) scale(1) !important;
 }
 
 .dev-menu-header {
@@ -635,21 +629,18 @@ ul::-webkit-scrollbar {
         0 12px 32px rgba(0, 0, 0, 0.6),
         0 4px 12px rgba(0, 0, 0, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    opacity: 0;
-    visibility: hidden;
     transform: translateY(-8px) scale(0.96);
-    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
 
     z-index: 10000;
-    pointer-events: none;
     overflow: hidden;
 }
 
-.settings-menu-icon:hover .settings-menu, .settings-menu:hover {
-    opacity: 1;
-    visibility: visible;
+.settings-menu-icon:hover .settings-menu {
     transform: translateY(0) scale(1);
-    pointer-events: auto;
+}
+
+.settings-menu:hover {
+    transform: translateY(0) scale(1) !important;
 }
 
 .menu-header {
@@ -820,21 +811,18 @@ ul::-webkit-scrollbar {
         0 12px 32px rgba(0, 0, 0, 0.6),
         0 4px 12px rgba(0, 0, 0, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    opacity: 0;
-    visibility: hidden;
     transform: translateY(-8px) scale(0.96);
-    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
 
     z-index: 10000;
-    pointer-events: none;
     overflow: hidden;
 }
 
-.view-mode-icon:hover .view-mode-menu, .view-mode-menu:hover {
-    opacity: 1;
-    visibility: visible;
+.view-mode-icon:hover .view-mode-menu {
     transform: translateY(0) scale(1);
-    pointer-events: auto;
+}
+
+.view-mode-menu:hover {
+    transform: translateY(0) scale(1) !important;
 }
 
 /* .view-mode-menu-header {
@@ -1141,16 +1129,15 @@ ul::-webkit-scrollbar {
         0 2px 8px rgba(0, 0, 0, 0.3);
     z-index: 10007;
     overflow: hidden;
-    opacity: 0;
-    visibility: hidden;
     transform: translateY(-8px) scale(0.95);
-    transition: all 0.15s ease-out;
 }
 
 .partition-dropdown:hover .partition-menu {
-    opacity: 1;
-    visibility: visible;
     transform: translateY(0) scale(1);
+}
+
+.partition-menu:hover {
+    transform: translateY(0) scale(1) !important;
 }
 
 
@@ -1272,7 +1259,7 @@ ul::-webkit-scrollbar {
     right: 0;
     height: 0%;
     -webkit-app-region: no-drag;
-    pointer-events: none;
+    pointer-events: auto;
     z-index: 1;
 } */
 
@@ -1513,7 +1500,7 @@ ul::-webkit-scrollbar {
     transform: translateX(-4px);
     transition: all 0.12s ease-out;
     z-index: 10003;
-    pointer-events: none;
+    pointer-events: auto;
     white-space: nowrap;
 }
 
@@ -2102,4 +2089,49 @@ header.window-controls-overlay + .content-area-scrim {
 :global(.frame > *) {
     border-radius: 8px;
     overflow: hidden;
+}
+
+/* Shared hover menu behavior */
+.hover-menu {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: auto;
+    transition: opacity 0.15s ease 0.3s, visibility 0.15s ease 0.3s, transform 0.15s ease 0.3s;
+}
+
+.hover-menu:hover {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease !important;
+}
+
+.hover-menu-button:hover .hover-menu {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+}
+
+header:hover .hover-menu {
+    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease !important;
+}
+
+:global(.hover-menu-button > svg) {
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+:global(.hover-menu-button:hover > svg) {
+    opacity: 1;
+}
+
+/* Special case for view-mode-icon which uses {@html} */
+.view-mode-icon svg {
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.view-mode-icon:hover svg {
+    opacity: 1;
 }
