@@ -7,14 +7,14 @@
 
 	let client
 
-	let conv = false // $derived() props
+
 
 	async function startVoice() {
-		// conv = true
+		conv = true
 	}
 
 	async function stopVoice() {
-		// conv = false
+		conv = false
 	}
 
 	// const conversation = await Conversation.startSession({ signedUrl });
@@ -75,7 +75,8 @@
 		switchToActivity,
 		switchToAIAgent,
 		viewMode = 'default',
-		currentTab = null
+		currentTab = null,
+		conv = $bindable(false)
 	} = $props()
 
 	let selectedTarget = $state('')
@@ -2916,7 +2917,7 @@ The current system demonstrates strong performance and security characteristics.
 												class="agent-edit-input"
 												bind:value={editingContent}
 												placeholder="Edit your message..."
-												rows="3"
+												rows="2"
 											></textarea>
 											<div class="agent-edit-actions">
 												<button class="agent-edit-btn save" onmousedown={() => saveMessageEdit(message.id)}>Save</button
@@ -3066,6 +3067,36 @@ The current system demonstrates strong performance and security characteristics.
 					placeholder="We can do anything..."
 					rows="3"
 				></textarea>
+				<button
+					class="agent-mic-button"
+					class:low-opacity={!conv}
+					onmousedown={() => handleActionButton('listen')}
+					title="Voice Input"
+					aria-label="Voice Input"
+				>
+					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"
+						/>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M19 10v2a7 7 0 0 1-14 0v-2"
+						/>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 19v4"
+						/>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M8 23h8"
+						/>
+					</svg>
+				</button>
 				{#if isProcessing}
 					<button
 						class="agent-stop-button"
@@ -3104,7 +3135,6 @@ The current system demonstrates strong performance and security characteristics.
 				<button class="agent-quick-action" onmousedown={() => handleActionButton('ask')}>ask</button>
 				<button class="agent-quick-action" onmousedown={() => handleActionButton('do')}>do</button>
 				<button class="agent-quick-action" onmousedown={() => handleActionButton('remember')}>remember</button>
-				<button class="agent-quick-action" onmousedown={() => handleActionButton('listen')}>listen</button>
 				<button class="agent-quick-action" onmousedown={() => handleActionButton('see')}>see</button>
 			</div>
 		</div>
@@ -3699,7 +3729,7 @@ The current system demonstrates strong performance and security characteristics.
 		background: rgba(255, 255, 255, 0.05);
 		border: 1px solid rgba(255, 255, 255, 0.06);
 		border-radius: 8px;
-		padding: 8px 80px 8px 8px;
+		padding: 8px 8px 27px 9px;
 		color: white;
 		font-size: 14px;
 		font-family: inherit;
@@ -3741,8 +3771,6 @@ The current system demonstrates strong performance and security characteristics.
 		right: 5px;
 	}
 
-
-
 	.agent-stop-button {
 		position: absolute;
 		background: transparent;
@@ -3768,6 +3796,32 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-send-button:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	.agent-mic-button {
+		position: absolute;
+		background: transparent;
+		border: none;
+		border-radius: 4px;
+		padding: 4px;
+		color: rgba(255, 255, 255, 0.6);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s ease;
+		z-index: 2;
+		bottom: 11px;
+		right: 40px;
+	}
+
+	.agent-mic-button.low-opacity {
+		opacity: 0.4;
+	}
+
+	.agent-mic-button:hover {
+		background: rgba(255, 255, 255, 0.08);
+		color: white;
 	}
 
 	.agent-stop-button:hover {

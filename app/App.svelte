@@ -3099,6 +3099,10 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
     bind:certificateMonitorForTab={certificateMonitorForTab} 
 />
 
+{#if agentEnabled}
+    <Agent></Agent>
+{/if}
+
 {#if rightPinnedTabs.length > 0}
     <div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
     class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
@@ -3262,7 +3266,8 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
                          {switchToActivity}
                          {switchToAIAgent}
                          {viewMode}
-                         currentTab={data.docs[data.spaceMeta.activeTabId]} />
+                         currentTab={data.docs[data.spaceMeta.activeTabId]}
+                         bind:conv={agentEnabled} />
             </div>
         {/if}
         

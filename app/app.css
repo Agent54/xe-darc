@@ -75,9 +75,20 @@ header.focus-mode .header-drag-handle {
 .sidebar-right:hover, :global(.sidebar-right.hover-xe) {
     box-shadow: 0 0 13px 7px #0000003c;
     transform: translateX(0px);
-    transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04),  opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45;
+    transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04), opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45;
     transition-delay: 0.1s;
     opacity: 1;
+}
+
+.sidebar-right:hover .sidebar-button > svg, .sidebar-right:hover .sidebar-divider, :global(.sidebar-right.hover-xe) .sidebar-button > svg, :global(.sidebar-right.hover-xe) .sidebar-divider {
+    opacity: 1;
+    transition: opacity 0.05s ease;
+    transition-delay: 0.1s;
+}
+
+.sidebar-right:hover .sidebar-button:not(.sidebar-nav-button), .sidebar-right:hover .sidebar-button.active:not(.sidebar-nav-button), :global(.sidebar-right.hover-xe) .sidebar-button:not(.sidebar-nav-button), :global(.sidebar-right.hover-xe) .sidebar-button.active:not(.sidebar-nav-button) {
+    transition: border 0.05s ease, background 0.05s ease;
+    transition-delay: 0.1s;
 }
 
 .sidebar-right::before {
@@ -2143,10 +2154,8 @@ header.window-controls-overlay + .content-area-scrim {
     opacity: 0 !important;
     visibility: hidden !important;
     pointer-events: none !important;
-    transition: opacity 0.45s ease, visibility 0.45s ease, transform 0.45s ease !important;
+    transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease !important;
 }
-
-
 
 .hover-menu:hover {
     opacity: 1 !important;
@@ -2191,7 +2200,7 @@ header:hover .hover-menu {
     left: -5px;
     width: 7px;
     height: 7px;
-    background: rgba(34, 197, 94, 0.9);
+    background: rgba(34, 197, 94, 0.6);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -2203,16 +2212,16 @@ header:hover .hover-menu {
 .microphone-indicator svg {
     width: 5px;
     height: 5px;
-    color: rgba(255, 255, 255, 0.95);
+    color: rgba(255, 255, 255, 0.7);
 }
 
 @keyframes microphone-pulse {
     0%, 100% {
-        opacity: 0.9;
+        opacity: 0.7;
         transform: scale(1);
     }
     50% {
-        opacity: 1;
+        opacity: 0.8;
         transform: scale(1.1);
     }
 }
