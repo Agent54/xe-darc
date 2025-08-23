@@ -60,10 +60,18 @@ header.focus-mode .header-drag-handle {
     backdrop-filter: blur(7px);
     transform: translateX(18px);
     border-left: 1px solid transparent;
+    /* opacity: 0; */
+}
+.sidebar-right:not(:hover) .sidebar-button > svg, .sidebar-right:not(:hover) .sidebar-divider{
     opacity: 0;
+    transition: opacity 0.05s ease 0.45s;
+}
+.sidebar-right:not(:hover) .sidebar-button:not(.sidebar-nav-button), .sidebar-right:not(:hover) .sidebar-button.active:not(.sidebar-nav-button) {
+    border: 1px solid transparent;
+    background: transparent;
+    transition: border 0.05s ease 0.45s, background 0.05s ease 0.45s;
 }
 
-/* .sidebar-right.sidebar-right-hovered,  */
 .sidebar-right:hover, :global(.sidebar-right.hover-xe) {
     box-shadow: 0 0 13px 7px #0000003c;
     transform: translateX(0px);
@@ -2175,4 +2183,36 @@ header:hover .hover-menu {
 
 .view-mode-icon:hover svg {
     opacity: 1;
+}
+
+.microphone-indicator {
+    position: absolute;
+    top: -2px;
+    left: -5px;
+    width: 7px;
+    height: 7px;
+    background: rgba(34, 197, 94, 0.9);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    animation: microphone-pulse 2s ease-in-out infinite;
+}
+
+.microphone-indicator svg {
+    width: 5px;
+    height: 5px;
+    color: rgba(255, 255, 255, 0.95);
+}
+
+@keyframes microphone-pulse {
+    0%, 100% {
+        opacity: 0.9;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
 }

@@ -6,7 +6,8 @@
     import Settings from './components/Settings.svelte'
     import UserMods from './components/UserMods.svelte'
     import Activity from './components/Activity.svelte'
-    import AIAgent from './components/Agent.svelte'
+    import AgentSidebar from './components/AgentSidebar.svelte'
+    import Agent from './components/Agent.svelte'
     import Excalidraw from './components/Excalidraw.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
@@ -136,11 +137,14 @@
     let prevOpenSidebars = $state(new Set())
     let isSwitchingSidebars = $state(false)
 
+    let agentEnabled = $state(false)
+
     let userMods = $state([])
     
     let isEditingUrl = $state(false)
     let editingUrlValue = $state('')
     let urlInput = $state(null)
+
 
     function getEnabledUserMods(tab) {
         if (!tab?.url) return { css: [], js: [] }
@@ -1398,7 +1402,7 @@
     }
 
     function activateVoiceAgent() {
-
+        agentEnabled = !agentEnabled
     }
 
     function toggleSidebar(sidebarName) {
@@ -3052,6 +3056,9 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
      onscroll={handleScroll} 
      bind:this={scrollContainer}
      style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
+    
+
+    
     {#if viewMode === 'canvas'}
         <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
     <!-- {:else if viewMode === 'reading'}
@@ -3118,10 +3125,21 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
 <!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->
 <div class="sidebar-right" role="region" >
     <div class="sidebar-buttons">
-        <button class="sidebar-button" title="Voice Agent" aria-label="Voice Agent" onmousedown={activateVoiceAgent}>
+        <button class="sidebar-button" 
+                class:active={agentEnabled}
+                title="Voice Agent" 
+                aria-label="Voice Agent" 
+                onmousedown={activateVoiceAgent}>
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 1.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3ZM19.5 10.5a7.5 7.5 0 0 1-15 0M12 18.75a7.5 7.5 0 0 0 7.5-7.5M12 18.75V22.5" />
             </svg>
+            {#if agentEnabled}
+                <div class="microphone-indicator">
+                    <svg class="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 1.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3ZM19.5 10.5a7.5 7.5 0 0 1-15 0M12 18.75a7.5 7.5 0 0 0 7.5-7.5M12 18.75V22.5" />
+                    </svg>
+                </div>
+            {/if}
         </button>
 
         <button class="sidebar-button" 
@@ -3236,7 +3254,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         
         {#if openSidebars.has('aiAgent')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('aiAgent') && !prevOpenSidebars.has('aiAgent') && !isSwitchingSidebars && !isWindowResizing}>
-                <AIAgent onClose={() => closeSidebar('aiAgent')} 
+                <AgentSidebar onClose={() => closeSidebar('aiAgent')} 
                          {openSidebars}
                          {switchToResources} 
                          {switchToSettings}
