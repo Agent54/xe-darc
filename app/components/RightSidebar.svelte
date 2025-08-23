@@ -7,11 +7,11 @@
         <h3 class="sidebar-title">{title}</h3>
         <div class="sidebar-controls">
             <div class="sidebar-nav-buttons" class:multiple={openSidebars.size > 1}>
-                <button class="sidebar-nav-button" title="Add" aria-label="Add">
+                <!-- TODO: <button class="sidebar-nav-button" title="Add" aria-label="Add">
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>
-                </button>
+                </button> -->
                 
                 <button class="sidebar-nav-button" 
                         class:active={openSidebars.has('aiAgent')}

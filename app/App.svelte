@@ -124,17 +124,20 @@
     let lightboxModeEnabled = $state(true)
     let tabsOpenRight = $state(true)
     
-    // Window resize state for performance optimization
+    let menuForceClose = $state(false)
+
+    async function closeMenuImmediately() {
+        menuForceClose = true
+    }
+    
     let isWindowResizing = $state(false)
     let resizeTimeout = null
 
-    // Track previous state to detect newly opened sidebars
     let prevOpenSidebars = $state(new Set())
     let isSwitchingSidebars = $state(false)
 
     let userMods = $state([])
     
-    // URL editing state
     let isEditingUrl = $state(false)
     let editingUrlValue = $state('')
     let urlInput = $state(null)
@@ -1337,75 +1340,7 @@
         hideContextMenu()
     }
 
-    function toggleResourcesSidebar() {
-        if (openSidebars.has('resources')) {
-            openSidebars.delete('resources')
-        } else {
-            openSidebars.add('resources')
-        }
-        openSidebars = new Set(openSidebars) // trigger reactivity
-    }
 
-    function closeResourcesSidebar() {
-        openSidebars.delete('resources')
-        openSidebars = new Set(openSidebars)
-    }
-
-    function toggleSettingsSidebar() {
-        if (openSidebars.has('settings')) {
-            openSidebars.delete('settings')
-        } else {
-            openSidebars.add('settings')
-        }
-        openSidebars = new Set(openSidebars) // trigger reactivity
-    }
-
-    function closeSettingsSidebar() {
-        openSidebars.delete('settings')
-        openSidebars = new Set(openSidebars)
-    }
-
-    function toggleUserModsSidebar() {
-        if (openSidebars.has('userMods')) {
-            openSidebars.delete('userMods')
-        } else {
-            openSidebars.add('userMods')
-        }
-        openSidebars = new Set(openSidebars) // trigger reactivity
-    }
-
-    function closeUserModsSidebar() {
-        openSidebars.delete('userMods')
-        openSidebars = new Set(openSidebars)
-    }
-
-    function toggleActivitySidebar() {
-        if (openSidebars.has('activity')) {
-            openSidebars.delete('activity')
-        } else {
-            openSidebars.add('activity')
-        }
-        openSidebars = new Set(openSidebars) // trigger reactivity
-    }
-
-    function closeActivitySidebar() {
-        openSidebars.delete('activity')
-        openSidebars = new Set(openSidebars)
-    }
-
-    function toggleAIAgentSidebar() {
-        if (openSidebars.has('aiAgent')) {
-            openSidebars.delete('aiAgent')
-        } else {
-            openSidebars.add('aiAgent')
-        }
-        openSidebars = new Set(openSidebars) // trigger reactivity
-    }
-
-    function closeAIAgentSidebar() {
-        openSidebars.delete('aiAgent')
-        openSidebars = new Set(openSidebars)
-    }
 
     function switchToResources() {
         if (!openSidebars.has('resources')) {
@@ -1460,6 +1395,24 @@
             openSidebars.add('aiAgent')
             openSidebars = new Set(openSidebars)
         }
+    }
+
+    function activateVoiceAgent() {
+
+    }
+
+    function toggleSidebar(sidebarName) {
+        if (openSidebars.has(sidebarName)) {
+            openSidebars.delete(sidebarName)
+        } else {
+            openSidebars.add(sidebarName)
+        }
+        openSidebars = new Set(openSidebars)
+    }
+
+    function closeSidebar(sidebarName) {
+        openSidebars.delete(sidebarName)
+        openSidebars = new Set(openSidebars)
     }
 
     function toggleAppsOverlay() {
@@ -2461,17 +2414,18 @@
     <div class="header-icon-button view-mode-icon hover-menu-button" 
         role="button"
         tabindex="0"
-        onmousedown={toggleViewMode}
+        onmousedown={(e) => { toggleViewMode(); closeMenuImmediately() }}
+        onmouseenter={() => menuForceClose = false}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleViewMode() } }}
         class:hidden={focusModeEnabled && !focusModeHovered}>
         {@html getViewModeIcon(viewMode)}
-        <div class="view-mode-menu hover-menu">
+        <div class="view-mode-menu hover-menu" class:menu-force-close={menuForceClose}>
             <div class="view-mode-menu-header menu-header">View Mode</div>
             <div class="view-mode-menu-item menu-item" 
                  class:active={viewMode === 'default'}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); selectViewMode('default') }}
+                 onmousedown={(e) => { e.stopPropagation(); selectViewMode('default'); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('default') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('default')}
@@ -2495,7 +2449,7 @@
                     class:active={viewMode === 'canvas'}
                     role="button"
                     tabindex="0"
-                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('canvas') }}
+                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('canvas'); closeMenuImmediately() }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('canvas') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('canvas')}
@@ -2507,7 +2461,7 @@
                     class:active={viewMode === 'tile'}
                     role="button"
                     tabindex="0"
-                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('tile') }}
+                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('tile'); closeMenuImmediately() }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('tile') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('tile')}
@@ -2519,7 +2473,7 @@
                     class:active={viewMode === 'reading'}
                     role="button"
                     tabindex="0"
-                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('reading') }}
+                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('reading'); closeMenuImmediately() }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('reading') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('reading')}
@@ -2531,7 +2485,7 @@
                  class:active={viewMode === 'squat'}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); selectViewMode('squat') }}
+                 onmousedown={(e) => { e.stopPropagation(); selectViewMode('squat'); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('squat') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('squat')}
@@ -2543,7 +2497,7 @@
                 class:active={viewMode === 'notebook'}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => { e.stopPropagation(); selectViewMode('notebook') }}
+                onmousedown={(e) => { e.stopPropagation(); selectViewMode('notebook'); closeMenuImmediately() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('notebook') } }}>
             <span class="view-mode-icon-item menu-icon-item">
                 {@html getViewModeIcon('notebook')}
@@ -2625,19 +2579,21 @@
         role="button"
         tabindex="0"
         title="Settings"
-        class:hidden={focusModeEnabled && !focusModeHovered}>
+        class:hidden={focusModeEnabled && !focusModeHovered}
+        onmouseenter={() => menuForceClose = false}
+        onmousedown={(e) => { e.stopPropagation(); toggleSidebar('settings'); closeMenuImmediately() }}>
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
         </svg>
-        <div class="settings-menu hover-menu">
+        <div class="settings-menu hover-menu" class:menu-force-close={menuForceClose}>
             <div class="settings-menu-header menu-header">Options</div>
             
-            <div class="settings-menu-item menu-item" 
+            <!-- TODO: theming supoort <div class="settings-menu-item menu-item" 
                  class:active={darkMode}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleDarkMode() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleDarkMode(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDarkMode() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2646,12 +2602,13 @@
                 </span>
                 <span>Dark Mode</span>
                 {#if darkMode}<span class="checkmark">•</span>{/if}
-            </div>
+            </div> -->
+
             <div class="settings-menu-item menu-item" 
                  class:active={globalTabComplete}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleGlobalTabComplete() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleGlobalTabComplete(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleGlobalTabComplete() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2665,7 +2622,7 @@
                  class:active={batterySaver}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleBatterySaver() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleBatterySaver(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleBatterySaver() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2679,7 +2636,7 @@
                  class:active={dataSaver}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleDataSaver() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleDataSaver(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDataSaver() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2689,25 +2646,12 @@
                 <span>Data Saver</span>
                 {#if dataSaver}<span class="checkmark">•</span>{/if}
             </div>
-            <div class="settings-menu-item menu-item" 
-                class:active={secondScreenActive}
-                role="button"
-                tabindex="0"
-                onmousedown={(e) => { e.stopPropagation(); toggleSecondScreen() }}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSecondScreen() } }}>
-                <span class="settings-menu-icon-item menu-icon-item">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
-                    </svg>
-                </span>
-                <span>Second Screen</span>
-                {#if secondScreenActive}<span class="checkmark">•</span>{/if}
-            </div>
+          
             <div class="settings-menu-item menu-item" 
                 class:active={statusLightsEnabled}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => { e.stopPropagation(); toggleStatusLights() }}
+                onmousedown={(e) => { e.stopPropagation(); toggleStatusLights(); closeMenuImmediately() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleStatusLights() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2722,7 +2666,7 @@
                 class:active={devModeEnabled}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => { e.stopPropagation(); toggleDevMode() }}
+                onmousedown={(e) => { e.stopPropagation(); toggleDevMode(); closeMenuImmediately() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDevMode() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2737,7 +2681,7 @@
                  class:active={data.spaceMeta.config.showLinkPreviews}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleLinkPreviews() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleLinkPreviews(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLinkPreviews() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2752,7 +2696,7 @@
                  class:active={lightboxModeEnabled}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleLightboxMode() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleLightboxMode(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLightboxMode() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2767,7 +2711,7 @@
                  class:active={tabsOpenRight}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleTabsOpenRight() }}
+                 onmousedown={(e) => { e.stopPropagation(); toggleTabsOpenRight(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleTabsOpenRight() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2779,13 +2723,28 @@
             </div>
             
             <div class="settings-menu-separator"></div>
-            
+
             <div class="settings-menu-item menu-item" 
+                class:active={secondScreenActive}
+                role="button"
+                tabindex="0"
+                onmousedown={(e) => { e.stopPropagation(); toggleSecondScreen(); closeMenuImmediately() }}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSecondScreen() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
+                    </svg>
+                </span>
+                <span>Second Screen</span>
+                {#if secondScreenActive}<span class="checkmark">•</span>{/if}
+            </div>
+            
+            <!-- <div class="settings-menu-item menu-item" 
                  class:active={openSidebars.has('resources')}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleResourcesSidebar() }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleResourcesSidebar() } }}>
+                 onmousedown={(e) => { e.stopPropagation(); toggleSidebar('resources'); closeMenuImmediately() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSidebar('resources') } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
@@ -2794,12 +2753,13 @@
                 <span>Resources</span>
                 {#if openSidebars.has('resources')}<span class="checkmark">•</span>{/if}
             </div>
+
             <div class="settings-menu-item menu-item" 
                  class:active={openSidebars.has('activity')}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleActivitySidebar() }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleActivitySidebar() } }}>
+                 onmousedown={(e) => { e.stopPropagation(); toggleSidebar('activity'); closeMenuImmediately() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSidebar('activity') } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
@@ -2808,12 +2768,13 @@
                 <span>Activity</span>
                 {#if openSidebars.has('activity')}<span class="checkmark">•</span>{/if}
             </div>
+            
             <div class="settings-menu-item menu-item" 
                  class:active={openSidebars.has('userMods')}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleUserModsSidebar() }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleUserModsSidebar() } }}>
+                 onmousedown={(e) => { e.stopPropagation(); toggleSidebar('userMods'); closeMenuImmediately() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSidebar('userMods') } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
@@ -2827,8 +2788,8 @@
                 class:active={openSidebars.has('settings')}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => { e.stopPropagation(); toggleSettingsSidebar() }}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSettingsSidebar() } }}>
+                onmousedown={(e) => { e.stopPropagation(); toggleSidebar('settings'); closeMenuImmediately() }}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSidebar('settings') } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
@@ -2837,7 +2798,7 @@
                 </span>
                 <span>Settings</span>
                 {#if openSidebars.has('settings')}<span class="checkmark">•</span>{/if}
-            </div>
+            </div> -->
         </div>
     </div>
 
@@ -2847,16 +2808,18 @@
             tabindex="0"
             title="Dev Menu"
             style="right: 133px;"
-            class:hidden={focusModeEnabled && !focusModeHovered}>
+            class:hidden={focusModeEnabled && !focusModeHovered}
+            onmouseenter={() => menuForceClose = false}
+            onmousedown={(e) => { e.stopPropagation(); closeMenuImmediately() }}>
             <svg class="w-4 h-4" fill="none" viewBox="1 1 21 21" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
             </svg>
-            <div class="dev-menu hover-menu">
+            <div class="dev-menu hover-menu" class:menu-force-close={menuForceClose}>
                 <div class="dev-menu-header">Developer</div>
                 <div class="dev-menu-item menu-item" 
                      role="button"
                      tabindex="0"
-                     onmousedown={(e) => { e.stopPropagation(); data.loadSampleData() }}
+                     onmousedown={(e) => { e.stopPropagation(); data.loadSampleData(); closeMenuImmediately() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.loadSampleData() } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2868,7 +2831,7 @@
                 <div class="dev-menu-item menu-item" 
                      role="button"
                      tabindex="0"
-                     onmousedown={(e) => { e.stopPropagation(); openTestSuite() }}
+                     onmousedown={(e) => { e.stopPropagation(); openTestSuite(); closeMenuImmediately() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openTestSuite() } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2880,7 +2843,7 @@
                 <div class="dev-menu-item menu-item" 
                         role="button"
                         tabindex="0"
-                        onmousedown={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) }}
+                        onmousedown={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }); closeMenuImmediately() }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2892,7 +2855,7 @@
                 <div class="dev-menu-item menu-item" 
                      role="button"
                      tabindex="0"
-                     onmousedown={(e) => { e.stopPropagation(); openVSCodeWorkspace() }}
+                     onmousedown={(e) => { e.stopPropagation(); openVSCodeWorkspace(); closeMenuImmediately() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openVSCodeWorkspace() } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -3155,18 +3118,70 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
 <!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->
 <div class="sidebar-right" role="region" >
     <div class="sidebar-buttons">
-        <button class="sidebar-button" title="Add" aria-label="Add">
+        <button class="sidebar-button" title="Voice Agent" aria-label="Voice Agent" onmousedown={activateVoiceAgent}>
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 1.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3ZM19.5 10.5a7.5 7.5 0 0 1-15 0M12 18.75a7.5 7.5 0 0 0 7.5-7.5M12 18.75V22.5" />
             </svg>
         </button>
-        
-        <button class="sidebar-button" title="Agent" aria-label="Agent" onmouseup={toggleAIAgentSidebar}>
+
+        <button class="sidebar-button" 
+                class:active={openSidebars.has('aiAgent')}
+                title="Agent" 
+                aria-label="Agent" 
+                onmousedown={() => toggleSidebar('aiAgent')}>
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423L16.5 15.75l.394 1.183a2.25 2.25 0 0 0 1.423 1.423L19.5 18.75l-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
             </svg>
         </button>
         
+        <div class="sidebar-divider"></div>
+        
+        <!-- TODO: <button class="sidebar-button" title="Add" aria-label="Add">
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+        </button> -->
+        
+        <button class="sidebar-button" 
+                class:active={openSidebars.has('activity')}
+                title="Activity" 
+                aria-label="Activity"
+                onmousedown={() => toggleSidebar('activity')}>
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+        </button>
+        
+        <button class="sidebar-button" 
+                class:active={openSidebars.has('resources')}
+                title="Resources" 
+                aria-label="Resources"
+                onmousedown={() => toggleSidebar('resources')}>
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+            </svg>
+        </button>
+
+        <button class="sidebar-button" 
+                class:active={openSidebars.has('userMods')}
+                title="User Mods" 
+                aria-label="User Mods"
+                onmousedown={() => toggleSidebar('userMods')}>
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+            </svg>
+        </button>
+        
+        <button class="sidebar-button" 
+                class:active={openSidebars.has('settings')}
+                title="Settings" 
+                aria-label="Settings"
+                onmousedown={() => toggleSidebar('settings')}>
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+        </button>
 
     </div>
 
@@ -3182,7 +3197,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
          style="--sidebar-width: {rightSidebarWidth}px; --space-taken: {spaceTaken}px;">
         {#if openSidebars.has('resources')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('resources') && !prevOpenSidebars.has('resources') && !isSwitchingSidebars && !isWindowResizing}>
-                <Resources onClose={closeResourcesSidebar}  {requestedResources}
+                <Resources onClose={() => closeSidebar('resources')}  {requestedResources}
                           {openSidebars}
                           {switchToResources} 
                           {switchToSettings}
@@ -3194,7 +3209,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         
         {#if openSidebars.has('activity')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('activity') && !prevOpenSidebars.has('activity') && !isSwitchingSidebars && !isWindowResizing}>
-                <Activity onClose={closeActivitySidebar}
+                <Activity onClose={() => closeSidebar('activity')}
                          {openSidebars}
                          {switchToResources} 
                          {switchToSettings}
@@ -3206,7 +3221,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         
         {#if openSidebars.has('userMods')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('userMods') && !prevOpenSidebars.has('userMods') && !isSwitchingSidebars && !isWindowResizing}>
-                <UserMods onClose={closeUserModsSidebar} 
+                <UserMods onClose={() => closeSidebar('userMods')} 
                          {openSidebars}
                          {switchToResources} 
                          {switchToSettings}
@@ -3221,7 +3236,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         
         {#if openSidebars.has('aiAgent')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('aiAgent') && !prevOpenSidebars.has('aiAgent') && !isSwitchingSidebars && !isWindowResizing}>
-                <AIAgent onClose={closeAIAgentSidebar} 
+                <AIAgent onClose={() => closeSidebar('aiAgent')} 
                          {openSidebars}
                          {switchToResources} 
                          {switchToSettings}
@@ -3235,7 +3250,7 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         
         {#if openSidebars.has('settings')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('settings') && !prevOpenSidebars.has('settings') && !isSwitchingSidebars && !isWindowResizing}>
-                <Settings onClose={closeSettingsSidebar} 
+                <Settings onClose={() => closeSidebar('settings')} 
                          {openSidebars}
                          {switchToResources} 
                          {switchToSettings}

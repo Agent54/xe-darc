@@ -141,6 +141,19 @@ header.focus-mode .header-drag-handle {
     transition: transform 0.1s ease;
 }
 
+.sidebar-button.active {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.sidebar-divider {
+    width: 12px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 6px 0;
+}
+
 .drag-handle-left {
     position: fixed;
     top: 0;
@@ -2114,6 +2127,18 @@ header.window-controls-overlay + .content-area-scrim {
     pointer-events: auto;
     transition: opacity 0.15s ease 0.3s, visibility 0.15s ease 0.3s, transform 0.15s ease 0.3s;
 }
+
+.hover-menu.menu-force-close,
+.hover-menu.menu-force-close:hover,
+.hover-menu-button:hover .hover-menu.menu-force-close,
+.hover-menu-button.menu-show-delay:hover .hover-menu.menu-force-close {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transition: opacity 0.45s ease, visibility 0.45s ease, transform 0.45s ease !important;
+}
+
+
 
 .hover-menu:hover {
     opacity: 1 !important;
