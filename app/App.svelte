@@ -13,6 +13,7 @@
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import Favicon from './components/Favicon.svelte'
     import UrlRenderer from './components/UrlRenderer.svelte'
+    import AttachmentImage from './components/AttachmentImage.svelte'
     import Apps from './components/Apps.svelte'
     import { onMount, untrack, tick } from 'svelte'
     import data from './data.svelte.js'
@@ -2947,7 +2948,7 @@
             </div>
             {#if hoveredTab.screenshot}
                 <div class="hovercard-screenshot">
-                    <img src={hoveredTab.screenshot} alt="Page preview" />
+                    <AttachmentImage src={hoveredTab.screenshot} alt="Page preview" />
                 </div>
             {/if}
         </div>

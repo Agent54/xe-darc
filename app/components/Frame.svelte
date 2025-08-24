@@ -4,6 +4,7 @@
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
     import Tooltip from './Tooltip.svelte'
+    import AttachmentImage from './AttachmentImage.svelte'
     import { origin } from '../lib/utils.js'
     import data from '../data.svelte.js'
 
@@ -488,113 +489,52 @@
     }
 </script>
 
-{#if !data.frames[tab.id]?.frame && data.spaceMeta.activeTabId !== tab.id && !tab.pinned}
-    <div 
-        bind:this={frameWrapper}
-        transition:fade={{duration: 150}}
-        style={style}
-        class="frame hibernated-frame"
-        class:window-controls-overlay={headerPartOfMain}
-        class:no-pointer-events={isScrolling}
-        role="button"
-        tabindex="0"
-        onmousedown={() => {
-            onFrameFocus()
-        }}
-        id="tab_{tab.id}"
-    >
-        {#if tab.screenshot}
-            <img src={tab.screenshot} alt="Hibernated tab preview" class="hibernated-screenshot" />
-        {:else}
-            <div class="hibernated-placeholder">
-                <div class="hibernated-icon">💤</div>
-                <div class="hibernated-text">Tab is hibernated</div>
-                <div class="hibernated-url">{tab.url}</div>
-            </div>
-        {/if}
-    </div>
-{:else}
-    {#if controlledFrameSupported}
-        <ControlledFrame
-            {style}
-            {isScrolling}
-            {tabId}
-            {headerPartOfMain}
-            {onFrameFocus}
-            {onFrameBlur}
-            {userMods}
-            {requestedResources}
-            {statusLightsEnabled}
-            {createOffOriginLightbox}
-            {observer}
-            bind:commandKeyPressed
-            bind:hoveredLink
-           
-            bind:inputDiffVisible
-            bind:inputDiffTimeout
-            bind:inputDiffData
-        />
-        <!--  bind:linkPreviewTimeout bind:linkPreviewVisible    linkPreviewVisible &&  -->
-
-        {#if hoveredLink}
-            <div class="link-preview" transition:fade={{duration: 150}}>
-                {#if isDifferentOrigin}
-                    <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                        <polyline points="15,3 21,3 21,9"/>
-                        <line x1="10" y1="14" x2="21" y2="3"/>
-                    </svg>
-                {/if}
-                <img 
-                    src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
-                    alt=""
-                    class="link-preview-favicon"
-                />
-                <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
-            </div>
-        {/if}
-        
-        {#if inputDiffVisible && inputDiffData}
-            <div class="input-diff-preview" transition:fade={{duration: 200}}>
-                <div class="input-diff-header">
-                    <span class="input-diff-element">Press tab to complete / double Esc to disable</span>
+<div class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
+    {#if !data.frames[tab.id]?.frame && data.spaceMeta.activeTabId !== tab.id && !tab.pinned}
+        <div 
+            bind:this={frameWrapper}
+            transition:fade={{duration: 200, delay: 400}}
+            class="frame hibernated-frame"
+            role="button"
+            tabindex="0"
+            onmousedown={() => {
+                onFrameFocus()
+            }}
+            id="tab_{tab.id}"
+        >
+            {#if tab.screenshot}
+                <AttachmentImage src={tab.screenshot} alt="Hibernated tab preview" class="hibernated-screenshot" lazy={true} />
+            {:else}
+                <div class="hibernated-placeholder">
+                    <div class="hibernated-icon">💤</div>
+                    <div class="hibernated-text">Tab is hibernated</div>
+                    <div class="hibernated-url">{tab.url}</div>
                 </div>
-                <div class="input-diff-content">
-                    {#each inputDiffData.diff as diffItem}
-                        {#if diffItem.type === 'add'}
-                            <span class="diff-add">{diffItem.char}</span>
-                        {:else if diffItem.type === 'delete'}
-                            <span class="diff-delete">{diffItem.char}</span>
-                        {:else}
-                            <span class="diff-same">{diffItem.char}</span>
-                        {/if}
-                    {/each}
-                </div>
-            </div>
-        {/if}
+            {/if}
+        </div>
     {:else}
-        {#if true} 
-        <!-- initial url  -->
-            <iframe
-                style={style}
-                transition:fade={{duration: 150}}
-                bind:this={iframeFrame}
-                src={tab.url}
-                class:window-controls-overlay={headerPartOfMain}
-                class:no-pointer-events={isScrolling}
-                id="tab_{tab.id}"
-                class="frame"
-                title="fallback-iframe"
-                credentialless={true}
-                referrerpolicy="strict-origin-when-cross-origin"
-                loading="lazy"
-            ></iframe>
-
-            <!--  sandbox="allow-scripts allow-forms"
-                csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
-                allow="accelerometer 'none'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'none'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-create 'self'; publickey-credentials-get 'self'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'" -->
+        {#if controlledFrameSupported}
+            <ControlledFrame
+                {style}
+                {isScrolling}
+                {tabId}
+                {headerPartOfMain}
+                {onFrameFocus}
+                {onFrameBlur}
+                {userMods}
+                {requestedResources}
+                {statusLightsEnabled}
+                {createOffOriginLightbox}
+                {observer}
+                bind:commandKeyPressed
+                bind:hoveredLink
             
-            <!-- Link preview for iframe fallback  linkPreviewVisible &&-->
+                bind:inputDiffVisible
+                bind:inputDiffTimeout
+                bind:inputDiffData
+            />
+            <!--  bind:linkPreviewTimeout bind:linkPreviewVisible    linkPreviewVisible &&  -->
+
             {#if hoveredLink}
                 <div class="link-preview" transition:fade={{duration: 150}}>
                     {#if isDifferentOrigin}
@@ -613,11 +553,10 @@
                 </div>
             {/if}
             
-            <!-- Input diff preview for iframe fallback -->
             {#if inputDiffVisible && inputDiffData}
                 <div class="input-diff-preview" transition:fade={{duration: 200}}>
                     <div class="input-diff-header">
-                        <span class="input-diff-element">completion</span>
+                        <span class="input-diff-element">Press tab to complete / double Esc to disable</span>
                     </div>
                     <div class="input-diff-content">
                         {#each inputDiffData.diff as diffItem}
@@ -632,227 +571,188 @@
                     </div>
                 </div>
             {/if}
-        <!-- {:else}
-            <div 
-                transition:fade={{duration: 150}}
-                bind:this={frame}
-                class:window-controls-overlay={headerPartOfMain}
-                class:no-pointer-events={isScrolling}
-                id="tab_{tab.id}"
-                class="frame iframe-blocked"
-            >
-                <div class="iframe-blocked-content">
-                    <div class="iframe-blocked-icon">⚠️</div>
-                    <div class="iframe-blocked-title">ControlledFrame API Not Available</div>
-                    <div class="iframe-blocked-message">
-                        This app requires the ControlledFrame API to display web content securely. 
-                        {#if tab.url}
-                            The URL "{tab.url}" cannot be displayed in a standard iframe due to security restrictions.
-                        {/if}
-                    </div>
-                    <div class="iframe-blocked-suggestion">
-                        <strong>To enable ControlledFrame API:</strong><br/>
-                        1. Ensure this is running as an Isolated Web App (IWA)<br/>
-                        2. Enable chrome://flags/#isolated-web-app-controlled-frame<br/>
-                        3. Or run Chrome with --enable-features=IsolatedWebApps,IsolatedWebAppControlledFrame
-                    </div>
-                </div>
-            </div> -->
-        {/if}
-    {/if}
+        {:else}
+            {#if true} 
+            <!-- initial url  -->
+                <iframe
+                    style={style}
+                    transition:fade={{duration: 150}}
+                    bind:this={iframeFrame}
+                    src={tab.url}
+                    class:window-controls-overlay={headerPartOfMain}
+                    class:no-pointer-events={isScrolling}
+                    id="tab_{tab.id}"
+                    class="frame"
+                    title="fallback-iframe"
+                    credentialless={true}
+                    referrerpolicy="strict-origin-when-cross-origin"
+                    loading="lazy"
+                ></iframe>
 
-    {#if globalHoverPreviewVisible && globalHoverPreview && data.docs[globalHoverPreviewTabId]?.preview}
-        {#key globalHoverPreview.href}
-            <div 
-                class="global-hover-preview" 
-                class:shown={globalHoverPreviewShown}
-                style={globalHoverPreview?.position ? 
-                    `margin-left: ${calculatePreviewLeft(globalHoverPreview)}px; top: ${calculatePreviewTop(globalHoverPreview)}px;` : 
-                    ''}
-                role="dialog"
-                aria-label="Link preview"
-                tabindex="-1"
-                out:scale={{duration: 200}}
-                onmouseenter={() => { 
-                    isHoveringPreview = true 
-                    // Cancel pending hide when mouse enters the preview
-                    if (hidePreviewDelayTimeout) {
-                        clearTimeout(hidePreviewDelayTimeout)
-                        hidePreviewDelayTimeout = null
-                    }
-                }}
-                onmouseleave={() => { 
-                    isHoveringPreview = false 
-                    // Trigger hide logic when leaving preview
-                    if (!hoveredLink) {
-                        if (hidePreviewDelayTimeout) clearTimeout(hidePreviewDelayTimeout)
-                        hidePreviewDelayTimeout = setTimeout(() => {
-                            if (!isHoveringPreview && !hoveredLink) {
-                                cleanupGlobalPreview()
-                            }
-                        }, 150)
-                    }
-                }}
-            >
-            <div class="global-hover-preview-container" style="height: {previewHeight}px;">
-                <div class="global-hover-preview-header">
-                    <div class="global-hover-preview-title">
-                        {#if globalIsDifferentOrigin}
-                            <svg class="global-hover-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <!--  sandbox="allow-scripts allow-forms"
+                    csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"
+                    allow="accelerometer 'none'; ambient-light-sensor 'none'; autoplay 'self'; battery 'none'; camera 'none'; cross-origin-isolated 'none'; display-capture 'none'; document-domain 'none'; encrypted-media 'self'; execution-while-not-rendered 'self'; fullscreen 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; midi 'none'; navigation-override 'none'; payment 'none'; picture-in-picture 'self'; publickey-credentials-create 'self'; publickey-credentials-get 'self'; screen-wake-lock 'none'; sync-xhr 'none'; usb 'none'; web-share 'none'; xr-spatial-tracking 'none'" -->
+                
+                <!-- Link preview for iframe fallback  linkPreviewVisible &&-->
+                {#if hoveredLink}
+                    <div class="link-preview" transition:fade={{duration: 150}}>
+                        {#if isDifferentOrigin}
+                            <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
                                 <polyline points="15,3 21,3 21,9"/>
                                 <line x1="10" y1="14" x2="21" y2="3"/>
                             </svg>
                         {/if}
                         <img 
-                            src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={globalHoverPreview.href}&size=16"
+                            src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
                             alt=""
-                            class="global-hover-preview-favicon"
+                            class="link-preview-favicon"
                         />
-                        <UrlRenderer url={globalHoverPreview.href} variant="compact" />
+                        <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
                     </div>
-                    <div class="global-hover-preview-controls">
-                        <button 
-                            class="global-hover-preview-pin"
-                            class:pinned={globalHoverPreviewPinned}
-                            aria-label="Pin link preview for debugging"
-                            onclick={() => {
-                                globalHoverPreviewPinned = !globalHoverPreviewPinned
-                            }}
-                        >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M9 9 V3 a1 1 0 0 1 6 0 v6"></path>
-                                <path d="M9 9 a3 3 0 0 0 6 0"></path>
-                                <path d="M12 15 v6"></path>
-                            </svg>
-                        </button>
-                        <button 
-                            class="global-hover-preview-expand"
-                            aria-label="Expand to full tab"
-                            onclick={() => {
-                                globalHoverPreviewExpanding = true
-                                
-                                // Preserve the existing ControlledFrame instance by moving it to background first
-                                const previewFrameData = data.frames[globalHoverPreviewTabId]
-                                if (previewFrameData?.frame) {
-                                    console.log('🎯 Preserving ControlledFrame instance for expand button conversion')
-                                    const backgroundFrames = document.getElementById('backgroundFrames')
-                                    const anchorFrame = document.getElementById('anchorFrame')
-                                    if (backgroundFrames && anchorFrame) {
-                                        // Move to background to preserve the frame during state transition
-                                        backgroundFrames.moveBefore(previewFrameData.frame, anchorFrame)
-                                        // Clear the wrapper reference but keep the frame
-                                        delete previewFrameData.wrapper
-                                    }
-                                }
-                                
-                                // Trigger the visual closing with expand animation
-                                cleanupForExpand()
-                                // Convert to lightbox immediately
-                                data.updateTab(globalHoverPreviewTabId, {preview: false, lightbox: true})
-                                globalHoverPreview = null
-                                globalHoverPreviewTabId = null
-                                globalHoverPreviewExpanding = false
-                            }}
-                        >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="15,3 21,3 21,9"></polyline>
-                                <polyline points="9,21 3,21 3,15"></polyline>
-                                <line x1="21" y1="3" x2="14" y2="10"></line>
-                                <line x1="3" y1="21" x2="10" y2="14"></line>
-                            </svg>
-                        </button>
-                        <button 
-                            class="global-hover-preview-close"
-                            aria-label="Close link preview"
-                            onclick={() => {
-                                globalHoverPreviewVisible = false
-                                globalHoverPreview = null
-                                globalHoverPreviewTabId = null
-                                globalHoverPreviewPinned = false
-                                if (globalHoverPreviewTimeout) {
-                                    clearTimeout(globalHoverPreviewTimeout)
-                                    globalHoverPreviewTimeout = null
-                                }
-                            }}
-                        >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </button>
+                {/if}
+                
+                <!-- Input diff preview for iframe fallback -->
+                {#if inputDiffVisible && inputDiffData}
+                    <div class="input-diff-preview" transition:fade={{duration: 200}}>
+                        <div class="input-diff-header">
+                            <span class="input-diff-element">completion</span>
+                        </div>
+                        <div class="input-diff-content">
+                            {#each inputDiffData.diff as diffItem}
+                                {#if diffItem.type === 'add'}
+                                    <span class="diff-add">{diffItem.char}</span>
+                                {:else if diffItem.type === 'delete'}
+                                    <span class="diff-delete">{diffItem.char}</span>
+                                {:else}
+                                    <span class="diff-same">{diffItem.char}</span>
+                                {/if}
+                            {/each}
+                        </div>
                     </div>
-                </div>
-                <div class="global-hover-preview-frame">
-                    {#if data.docs[globalHoverPreviewTabId] && !globalHoverPreviewExpanding}
-                        <ControlledFrame
-                            {style}
-                            class="global-hover-preview-controlledframe"
-                            {isScrolling}
-                            tabId={globalHoverPreviewTabId}
-                            {headerPartOfMain}
-                            {onFrameFocus}
-                            {onFrameBlur}
-                            {userMods}
-                            {requestedResources}
-                        />
-                    {/if}
-                </div>
-            </div>
-            </div>
-        {/key}
-    {/if}
+                {/if}
+            <!-- {:else}
+                <div 
+                    transition:fade={{duration: 150}}
+                    bind:this={frame}
+                    class:window-controls-overlay={headerPartOfMain}
+                    class:no-pointer-events={isScrolling}
+                    id="tab_{tab.id}"
+                    class="frame iframe-blocked"
+                >
+                    <div class="iframe-blocked-content">
+                        <div class="iframe-blocked-icon">⚠️</div>
+                        <div class="iframe-blocked-title">ControlledFrame API Not Available</div>
+                        <div class="iframe-blocked-message">
+                            This app requires the ControlledFrame API to display web content securely. 
+                            {#if tab.url}
+                                The URL "{tab.url}" cannot be displayed in a standard iframe due to security restrictions.
+                            {/if}
+                        </div>
+                        <div class="iframe-blocked-suggestion">
+                            <strong>To enable ControlledFrame API:</strong><br/>
+                            1. Ensure this is running as an Isolated Web App (IWA)<br/>
+                            2. Enable chrome://flags/#isolated-web-app-controlled-frame<br/>
+                            3. Or run Chrome with --enable-features=IsolatedWebApps,IsolatedWebAppControlledFrame
+                        </div>
+                    </div>
+                </div> -->
+            {/if}
+        {/if}
 
-    {#if data.previews[tab._id] && data.docs[data.previews[tab._id]?.lightbox]}
-        {@const lightboxChild = data.docs[data.previews[tab._id].lightbox]}
-        <div 
-            class="lightbox-backdrop"
-            role="dialog"
-            aria-modal="true"
-            tabindex="-1"
-            in:fade={{duration: 100}}
-            out:fade={{duration: 80}}
-            onclick={(e) => {
-                // Only close if clicking the backdrop, not the content
-                if (e.target === e.currentTarget) {
-                    data.closeTab(tab.spaceId, lightboxChild?._id)
-                }
-            }}
-            onkeydown={(e) => {
-                if (e.key === 'Escape') {
-                    data.closeTab(tab.spaceId, lightboxChild?._id)
-                }
-            }}
-        >
-            <div class="lightbox-container" 
-                in:scale={{duration: 100}}
-                out:scale={{duration: 80}}>
-                <div class="lightbox-header">
-                    <div class="lightbox-title">
-                        <img 
-                            src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={lightboxChild?.url}&size=16"
-                            alt=""
-                            class="lightbox-favicon"
-                        />
-                        <UrlRenderer url={lightboxChild?.url} variant="compact" />
-                    </div>
-                    <div class="lightbox-controls">
-                        <Tooltip text="Move to new tab" position="bottom">
+        {#if globalHoverPreviewVisible && globalHoverPreview && data.docs[globalHoverPreviewTabId]?.preview}
+            {#key globalHoverPreview.href}
+                <div 
+                    class="global-hover-preview" 
+                    class:shown={globalHoverPreviewShown}
+                    style={globalHoverPreview?.position ? 
+                        `margin-left: ${calculatePreviewLeft(globalHoverPreview)}px; top: ${calculatePreviewTop(globalHoverPreview)}px;` : 
+                        ''}
+                    role="dialog"
+                    aria-label="Link preview"
+                    tabindex="-1"
+                    out:scale={{duration: 200}}
+                    onmouseenter={() => { 
+                        isHoveringPreview = true 
+                        // Cancel pending hide when mouse enters the preview
+                        if (hidePreviewDelayTimeout) {
+                            clearTimeout(hidePreviewDelayTimeout)
+                            hidePreviewDelayTimeout = null
+                        }
+                    }}
+                    onmouseleave={() => { 
+                        isHoveringPreview = false 
+                        // Trigger hide logic when leaving preview
+                        if (!hoveredLink) {
+                            if (hidePreviewDelayTimeout) clearTimeout(hidePreviewDelayTimeout)
+                            hidePreviewDelayTimeout = setTimeout(() => {
+                                if (!isHoveringPreview && !hoveredLink) {
+                                    cleanupGlobalPreview()
+                                }
+                            }, 150)
+                        }
+                    }}
+                >
+                <div class="global-hover-preview-container" style="height: {previewHeight}px;">
+                    <div class="global-hover-preview-header">
+                        <div class="global-hover-preview-title">
+                            {#if globalIsDifferentOrigin}
+                                <svg class="global-hover-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                    <polyline points="15,3 21,3 21,9"/>
+                                    <line x1="10" y1="14" x2="21" y2="3"/>
+                                </svg>
+                            {/if}
+                            <img 
+                                src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={globalHoverPreview.href}&size=16"
+                                alt=""
+                                class="global-hover-preview-favicon"
+                            />
+                            <UrlRenderer url={globalHoverPreview.href} variant="compact" />
+                        </div>
+                        <div class="global-hover-preview-controls">
                             <button 
-                                class="lightbox-move-to-tab"
-                                aria-label="Move to new tab"
+                                class="global-hover-preview-pin"
+                                class:pinned={globalHoverPreviewPinned}
+                                aria-label="Pin link preview for debugging"
+                                onclick={() => {
+                                    globalHoverPreviewPinned = !globalHoverPreviewPinned
+                                }}
                             >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M9 9h3v3"/>
-                                    <path d="M9 21V9a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z"/>
-                                    <path d="M5 3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/>
+                                    <path d="M9 9 V3 a1 1 0 0 1 6 0 v6"></path>
+                                    <path d="M9 9 a3 3 0 0 0 6 0"></path>
+                                    <path d="M12 15 v6"></path>
                                 </svg>
                             </button>
-                        </Tooltip>
-                        <Tooltip text="Expand to full tab" position="bottom">
                             <button 
-                                class="lightbox-expand-full"
+                                class="global-hover-preview-expand"
                                 aria-label="Expand to full tab"
+                                onclick={() => {
+                                    globalHoverPreviewExpanding = true
+                                    
+                                    // Preserve the existing ControlledFrame instance by moving it to background first
+                                    const previewFrameData = data.frames[globalHoverPreviewTabId]
+                                    if (previewFrameData?.frame) {
+                                        console.log('🎯 Preserving ControlledFrame instance for expand button conversion')
+                                        const backgroundFrames = document.getElementById('backgroundFrames')
+                                        const anchorFrame = document.getElementById('anchorFrame')
+                                        if (backgroundFrames && anchorFrame) {
+                                            // Move to background to preserve the frame during state transition
+                                            backgroundFrames.moveBefore(previewFrameData.frame, anchorFrame)
+                                            // Clear the wrapper reference but keep the frame
+                                            delete previewFrameData.wrapper
+                                        }
+                                    }
+                                    
+                                    // Trigger the visual closing with expand animation
+                                    cleanupForExpand()
+                                    // Convert to lightbox immediately
+                                    data.updateTab(globalHoverPreviewTabId, {preview: false, lightbox: true})
+                                    globalHoverPreview = null
+                                    globalHoverPreviewTabId = null
+                                    globalHoverPreviewExpanding = false
+                                }}
                             >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <polyline points="15,3 21,3 21,9"></polyline>
@@ -861,38 +761,18 @@
                                     <line x1="3" y1="21" x2="10" y2="14"></line>
                                 </svg>
                             </button>
-                        </Tooltip>
-                        <Tooltip text="Collapse to preview card" position="bottom">
                             <button 
-                                class="lightbox-collapse-preview"
-                                aria-label="Collapse to preview card"
-                            >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="4,14 10,14 10,20"></polyline>
-                                    <polyline points="20,10 14,10 14,4"></polyline>
-                                    <line x1="14" y1="10" x2="21" y2="3"></line>
-                                    <line x1="3" y1="21" x2="10" y2="14"></line>
-                                </svg>
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Settings" position="bottom">
-                            <button 
-                                class="lightbox-settings"
-                                aria-label="Settings"
-                            >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                    <path d="m12 1 0 6m0 6 0 6"></path>
-                                    <path d="M9 12 3 7.02M21 7.02 15 12m0 0 6 4.98M3 16.98 9 12"></path>
-                                </svg>
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Close" position="bottom">
-                            <button 
-                                class="lightbox-close"
-                                aria-label="Close lightbox"
+                                class="global-hover-preview-close"
+                                aria-label="Close link preview"
                                 onclick={() => {
-                                    data.closeTab(tab.spaceId, lightboxChild?.id)
+                                    globalHoverPreviewVisible = false
+                                    globalHoverPreview = null
+                                    globalHoverPreviewTabId = null
+                                    globalHoverPreviewPinned = false
+                                    if (globalHoverPreviewTimeout) {
+                                        clearTimeout(globalHoverPreviewTimeout)
+                                        globalHoverPreviewTimeout = null
+                                    }
                                 }}
                             >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -900,52 +780,178 @@
                                     <line x1="6" y1="6" x2="18" y2="18"></line>
                                 </svg>
                             </button>
-                        </Tooltip>
+                        </div>
+                    </div>
+                    <div class="global-hover-preview-frame">
+                        {#if data.docs[globalHoverPreviewTabId] && !globalHoverPreviewExpanding}
+                            <ControlledFrame
+                                {style}
+                                class="global-hover-preview-controlledframe"
+                                {isScrolling}
+                                tabId={globalHoverPreviewTabId}
+                                {headerPartOfMain}
+                                {onFrameFocus}
+                                {onFrameBlur}
+                                {userMods}
+                                {requestedResources}
+                            />
+                        {/if}
                     </div>
                 </div>
-                <div class="lightbox-frame">
-                    <ControlledFrame
-                        {style}
-                        {isScrolling}
-                        class="lightbox-controlledframe"
-                        tabId={lightboxChild?.id}
-                        {headerPartOfMain}
-                        {onFrameFocus}
-                        {onFrameBlur}
-                        {userMods}
-                        {requestedResources}
-                        {statusLightsEnabled}
-                        bind:hoveredLink
-                        
-                        bind:inputDiffVisible
-                        bind:inputDiffTimeout
-                        bind:inputDiffData
-                    />
-                    <!-- bind:linkPreviewTimeout bind:linkPreviewVisible -->
+                </div>
+            {/key}
+        {/if}
+
+        {#if data.previews[tab._id] && data.docs[data.previews[tab._id]?.lightbox]}
+            {@const lightboxChild = data.docs[data.previews[tab._id].lightbox]}
+            <div 
+                class="lightbox-backdrop"
+                role="dialog"
+                aria-modal="true"
+                tabindex="-1"
+                in:fade={{duration: 100}}
+                out:fade={{duration: 80}}
+                onclick={(e) => {
+                    // Only close if clicking the backdrop, not the content
+                    if (e.target === e.currentTarget) {
+                        data.closeTab(tab.spaceId, lightboxChild?._id)
+                    }
+                }}
+                onkeydown={(e) => {
+                    if (e.key === 'Escape') {
+                        data.closeTab(tab.spaceId, lightboxChild?._id)
+                    }
+                }}
+            >
+                <div class="lightbox-container" 
+                    in:scale={{duration: 100}}
+                    out:scale={{duration: 80}}>
+                    <div class="lightbox-header">
+                        <div class="lightbox-title">
+                            <img 
+                                src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={lightboxChild?.url}&size=16"
+                                alt=""
+                                class="lightbox-favicon"
+                            />
+                            <UrlRenderer url={lightboxChild?.url} variant="compact" />
+                        </div>
+                        <div class="lightbox-controls">
+                            <Tooltip text="Move to new tab" position="bottom">
+                                <button 
+                                    class="lightbox-move-to-tab"
+                                    aria-label="Move to new tab"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M9 9h3v3"/>
+                                        <path d="M9 21V9a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z"/>
+                                        <path d="M5 3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/>
+                                    </svg>
+                                </button>
+                            </Tooltip>
+                            <Tooltip text="Expand to full tab" position="bottom">
+                                <button 
+                                    class="lightbox-expand-full"
+                                    aria-label="Expand to full tab"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="15,3 21,3 21,9"></polyline>
+                                        <polyline points="9,21 3,21 3,15"></polyline>
+                                        <line x1="21" y1="3" x2="14" y2="10"></line>
+                                        <line x1="3" y1="21" x2="10" y2="14"></line>
+                                    </svg>
+                                </button>
+                            </Tooltip>
+                            <Tooltip text="Collapse to preview card" position="bottom">
+                                <button 
+                                    class="lightbox-collapse-preview"
+                                    aria-label="Collapse to preview card"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="4,14 10,14 10,20"></polyline>
+                                        <polyline points="20,10 14,10 14,4"></polyline>
+                                        <line x1="14" y1="10" x2="21" y2="3"></line>
+                                        <line x1="3" y1="21" x2="10" y2="14"></line>
+                                    </svg>
+                                </button>
+                            </Tooltip>
+                            <Tooltip text="Settings" position="bottom">
+                                <button 
+                                    class="lightbox-settings"
+                                    aria-label="Settings"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                        <path d="m12 1 0 6m0 6 0 6"></path>
+                                        <path d="M9 12 3 7.02M21 7.02 15 12m0 0 6 4.98M3 16.98 9 12"></path>
+                                    </svg>
+                                </button>
+                            </Tooltip>
+                            <Tooltip text="Close" position="bottom">
+                                <button 
+                                    class="lightbox-close"
+                                    aria-label="Close lightbox"
+                                    onclick={() => {
+                                        data.closeTab(tab.spaceId, lightboxChild?.id)
+                                    }}
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                            </Tooltip>
+                        </div>
+                    </div>
+                    <div class="lightbox-frame">
+                        <ControlledFrame
+                            {style}
+                            {isScrolling}
+                            class="lightbox-controlledframe"
+                            tabId={lightboxChild?.id}
+                            {headerPartOfMain}
+                            {onFrameFocus}
+                            {onFrameBlur}
+                            {userMods}
+                            {requestedResources}
+                            {statusLightsEnabled}
+                            bind:hoveredLink
+                            
+                            bind:inputDiffVisible
+                            bind:inputDiffTimeout
+                            bind:inputDiffData
+                        />
+                        <!-- bind:linkPreviewTimeout bind:linkPreviewVisible -->
+                    </div>
                 </div>
             </div>
-        </div>
+        {/if}
     {/if}
-{/if}
-
+</div>
 
 <style>
+    .frame-wrapper {
+        position: relative;
+    }
+
      .hibernated-frame {
         background: #0a0a0a;
         display: flex;
         align-items: center;
         justify-content: center;
-        position: relative;
+        position: absolute;
         overflow: hidden;
         --webkit-app-region: no-drag;
     }
 
-    .hibernated-screenshot {
+    :global(.hibernated-screenshot) {
         width: 100%;
         height: 100%;
+        opacity: 0.5;
+    }
+    
+    :global(.hibernated-screenshot .attachment-image) {
         object-fit: cover;
         object-position: top;
-        opacity: 0.5;
     }
 
     .hibernated-placeholder {

@@ -1068,3 +1068,8 @@ ai that ads spoilers to catchy thumbnails and titles
 
 handle invoices matching agent
 
+diffs with real edits for every commit as signs changes, modified
+real remove
+
+docker unavailable when network changes?
+

@@ -491,11 +491,66 @@ function hibernate (tabId) {
     frames[tabId].hibernated = Date.now()
 }
 
+// Helper function to resolve attachment URLs to blob URLs
+const resolveAttachmentUrl = async (attachmentUrl) => {
+    if (!attachmentUrl || !attachmentUrl.startsWith('attachment://')) {
+        return attachmentUrl
+    }
+    
+    try {
+        const [docId, attachmentName] = attachmentUrl.replace('attachment://', '').split('/')
+        const doc = await db.get(docId, { attachments: true })
+        
+        if (doc._attachments && doc._attachments[attachmentName]) {
+            const attachment = doc._attachments[attachmentName]
+            if (attachment.data instanceof Blob) {
+                return URL.createObjectURL(attachment.data)
+            }
+            // If data is base64 string (from replication)
+            if (typeof attachment.data === 'string') {
+                const byteCharacters = atob(attachment.data)
+                const byteNumbers = new Array(byteCharacters.length)
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i)
+                }
+                const byteArray = new Uint8Array(byteNumbers)
+                const blob = new Blob([byteArray], { type: attachment.content_type })
+                return URL.createObjectURL(blob)
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to resolve attachment URL:', attachmentUrl, error)
+    }
+    
+    return null
+}
+
+// Cache for resolved attachment URLs
+const attachmentUrlCache = new Map()
+
+const getAttachmentUrl = async (attachmentUrl) => {
+    if (!attachmentUrl || !attachmentUrl.startsWith('attachment://')) {
+        return attachmentUrl
+    }
+    
+    if (attachmentUrlCache.has(attachmentUrl)) {
+        return attachmentUrlCache.get(attachmentUrl)
+    }
+    
+    const resolvedUrl = await resolveAttachmentUrl(attachmentUrl)
+    if (resolvedUrl) {
+        attachmentUrlCache.set(attachmentUrl, resolvedUrl)
+    }
+    
+    return resolvedUrl
+}
+
 export default {
     origins,
     spaceMeta,
     spaces,
     activity,
+    getAttachmentUrl,
     resources,
     docs,
     frames,
@@ -695,7 +750,7 @@ export default {
         return tab
     },
 
-    updateTab: (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url } = {}) => {
+    updateTab: async (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url } = {}) => {
         const tab = docs[tabId]
        
         let newProps = {}
@@ -727,18 +782,40 @@ export default {
         }
     
         if (typeof screenshot !== 'undefined') {
-            newProps.screenshot = screenshot
-
-            // TODO: newProps._attachments ??= {}
-
-            // newProps._attachments.screenshot = {
-			// 	content_type: "image/png",
-			// 	data: new Blob([yjs.encodeStateAsUpdate(winYDoc)], { type: 'image/png' })
-			// }
+            if (screenshot && screenshot.startsWith('data:')) {
+                // Convert data URL to blob and store as attachment
+                const response = await fetch(screenshot)
+                const blob = await response.blob()
+                
+                // Store as PouchDB attachment
+                newProps._attachments = {
+                    ...(tab._attachments || {}),
+                    screenshot: {
+                        content_type: blob.type || 'image/png',
+                        data: blob
+                    }
+                }
+                
+                // Set screenshot property to attachment URL path
+                newProps.screenshot = `attachment://${tabId}/screenshot`
+            } else if (screenshot === null || screenshot === undefined) {
+                // Remove screenshot attachment if being cleared
+                if (tab._attachments?.screenshot) {
+                    newProps._attachments = { ...tab._attachments }
+                    delete newProps._attachments.screenshot
+                    if (Object.keys(newProps._attachments).length === 0) {
+                        newProps._attachments = undefined
+                    }
+                }
+                newProps.screenshot = screenshot
+            } else {
+                // External URL or already processed attachment URL
+                newProps.screenshot = screenshot
+            }
         }
 
         if (Object.keys(newProps).length > 0) {
-            db.put({
+            await db.put({
                     ...tab,
                     ...newProps
                 })

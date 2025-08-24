@@ -482,7 +482,7 @@
             
             if (screenshot) {
                 // tab.screenshot = screenshot
-                data.updateTab(tab.id, { screenshot })
+                await data.updateTab(tab.id, { screenshot })
             }
         } catch (err) {
             console.log('Error capturing screenshot:', err)
