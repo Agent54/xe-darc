@@ -701,7 +701,7 @@ export default {
             })
         }
 
-        // db.put({
+        // db.put({d
         //     _id: `darc:activity_${crypto.randomUUID()}`,
         //     type: 'activity',
         //     archive: 'history',
@@ -743,9 +743,7 @@ export default {
             activate(_id)
         }
 
-        setTimeout(() => {
-            db.put(tab)
-        },1000)
+        db.put(tab)
 
         return tab
     },

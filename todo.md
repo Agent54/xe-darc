@@ -1073,3 +1073,6 @@ real remove
 
 docker unavailable when network changes?
 
+
+granola notes/ transcribeand and highlightai.com, rewind.ai usecases
+
