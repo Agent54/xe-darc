@@ -202,6 +202,7 @@ const refresh = throttle(async function (spaceId) {
                 spaceMeta.activeSpace = doc._id
             }
             if (!spaces[doc._id]) {
+                doc.tabs = []
                 spaces[doc._id] = doc
             } else {
                 spaces[doc._id] = { ...spaces[doc._id], ...doc }
@@ -359,7 +360,9 @@ function activate(tabId) {
 function closeTab (spaceId, tabId) {
     const tab = docs[tabId]
 
-    frames[tabId].frame = null
+    if (frames[tabId]) {
+        frames[tabId].frame = null
+    }
 
     removedActiveTabId(tabId)
    
@@ -529,6 +532,7 @@ const resolveAttachmentUrl = async (attachmentUrl) => {
 const attachmentUrlCache = new Map()
 
 const getAttachmentUrl = async (attachmentUrl) => {
+    console.log('getAttachmentUrl', attachmentUrl)
     if (!attachmentUrl || !attachmentUrl.startsWith('attachment://')) {
         return attachmentUrl
     }

@@ -1,4 +1,3 @@
-// Initialize trusted types policy for IWA compatibility
 if (typeof window !== 'undefined' && window.trustedTypes && window.trustedTypes.createPolicy) {
   try {
     // Create the policy directly - if it already exists, the browser will throw an error

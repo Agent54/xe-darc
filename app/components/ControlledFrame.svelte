@@ -565,6 +565,7 @@
         }
 
         evaluateSecurityState(tab)
+        updateTabMeta(tab)
     }
 
     function handleLoadStop(tab) {

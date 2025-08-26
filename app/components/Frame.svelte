@@ -1007,7 +1007,7 @@
         justify-content: center;
         font-size: 12px;
         z-index: 1;
-        pointer-events: none;
+        /* pointer-events: none; */
         border-radius: 12px;
     }
 
@@ -1018,7 +1018,7 @@
         right: 14px;
         font-size: 12px;
         z-index: 2;
-        pointer-events: none;
+        /* pointer-events: none; */
     }
 
     .iframe-blocked {
