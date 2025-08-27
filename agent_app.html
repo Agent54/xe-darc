@@ -160,6 +160,7 @@
     
     <script type="module">
         import { Conversation } from '@elevenlabs/client'
+        import { tools } from './workerd/tools.ts'
         
         const statusEl = document.getElementById('status')
         const controlsEl = document.getElementById('controls')
@@ -268,6 +269,20 @@
                     onConnect: () => {
                         console.log('onConnect')
                     },
+
+                    clientTools: {
+                        listPlatformTools: async ({ context }) => {
+                            console.log('listPlatformTools: ', {context})
+                        
+                            return ``
+                        },
+                        executePlatformTool: async (args) => {
+                            // console.log('message tool `log`', message)
+                        
+                            // return `Logged: ${message}`
+                        }
+                    },
+
                     onDisconnect: () => {
                         console.log('onDisconnect')
                         stopVolumePolling()

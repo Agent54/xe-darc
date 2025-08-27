@@ -36,6 +36,14 @@ const frames = $state({})
 const previews = $state({})
 const settings = $state({})
 
+// LED indicator states for all frames - using timestamps to avoid events
+const ledIndicators = $state({
+    networkAccess: 0,
+    blockedRequest: 0,
+    mockedActivation: 0,
+    permissionRequest: 0
+})
+
 db.bulkDocs(bootstrap).then(async (res) => {
     db.createIndex({
         index: { fields: sortOrder }
@@ -560,6 +568,7 @@ export default {
     frames,
     previews,
     settings,
+    ledIndicators,
 
     activate,
     loadSampleData,
@@ -911,5 +920,7 @@ export default {
         } else {
             return false
         }
-    }
+    },
+
+
 }

@@ -122,6 +122,12 @@
     let statusLightsEnabled = $state(false)
     let certificateMonitorForTab = $state(null)
     let devModeEnabled = $state(false)
+
+    // LED indicator reactive states
+    let networkAccessActive = $state(false)
+    let blockedRequestActive = $state(false)
+    let mockedActivationActive = $state(false)
+    let permissionRequestActive = $state(false)
     let globalTabComplete = $state(true)
     let lightboxModeEnabled = $state(true)
     let tabsOpenRight = $state(true)
@@ -1618,6 +1624,50 @@
         }, 1000) // Delay to allow app to fully load
     })
 
+    // LED indicator effects - handle show/hide logic based on timestamps
+    $effect(() => {
+        const now = Date.now()
+        networkAccessActive = data.ledIndicators.networkAccess > 0 && (now - data.ledIndicators.networkAccess) < 400
+    })
+
+    $effect(() => {
+        const now = Date.now()
+        blockedRequestActive = data.ledIndicators.blockedRequest > 0 && (now - data.ledIndicators.blockedRequest) < 400
+    })
+
+    $effect(() => {
+        mockedActivationActive = data.ledIndicators.mockedActivation > 0
+    })
+
+    $effect(() => {
+        permissionRequestActive = data.ledIndicators.permissionRequest > 0
+    })
+
+    // Auto-fade network and blocked request indicators after their duration
+    $effect(() => {
+        if (data.ledIndicators.networkAccess > 0) {
+            const timeout = setTimeout(() => {
+                // This will trigger the reactive effect above to set networkAccessActive to false
+                if (Date.now() - data.ledIndicators.networkAccess >= 400) {
+                    networkAccessActive = false
+                }
+            }, 400)
+            return () => clearTimeout(timeout)
+        }
+    })
+
+    $effect(() => {
+        if (data.ledIndicators.blockedRequest > 0) {
+            const timeout = setTimeout(() => {
+                // This will trigger the reactive effect above to set blockedRequestActive to false
+                if (Date.now() - data.ledIndicators.blockedRequest >= 400) {
+                    blockedRequestActive = false
+                }
+            }, 400)
+            return () => clearTimeout(timeout)
+        }
+    })
+
     // let sidebarRightHovered = $state(false)
     // function handleSidebarRightMouseEnter() {
     //     sidebarRightHovered = true
@@ -2623,7 +2673,7 @@
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleGlobalTabComplete() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25 12 21m0 0-3.75-3.75M12 21V3" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5 7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
                     </svg>
                 </span>
                 <span>Global Tab Complete</span>
@@ -2667,9 +2717,10 @@
                 onmousedown={(e) => { e.stopPropagation(); toggleStatusLights(); closeMenuImmediately() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleStatusLights() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <circle cx="12" cy="16" r="2" fill="currentColor"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 14v-2M10 8l2-2 2 2M8 6l4-4 4 4"/>
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <circle cx="11" cy="6" r="3" stroke="currentColor" fill="none"/>
+                        <circle cx="11" cy="12" r="3" stroke="currentColor" fill="none"/>
+                        <circle cx="11" cy="18" r="3" stroke="currentColor" fill="none"/>
                     </svg>
                 </span>
                 <span>Status Lights</span>
@@ -2714,7 +2765,7 @@
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLightboxMode() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                     </svg>
                 </span>
                 <span>Lightbox Mode</span>
@@ -2849,7 +2900,7 @@
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openTestSuite() } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 16.5a9.065 9.065 0 0 1-6.23-.693L5 15.5l.8-.2m13.2 0v3.394c0 .621-.504 1.125-1.125 1.125h-3.819M5.8 15.1v3.394c0 .621.504 1.125 1.125 1.125h3.819m0 0a1.125 1.125 0 0 1 1.125-1.125M13.05 19.62h.375a1.125 1.125 0 0 1 1.125 1.125M13.05 19.62v2.25M13.05 19.62a1.125 1.125 0 0 1 1.125-1.125m0 1.125v2.25m-8.25-4.5h.375c.621 0 1.125.504 1.125 1.125m-.75 0v2.25a1.125 1.125 0 0 0 1.125 1.125m0 0h.375a1.125 1.125 0 0 1 1.125 1.125M19.05 19.62v2.25a1.125 1.125 0 0 0 1.125-1.125" />
                         </svg>
                     </span>
                     <span>Open Test Suite</span>
@@ -3215,8 +3266,25 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
             </svg>
         </button>
 
+        
+
     </div>
 
+    {#if statusLightsEnabled}
+        <div class="led-indicator-array">
+            <!-- TODO: unify {#if agentEnabled}
+                <div class="microphone-indicator">
+                    <svg class="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 1.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3ZM19.5 10.5a7.5 7.5 0 0 1-15 0M12 18.75a7.5 7.5 0 0 0 7.5-7.5M12 18.75V22.5" />
+                    </svg>
+                </div>
+            {/if} -->
+            <div class="led-dot network-access" class:active={networkAccessActive}></div>
+            <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>
+            <div class="led-dot mocked-activation" class:active={mockedActivationActive}></div>
+            <div class="led-dot permission-request" class:active={permissionRequestActive}></div>
+        </div>
+    {/if}
     <!-- class:drag-enabled={isDragEnabled} -->
 </div>
 
@@ -3366,5 +3434,151 @@ style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinne
         overflow: visible;
         max-width: 1250px;
         max-height: 1125px;
+    }
+
+    /* LED Indicator Array - positioned in hover sidebar */
+    .led-indicator-array {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 0;
+        align-items: center;
+        position: fixed;
+        right: 21px;
+        bottom: 8px;
+    }
+
+    .led-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        opacity: 0.17;
+        transition: opacity 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        position: relative;
+    }
+
+    .led-dot::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: inherit;
+        opacity: 0.8;
+    }
+
+    .led-dot.network-access {
+        background: #10b981;
+        border-color: #10b981;
+    }
+
+    .led-dot.blocked-request {
+        background: #ef4444;
+        border-color: #ef4444;
+    }
+
+    .led-dot.mocked-activation {
+        background: #8b5cf6;
+        border-color: #8b5cf6;
+    }
+
+    .led-dot.permission-request {
+        background: #f59e0b;
+        border-color: #f59e0b;
+    }
+
+    .led-dot.active {
+        opacity: 1;
+        animation: ledGlow 0.3s ease-in-out;
+    }
+
+    .led-dot.network-access.active {
+        box-shadow: 0 0 8px #10b981, 0 0 16px rgba(16, 185, 129, 0.5);
+        animation: ledGlow 0.3s ease-in-out, networkFade 0.4s ease-in-out;
+    }
+
+    .led-dot.blocked-request.active {
+        box-shadow: 0 0 8px #ef4444, 0 0 16px rgba(239, 68, 68, 0.5);
+        animation: ledGlow 0.3s ease-in-out, blockedFade 0.4s ease-in-out;
+    }
+
+    .led-dot.mocked-activation.active {
+        box-shadow: 0 0 8px #8b5cf6, 0 0 16px rgba(139, 92, 246, 0.5);
+        animation: ledGlow 0.3s ease-in-out, mockedPulse 2s ease-in-out;
+    }
+
+    .led-dot.permission-request.active {
+        box-shadow: 0 0 8px #f59e0b, 0 0 16px rgba(245, 158, 11, 0.5);
+        animation: ledGlow 0.3s ease-in-out, permissionPulse 0.8s ease-in-out infinite;
+    }
+
+    @keyframes ledGlow {
+        0% {
+            transform: scale(1);
+            opacity: 0.18;
+        }
+        50% {
+            transform: scale(1.2);
+            opacity: 1;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    @keyframes networkFade {
+        0% {
+            opacity: 1;
+        }
+        70% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0.18;
+        }
+    }
+
+    @keyframes blockedFade {
+        0% {
+            opacity: 1;
+        }
+        70% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0.18;
+        }
+    }
+
+    @keyframes mockedPulse {
+        0% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.6;
+        }
+        100% {
+            opacity: 0.18;
+        }
+    }
+
+    @keyframes permissionPulse {
+        0% {
+            opacity: 1;
+            transform: scale(1);
+        }
+        50% {
+            opacity: 0.7;
+            transform: scale(1.1);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
     }
 </style>

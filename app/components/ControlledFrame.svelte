@@ -69,46 +69,21 @@
         return netError
     })
 
-    // LED indicator states
-    let networkAccessActive = $state(false)
-    let blockedRequestActive = $state(false)
-    let mockedActivationActive = $state(false)
-    let permissionRequestActive = $state(false)
-
-    // LED indicator timeouts
-    let networkAccessTimeout = null
-    let blockedRequestTimeout = null
-
-    // LED indicator functions
+    // LED indicator functions - directly set timestamps in data store
     function showNetworkAccess() {
-        networkAccessActive = true
-        if (networkAccessTimeout) {
-            clearTimeout(networkAccessTimeout)
-        }
-        networkAccessTimeout = setTimeout(() => {
-            networkAccessActive = false
-            networkAccessTimeout = null
-        }, 400)
+        data.ledIndicators.networkAccess = Date.now()
     }
 
     function showBlockedRequest() {
-        blockedRequestActive = true
-        if (blockedRequestTimeout) {
-            clearTimeout(blockedRequestTimeout)
-        }
-        blockedRequestTimeout = setTimeout(() => {
-            blockedRequestActive = false
-            blockedRequestTimeout = null
-        }, 400)
+        data.ledIndicators.blockedRequest = Date.now()
     }
 
     function showMockedActivation() {
-        mockedActivationActive = true
-        // This doesn't auto-hide, needs manual clearing
+        data.ledIndicators.mockedActivation = Date.now()
     }
 
     function hideMockedActivation() {
-        mockedActivationActive = false
+        data.ledIndicators.mockedActivation = 0
     }
 
     // Check if user mods are applicable to current tab
@@ -183,7 +158,7 @@
     }
 
     function handlePermissionRequest(tabId, event) {
-        permissionRequestActive = true
+        data.ledIndicators.permissionRequest = Date.now()
 
         requestedResources.push({
             permission: event.permission,
@@ -207,13 +182,13 @@
             
             // Hide permission request LED after granting
             setTimeout(() => {
-                permissionRequestActive = false
+                data.ledIndicators.permissionRequest = 0
             }, 1000)
         } catch (error) {
             console.error(`❌ [Permission Error] Failed to grant ${event.permission}:`, error)
             // Hide permission request LED on error too
             setTimeout(() => {
-                permissionRequestActive = false
+                data.ledIndicators.permissionRequest = 0
             }, 1000)
         }
     }
@@ -1135,31 +1110,34 @@ document.addEventListener('input', function(event) {
             // })
             // console.groupEnd()
 
-
-            if (url.hostname === 'code.xe') {
-                return {
-                    redirectUrl: 'https://google.com',
-                    responseHeaders: [
-                        {
-                            name: 'Content-Type',
-                            value: 'text/html'
-                        }
-                    ]
-                }
-            }
+            // TODO: fix this
+            // if (url.hostname === 'code.xe') {
+            //     return {
+            //         redirectUrl: 'https://google.com',
+            //         responseHeaders: [
+            //             {
+            //                 name: 'Content-Type',
+            //                 value: 'text/html'
+            //             }
+            //         ]
+            //     }
+            // }
 
             const block = url.hostname.indexOf("google-analytics.com") != -1 
                 || url.hostname.indexOf("googletagmanager.com") != -1
                 || url.hostname.indexOf("adservice.google.com") != -1
                 || url.hostname.indexOf("doubleclick.net") != -1
                 || url.hostname.indexOf('cdn.cookielaw.org') != -1
-                || url.hostname.indexOf('pagead2.googlesyndication.com') != -1
+                || url.hostname.indexOf('.googlesyndication.com') != -1
+                || url.hostname.indexOf('fides-cdn.ethyca.com') != -1
 
             if (block) {
+                // console.log('blocking', url.hostname, {details})
+                details.preventDefault()
                 // Show red LED for blocked requests
                 showBlockedRequest()
                 // block && console.log('blocking', url)
-                return { cancel: block }
+                return { cancel: true }
             } else {
                 // Show green LED for allowed network access
                 showNetworkAccess()
@@ -1862,14 +1840,6 @@ document.addEventListener('input', function(event) {
             delete data.frames[tab.id]
         }
         
-        if (networkAccessTimeout) {
-            clearTimeout(networkAccessTimeout)
-            networkAccessTimeout = null
-        }
-        if (blockedRequestTimeout) {
-            clearTimeout(blockedRequestTimeout)
-            blockedRequestTimeout = null
-        }
         if (linkPreviewTimeout) {
             clearTimeout(linkPreviewTimeout)
             linkPreviewTimeout = null
@@ -2095,8 +2065,8 @@ document.addEventListener('input', function(event) {
 {#key tab.partition}
     <!-- OAuth Popup Modal -->
     {#if oauthPopup}
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div 
             class="oauth-popup-backdrop" 
             onclick={closeOAuthPopup}
@@ -2114,7 +2084,7 @@ document.addEventListener('input', function(event) {
 
     <div
         out:detach|global
-        style={style}
+        style="border: none; {style}"
         bind:this={frameWrapper} 
         
         class:window-controls-overlay={headerPartOfMain}
@@ -2141,14 +2111,7 @@ document.addEventListener('input', function(event) {
 
         <div class="hidden" bind:this={anchor}></div>
 
-        {#if tab.id === data.spaceMeta.activeTabId && statusLightsEnabled}
-            <div class="led-indicator-array">
-                <div class="led-dot network-access" class:active={networkAccessActive}></div>
-                <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>
-                <div class="led-dot mocked-activation" class:active={mockedActivationActive}></div>
-                <div class="led-dot permission-request" class:active={permissionRequestActive}></div>
-            </div>
-        {/if}
+
            
         {#if currentCertificateError}
             <SSLErrorPage
@@ -2268,154 +2231,7 @@ loading="eager"
         display: none;
     }
 
-    /* LED Indicator Array */
-    .led-indicator-array {
-        position: fixed;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        z-index: 999;
-        pointer-events: none;
-        padding: 8px;
 
-        bottom: 11px;
-        right: -5px;
-        z-index: -1;
-    }
-
-    .led-dot {
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        opacity: 0.17;
-        transition: opacity 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        position: relative;
-    }
-
-    .led-dot::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 3px;
-        height: 3px;
-        border-radius: 50%;
-        background: inherit;
-        opacity: 0.8;
-    }
-
-    .led-dot.network-access {
-        background: #10b981;
-        border-color: #10b981;
-    }
-
-    .led-dot.blocked-request {
-        background: #ef4444;
-        border-color: #ef4444;
-    }
-
-    .led-dot.mocked-activation {
-        background: #8b5cf6;
-        border-color: #8b5cf6;
-    }
-
-    .led-dot.permission-request {
-        background: #f59e0b;
-        border-color: #f59e0b;
-    }
-
-    .led-dot.active {
-        opacity: 1;
-        animation: ledGlow 0.3s ease-in-out;
-    }
-
-    .led-dot.network-access.active {
-        box-shadow: 0 0 8px #10b981, 0 0 16px rgba(16, 185, 129, 0.5);
-        animation: ledGlow 0.3s ease-in-out, networkFade 0.4s ease-in-out;
-    }
-
-    .led-dot.blocked-request.active {
-        box-shadow: 0 0 8px #ef4444, 0 0 16px rgba(239, 68, 68, 0.5);
-        animation: ledGlow 0.3s ease-in-out, blockedFade 0.4s ease-in-out;
-    }
-
-    .led-dot.mocked-activation.active {
-        box-shadow: 0 0 8px #8b5cf6, 0 0 16px rgba(139, 92, 246, 0.5);
-        animation: ledGlow 0.3s ease-in-out, mockedPulse 2s ease-in-out;
-    }
-
-    .led-dot.permission-request.active {
-        box-shadow: 0 0 8px #f59e0b, 0 0 16px rgba(245, 158, 11, 0.5);
-        animation: ledGlow 0.3s ease-in-out, permissionPulse 0.8s ease-in-out infinite;
-    }
-
-    @keyframes ledGlow {
-        0% {
-            transform: scale(1);
-            opacity: 0.18;
-        }
-        50% {
-            transform: scale(1.2);
-            opacity: 1;
-        }
-        100% {
-            transform: scale(1);
-            opacity: 1;
-        }
-    }
-
-    @keyframes networkFade {
-        0% {
-            opacity: 1;
-        }
-        70% {
-            opacity: 1;
-        }
-        100% {
-            opacity: 0.18;
-        }
-    }
-
-    @keyframes blockedFade {
-        0% {
-            opacity: 1;
-        }
-        70% {
-            opacity: 1;
-        }
-        100% {
-            opacity: 0.18;
-        }
-    }
-
-    @keyframes mockedPulse {
-        0% {
-            opacity: 1;
-        }
-        50% {
-            opacity: 0.6;
-        }
-        100% {
-            opacity: 0.18;
-        }
-    }
-
-    @keyframes permissionPulse {
-        0% {
-            opacity: 1;
-            transform: scale(1);
-        }
-        50% {
-            opacity: 0.7;
-            transform: scale(1.1);
-        }
-        100% {
-            opacity: 1;
-            transform: scale(1);
-        }
-    }
 
     /* OAuth popup styles */
     .oauth-popup-backdrop {

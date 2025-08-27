@@ -502,6 +502,7 @@
             bind:this={frameWrapper}
             transition:fade={{duration: 200, delay: 400}}
             class="frame hibernated-frame"
+            style="border: none;"
             role="button"
             tabindex="0"
             onmousedown={() => {

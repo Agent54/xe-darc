@@ -1,7 +1,3 @@
-/**
- * Tool definitions for the AI chat agent
- * Tools can either require human confirmation or execute automatically
- */
 import { tool } from "ai";
 import { z } from "zod";
 
@@ -113,6 +109,14 @@ const cancelScheduledTask = tool({
  * Export all available tools
  * These will be provided to the AI model to describe available capabilities
  */
+// Omitting execute function makes this tool require human confirmation
+
+export const toolTags = {
+  browsing: ['readPageContent', 'openNewTab', 'displayHtml'],
+  scheduling: ['scheduleTask', 'getScheduledTasks', 'cancelScheduledTask'],
+  orga: ['getWeatherInformation', 'getLocalTime'],
+  platform: ['listPlatformTools', 'executePlatformTool'],
+}
 export const tools = {
   getWeatherInformation,
   getLocalTime,
@@ -122,32 +126,32 @@ export const tools = {
   readPageContent: tool({
     description: "read current tab page content, optional with a xpath selector or only text access if not specific html structure requiring task is performed",
     parameters: z.object({ selector: z.optional(z.string()), textOnly: z.optional(z.boolean()) }),
-    // Omitting execute function makes this tool require human confirmation
   }),
+
   openNewTab: tool({
     description: "open a new tab in the current space, optionally with a specific URL",
     parameters: z.object({ 
       url: z.optional(z.string()).describe("URL to open in the new tab - if not provided, opens a new tab page"),
       title: z.optional(z.string()).describe("Title for the new tab - if not provided, will be determined from the URL")
-    }),
-    // Omitting execute function makes this tool require human confirmation
+    })
   }),
+
   displayHtml: tool({
     description: "display pure HTML content in a new tab using a data: URL",
     parameters: z.object({
       html: z.string().describe("The HTML content to display"),
       title: z.optional(z.string()).describe("Title for the new tab")
     }),
-    // Omitting execute function makes this tool require human confirmation
   }),
-  deployDocker: tool({
-    description: "deploy a Docker container from a git repository URL",
-    parameters: z.object({
-      gitUrl: z.string().describe("Git/GitHub URL to deploy from"),
-      dockerfilePath: z.optional(z.string()).describe("Path to Dockerfile in repo (defaults to ./Dockerfile)")
-    }),
-    // Omitting execute function makes this tool require human confirmation
-  })
+
+  // deployDocker: tool({
+  //   description: "deploy a Docker container from a git repository URL",
+  //   parameters: z.object({
+  //     gitUrl: z.string().describe("Git/GitHub URL to deploy from"),
+  //     dockerfilePath: z.optional(z.string()).describe("Path to Dockerfile in repo (defaults to ./Dockerfile)")
+  //   }),
+  //   // Omitting execute function makes this tool require human confirmation
+  // })
 }
 
 /**
@@ -172,33 +176,33 @@ export const executions = {
   //   // Return JSON string for the client to parse
   //   return JSON.stringify({ dataUrl, title: title || 'HTML Content' });
   // },
-  deployDocker: async ({ gitUrl, dockerfilePath }: { gitUrl: string; dockerfilePath?: string }) => {
-    console.log(`Deploying Docker container from ${gitUrl}`);
-    try {
-      const dockerPath = dockerfilePath //  || 'Dockerfile';
+  // deployDocker: async ({ gitUrl, dockerfilePath }: { gitUrl: string; dockerfilePath?: string }) => {
+  //   console.log(`Deploying Docker container from ${gitUrl}`);
+  //   try {
+  //     const dockerPath = dockerfilePath //  || 'Dockerfile';
       
-      // Call the Docker service running on port 5196
-      const response = await fetch('http://localhost:5196/deploy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          gitUrl,
-          dockerfilePath: dockerPath
-        })
-      });
+  //     // Call the Docker service running on port 5196
+  //     const response = await fetch('http://localhost:5196/deploy', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({
+  //         gitUrl,
+  //         dockerfilePath: dockerPath
+  //       })
+  //     });
       
-      const result = await response.json();
+  //     const result = await response.json();
       
-      if (!response.ok) {
-        return `Docker deployment failed: ${result.error || 'Unknown error'}`;
-      }
+  //     if (!response.ok) {
+  //       return `Docker deployment failed: ${result.error || 'Unknown error'}`;
+  //     }
       
-      return `Docker deployment successful! Deployment ID: ${result.deploymentId}. Status: ${result.status}. ${result.message}`;
-    } catch (error) {
-      console.error('Deploy request failed:', error);
-      return `Docker deployment failed: ${error.message}`;
-    }
-  },
+  //     return `Docker deployment successful! Deployment ID: ${result.deploymentId}. Status: ${result.status}. ${result.message}`;
+  //   } catch (error) {
+  //     console.error('Deploy request failed:', error);
+  //     return `Docker deployment failed: ${error.message}`;
+  //   }
+  // },
 }
