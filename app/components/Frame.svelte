@@ -272,6 +272,13 @@
         }
     })
 
+    // Detect when tab is being closed and immediately abort all previews
+    $effect(() => {
+        if (tab?.closed || tab?.archive === 'closed') {
+            cleanupAllHoverPreviews()
+        }
+    })
+
     // Show global hover preview when regular link preview has been visible for a while
     $effect(() => {
         // Don't show hover previews when a lightbox is active or tab is loading

@@ -2438,7 +2438,8 @@
                 <span>Default</span>
                 {#if viewMode === 'default'}<span class="checkmark">•</span>{/if}
             </div>
-            <!-- <div class="view-mode-menu-item menu-item" 
+
+            <!-- TODO: stage manager view <div class="view-mode-menu-item menu-item" 
                     class:active={viewMode === 'stage'}
                     role="button"
                     tabindex="0"
@@ -2450,6 +2451,7 @@
                 <span>Stage</span>
                 {#if viewMode === 'stage'}<span class="checkmark">•</span>{/if}
             </div> -->
+
             <div class="view-mode-menu-item menu-item" 
                     class:active={viewMode === 'canvas'}
                     role="button"
@@ -2462,6 +2464,7 @@
                 <span>Canvas</span>
                 {#if viewMode === 'canvas'}<span class="checkmark">•</span>{/if}
             </div>
+
             <div class="view-mode-menu-item menu-item" 
                     class:active={viewMode === 'tile'}
                     role="button"
@@ -2474,6 +2477,7 @@
                 <span>Tiles</span>
                 {#if viewMode === 'tile'}<span class="checkmark">•</span>{/if}
             </div>
+
             <div class="view-mode-menu-item menu-item" 
                     class:active={viewMode === 'reading'}
                     role="button"
@@ -2486,6 +2490,7 @@
                 <span>Reading</span>
                 {#if viewMode === 'reading'}<span class="checkmark">•</span>{/if}
             </div>
+
             <div class="view-mode-menu-item menu-item" 
                  class:active={viewMode === 'squat'}
                  role="button"
@@ -2498,7 +2503,8 @@
                 <span>Squat</span>
                 {#if viewMode === 'squat'}<span class="checkmark">•</span>{/if}
             </div>
-            <div class="view-mode-menu-item menu-item" 
+
+            <!--TODO: <div class="view-mode-menu-item menu-item" 
                 class:active={viewMode === 'notebook'}
                 role="button"
                 tabindex="0"
@@ -2509,7 +2515,7 @@
             </span>
             <span>Notebook</span>
             {#if viewMode === 'notebook'}<span class="checkmark">•</span>{/if}
-            </div>
+            </div> -->
         </div>
     </div>
 
@@ -2623,7 +2629,8 @@
                 <span>Global Tab Complete</span>
                 {#if globalTabComplete}<span class="checkmark">•</span>{/if}
             </div>
-            <div class="settings-menu-item menu-item" 
+
+            <!-- TODO: <div class="settings-menu-item menu-item" 
                  class:active={batterySaver}
                  role="button"
                  tabindex="0"
@@ -2637,6 +2644,7 @@
                 <span>Battery Saver</span>
                 {#if batterySaver}<span class="checkmark">•</span>{/if}
             </div>
+
             <div class="settings-menu-item menu-item" 
                  class:active={dataSaver}
                  role="button"
@@ -2650,7 +2658,7 @@
                 </span>
                 <span>Data Saver</span>
                 {#if dataSaver}<span class="checkmark">•</span>{/if}
-            </div>
+            </div> -->
           
             <div class="settings-menu-item menu-item" 
                 class:active={statusLightsEnabled}
@@ -2667,6 +2675,7 @@
                 <span>Status Lights</span>
                 {#if statusLightsEnabled}<span class="checkmark">•</span>{/if}
             </div>
+
             <div class="settings-menu-item menu-item" 
                 class:active={devModeEnabled}
                 role="button"

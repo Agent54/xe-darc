@@ -1077,3 +1077,20 @@ docker unavailable when network changes?
 granola notes/ transcribeand and highlightai.com, rewind.ai usecases
 
 atreyu lifetime handling for service workers
+
+
+end of aug:
+    refactor app.svelte, frame.svelte and controlldFrame.svelte
+
+    drag new tab to position where you want + dnd for tabs
+
+    tab groups
+
+    history
+
+    reviews and merges
+
+    end of month plan
+
+    dev and agent setup
+    
