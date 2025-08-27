@@ -779,7 +779,7 @@ document.addEventListener('mouseover', function(event) {
         
         // Log anchor enter with details including position and screen coordinates
         // Use the link's right edge as the reference to avoid preview overlapping the cursor on long links
-        console.log('iwa:link-enter:${tab.id}:' + JSON.stringify({
+        console.log('iwa:link-enter:' + tabId + ':' + JSON.stringify({
             href: anchor.href || anchor.getAttribute('href') || '',
             target: anchor.target || anchor.getAttribute('target') || '',
             rel: anchor.rel || anchor.getAttribute('rel') || '',
@@ -805,7 +805,7 @@ document.addEventListener('mouseover', function(event) {
         }));
     } else if (!anchor && currentHoveredAnchor) {
         // Left the anchor element
-        console.log('iwa:link-leave:${tab.id}:' + JSON.stringify({
+        console.log('iwa:link-leave:' + tabId + ':' + JSON.stringify({
             href: currentHoveredAnchor.href || currentHoveredAnchor.getAttribute('href') || ''
         }));
         currentHoveredAnchor = null;
@@ -847,7 +847,7 @@ function setupDragDropListeners() {
         const eventData = {
             type: eventType,
             timestamp: new Date().toISOString(),
-            frameId: '${tab.id}',
+            frameId: tabId,
             target: {
                 tagName: event.target?.tagName,
                 id: event.target?.id,
@@ -875,7 +875,7 @@ function setupDragDropListeners() {
         };
         
         // Send drag/drop event data to parent via console
-        console.log('iwa:dragdrop:${tab.id}:' + JSON.stringify(eventData));
+        console.log('iwa:dragdrop:' + tabId + ':' + JSON.stringify(eventData));
     }
     
     // Dragstart - when user starts dragging an element
@@ -930,7 +930,7 @@ function setupDragDropListeners() {
                 console.log('Could not read dataTransfer text data:', e);
             }
             
-            console.log('iwa:dragdrop-data:${tab.id}:' + JSON.stringify(additionalData));
+            console.log('iwa:dragdrop-data:' + tabId + ':' + JSON.stringify(additionalData));
         }
     }, { capture: true });
     
@@ -940,7 +940,7 @@ function setupDragDropListeners() {
         dragEventCounter = 0; // Reset counter
     }, { capture: true });
     
-    console.log('🎯 Drag&Drop listeners installed in controlled frame ${tab.id}');
+    console.log('🎯 Drag&Drop listeners installed in controlled frame ' + tabId);
 }
 
 // Initialize drag and drop listeners
@@ -986,7 +986,7 @@ document.addEventListener('input', function(event) {
         
         // Only log if there's actual text content
         if (currentText.trim().length > 0) {
-            console.log('iwa:input-text:${tab.id}:' + JSON.stringify({
+            console.log('iwa:input-text:' + tabId + ':' + JSON.stringify({
                 element: elementId,
                 text: currentText,
                 length: currentText.length,
@@ -1130,6 +1130,19 @@ document.addEventListener('input', function(event) {
                 || url.hostname.indexOf('cdn.cookielaw.org') != -1
                 || url.hostname.indexOf('.googlesyndication.com') != -1
                 || url.hostname.indexOf('fides-cdn.ethyca.com') != -1
+                || url.hostname.indexOf('posthog.com') != -1
+
+                // only for data saver/ use proxy
+                || url.hostname.indexOf('fonts.gstatic.com') != -1
+
+                // needs to be exposed and enablable as custom entities:
+                || url.hostname.indexOf('play.google.com') != -1
+
+                || url.hostname.indexOf('accounts.google.com/') != -1
+                || url.hostname.indexOf('appleid.cdn-apple.com') != -1
+
+                // hanlde special tracking for internal domains
+                || url.pathname.indexOf('/track') != -1 && (details.request.method == 'POST' || details.request.method == 'PUT')
 
             if (block) {
                 // console.log('blocking', url.hostname, {details})

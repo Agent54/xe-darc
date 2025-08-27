@@ -1093,4 +1093,20 @@ end of aug:
     end of month plan
 
     dev and agent setup
-    
+
+
+dynamic tab groups for youtube etc. or tags
+
+onsite invitations?
+
+website/ docs
+
+companion extension
+
+audit extension sideproject instead of just feature
+
+fix sync, tab groups, history, data export, import, usermods, canvas mode
+
+bug report tool/ lanes sidebar
+
+website total white arctic tech look?

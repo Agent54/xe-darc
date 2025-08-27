@@ -159,16 +159,15 @@
     </div>
     
     <script type="module">
-        import { Conversation } from '@elevenlabs/client'
-        import { tools } from './workerd/tools.ts'
-        
+        import { tool } from "ai"
+        import { Conversation } from '@elevenlabs/client'        
         const statusEl = document.getElementById('status')
         const controlsEl = document.getElementById('controls')
         const volumeSlider = document.getElementById('volumeSlider')
         const volumeValue = document.getElementById('volumeValue')
         const inputMeter = document.getElementById('inputMeter')
         const outputMeter = document.getElementById('outputMeter')
-        
+
         let conversation = null
         let volumePollingInterval = null
         

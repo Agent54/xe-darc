@@ -1,9 +1,9 @@
-import { tool } from "ai";
-import { z } from "zod";
+import { tool, jsonSchema } from "ai";
+import { type } from "arktype";
 
-import type { Chat } from "./agent.ts";
-import { getCurrentAgent } from "agents";
-import { unstable_scheduleSchema } from "agents/schedule";
+// import type { Chat } from "./agent.ts";
+// import { getCurrentAgent } from "agents";
+// import { unstable_scheduleSchema } from "agents/schedule";
 
 /**
  * Weather information tool that requires human confirmation
@@ -12,7 +12,7 @@ import { unstable_scheduleSchema } from "agents/schedule";
  */
 const getWeatherInformation = tool({
   description: "show the weather in a given city to the user",
-  parameters: z.object({ city: z.string() }),
+  inputSchema: type({ city: "string" }).toJsonSchema() as any,
   // Omitting execute function makes this tool require human confirmation
 });
 
@@ -23,43 +23,43 @@ const getWeatherInformation = tool({
  */
 const getLocalTime = tool({
   description: "get the local time for a specified location",
-  parameters: z.object({ location: z.string() }),
+  inputSchema: type({ location: "string" }).toJsonSchema() as any,
   execute: async ({ location }) => {
     console.log(`Getting local time for ${location}`);
     return "10am";
   },
 });
 
-const scheduleTask = tool({
-  description: "A tool to schedule a task to be executed at a later time",
-  parameters: unstable_scheduleSchema,
-  execute: async ({ when, description }) => {
-    // we can now read the agent context from the ALS store
-    const { agent } = getCurrentAgent<Chat>();
+// const scheduleTask = tool({
+//   description: "A tool to schedule a task to be executed at a later time",
+//   parameters: unstable_scheduleSchema,
+//   execute: async ({ when, description }) => {
+//     // we can now read the agent context from the ALS store
+//     // const { agent } = getCurrentAgent<Chat>();
 
-    function throwError(msg: string): string {
-      throw new Error(msg);
-    }
-    if (when.type === "no-schedule") {
-      return "Not a valid schedule input";
-    }
-    const input =
-      when.type === "scheduled"
-        ? when.date // scheduled
-        : when.type === "delayed"
-          ? when.delayInSeconds // delayed
-          : when.type === "cron"
-            ? when.cron // cron
-            : throwError("not a valid schedule input");
-    try {
-      agent!.schedule(input!, "executeTask", description);
-    } catch (error) {
-      console.error("error scheduling task", error);
-      return `Error scheduling task: ${error}`;
-    }
-    return `Task scheduled for type "${when.type}" : ${input}`;
-  },
-});
+//     function throwError(msg: string): string {
+//       throw new Error(msg);
+//     }
+//     if (when.type === "no-schedule") {
+//       return "Not a valid schedule input";
+//     }
+//     const input =
+//       when.type === "scheduled"
+//         ? when.date // scheduled
+//         : when.type === "delayed"
+//           ? when.delayInSeconds // delayed
+//           : when.type === "cron"
+//             ? when.cron // cron
+//             : throwError("not a valid schedule input");
+//     try {
+//       // agent!.schedule(input!, "executeTask", description);
+//     } catch (error) {
+//       console.error("error scheduling task", error);
+//       return `Error scheduling task: ${error}`;
+//     }
+//     return `Task scheduled for type "${when.type}" : ${input}`;
+//   }
+// })
 
 /**
  * Tool to list all scheduled tasks
@@ -67,16 +67,16 @@ const scheduleTask = tool({
  */
 const getScheduledTasks = tool({
   description: "List all tasks that have been scheduled",
-  parameters: z.object({}),
+  inputSchema: type({}).toJsonSchema() as any,
   execute: async () => {
-    const { agent } = getCurrentAgent<Chat>();
+    // const { agent } = getCurrentAgent<Chat>();
 
     try {
-      const tasks = agent!.getSchedules();
-      if (!tasks || tasks.length === 0) {
-        return "No scheduled tasks found.";
-      }
-      return tasks;
+      // const tasks = agent!.getSchedules();
+      // if (!tasks || tasks.length === 0) {
+      //   return "No scheduled tasks found.";
+      // }
+      // return tasks;
     } catch (error) {
       console.error("Error listing scheduled tasks", error);
       return `Error listing scheduled tasks: ${error}`;
@@ -90,13 +90,11 @@ const getScheduledTasks = tool({
  */
 const cancelScheduledTask = tool({
   description: "Cancel a scheduled task using its ID",
-  parameters: z.object({
-    taskId: z.string().describe("The ID of the task to cancel"),
-  }),
+  inputSchema: type({ taskId: "string" }).toJsonSchema() as any,
   execute: async ({ taskId }) => {
-    const { agent } = getCurrentAgent<Chat>();
+    // const { agent } = getCurrentAgent<Chat>();
     try {
-      await agent!.cancelSchedule(taskId);
+      // await agent!.cancelSchedule(taskId);
       return `Task ${taskId} has been successfully canceled.`;
     } catch (error) {
       console.error("Error canceling scheduled task", error);
@@ -120,28 +118,28 @@ export const toolTags = {
 export const tools = {
   getWeatherInformation,
   getLocalTime,
-  scheduleTask,
+  // scheduleTask,
   getScheduledTasks,
   cancelScheduledTask,
   readPageContent: tool({
     description: "read current tab page content, optional with a xpath selector or only text access if not specific html structure requiring task is performed",
-    parameters: z.object({ selector: z.optional(z.string()), textOnly: z.optional(z.boolean()) }),
+    inputSchema: type({ selector: "string?", textOnly: "boolean?" }).toJsonSchema() as any,
   }),
 
   openNewTab: tool({
     description: "open a new tab in the current space, optionally with a specific URL",
-    parameters: z.object({ 
-      url: z.optional(z.string()).describe("URL to open in the new tab - if not provided, opens a new tab page"),
-      title: z.optional(z.string()).describe("Title for the new tab - if not provided, will be determined from the URL")
-    })
+    inputSchema: type({  // Todo: handle description per schema field
+      url: "string?", 
+      title: "string?"
+    }).toJsonSchema() as any
   }),
 
   displayHtml: tool({
     description: "display pure HTML content in a new tab using a data: URL",
-    parameters: z.object({
-      html: z.string().describe("The HTML content to display"),
-      title: z.optional(z.string()).describe("Title for the new tab")
-    }),
+    inputSchema: type({
+      html: "string",
+      title: "string?"
+    }).toJsonSchema() as any,
   }),
 
   // deployDocker: tool({

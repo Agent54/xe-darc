@@ -996,20 +996,24 @@ ul::-webkit-scrollbar {
 }
 
 :global(.frame) {
-  width: calc(100vw - var(--space-taken, 0px) - 18px);
-  height: calc(100vh - 18px);
-  border: none;
-  display: block;
-  border-radius: inherit;
-  border-radius: 8px;
-  overflow: hidden;
-  flex: 0 0 auto;
-  -webkit-app-region: no-drag;
-  user-select: none;
-  scroll-snap-align: start;
-  scroll-snap-stop: normal;
-  border: 1px solid #ffffff12;
-  transition: width 0.3s ease, border-color 0.3s ease;
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: inherit;
+    border-radius: 8px;
+    overflow: hidden;
+    flex: 0 0 auto;
+    -webkit-app-region: no-drag;
+    user-select: none;
+    transition: width 0.3s ease, border-color 0.3s ease;
+}
+
+:global(.frame-wrapper) {
+    scroll-snap-align: start;
+    scroll-snap-stop: normal;
+    width: calc(100vw - var(--space-taken, 0px) - 18px);
+    height: calc(100vh - 18px);
+    border: 1px solid #ffffff12;
 }
 
 /* @media (min-width: 1800px) {
@@ -1026,8 +1030,18 @@ ul::-webkit-scrollbar {
     border: 1px solid #74747466;
 }
 
-.has-right-pins :global(.frame) {
+.has-right-pins :global(.frame-wrapper) {
     width: calc(100vw - var(--space-taken, 0px) - 18px - 9px);
+}
+
+.has-left-pins :global(.frame-wrapper) {
+    width: calc(100vw - var(--space-taken, 0px) - 9px);
+    padding-left: 9px;
+}
+
+.has-left-pins.has-right-pins :global(.frame-wrapper) {
+    width: calc(100vw - var(--space-taken, 0px) - 18px);
+    padding-left: 9px;
 }
 
 /* .controlled-frame-container.sidebar-open :global(.frame) {
@@ -1804,28 +1818,32 @@ ul::-webkit-scrollbar {
 .controlled-frame-container {
     width: calc(100% - var(--space-taken, 0px));
     left: var(--left-pinned-width, 0px);
-    transition: width 0.3s ease, left 0.3s ease;
+    transition: width 0.1s ease-out, left 0.1s ease-out;
 }
 
 .controlled-frame-container.has-left-pins {
-    left: calc(var(--left-pinned-width, 0px) - 8px);
+    left: calc(var(--left-pinned-width, 0px) - 18px);
+}
+
+.controlled-frame-container.has-left-pins.has-right-pins {
+    width: calc(100% - var(--space-taken, 0px) + 9px);
 }
 
 .pinned-frames-left {
     position: fixed;
-    top: 0;
+    top: 50px; /* Start below tab bar, aligned with main frames */
     left: 0;
     width: var(--left-pinned-width, 0px);
-    height: 100vh;
-    padding: 9px 0 9px 9px;
+    height: calc(100vh - 52px); /* Account for tab bar height */
+    padding: 9px 8px 9px 9px; /* Add 8px right padding */
     display: flex;
     flex-direction: row;
     gap: 9px;
     align-items: flex-end;
-    overflow: hidden;
-    z-index: 1;
-    transition: width 0.3s ease;
     overflow: visible;
+    z-index: 1;
+    transition: width 0.1s ease-out;
+    border-radius: 0 8px 8px 0; /* Round right corners to match frames */
 }
 
 .pinned-frames-left.window-controls-overlay {
@@ -1836,18 +1854,19 @@ ul::-webkit-scrollbar {
 .pinned-frames-right {
     overflow: visible;
     position: fixed;
-    top: 0;
+    top: 50px;
     right: var(--sidebar-width, 0px);
     width: var(--right-pinned-width, 0px);
-    height: 100vh;
+    height: calc(100vh - 52px); /* Account for tab bar height */
     padding: 9px 9px 9px 0;
+    border-radius: 8px 0 0 8px; /* Round left corners to match frames */
     display: flex;
     flex-direction: row;
     gap: 9px;
     align-items: flex-end;
     overflow: hidden;
     z-index: 1;
-    transition: width 0.3s ease, right 0.3s ease;
+    transition: width 0.1s ease-out, right 0.1s ease-out;
     overflow: visible;
 }
 
@@ -1865,7 +1884,7 @@ ul::-webkit-scrollbar {
 
 .pinned-frames-left :global(.frame),
 .pinned-frames-right :global(.frame) {
-    height: calc(100vh - 18px);
+    height: calc(100vh - 72px); /* Account for tab bar (52px) + padding (18px) */
     /* border: 1px solid #ffffff12; */
     border: none;
     /* border-radius: 8px;
@@ -1873,18 +1892,19 @@ ul::-webkit-scrollbar {
     flex-shrink: 0;
     transition: width 0.3s ease;
     border-radius: 8px;
-    box-shadow: 0px 0px 9px 8px #00000040;
+    box-shadow: 0px 0px 9px 4px #00000040;
     overflow: visible;
     /* border: 1px solid #111111; */
 }
 
 .pinned-frames-left.window-controls-overlay :global(.frame),
 .pinned-frames-right.window-controls-overlay :global(.frame) {
-    height: calc(100vh - 52px);
+    height: calc(100vh - 54px);
+    margin-bottom: 1px;
 }
 
 .pinned-frames-left :global(.frame) {
-    width: calc((var(--left-pinned-width, 0px) - 9px * var(--left-pinned-count, 1)) / var(--left-pinned-count, 1));
+    width: calc((var(--left-pinned-width, 0px) - 8px - 9px * var(--left-pinned-count, 1)) / var(--left-pinned-count, 1)); /* Account for 9px left + 8px right padding + gaps */
 }
 
 .pinned-frames-right :global(.frame) {
@@ -1974,6 +1994,64 @@ ul::-webkit-scrollbar {
 
 .pinned-frames-left.no-transitions :global(.frame),
 .pinned-frames-right.no-transitions :global(.frame) {
+    transition: none !important;
+}
+
+/* Resize handles for pinned frames */
+.resize-handle {
+    position: fixed;
+    top: 50px;
+    bottom: 16px;
+    width: 5px;
+    background: transparent;
+    cursor: col-resize;
+    z-index: 1000;
+    transition: background-color 0.2s ease;
+    pointer-events: auto;
+}
+
+.resize-handle:hover,
+.resize-handle.active {
+    background: rgb(255 255 255 / 23%);
+}
+
+/* Position will be set dynamically via style attribute */
+.resize-handle-right {
+    /* Left position will be calculated dynamically */
+}
+
+.resize-handle-left {
+    /* Left position will be calculated dynamically */
+}
+
+/* Disable pointer events on frames during resize */
+.resizing-pinned-frames :global(.frame),
+.resizing-pinned-frames :global(iframe),
+.resizing-pinned-frames :global(.controlled-frame) {
+    pointer-events: none !important;
+}
+
+.controlled-frame-container.resizing-pinned-frames :global(.frame),
+.controlled-frame-container.resizing-pinned-frames :global(iframe),
+.controlled-frame-container.resizing-pinned-frames :global(.controlled-frame) {
+    pointer-events: none !important;
+}
+
+/* Disable transitions during resize for immediate response */
+.resizing-pinned-frames,
+.controlled-frame-container.resizing-pinned-frames {
+    transition: none !important;
+}
+
+/* Disable frame width transitions during resize */
+.resizing-pinned-frames :global(.frame),
+.controlled-frame-container.resizing-pinned-frames :global(.frame) {
+    transition: none !important;
+}
+
+/* Disable pinned frame container transitions during resize */
+.pinned-frames-left.resizing-pinned-frames,
+.pinned-frames-right.resizing-pinned-frames {
     transition: none !important;
 }
 

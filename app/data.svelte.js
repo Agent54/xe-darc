@@ -3,6 +3,7 @@ import findPlugin from 'pouchdb-find'
 import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
 import { throttle } from './lib/utils.js'
+import { tick } from 'svelte'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
@@ -728,7 +729,7 @@ export default {
         // })
     },
     
-    newTab: (spaceId, { url, title, opener, preview, lightbox, shouldFocus } = {}) => {
+    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus } = {}) => {
         // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
 
@@ -747,17 +748,21 @@ export default {
             lightbox: !!lightbox
         }
 
+        if (!spaces[spaceId].tabs?.length) {
+            spaces[spaceId].tabs = []
+        }
+
         if (!preview && !lightbox) {
             spaces[spaceId].tabs.push(tab)
             docs[tab._id] = tab
         }
 
         if (shouldFocus && !preview && !lightbox) {
+            await tick()
             activate(_id)
         }
 
         db.put(tab)
-
         return tab
     },
 

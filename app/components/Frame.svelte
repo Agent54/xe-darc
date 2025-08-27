@@ -496,10 +496,9 @@
     }
 </script>
 
-<div class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
+<div bind:this={frameWrapper} class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
     {#if !data.frames[tab.id]?.frame && data.spaceMeta.activeTabId !== tab.id && !tab.pinned}
         <div 
-            bind:this={frameWrapper}
             transition:fade={{duration: 200, delay: 400}}
             class="frame hibernated-frame"
             style="border: none;"
@@ -954,12 +953,15 @@
     :global(.hibernated-screenshot) {
         width: 100%;
         height: 100%;
-        opacity: 0.5;
+        opacity: 0.7;
+        border-radius: 8px;
+        overflow: hidden;
     }
     
     :global(.hibernated-screenshot .attachment-image) {
-        object-fit: cover;
-        object-position: top;
+        object-fit: contain;
+        object-position: top left;
+        border-radius: 8px;
     }
 
     .hibernated-placeholder {

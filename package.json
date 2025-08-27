@@ -15,18 +15,16 @@
   },
   "packageManager": "pnpm@10.13.1",
   "dependencies": {
-    "@ai-sdk/anthropic": "1.2.12",
-    "@ai-sdk/ui-utils": "^1.2.11",
+    "@ai-sdk/anthropic": "2.0.8",
+    "@ai-sdk/ui-utils": "1.2.11",
     "@cloudflare/vite-plugin": "1.7.4",
-    "@e2b/code-interpreter": "1.5.1",
     "@elevenlabs/client": "^0.5.0",
     "@excalidraw/excalidraw": "0.18.0",
     "@sveltejs/vite-plugin-svelte": "5.1.0",
     "@tailwindcss/vite": "4.1.10",
     "@threlte/core": "8.0.4",
     "@threlte/extras": "9.2.1",
-    "agents": "^0.0.97",
-    "ai": "^4.3.16",
+    "ai": "5.0.26",
     "events": "3.3.0",
     "pouchdb-adapter-indexeddb": "^9.0.0",
     "pouchdb-browser": "9.0.0",
@@ -42,6 +40,6 @@
     "vite-plugin-html-inject": "1.1.2",
     "wbn-sign": "0.2.1",
     "wrangler": "4.32.0",
-    "zod": "^3.25.67"
+    "arktype": "2.1.20"
   }
 }

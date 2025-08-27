@@ -90,7 +90,15 @@
     function activateTab(tabId, spaceId) {
         // If clicking on the currently active tab, switch to previous tab
         data.spaceMeta.activeSpace = spaceId
+        const tab = data.docs[tabId]
+        
+        // For unpinned tabs, use the original behavior
         if (tabId === data.spaceMeta.activeTabId) {
+            // For pinned tabs, don't activate them in the sidebar (they should only toggle visibility from main tabs)
+            // For now, just do nothing for pinned tabs in sidebar
+            if (tab?.pinned) {
+                return
+            }
             data.previous()
         } else {
             data.activate(tabId)

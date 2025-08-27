@@ -3,11 +3,9 @@
 	import RightSidebar from './RightSidebar.svelte'
 	import data from '../data.svelte.js'
 	import * as smd from 'streaming-markdown'
-	import { AgentClient } from 'agents/client'
+	// import { AgentClient } from 'agents/client'
 
-	let client
-
-
+	let client = {}
 
 	async function startVoice() {
 		conv = true
@@ -1036,7 +1034,7 @@
 		// Gather context metadata based on selected target
 		const contextMetadata = gatherContextMetadata(queueItem.selectedTarget)
 
-        client.send(
+        client?.send(
 			JSON.stringify(
 				{
 					id: crypto.randomUUID(),
@@ -1158,7 +1156,7 @@
 
 	function clearHistory() {
 		// Send clear message to agent
-		client.send(JSON.stringify({"type":"cf_agent_chat_clear"}))
+		// client?.send(JSON.stringify({"type":"cf_agent_chat_clear"}))
 
 		// Cancel current task and queue
 		if (currentTimeout) {
@@ -1592,7 +1590,7 @@
 		}
 		
 		// Send the complete chat message
-		client.send(JSON.stringify({
+		client?.send(JSON.stringify({
 			id: crypto.randomUUID(),
 			init: {
 				body: JSON.stringify(messagePayload),
@@ -1722,7 +1720,7 @@
 		}
 		
 		// Send the complete chat message
-		client.send(JSON.stringify({
+		client?.send(JSON.stringify({
 			id: crypto.randomUUID(),
 			init: {
 				body: JSON.stringify(messagePayload),
@@ -2301,18 +2299,18 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	onMount(() => {
-		client = new AgentClient({
-			agent: 'chat',
-			name: 'default',
-			host: 'localhost:5193',
-			protocol: 'wss'
-		})
+		// client = new AgentClient({
+		// 	agent: 'chat',
+		// 	name: 'default',
+		// 	host: 'localhost:5193',
+		// 	protocol: 'wss'
+		// })
 
-		client.onopen = () => {
-			console.log('Connected to agent')
-			// Send an initial message
-			// client.send(JSON.stringify({ type: "join", user: "user123" }));
-		}
+		// client.onopen = () => {
+		// 	console.log('Connected to agent')
+		// 	// Send an initial message
+		// 	// client?.send(JSON.stringify({ type: "join", user: "user123" }));
+		// }
 
 		// Load selected model from localStorage
 		if (typeof localStorage !== 'undefined') {
@@ -2365,69 +2363,72 @@ The current system demonstrates strong performance and security characteristics.
 
 		window.addEventListener('message', handleAgentMessage)
 
-		client.onmessage = (event) => {
-			// Handle incoming messages
-			const data = JSON.parse(event.data)
-			console.log('Received message:', data)
+		// Only set event handlers if client has the required methods
+		if (client && typeof client.addEventListener === 'function') {
+			client.onmessage = (event) => {
+				// Handle incoming messages
+				const data = JSON.parse(event.data)
+				console.log('Received message:', data)
 
 
-			// { "mcp": { "prompts": [], "resources": [], "servers": {}, "tools": [] }, "type": "cf_agent_mcp_servers" }
+				// { "mcp": { "prompts": [], "resources": [], "servers": {}, "tools": [] }, "type": "cf_agent_mcp_servers" }
 
-			// "body": "f:{\"messageId\":\"msg-AI9pv13V8IEr5o6jevyUFeAL\"}\n", "done": false, "id": "LdxkiFBI
-			//  { "body": "0:\" you've typed \\\"asdf\\\" - that doesn't seem to be a specific\"\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
+				// "body": "f:{\"messageId\":\"msg-AI9pv13V8IEr5o6jevyUFeAL\"}\n", "done": false, "id": "LdxkiFBI
+				//  { "body": "0:\" you've typed \\\"asdf\\\" - that doesn't seem to be a specific\"\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
 
-			//{ "body": "e:{\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":1287,\"completionTokens\":124},\"isContinued\":false}\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
+				//{ "body": "e:{\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":1287,\"completionTokens\":124},\"isContinued\":false}\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
 
-			// Ignore empty status messages - these are just completion signals
-			if (data.type === 'cf_agent_use_chat_response' && (!data.body || data.body.trim() === '')) {
-				console.log('Ignoring empty status message:', data)
-				return
+				// Ignore empty status messages - these are just completion signals
+				if (data.type === 'cf_agent_use_chat_response' && (!data.body || data.body.trim() === '')) {
+					console.log('Ignoring empty status message:', data)
+					return
+				}
+
+				// Check if this is a streaming message chunk
+				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('0:')) {
+					handleStreamingChunk(data, { type: 'message' })
+					return
+				}
+
+				// Check if this is a stream completion message
+				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('e:')) {
+					handleStreamingChunk(data, { type: 'completion' })
+					return
+				}
+
+				// Check if this is a tool call message
+				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('9:')) {
+					handleToolCall(data)
+					return
+				}
+
+				// Check if this is a tool result message
+				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('a:')) {
+					handleToolResult(data)
+					return
+				}
+
+				// Check if this is a response summary
+				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('d:')) {
+					handleResponseSummary(data)
+					return
+				}
+
+				// Handle complete message updates
+				if (data.type === 'cf_agent_chat_messages') {
+					handleChatMessages(data)
+					return
+				}
+
+				if (data.type === 'state_update') {
+					// Update local UI with new state
+					//updateUI(data.state);
+					console.log('state upd', data)
+				}
 			}
 
-			// Check if this is a streaming message chunk
-			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('0:')) {
-				handleStreamingChunk(data, { type: 'message' })
-				return
-			}
-
-			// Check if this is a stream completion message
-			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('e:')) {
-				handleStreamingChunk(data, { type: 'completion' })
-				return
-			}
-
-			// Check if this is a tool call message
-			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('9:')) {
-				handleToolCall(data)
-				return
-			}
-
-			// Check if this is a tool result message
-			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('a:')) {
-				handleToolResult(data)
-				return
-			}
-
-			// Check if this is a response summary
-			if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('d:')) {
-				handleResponseSummary(data)
-				return
-			}
-
-			// Handle complete message updates
-			if (data.type === 'cf_agent_chat_messages') {
-				handleChatMessages(data)
-				return
-			}
-
-			if (data.type === 'state_update') {
-				// Update local UI with new state
-				//updateUI(data.state);
-				console.log('state upd', data)
-			}
+			client.onclose = () => console.log('Disconnected from agent')
 		}
-
-		client.onclose = () => console.log('Disconnected from agent')
 		
 		// Auto-focus the input when sidebar opens
 		const input = document.querySelector('.agent-conversation-input')
@@ -2442,7 +2443,7 @@ The current system demonstrates strong performance and security characteristics.
 
 			window.removeEventListener('message', handleAgentMessage)
 
-			if (client) {
+			if (client && typeof client.close === 'function') {
 				client.close()
 			}
 		}
