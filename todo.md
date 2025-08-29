@@ -1110,3 +1110,10 @@ fix sync, tab groups, history, data export, import, usermods, canvas mode
 bug report tool/ lanes sidebar
 
 website total white arctic tech look?
+
+
+keyboard navigation space and tabgroup, tab and active frame border
+
+revisit trails and stacked browsing concepts. browser session  progression as horizontal frames that fade out?
+
+

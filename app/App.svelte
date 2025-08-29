@@ -111,18 +111,21 @@
     let openSidebars = $state(new Set())
     let sidebarStateLoaded = $state(false)
     
-    let invisiblePinnedFrames = $state(new Set())
+    let invisiblePins = $state({})
     let customLeftPinnedWidth = $state(null)
     let customRightPinnedWidth = $state(null)
+    let customRightSidebarWidth = $state(null)
     let isResizingLeft = $state(false)
     let isResizingRight = $state(false)
-    let isResizingPinnedFrames = $derived(isResizingLeft || isResizingRight)
+    let isResizingSidebar = $state(false)
+    let isResizingPinnedFrames = $derived(isResizingLeft || isResizingRight || isResizingSidebar)
     let resizeStartX = $state(0)
     let resizeStartWidth = $state(0)
     let resizeAnimationFrame = null
     let visibleFrameDuringResize = $state(null)
     let leftResizeHandlePosition = $state(0)
     let rightResizeHandlePosition = $state(0)
+    let sidebarResizeHandlePosition = $state(0)
 
     let focusModeEnabled = $state(false)
     let focusModeHovered = $state(false)
@@ -305,15 +308,13 @@
             }
             
             // Load invisible pinned frames
-            const savedInvisiblePinnedFrames = localStorage.getItem('invisiblePinnedFrames')
-            if (savedInvisiblePinnedFrames !== null) {
+            const savedInvisiblePins = localStorage.getItem('invisiblePins')
+            if (savedInvisiblePins !== null) {
                 try {
-                    const invisibleFramesArray = JSON.parse(savedInvisiblePinnedFrames)
-                    invisiblePinnedFrames = new Set(invisibleFramesArray)
-                    console.log('Restored invisible pinned frames state:', invisibleFramesArray)
+                    invisiblePins = JSON.parse(savedInvisiblePins)
                 } catch (e) {
-                    console.warn('Failed to parse saved invisible pinned frames state:', e)
-                    invisiblePinnedFrames = new Set()
+                    console.warn('Failed to parse saved invisible pins state:', e)
+                    invisiblePins = {}
                 }
             }
             
@@ -325,6 +326,11 @@
             const savedRightWidth = localStorage.getItem('customRightPinnedWidth')
             if (savedRightWidth !== null) {
                 customRightPinnedWidth = parseInt(savedRightWidth, 10)
+            }
+            
+            const savedSidebarWidth = localStorage.getItem('customRightSidebarWidth')
+            if (savedSidebarWidth !== null) {
+                customRightSidebarWidth = parseInt(savedSidebarWidth, 10)
             }
             
 
@@ -350,22 +356,9 @@
         }
     })
     
-    // Save invisible pinned frames state to localStorage
-    $effect(() => {
-        if (!sidebarStateLoaded) return // Don't save during initial load
-        
-        try {
-            const invisibleFramesArray = Array.from(invisiblePinnedFrames)
-            localStorage.setItem('invisiblePinnedFrames', JSON.stringify(invisibleFramesArray))
-            console.log('Saved invisible pinned frames state:', invisibleFramesArray)
-        } catch (error) {
-            console.warn('Failed to save invisible pinned frames state:', error)
-        }
-    })
-    
     // Save custom pinned widths to localStorage (only when not resizing)
     $effect(() => {
-        if (!sidebarStateLoaded || isResizingLeft || isResizingRight) return // Don't save during resize or initial load
+        if (!sidebarStateLoaded || isResizingLeft || isResizingRight || isResizingSidebar) return // Don't save during resize or initial load
         
         if (customLeftPinnedWidth !== null) {
             localStorage.setItem('customLeftPinnedWidth', customLeftPinnedWidth.toString())
@@ -373,11 +366,14 @@
         if (customRightPinnedWidth !== null) {
             localStorage.setItem('customRightPinnedWidth', customRightPinnedWidth.toString())
         }
+        if (customRightSidebarWidth !== null) {
+            localStorage.setItem('customRightSidebarWidth', customRightSidebarWidth.toString())
+        }
     })
     
     // Update resize handle positions when layout changes (but not during resize)
     $effect(() => {
-        if (isResizingLeft || isResizingRight) return // Don't update during active resize
+        if (isResizingLeft || isResizingRight || isResizingSidebar) return // Don't update during active resize
         
         updateResizeHandlePositions()
     })
@@ -666,20 +662,16 @@
 
     let pinsInit = false
     $effect(() => {
-        const leftCount = leftPinnedTabs.length
-        const rightCount = rightPinnedTabs.length
-
+        // TODO: hanlde this
+        // const leftCount = leftPinnedTabs.length
+        // const rightCount = rightPinnedTabs.length
         // Reset invisible state when no tabs are pinned on a side (clean up state)
-        if (leftCount === 0 && invisiblePinnedFrames.has('left')) {
-            invisiblePinnedFrames.delete('left')
-            invisiblePinnedFrames = new Set(invisiblePinnedFrames)
-        }
-        if (rightCount === 0 && invisiblePinnedFrames.has('right')) {
-            invisiblePinnedFrames.delete('right')
-            invisiblePinnedFrames = new Set(invisiblePinnedFrames)
-        }
-
-        // console.log({leftCount, rightCount, tabChangeFromScroll})
+        // if (leftCount === 0 && invisiblePins.left) {
+        //     delete invisiblePins.left
+        // }
+        // if (rightCount === 0 && invisiblePins.right) {
+        //     delete invisiblePins.right
+        // }
         
         if (tabChangeFromScroll || !pinsInit) {
             pinsInit = true
@@ -1503,12 +1495,13 @@
     }
     
     function togglePinnedFrames(side) {
-        if (invisiblePinnedFrames.has(side)) {
-            invisiblePinnedFrames.delete(side)
-        } else {
-            invisiblePinnedFrames.add(side)
+        invisiblePins[side] = !invisiblePins[side]
+        
+        try {
+            localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+        } catch (error) {
+            console.warn('Failed to save invisible pins state:', error)
         }
-        invisiblePinnedFrames = new Set(invisiblePinnedFrames)
     }
     
     function findCurrentlyVisibleFrame() {
@@ -1549,21 +1542,28 @@
     
     function updateResizeHandlePositions() {
         // Update left handle position (center of gap between left pinned frames and main content)
-        if (leftPinnedTabs.length > 0 && !invisiblePinnedFrames.has('left')) {
+        if (leftPinnedTabs.length > 0 && !invisiblePins.left) {
             // Left pinned frames end at leftPinnedWidth, main content starts at leftPinnedWidth - 8px + 18px padding
             // So the visible gap is from leftPinnedWidth to leftPinnedWidth + 10px
             leftResizeHandlePosition = leftPinnedWidth - 8
         }
         
         // Update right handle position (center of gap between main content and right pinned frames)
-        if (rightPinnedTabs.length > 0 && !invisiblePinnedFrames.has('right')) {
+        if (rightPinnedTabs.length > 0 && !invisiblePins.right) {
             const viewportWidth = window.innerWidth
-            const sidebarWidth = openSidebars.size * data.spaceMeta.config.rightSidebarWidth
-            // Right pinned frames start at viewportWidth - sidebarWidth - rightPinnedWidth
+            // Right pinned frames start at viewportWidth - rightSidebarWidth - rightPinnedWidth
             // Main content ends 18px before that due to padding-right
-            rightResizeHandlePosition = viewportWidth - sidebarWidth - rightPinnedWidth - 5
+            rightResizeHandlePosition = viewportWidth - rightSidebarWidth - rightPinnedWidth - 5
+        }
+        
+        // Update sidebar handle position (left edge of sidebar)
+        if (openSidebars.size > 0) {
+            const viewportWidth = window.innerWidth
+            sidebarResizeHandlePosition = viewportWidth - rightSidebarWidth - 5
         }
     }
+
+    $inspect(invisiblePins)
     
     function startResizeLeft(event) {
         event.preventDefault()
@@ -1665,6 +1665,59 @@
         // Trigger persistence by updating the state (effect will save to localStorage)
         if (customRightPinnedWidth !== null) {
             customRightPinnedWidth = customRightPinnedWidth // Force reactivity
+        }
+        
+        // Clear the visible frame tracking
+        visibleFrameDuringResize = null
+    }
+    
+    function startResizeSidebar(event) {
+        event.preventDefault()
+        isResizingSidebar = true
+        resizeStartX = event.clientX
+        resizeStartWidth = customRightSidebarWidth || data.spaceMeta.config.rightSidebarWidth
+        visibleFrameDuringResize = findCurrentlyVisibleFrame()
+        updateResizeHandlePositions() // Set initial positions
+        document.addEventListener('mousemove', handleResizeSidebar)
+        document.addEventListener('mouseup', stopResizeSidebar)
+    }
+    
+    function handleResizeSidebar(event) {
+        if (!isResizingSidebar) return
+        
+        // Cancel any pending animation frame
+        if (resizeAnimationFrame) {
+            cancelAnimationFrame(resizeAnimationFrame)
+        }
+        
+        // Use requestAnimationFrame for smooth updates
+        resizeAnimationFrame = requestAnimationFrame(() => {
+            const deltaX = resizeStartX - event.clientX // Inverted for right side
+            const newWidth = Math.max(200, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 200px, max 50% viewport
+            customRightSidebarWidth = newWidth
+            
+            // Update handle positions to stay at frame boundaries
+            updateResizeHandlePositions()
+            
+            // Keep the visible frame in view
+            scrollVisibleFrameIntoView()
+        })
+    }
+    
+    function stopResizeSidebar() {
+        isResizingSidebar = false
+        document.removeEventListener('mousemove', handleResizeSidebar)
+        document.removeEventListener('mouseup', stopResizeSidebar)
+        
+        // Cancel any pending animation frame
+        if (resizeAnimationFrame) {
+            cancelAnimationFrame(resizeAnimationFrame)
+            resizeAnimationFrame = null
+        }
+        
+        // Trigger persistence by updating the state (effect will save to localStorage)
+        if (customRightSidebarWidth !== null) {
+            customRightSidebarWidth = customRightSidebarWidth // Force reactivity
         }
         
         // Clear the visible frame tracking
@@ -2262,19 +2315,22 @@
     })
     
     let rightSidebarWidth = $derived.by(() => {
+        if (customRightSidebarWidth !== null) {
+            return openSidebars.size * customRightSidebarWidth
+        }
         return openSidebars.size * data.spaceMeta.config.rightSidebarWidth
     })
     
     // Total space taken by all UI elements (affects available width)
     let spaceTaken = $derived.by(() => {
-        const visibleLeftWidth = (leftPinnedTabs.length > 0 && !invisiblePinnedFrames.has('left')) ? leftPinnedWidth : 0
-        const visibleRightWidth = (rightPinnedTabs.length > 0 && !invisiblePinnedFrames.has('right')) ? rightPinnedWidth : 0
+        const visibleLeftWidth = (leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0
+        const visibleRightWidth = (rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0
         const baseSpace = visibleLeftWidth + visibleRightWidth + rightSidebarWidth
         
         // Reduce space taken to allow content to scroll behind pinned tabs
         let reduction = 0
-        if (leftPinnedTabs.length > 0 && !invisiblePinnedFrames.has('left')) reduction += 9
-        if (rightPinnedTabs.length > 0 && !invisiblePinnedFrames.has('right')) reduction += 9
+        if (leftPinnedTabs.length > 0 && !invisiblePins.left) reduction += 9
+        if (rightPinnedTabs.length > 0 && !invisiblePins.right) reduction += 9
         
         return baseSpace - reduction
     })
@@ -3340,50 +3396,17 @@
     </div>
 </div>
 
-{#if leftPinnedTabs.length > 0 && !invisiblePinnedFrames.has('left')}
-    <div class="pinned-frames-left" class:window-controls-overlay={headerPartOfMain} 
-    class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
-    class:resizing-pinned-frames={isResizingPinnedFrames}
-    style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length};">
-        {#each leftPinnedTabs as leftPinned (leftPinned.id)}
-            {@const tab = data.docs[leftPinned.id]}
-            {#key userModsHash}
-                {#if tab.type !== 'divider'}
-                    <div>
-                        {#key origin(tab.url)}
-                            <div class="url-display visible">
-                                <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
-                            </div>
-                        {/key}
-                        
-                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
-                    </div>
-                {/if}
-            {/key}
-        {/each}
-
-        <div class="resize-handle resize-handle-right" 
-             class:active={isResizingLeft}
-             role="separator"
-             aria-orientation="vertical"
-             aria-label="Resize left pinned tabs"
-             onmousedown={startResizeLeft}
-             style="left: {leftResizeHandlePosition}px"
-             title="Drag to resize left pinned tabs"></div>
-    </div>
-{/if}
-
 <div class="controlled-frame-container browser-frame" 
      class:window-controls-overlay={headerPartOfMain} 
      class:scrolling={isScrolling}
      class:sidebar-open={openSidebars.size > 0}
      class:no-transitions={isWindowResizing}
      class:resizing-pinned-frames={isResizingPinnedFrames}
-     class:has-left-pins={leftPinnedTabs.length > 0 && !invisiblePinnedFrames.has('left')}
-     class:has-right-pins={rightPinnedTabs.length > 0 && !invisiblePinnedFrames.has('right')}
+     class:has-left-pins={leftPinnedTabs.length > 0 && !invisiblePins.left}
+     class:has-right-pins={rightPinnedTabs.length > 0 && !invisiblePins.right}
      onscroll={handleScroll} 
      bind:this={scrollContainer}
-     style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {(leftPinnedTabs.length > 0 && !invisiblePinnedFrames.has('left')) ? leftPinnedWidth : 0}px; --right-pinned-width: {(rightPinnedTabs.length > 0 && !invisiblePinnedFrames.has('right')) ? rightPinnedWidth : 0}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
+     style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --right-pinned-width: {(rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size};">
 
     {#if viewMode === 'canvas'}
         <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
@@ -3429,7 +3452,41 @@
     <Agent></Agent>
 {/if}
 
-{#if rightPinnedTabs.length > 0 && !invisiblePinnedFrames.has('right')}
+
+{#if leftPinnedTabs.length > 0 && !invisiblePins.left}
+    <div class="pinned-frames-left" class:window-controls-overlay={headerPartOfMain} 
+    class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
+    class:resizing-pinned-frames={isResizingPinnedFrames}
+    style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length};">
+        {#each leftPinnedTabs as leftPinned (leftPinned.id)}
+            {@const tab = data.docs[leftPinned.id]}
+            {#key userModsHash}
+                {#if tab.type !== 'divider'}
+                    <div>
+                        {#key origin(tab.url)}
+                            <div class="url-display visible">
+                                <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
+                            </div>
+                        {/key}
+                        
+                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                    </div>
+                {/if}
+            {/key}
+        {/each}
+
+        <div class="resize-handle resize-handle-right" 
+             class:active={isResizingLeft}
+             role="separator"
+             aria-orientation="vertical"
+             aria-label="Resize left pinned tabs"
+             onmousedown={startResizeLeft}
+             style="left: {leftResizeHandlePosition}px"
+             title="Drag to resize left pinned tabs"></div>
+    </div>
+{/if}
+
+{#if rightPinnedTabs.length > 0 && !invisiblePins.right}
     <div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
     class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
     class:resizing-pinned-frames={isResizingPinnedFrames}
@@ -3568,7 +3625,16 @@
     <div class="sidebar-container" 
          class:window-controls-overlay={headerPartOfMain}
          class:no-transitions={isWindowResizing}
-         style="--sidebar-width: {rightSidebarWidth}px; --space-taken: {spaceTaken}px;">
+         class:resizing-pinned-frames={isResizingPinnedFrames}
+         style="--sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --space-taken: {spaceTaken}px;">
+        <div class="resize-handle resize-handle-left" 
+             class:active={isResizingSidebar}
+             role="separator"
+             aria-orientation="vertical"
+             aria-label="Resize sidebar"
+             onmousedown={startResizeSidebar}
+             style="left: {sidebarResizeHandlePosition}px"
+             title="Drag to resize sidebar"></div>
         {#if openSidebars.has('resources')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('resources') && !prevOpenSidebars.has('resources') && !isSwitchingSidebars && !isWindowResizing}>
                 <Resources onClose={() => closeSidebar('resources')}  {requestedResources}

@@ -1000,7 +1000,6 @@ ul::-webkit-scrollbar {
     height: 100%;
     display: block;
     border-radius: inherit;
-    border-radius: 8px;
     overflow: hidden;
     flex: 0 0 auto;
     -webkit-app-region: no-drag;
@@ -1013,9 +1012,7 @@ ul::-webkit-scrollbar {
     scroll-snap-stop: normal;
     width: calc(100vw - var(--space-taken, 0px) - 18px);
     height: calc(100vh - 18px);
-    border: 1px solid #ffffff12;
 }
-
 /* @media (min-width: 1800px) {
     :global(.tab-group .frame) {
         max-width: 1400px !important;
@@ -1823,9 +1820,6 @@ ul::-webkit-scrollbar {
 
 .controlled-frame-container.has-left-pins {
     left: calc(var(--left-pinned-width, 0px) - 18px);
-}
-
-.controlled-frame-container.has-left-pins.has-right-pins {
     width: calc(100% - var(--space-taken, 0px) + 9px);
 }
 
@@ -1846,10 +1840,7 @@ ul::-webkit-scrollbar {
     border-radius: 0 8px 8px 0; /* Round right corners to match frames */
 }
 
-.pinned-frames-left.window-controls-overlay {
-    height: calc(100vh - 35px);
-    top: 35px;
-}
+
 
 .pinned-frames-right {
     overflow: visible;
@@ -1870,6 +1861,10 @@ ul::-webkit-scrollbar {
     overflow: visible;
 }
 
+.pinned-frames-left.window-controls-overlay {
+    height: calc(100vh - 35px);
+    top: 35px;
+}
 .pinned-frames-right.window-controls-overlay {
     height: calc(100vh - 35px);
     top: 35px;
@@ -1929,8 +1924,7 @@ ul::-webkit-scrollbar {
 }
 
 .sidebar-panel {
-    /* todo: width: var(--sidebar-width, 330px); */
-    width: 340px;
+    width: calc(var(--sidebar-width) / var(--sidebar-count, 1));
     height: 100%;
     flex-shrink: 0;
     position: relative;
@@ -2012,7 +2006,7 @@ ul::-webkit-scrollbar {
 
 .resize-handle:hover,
 .resize-handle.active {
-    background: rgb(255 255 255 / 23%);
+    background: rgb(69 68 68);
 }
 
 /* Position will be set dynamically via style attribute */
@@ -2214,6 +2208,13 @@ header.window-controls-overlay + .content-area-scrim {
 }
 
 :global(.frame > *) {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+
+:global(.frame-wrapper > * ) {
+    border: 1px solid #ffffff12;
     border-radius: 8px;
     overflow: hidden;
 }

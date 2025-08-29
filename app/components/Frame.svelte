@@ -501,7 +501,6 @@
         <div 
             transition:fade={{duration: 200, delay: 400}}
             class="frame hibernated-frame"
-            style="border: none;"
             role="button"
             tabindex="0"
             onmousedown={() => {
@@ -950,6 +949,10 @@
         --webkit-app-region: no-drag;
     }
 
+    :global(.has-left-pins .hibernated-frame) {
+        max-width: calc(100% - 9px);
+    }
+
     :global(.hibernated-screenshot) {
         width: 100%;
         height: 100%;
@@ -959,7 +962,7 @@
     }
     
     :global(.hibernated-screenshot .attachment-image) {
-        object-fit: contain;
+        object-fit: cover;
         object-position: top left;
         border-radius: 8px;
     }

@@ -1133,7 +1133,7 @@ document.addEventListener('input', function(event) {
                 || url.hostname.indexOf('posthog.com') != -1
 
                 // only for data saver/ use proxy
-                || url.hostname.indexOf('fonts.gstatic.com') != -1
+                // || url.hostname.indexOf('fonts.gstatic.com') != -1
 
                 // needs to be exposed and enablable as custom entities:
                 || url.hostname.indexOf('play.google.com') != -1
@@ -2097,7 +2097,7 @@ document.addEventListener('input', function(event) {
 
     <div
         out:detach|global
-        style="border: none; {style}"
+        style="{style}"
         bind:this={frameWrapper} 
         
         class:window-controls-overlay={headerPartOfMain}
