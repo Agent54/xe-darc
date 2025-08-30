@@ -1,7 +1,13 @@
 <script>
     // Tab sidebar component with Firefox-like hover behavior
     // let { isDragEnabled = true } = $props()
-    let { onShowApps = () => {} } = $props()
+    let { 
+        onShowApps = () => {},
+        customTabSidebarWidth = null,
+        tabSidebarVisible = false,
+        isResizingTabSidebar = false,
+        onStartResizeTabSidebar = null
+    } = $props()
     import data from '../data.svelte.js'
     import Favicon from './Favicon.svelte'
     import Tooltip from './Tooltip.svelte'
@@ -18,6 +24,9 @@
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
+    let resizeHandleHovered = $state(false)
+    let resizeHandleVisible = $state(false)
+    let resizeHandleShowTimeout = null
 
     let isManualScroll = false
     let previousSpaceIndex = -1
@@ -30,10 +39,27 @@
     
     function handleMouseEnter() {
         isHovered = true
+        
+        // Show resize handle after delay
+        if (resizeHandleShowTimeout) {
+            clearTimeout(resizeHandleShowTimeout)
+        }
+        resizeHandleShowTimeout = setTimeout(() => {
+            resizeHandleVisible = true
+        }, 200)
     }
     
     function handleMouseLeave() {
+        // Always set isHovered to false for resize handle logic
         isHovered = false
+        resizeHandleVisible = false
+        
+        // Clear resize handle timeout
+        if (resizeHandleShowTimeout) {
+            clearTimeout(resizeHandleShowTimeout)
+            resizeHandleShowTimeout = null
+        }
+        
         // Close context menu when leaving sidebar
         if (spaceContextMenuId !== null) {
             spaceContextMenuId = null
@@ -274,6 +300,18 @@
     //     previousClosedTabsLength = currentLength
     // })
     
+    // Cleanup timeouts on component destroy
+    $effect(() => {
+        return () => {
+            if (resizeHandleShowTimeout) {
+                clearTimeout(resizeHandleShowTimeout)
+            }
+            if (closedTabsHideTimeout) {
+                clearTimeout(closedTabsHideTimeout)
+            }
+        }
+    })
+    
     function handleSpaceContextMenuAction(action, spaceId) {
         if (action === 'rename') {
             // TODO: Implement rename functionality
@@ -295,6 +333,22 @@
     function handleAppsToggle() {
         onShowApps()
     }
+    
+    function handleResizeHandleMouseEnter() {
+        resizeHandleHovered = true
+        // Ensure resize handle stays visible
+        resizeHandleVisible = true
+        // Clear any pending timeout
+        if (resizeHandleShowTimeout) {
+            clearTimeout(resizeHandleShowTimeout)
+            resizeHandleShowTimeout = null
+        }
+    }
+    
+    function handleResizeHandleMouseLeave() {
+        resizeHandleHovered = false
+        // Let the main sidebar mouse leave handler deal with hiding
+    }
 
 </script>
 
@@ -302,9 +356,11 @@
 
 <div class="sidebar-box" 
      class:hovered={isHovered}
+     class:visible={tabSidebarVisible}
+     class:resizing={isResizingTabSidebar}
      onmouseenter={handleMouseEnter} 
      onmouseleave={handleMouseLeave}
-
+     style="width: {customTabSidebarWidth || 263}px;"
      role="complementary"
      aria-label="Tab Sidebar">
     <div class="sidebar">
@@ -526,6 +582,18 @@
                 </div>
             </div>
         {/if}
+        
+        <div class="resize-handle-hover-zone"
+             onmouseenter={handleResizeHandleMouseEnter}
+             onmouseleave={handleResizeHandleMouseLeave}></div>
+        
+        {#if resizeHandleVisible || isResizingTabSidebar}
+            <button class="resize-handle resize-handle-right" 
+                    class:active={isResizingTabSidebar}
+                    aria-label="Resize tab sidebar"
+                    onmousedown={onStartResizeTabSidebar}
+                    title="Drag to resize tab sidebar"></button>
+        {/if}
     </div>
 </div>
 
@@ -538,18 +606,26 @@
         top: 43px;
         left: 0px;
         transition: transform 190ms 340ms cubic-bezier(.78,-0.01,.34,1.04);
-        padding-right: 15px;
-        transform: translateX(-255px);
+        padding-right: 9px;
         backface-visibility: hidden;
         padding-left: 9px;
-        width: 263px;
         pointer-events: auto;
         overflow: visible;
+        transform: translateX(calc(-100% + 8px));
     }
 
-    .sidebar-box.hovered, .sidebar-box:hover {
+    .sidebar-box:hover, .sidebar-box.hovered, .sidebar-box.resizing, .sidebar-box.visible {
         transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04);
         transform: translateX(0px);
+    }
+    
+    .sidebar-box.resizing {
+        transition: none; /* Disable transition during resize for smooth dragging */
+    }
+    
+    .sidebar-box.visible {
+        transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04);
+        background: black;
     }
 
     .sidebar {
@@ -558,9 +634,31 @@
         backdrop-filter: blur(21px);
         background: rgb(0 0 0 / 96%);
         user-select: none;
-        overflow:visible;
+        overflow: visible;
+        border-radius: 8px;
     }
-
+    
+    .sidebar-box.visible .sidebar {
+        background: rgb(0, 0, 0);
+        backdrop-filter: none;
+    }
+    
+    .sidebar-box.visible .sidebar::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 1px;
+        width: 1px;
+        height: calc(100vh - 50px);
+        background: linear-gradient(to bottom, transparent 0%, #ffffff17 12%, #ffffff17 95%, transparent 100%), rgba(0, 0, 0, 0.802);
+        background-size: 1px 100%, 100% 100%;
+        background-position: right center, center;
+        background-repeat: no-repeat, no-repeat;
+        opacity: 1;
+        z-index: 10;
+        transition: opacity 150ms ease 200ms;
+    }
+    
     .sidebar-content {
         height: 100%;
         overflow-y: auto;
@@ -572,9 +670,17 @@
         position: relative;
         padding-bottom: 0;
         border-radius: 9px;
-        box-shadow: 0 0 2px 0 #000, -18px 0px 2px 1px #000;
+        box-shadow: 0 0 16px 0 #000, -18px 0px 2px 1px #000;
         border: 1px solid hsl(0 0% 12% / 1);
-        overflow: hidden
+        transition: border-radius 190ms ease, box-shadow 190ms ease, border 190ms ease;
+    }
+
+    .sidebar-box.visible .sidebar-content {
+        border-radius: 0;
+        box-shadow: 13px 0 13px 7px #0000003c;
+        border: none;
+        background: transparent;
+        transition: border-radius 190ms ease, box-shadow 190ms ease 100ms, border 190ms ease;
     }
     
     .section {
@@ -1681,6 +1787,54 @@
 
     .space-context-menu-item.delete:active {
         background: rgba(255, 107, 107, 0.2);
+    }
+    
+    /* Tab sidebar resize handle - custom styling to work with absolute positioning */
+    .sidebar .resize-handle {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 6px;
+        cursor: ew-resize;
+        z-index: 1000;
+        opacity: 0;
+        transition: opacity 150ms ease;
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 3px;
+        margin-top: 4px;
+        margin-bottom: 4px;
+        padding: 0;
+        pointer-events: auto;
+        box-shadow: 0 0 1px rgba(0, 0, 0, 0.15);
+    }
+    
+    .sidebar .resize-handle:hover, 
+    .sidebar .resize-handle.active {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.3);
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+    }
+    
+    .sidebar .resize-handle.resize-handle-right {
+        right: -6px;
+    }
+
+    .sidebar-box.visible .resize-handle.resize-handle-right {
+        right: 3px;
+    }
+    
+    
+    /* Invisible hover zone for resize handle */
+    .resize-handle-hover-zone {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        right: -15px;
+        width: 20px;
+        pointer-events: auto;
+        z-index: 999;
     }
 </style>
 

@@ -1012,6 +1012,7 @@ ul::-webkit-scrollbar {
     scroll-snap-stop: normal;
     width: calc(100vw - var(--space-taken, 0px) - 18px);
     height: calc(100vh - 18px);
+    overflow: visible;
 }
 /* @media (min-width: 1800px) {
     :global(.tab-group .frame) {
@@ -1823,6 +1824,16 @@ ul::-webkit-scrollbar {
     width: calc(100% - var(--space-taken, 0px) + 9px);
 }
 
+.controlled-frame-container.has-tab-sidebar {
+    left: calc(var(--left-pinned-width, 0px) + var(--tab-sidebar-width, 0px));
+    width: calc(100% - var(--space-taken, 0px));
+}
+
+.controlled-frame-container.has-left-pins.has-tab-sidebar {
+    left: calc(var(--left-pinned-width, 0px) + var(--tab-sidebar-width, 0px) - 18px);
+    width: calc(100% - var(--space-taken, 0px) + 9px);
+}
+
 .pinned-frames-left {
     position: fixed;
     top: 50px; /* Start below tab bar, aligned with main frames */
@@ -1836,8 +1847,12 @@ ul::-webkit-scrollbar {
     align-items: flex-end;
     overflow: visible;
     z-index: 1;
-    transition: width 0.1s ease-out;
+    transition: width 0.1s ease-out, left 0.1s ease-out;
     border-radius: 0 8px 8px 0; /* Round right corners to match frames */
+}
+
+.pinned-frames-left.has-tab-sidebar {
+    left: var(--tab-sidebar-width, 0px);
 }
 
 
@@ -1952,8 +1967,8 @@ ul::-webkit-scrollbar {
 }
 
 .sidebar-container.window-controls-overlay .sidebar-panel::before {
-    top: -58px;
-    height: calc(100vh + 20px);
+    top: 0px;
+    height: calc(100vh - 50px);
 }
 
 @keyframes slide-in-panel {
@@ -1996,17 +2011,26 @@ ul::-webkit-scrollbar {
     position: fixed;
     top: 50px;
     bottom: 16px;
-    width: 5px;
-    background: transparent;
+    width: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(0, 0, 0, 0.1);
     cursor: col-resize;
     z-index: 1000;
-    transition: background-color 0.2s ease;
+    opacity: 0;
+    transition: opacity 150ms ease;
     pointer-events: auto;
+    border-radius: 3px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    box-shadow: 0 0 1px rgba(0, 0, 0, 0.15);
 }
 
 .resize-handle:hover,
 .resize-handle.active {
-    background: rgb(69 68 68);
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
 }
 
 /* Position will be set dynamically via style attribute */

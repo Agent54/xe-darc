@@ -496,7 +496,7 @@
     }
 </script>
 
-<div bind:this={frameWrapper} class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
+<div bind:this={frameWrapper} id="tab_{tab.id}" class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
     {#if !data.frames[tab.id]?.frame && data.spaceMeta.activeTabId !== tab.id && !tab.pinned}
         <div 
             transition:fade={{duration: 200, delay: 400}}
@@ -506,7 +506,6 @@
             onmousedown={() => {
                 onFrameFocus()
             }}
-            id="tab_{tab.id}"
         >
             {#if tab.screenshot}
                 <AttachmentImage src={tab.screenshot} alt="Hibernated tab preview" class="hibernated-screenshot" lazy={true} />
@@ -587,7 +586,6 @@
                     src={tab.url}
                     class:window-controls-overlay={headerPartOfMain}
                     class:no-pointer-events={isScrolling}
-                    id="tab_{tab.id}"
                     class="frame"
                     title="fallback-iframe"
                     credentialless={true}
@@ -643,7 +641,6 @@
                     bind:this={frame}
                     class:window-controls-overlay={headerPartOfMain}
                     class:no-pointer-events={isScrolling}
-                    id="tab_{tab.id}"
                     class="frame iframe-blocked"
                 >
                     <div class="iframe-blocked-content">
@@ -1099,7 +1096,7 @@
 
     .link-preview {
         position: absolute;
-        top: 1px;
+        top: -4px;
         /* margin-left: 7px; */
         background: rgba(25, 25, 25, 0.98);
         color: rgba(255, 255, 255, 0.95);
@@ -1120,6 +1117,7 @@
         pointer-events: none;
         display: flex;
         align-items: center;
+        z-index: 10000;
         gap: 8px;
     }
 
