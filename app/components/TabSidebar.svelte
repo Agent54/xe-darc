@@ -40,19 +40,14 @@
     function handleMouseEnter() {
         isHovered = true
         
-        // Show resize handle after delay
-        if (resizeHandleShowTimeout) {
-            clearTimeout(resizeHandleShowTimeout)
-        }
-        resizeHandleShowTimeout = setTimeout(() => {
-            resizeHandleVisible = true
-        }, 200)
+        // Don't automatically show resize handle on main sidebar hover anymore
+        // Only show it via the hover zone
+        console.log('Main sidebar mouse enter - NOT showing resize handle automatically')
     }
     
     function handleMouseLeave() {
         // Always set isHovered to false for resize handle logic
         isHovered = false
-        resizeHandleVisible = false
         
         // Clear resize handle timeout
         if (resizeHandleShowTimeout) {
@@ -64,6 +59,14 @@
         if (spaceContextMenuId !== null) {
             spaceContextMenuId = null
         }
+        
+        // Delay hiding resize handle to allow hover zone to take over
+        setTimeout(() => {
+            if (!resizeHandleHovered) {
+                resizeHandleVisible = false
+                
+            }
+        }, 10)
     }
     
     function scrollToCurrentSpace(behavior = 'smooth') {
@@ -347,7 +350,10 @@
     
     function handleResizeHandleMouseLeave() {
         resizeHandleHovered = false
-        // Let the main sidebar mouse leave handler deal with hiding
+        // Hide resize handle when leaving the resize handle zone and not hovering over the main sidebar
+        if (!isHovered) {
+            resizeHandleVisible = false
+        }
     }
 
 </script>
@@ -592,7 +598,8 @@
                     class:active={isResizingTabSidebar}
                     aria-label="Resize tab sidebar"
                     onmousedown={onStartResizeTabSidebar}
-                    title="Drag to resize tab sidebar"></button>
+                    title="Drag to resize tab sidebar"
+                    style="opacity: 1 !important; z-index: 99999 !important;"></button>
         {/if}
     </div>
 </div>
@@ -1834,7 +1841,11 @@
         right: -15px;
         width: 20px;
         pointer-events: auto;
-        z-index: 999;
+        z-index: 10001;
+    }
+
+    .sidebar-box.visible .resize-handle-hover-zone {
+        right: -10px;
     }
 </style>
 

@@ -1117,3 +1117,28 @@ keyboard navigation space and tabgroup, tab and active frame border
 revisit trails and stacked browsing concepts. browser session  progression as horizontal frames that fade out?
 
 
+fix hover menus in focus mode and icon brightness
+
+min widht sidebar > 400something px
+
+ai folder select for bookmarking/ filing
+
+badges for unseen new tabs and tabs with changes, badge api
+
+connect vscode to cdp 
+
+access cdp and integrated dev tools
+
+try:
+    --auto-select-desktop-capture-source ⊗	This flag makes Chrome auto-select the provided choice when an extension asks permission to start desktop capture. Should only be used for tests. For instance, --auto-select-desktop-capture-source="Entire screen" will automatically select sharing the entire screen in English locales. The switch value only needs to be substring of the capture source name, i.e. "display" would match "Built-in display" and "External display", whichever comes first. ↪
+    --auto-select-screen-capture-source ⊗	This flag makes Chrome auto-select any screen when an extension asks permission to start desktop capture. Should only be used for tests. kAutoSelectDesktopCaptureSource (see above) can be also be used to auto-select screens. But it have the problem that you need to know the name of a screen to auto-select it. The name of screens can't be set, are different for different platforms, and are different if you have one or several screens. So it's hard to use for auto-selecting screens. This flag does not care what the screen name is, but it also gives no control. Any screen could be chosen. It is useful in tests where we don't care which screen is auto-selected. ↪
+    --auto-select-tab-capture-source-by-title ⊗	This flag makes Chrome auto-select a tab with the provided title when the media-picker should otherwise be displayed to the user. This switch is very similar to kAutoSelectDesktopCaptureSource, but limits selection to tabs. This solves the issue of kAutoSelectDesktopCaptureSource being liable to accidentally capturing the Chromium window instead of the tab, as both have the same title if the tab is focused. ↪
+    --auto-select-window-capture-source-by-title ⊗	This flag makes Chrome auto-select a window with the provided title when the media-picker should otherwise be displayed to the user. This switch is very similar to kAutoSelectDesktopCaptureSource, but limits selection to the window.
+
+--cardboard
+--load-extension
+--device-management-url
+--load-apps
+--managed-mode
+--silent-launch
+--remote-debugging-port=9226

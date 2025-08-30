@@ -593,6 +593,9 @@
     }
 
     async function activateTab (tab, index) {
+        // Mark window as active to prevent background styling glitches
+        activateWindowFocus()
+        
         // console.log('activateTab called for tab:', tab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
         // Clear the tabChangeFromScroll flag when user explicitly clicks a tab
         if (tabChangeFromScroll) {
@@ -1411,6 +1414,13 @@
         const shouldBeActive = documentHasFocus || controlledFrameHasFocus
         
         isWindowBackground = !shouldBeActive
+    }
+    
+    function activateWindowFocus() {
+        // Mark window as active to prevent background styling glitches
+        // This is called on user interactions like tab activation and link hovers
+        controlledFrameHasFocus = true
+        updateWindowFocusState()
     }
     
     function handleFrameFocus(focusedTabId) {

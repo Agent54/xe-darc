@@ -48,7 +48,7 @@
 
     // Derived values for error checking from origins store
     let currentCertificateError = $derived.by(() => {
-        if (!tab.url) {
+        if (!tab?.url) {
             return null
         }
         const originValue = origin(tab.url)
@@ -59,7 +59,7 @@
     })
 
     let currentNetworkError = $derived.by(() => {
-        if (!tab.url) {
+        if (!tab?.url) {
             return null
         }
         const originValue = origin(tab.url)
@@ -116,7 +116,7 @@
 
     // Check if current tab has applicable user mods
     $effect(() => {
-        if (tab.url && tab.id === data.spaceMeta.activeTabId) {
+        if (tab?.url && tab?.id === data.spaceMeta.activeTabId) {
             // console.log('checking for applicable mods', tab.url)
             const applicableMods = getApplicableMods(tab.url)
             if (applicableMods.length > 0) {
@@ -751,7 +751,7 @@ function setupContentScripts(frame) {
             urlPatterns: ['http://*/*', 'https://*/*'], // '<all_urls>', 
             js: {
                 code: `
-const tabId = '${tab.id}';
+const tabId = '${tab?.id || tabId}';
 
 ${ipc}
 
@@ -1742,32 +1742,17 @@ document.addEventListener('input', function(event) {
             return
         }
 
-        let controlledFrame = data.frames[tab.id]?.frame
+        let controlledFrame = data.frames[tab?.id]?.frame
 
-        // If current URL is about:newtab, don't create/use controlled frame
-        // if (isNewTabUrl(tab.url)) {
-        //     console.log('Skipping controlled frame creation for:', tab.url)
-        //     // Hide any existing controlled frame by moving it to background
-        //     if (controlledFrame && attached) {
-        //         const backgroundFrames = document.getElementById('backgroundFrames')
-        //         const anchorFrame = document.getElementById('anchorFrame')
-        //         if (backgroundFrames && anchorFrame) {
-        //             backgroundFrames.moveBefore(controlledFrame, anchorFrame)
-        //             attached = false
-        //         }
-        //     }
-        //     return
-        // }
-        
         // If transitioning from newtab to real URL, create frame if needed
 
         data.frames[tabId] ??= {}
         data.frames[tabId].wrapper = frameWrapper
 
         let addNode = false
-        if (!controlledFrame) {
+        if (!controlledFrame && tab) {
             controlledFrame = document.createElement('controlledframe')
-            const tabId = tab.id
+            const currentTabId = tab.id
             const mytab = untrack(() => tab)
 
             data.frames[tabId].frame = controlledFrame
@@ -1833,7 +1818,7 @@ document.addEventListener('input', function(event) {
             attached = true
         }
 
-        if (!attached) {
+        if (!attached && controlledFrame && anchor) {
             try {
                 frameWrapper.moveBefore(controlledFrame, anchor)
                 attached = true
@@ -2075,7 +2060,7 @@ document.addEventListener('input', function(event) {
 </script>
 
 <svelte:window onkeydown={handleOAuthKeydown} />
-{#key tab.partition}
+{#key tab?.partition || 'default'}
     <!-- OAuth Popup Modal -->
     {#if oauthPopup}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -2104,21 +2089,21 @@ document.addEventListener('input', function(event) {
         class:no-pointer-events={isScrolling}
         class:certificate-error={!!currentCertificateError}
         class:network-error={!!currentNetworkError}
-        class:new-tab-page={isNewTabUrl(tab.url)}
-        id="tab_{tab.id}"
+        class:new-tab-page={isNewTabUrl(tab?.url)}
+        id="tab_{tab?.id || tabId}"
         class="frame {className}"
 
         role="tabpanel"
         tabindex="0"
         onmousedown={() => {
             window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
-                detail: { tabId: tab.id }
+                detail: { tabId: tab?.id || tabId }
             }))
             onFrameFocus()
         }}
         onmouseup={() => {
             window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
-                detail: { tabId: tab.id }
+                detail: { tabId: tab?.id || tabId }
             }))
         }} >
 
@@ -2139,10 +2124,10 @@ document.addEventListener('input', function(event) {
                 onReload={() => reloadTab(tab)}
             />
 
-        {:else if isNewTabUrl(tab.url)}
+        {:else if isNewTabUrl(tab?.url)}
             <NewTab
                 {tab}
-                isActive={tab.id === data.spaceMeta.activeTabId}
+                isActive={tab?.id === data.spaceMeta.activeTabId}
             />
         {/if}
     </div>

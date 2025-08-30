@@ -45,6 +45,7 @@
     // Global hover link preview state
     let globalHoverPreview = $state(null) // { href, target, rel, title, position }
     let globalHoverPreviewTabId = $state(null) // { href, target, rel, title, position }
+    let globalHoverPreviewTab = $state(null) // Store the actual tab object since preview tabs aren't in docs store
     let globalHoverPreviewVisible = $state(false)
     let globalHoverPreviewShown = $state(false) // Controls the delayed fade-in
     let globalHoverPreviewTimeout = null
@@ -218,6 +219,7 @@
                 globalHoverPreviewVisible = false
                 globalHoverPreview = null
                 globalHoverPreviewTabId = null
+                globalHoverPreviewTab = null
             }
         }, 300)
     }
@@ -234,8 +236,6 @@
 
     // Complete cleanup of all hover preview state (for lightbox creation)
     function cleanupAllHoverPreviews() {
-        console.log('🚫 Cleaning up all hover previews for lightbox creation')
-        
         // Cancel any pending preview
         if (globalHoverPreviewTimeout) {
             clearTimeout(globalHoverPreviewTimeout)
@@ -246,11 +246,6 @@
             clearTimeout(hidePreviewDelayTimeout)
             hidePreviewDelayTimeout = null
         }
-        // Clear any link preview timeouts
-        // if (linkPreviewTimeout) {
-        //     clearTimeout(linkPreviewTimeout)
-        //     linkPreviewTimeout = null
-        // }
         // Clear hovered link state
         if (hoveredLink) {
             hoveredLink = null
@@ -284,7 +279,9 @@
         // Don't show hover previews when a lightbox is active or tab is loading
         const hasActiveLightbox = data.previews[tab._id]?.lightbox
         
-        if (hoveredLink && data.spaceMeta.config.showLinkPreviews && !hasActiveLightbox && !tab.loading) {
+        console.log('Link preview effect:', { hoveredLink: !!hoveredLink, showLinkPreviews: data.spaceMeta.config.showLinkPreviews, hasActiveLightbox, tabLoading: tab?.loading })
+        
+        if (hoveredLink && data.spaceMeta.config.showLinkPreviews && !hasActiveLightbox && !tab?.loading) {
             // Cancel any pending hide delay because we have (or are about to have) a hovered link again
             if (hidePreviewDelayTimeout) {
                 clearTimeout(hidePreviewDelayTimeout)
@@ -300,9 +297,10 @@
                     setTimeout(() => startGlobalPreview(), 100)
                 }, 150)
             } else if (!globalHoverPreviewVisible) {
+                console.log('📍 Calling startGlobalPreview()')
                 startGlobalPreview()
             }
-        } else if ( !isHoveringPreview && !globalHoverPreviewPinned) {
+        } else if (!isHoveringPreview && !globalHoverPreviewPinned) {
             // Hide global preview when regular preview is hidden AND not hovering the preview AND not pinned
             // OR when a lightbox becomes active
             if (hidePreviewDelayTimeout) clearTimeout(hidePreviewDelayTimeout)
@@ -317,20 +315,26 @@
     const pinnedPreviews = $state([])
 
     function startGlobalPreview() {
+        console.log('🎯 startGlobalPreview called')
         // Clear any existing timeout
         if (globalHoverPreviewTimeout) {
             clearTimeout(globalHoverPreviewTimeout)
         }
         
-        const createPreview = () => {
+        const createPreview = async () => {
+            console.log('🎯 createPreview called', { hoveredLink: hoveredLink?.href })
             if (!hoveredLink?.href) {
+                console.log('❌ No hovered link, aborting preview creation')
                 return
             }
-            const tab = data.newTab(data.spaceMeta.activeSpace, { url: hoveredLink.href, preview: true, opener: tabId })
+            const tab = await data.newTab(data.spaceMeta.activeSpace, { url: hoveredLink.href, preview: true, opener: tabId })
+            console.log('✅ Preview tab created:', { tabId: tab.id, url: hoveredLink.href })
 
             globalHoverPreviewTabId = tab.id
+            globalHoverPreviewTab = tab
             globalHoverPreview = hoveredLink
             globalHoverPreviewVisible = true
+            console.log('✅ Preview state set visible')
             
             // If the preview is pinned, show immediately, otherwise wait for the page to load
             if (globalHoverPreviewPinned) {
@@ -416,46 +420,38 @@
         const padding = 20
 
         const position = preview?.position || preview || {}
-        const abs = preview?.absolute
-        const previewScreenX = preview?.screenX
-        const controlledFrameScreenX = window.screenX || 0
-        const isFromIframe = typeof previewScreenX === 'number' && Math.abs(previewScreenX - controlledFrameScreenX) > 12
-        const deltaX = isFromIframe ? (previewScreenX - controlledFrameScreenX) : 0
-
-        if (abs && typeof abs.right === 'number') {
-            const viewportOriginX = (window.screenX || 0)
-            let left = (abs.right - viewportOriginX) + padding
-            const absLeft = (typeof abs.left === 'number') ? abs.left : (abs.right - (position.width ?? 0))
-            if (left + previewWidth > window.innerWidth - padding) {
-                left = (absLeft - viewportOriginX) - previewWidth - padding
-            }
-            left = Math.round(left)
-            if (left < 5) left = 5
-            if (left + previewWidth > window.innerWidth - 5) left = window.innerWidth - previewWidth - 5
-            console.log('hoverLeftAbs', left)
-            return Math.max(5, left)
+        
+        // Get the actual source frame position to account for layout changes
+        const sourceFrame = frameWrapper
+        const sourceFrameRect = sourceFrame ? sourceFrame.getBoundingClientRect() : null
+        
+        if (!sourceFrameRect) {
+            return 5 // Fallback if no frame rect available
         }
 
-        const anchorRight = (position.right ?? ((position.left ?? 0) + (position.width ?? 0)))
-        const anchorLeft = (position.left ?? (anchorRight - (position.width ?? 0)))
-
-        let left = anchorRight - deltaX + padding
-
+        // The link position is already in viewport coordinates, so use it directly
+        const linkRight = position.right || (position.left + (position.width || 0)) || 0
+        const linkLeft = position.left || 0
+        
+        // Position preview to the right of the link with padding
+        let left = linkRight + padding
+        
+        // If preview would go off the right edge, position it to the left of the link
         if (left + previewWidth > window.innerWidth - padding) {
-            left = anchorLeft - deltaX - previewWidth - padding
+            left = linkLeft - previewWidth - padding
         }
-
-        left = Math.round(left)
-        if (left < 5) {
-            left = 5
+        
+        // Ensure preview doesn't go off the left edge of the frame
+        if (left < sourceFrameRect.left + 5) {
+            left = sourceFrameRect.left + 5
         }
-
+        
+        // Final boundary check
         if (left + previewWidth > window.innerWidth - 5) {
             left = window.innerWidth - previewWidth - 5
         }
 
-        const out = Math.max(5, left)
-        return out
+        return Math.max(sourceFrameRect.left + 5, left)
     }
     
     function calculatePreviewTop(preview) {
@@ -476,7 +472,7 @@
             top = Math.round(top)
             if (top + totalPreviewHeight > window.innerHeight - padding) top = window.innerHeight - totalPreviewHeight - padding
             const outAbs = Math.max(20, top)
-            console.log('hoverTopAbs', outAbs)
+
             return outAbs
         }
 
@@ -663,7 +659,7 @@
             {/if}
         {/if}
 
-        {#if globalHoverPreviewVisible && globalHoverPreview && data.docs[globalHoverPreviewTabId]?.preview}
+        {#if globalHoverPreviewVisible && globalHoverPreview && globalHoverPreviewTabId}
             {#key globalHoverPreview.href}
                 <div 
                     class="global-hover-preview" 
@@ -737,7 +733,7 @@
                                     // Preserve the existing ControlledFrame instance by moving it to background first
                                     const previewFrameData = data.frames[globalHoverPreviewTabId]
                                     if (previewFrameData?.frame) {
-                                        console.log('🎯 Preserving ControlledFrame instance for expand button conversion')
+
                                         const backgroundFrames = document.getElementById('backgroundFrames')
                                         const anchorFrame = document.getElementById('anchorFrame')
                                         if (backgroundFrames && anchorFrame) {
@@ -786,7 +782,7 @@
                         </div>
                     </div>
                     <div class="global-hover-preview-frame">
-                        {#if data.docs[globalHoverPreviewTabId] && !globalHoverPreviewExpanding}
+                        {#if globalHoverPreviewTab && !globalHoverPreviewExpanding}
                             <ControlledFrame
                                 {style}
                                 class="global-hover-preview-controlledframe"
