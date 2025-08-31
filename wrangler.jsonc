@@ -12,10 +12,10 @@
   // "route": "*/agents",
   "durable_objects": {
     "bindings": [
-      {
-        "name": "Chat",
-        "class_name": "Chat"
-      },
+      // {
+      //   "name": "Chat",
+      //   "class_name": "Chat"
+      // },
     ],
   },
   "migrations": [

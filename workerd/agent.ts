@@ -162,9 +162,6 @@ function getModel(modelId: string = 'claude-4-sonnet-20250514') {
 //   }
 // }
 
-/**
- * Worker entry point that routes incoming requests to the appropriate handler
- */
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext) {
     const url = new URL(request.url);

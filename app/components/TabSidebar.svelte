@@ -40,9 +40,13 @@
     function handleMouseEnter() {
         isHovered = true
         
-        // Don't automatically show resize handle on main sidebar hover anymore
-        // Only show it via the hover zone
-        console.log('Main sidebar mouse enter - NOT showing resize handle automatically')
+        // Show resize handle after delay
+        // if (resizeHandleShowTimeout) {
+        //     clearTimeout(resizeHandleShowTimeout)
+        // }
+        // resizeHandleShowTimeout = setTimeout(() => {
+        //     resizeHandleVisible = true
+        // }, 200)
     }
     
     function handleMouseLeave() {

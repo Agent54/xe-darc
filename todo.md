@@ -1142,3 +1142,21 @@ try:
 --managed-mode
 --silent-launch
 --remote-debugging-port=9226
+
+json render/ editor
+
+custom protocol handlers did, ipfs, blsky, mastodon
+
+resizing can make the resize handle get wrong position. it should initialize on hover not stay where it is
+
+integrate cdp targets and task viewer into apps page, 
+
+make inspector turn around the page, theming + activate the preview
+
+test environment with parallel tests on canvas playwright
+
+mcp playwright vs other browser use solutions
+
+accounts/ identity/ data storage/ sync for app build platform /boris/ architecture where data lives diagram/ opinionated app shell and starters
+
+app intercollabortaion of created apps, with backend interop
