@@ -1,4 +1,5 @@
 (() => {
+  // FIXME: opening in devtools
     if (window.SELECT_NATIVE_FIX) window.SELECT_NATIVE_FIX.disable()
   
     const MOVE_EPS = 3

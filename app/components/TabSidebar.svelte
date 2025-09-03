@@ -569,10 +569,17 @@
         transition: transform 190ms 340ms cubic-bezier(.78,-0.01,.34,1.04);
 
         backface-visibility: hidden;
+        padding-right: 9px;
+        padding-left: 9px;
 
         pointer-events: auto;
         overflow: visible;
         transform: translateX(calc(-100% + 8px));
+    }
+
+    .sidebar-box.visible {
+        padding-right: 9px;
+        padding-left: 9px;
     }
 
     .sidebar-box:hover, .sidebar-box.hovered, .sidebar-box.resizing, .sidebar-box.visible {

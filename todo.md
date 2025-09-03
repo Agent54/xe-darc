@@ -1160,3 +1160,6 @@ mcp playwright vs other browser use solutions
 accounts/ identity/ data storage/ sync for app build platform /boris/ architecture where data lives diagram/ opinionated app shell and starters
 
 app intercollabortaion of created apps, with backend interop
+
+xenon as ai browser toolkit
+
