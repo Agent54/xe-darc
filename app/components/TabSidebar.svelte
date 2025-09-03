@@ -24,14 +24,11 @@
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
-    let resizeHandleHovered = $state(false)
-    let resizeHandleVisible = $state(false)
-    let resizeHandleShowTimeout = null
+
 
     let isManualScroll = false
     let previousSpaceIndex = -1
     // let scrollActiveSpaceTimeout = null
-
 
     // TODO: active tab on tab title and track active tabs per space, show active tab in each space
 
@@ -39,38 +36,16 @@
     
     function handleMouseEnter() {
         isHovered = true
-        
-        // Show resize handle after delay
-        // if (resizeHandleShowTimeout) {
-        //     clearTimeout(resizeHandleShowTimeout)
-        // }
-        // resizeHandleShowTimeout = setTimeout(() => {
-        //     resizeHandleVisible = true
-        // }, 200)
     }
     
     function handleMouseLeave() {
         // Always set isHovered to false for resize handle logic
         isHovered = false
         
-        // Clear resize handle timeout
-        if (resizeHandleShowTimeout) {
-            clearTimeout(resizeHandleShowTimeout)
-            resizeHandleShowTimeout = null
-        }
-        
         // Close context menu when leaving sidebar
         if (spaceContextMenuId !== null) {
             spaceContextMenuId = null
         }
-        
-        // Delay hiding resize handle to allow hover zone to take over
-        setTimeout(() => {
-            if (!resizeHandleHovered) {
-                resizeHandleVisible = false
-                
-            }
-        }, 10)
     }
     
     function scrollToCurrentSpace(behavior = 'smooth') {
@@ -310,9 +285,6 @@
     // Cleanup timeouts on component destroy
     $effect(() => {
         return () => {
-            if (resizeHandleShowTimeout) {
-                clearTimeout(resizeHandleShowTimeout)
-            }
             if (closedTabsHideTimeout) {
                 clearTimeout(closedTabsHideTimeout)
             }
@@ -341,24 +313,7 @@
         onShowApps()
     }
     
-    function handleResizeHandleMouseEnter() {
-        resizeHandleHovered = true
-        // Ensure resize handle stays visible
-        resizeHandleVisible = true
-        // Clear any pending timeout
-        if (resizeHandleShowTimeout) {
-            clearTimeout(resizeHandleShowTimeout)
-            resizeHandleShowTimeout = null
-        }
-    }
-    
-    function handleResizeHandleMouseLeave() {
-        resizeHandleHovered = false
-        // Hide resize handle when leaving the resize handle zone and not hovering over the main sidebar
-        if (!isHovered) {
-            resizeHandleVisible = false
-        }
-    }
+
 
 </script>
 
@@ -593,18 +548,13 @@
             </div>
         {/if}
         
-        <div class="resize-handle-hover-zone"
-             onmouseenter={handleResizeHandleMouseEnter}
-             onmouseleave={handleResizeHandleMouseLeave}></div>
-        
-        {#if resizeHandleVisible || isResizingTabSidebar}
-            <button class="resize-handle resize-handle-right" 
-                    class:active={isResizingTabSidebar}
-                    aria-label="Resize tab sidebar"
-                    onmousedown={onStartResizeTabSidebar}
-                    title="Drag to resize tab sidebar"
-                    style="opacity: 1 !important; z-index: 99999 !important;"></button>
-        {/if}
+        <button class="resize-handle resize-handle-right" 
+                class:active={isResizingTabSidebar}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize tab sidebar"
+                onmousedown={onStartResizeTabSidebar}
+                title="Drag to resize tab sidebar"></button>
     </div>
 </div>
 
@@ -617,9 +567,9 @@
         top: 43px;
         left: 0px;
         transition: transform 190ms 340ms cubic-bezier(.78,-0.01,.34,1.04);
-        padding-right: 9px;
+
         backface-visibility: hidden;
-        padding-left: 9px;
+
         pointer-events: auto;
         overflow: visible;
         transform: translateX(calc(-100% + 8px));
@@ -1800,23 +1750,22 @@
         background: rgba(255, 107, 107, 0.2);
     }
     
-    /* Tab sidebar resize handle - custom styling to work with absolute positioning */
+    /* Tab sidebar resize handle - positioned next to the fading divider line */
     .sidebar .resize-handle {
         position: absolute;
         top: 0;
         bottom: 0;
         width: 6px;
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(0, 0, 0, 0.1);
         cursor: ew-resize;
         z-index: 1000;
         opacity: 0;
         transition: opacity 150ms ease;
-        background: rgba(255, 255, 255, 0.15);
-        border: 1px solid rgba(0, 0, 0, 0.1);
+        pointer-events: auto;
         border-radius: 3px;
         margin-top: 4px;
         margin-bottom: 4px;
-        padding: 0;
-        pointer-events: auto;
         box-shadow: 0 0 1px rgba(0, 0, 0, 0.15);
     }
     
@@ -1828,28 +1777,14 @@
         box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
     }
     
+    /* Position naturally at the right edge next to the divider line */
     .sidebar .resize-handle.resize-handle-right {
-        right: -6px;
+        right: -5px;
     }
 
+    /* When visible, position it just to the right of the divider line */
     .sidebar-box.visible .resize-handle.resize-handle-right {
-        right: 3px;
-    }
-    
-    
-    /* Invisible hover zone for resize handle */
-    .resize-handle-hover-zone {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        right: -15px;
-        width: 20px;
-        pointer-events: auto;
-        z-index: 10001;
-    }
-
-    .sidebar-box.visible .resize-handle-hover-zone {
-        right: -10px;
+        right: -5px;
     }
 </style>
 

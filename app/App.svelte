@@ -127,9 +127,7 @@
     let resizeStartWidth = $state(0)
     let resizeAnimationFrame = null
     let visibleFrameDuringResize = $state(null)
-    let leftResizeHandlePosition = $state(0)
-    let rightResizeHandlePosition = $state(0)
-    let sidebarResizeHandlePosition = $state(0)
+
 
     let focusModeEnabled = $state(false)
     let focusModeHovered = $state(false)
@@ -388,15 +386,6 @@
         }
         localStorage.setItem('tabSidebarVisible', tabSidebarVisible.toString())
     })
-    
-    // Update resize handle positions when layout changes (but not during resize)
-    $effect(() => {
-        if (isResizingAnySidebar) return // Don't update during active resize
-        
-        updateResizeHandlePositions()
-    })
-    
-
 
     // Determine if sidebars are newly opened (but not when switching)
     // This effect is now handled by updateSidebarState() function to prevent timing conflicts
@@ -1568,31 +1557,7 @@
         }
     }
     
-    function updateResizeHandlePositions() {
-        // Update left handle position (center of gap between left pinned frames and main content)
-        if (leftPinnedTabs.length > 0 && !invisiblePins.left) {
-            // Left pinned frames end at leftPinnedWidth, main content starts at leftPinnedWidth - 8px + 18px padding
-            // So the visible gap is from leftPinnedWidth to leftPinnedWidth + 10px
-            const tabSidebarOffset = tabSidebarVisible ? (customTabSidebarWidth || 263) : 0
-            leftResizeHandlePosition = leftPinnedWidth + tabSidebarOffset - 8
-        }
-        
-        // Update right handle position (center of gap between main content and right pinned frames)
-        if (rightPinnedTabs.length > 0 && !invisiblePins.right) {
-            const viewportWidth = window.innerWidth
-            // Right pinned frames start at viewportWidth - rightSidebarWidth - rightPinnedWidth
-            // Main content ends 18px before that due to padding-right
-            rightResizeHandlePosition = viewportWidth - rightSidebarWidth - rightPinnedWidth - 5
-        }
-        
-        // Update sidebar handle position (left edge of sidebar)
-        if (openSidebars.size > 0) {
-            const viewportWidth = window.innerWidth
-            sidebarResizeHandlePosition = viewportWidth - rightSidebarWidth - 5
-        }
-        
 
-    }
 
     $inspect(invisiblePins)
     
@@ -1602,7 +1567,6 @@
         resizeStartX = event.clientX
         resizeStartWidth = leftPinnedWidth
         visibleFrameDuringResize = findCurrentlyVisibleFrame()
-        updateResizeHandlePositions() // Set initial positions
         document.addEventListener('mousemove', handleResizeLeft)
         document.addEventListener('mouseup', stopResizeLeft)
     }
@@ -1620,9 +1584,6 @@
             const deltaX = event.clientX - resizeStartX
             const newWidth = Math.max(200, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 200px, max 50% viewport
             customLeftPinnedWidth = newWidth
-            
-            // Update handle positions to stay at frame boundaries
-            updateResizeHandlePositions()
             
             // Keep the visible frame in view
             scrollVisibleFrameIntoView()
@@ -1655,7 +1616,6 @@
         resizeStartX = event.clientX
         resizeStartWidth = rightPinnedWidth
         visibleFrameDuringResize = findCurrentlyVisibleFrame()
-        updateResizeHandlePositions() // Set initial positions
         document.addEventListener('mousemove', handleResizeRight)
         document.addEventListener('mouseup', stopResizeRight)
     }
@@ -1673,9 +1633,6 @@
             const deltaX = resizeStartX - event.clientX // Inverted for right side
             const newWidth = Math.max(200, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 200px, max 50% viewport
             customRightPinnedWidth = newWidth
-            
-            // Update handle positions to stay at frame boundaries
-            updateResizeHandlePositions()
             
             // Keep the visible frame in view
             scrollVisibleFrameIntoView()
@@ -1708,7 +1665,6 @@
         resizeStartX = event.clientX
         resizeStartWidth = customRightSidebarWidth || data.spaceMeta.config.rightSidebarWidth
         visibleFrameDuringResize = findCurrentlyVisibleFrame()
-        updateResizeHandlePositions() // Set initial positions
         document.addEventListener('mousemove', handleResizeSidebar)
         document.addEventListener('mouseup', stopResizeSidebar)
     }
@@ -1726,9 +1682,6 @@
             const deltaX = resizeStartX - event.clientX // Inverted for right side
             const newWidth = Math.max(200, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 200px, max 50% viewport
             customRightSidebarWidth = newWidth
-            
-            // Update handle positions to stay at frame boundaries
-            updateResizeHandlePositions()
             
             // Keep the visible frame in view
             scrollVisibleFrameIntoView()
@@ -1765,7 +1718,6 @@
         isResizingTabSidebar = true
         resizeStartX = event.clientX
         resizeStartWidth = customTabSidebarWidth || 263
-        updateResizeHandlePositions() // Set initial positions
         document.addEventListener('mousemove', handleResizeTabSidebar)
         document.addEventListener('mouseup', stopResizeTabSidebar)
     }
@@ -1789,9 +1741,6 @@
             const deltaX = event.clientX - resizeStartX
             const newWidth = Math.max(200, Math.min(Math.min(600, window.innerWidth * 0.5), resizeStartWidth + deltaX)) // Min 200px, max min(600px, 50vw)
             customTabSidebarWidth = newWidth
-            
-            // Update handle positions
-            updateResizeHandlePositions()
         })
     }
     
@@ -3582,7 +3531,6 @@
              aria-orientation="vertical"
              aria-label="Resize left pinned tabs"
              onmousedown={startResizeLeft}
-             style="left: {leftResizeHandlePosition}px"
              title="Drag to resize left pinned tabs"></div>
     </div>
 {/if}
@@ -3598,7 +3546,6 @@
              aria-orientation="vertical"
              aria-label="Resize right pinned tabs"
              onmousedown={startResizeRight}
-             style="left: {rightResizeHandlePosition}px"
              title="Drag to resize right pinned tabs"></div>
         {#each rightPinnedTabs as rigthPinned (rigthPinned.id)}
             {@const tab = data.docs[rigthPinned.id]}
@@ -3734,7 +3681,6 @@
              aria-orientation="vertical"
              aria-label="Resize sidebar"
              onmousedown={startResizeSidebar}
-             style="left: {sidebarResizeHandlePosition}px"
              title="Drag to resize sidebar"></div>
         {#if openSidebars.has('resources')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('resources') && !prevOpenSidebars.has('resources') && !isSwitchingSidebars && !isWindowResizing}>

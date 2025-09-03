@@ -2016,9 +2016,9 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 /* Resize handles for pinned frames */
 .resize-handle {
-    position: fixed;
-    top: 50px;
-    bottom: 16px;
+    position: absolute;
+    top: 0;
+    bottom: 0;
     width: 6px;
     background: rgba(255, 255, 255, 0.15);
     border: 1px solid rgba(0, 0, 0, 0.1);
@@ -2041,13 +2041,19 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
 }
 
-/* Position will be set dynamically via style attribute */
-.resize-handle-right {
-    /* Left position will be calculated dynamically */
+/* Position naturally at the right edge of left pinned frames */
+.pinned-frames-left .resize-handle-right {
+    right: 2px;
 }
 
-.resize-handle-left {
-    /* Left position will be calculated dynamically */
+/* Position naturally at the left edge of right pinned frames */
+.pinned-frames-right .resize-handle-left {
+    left: -6px;
+}
+
+/* Position naturally at the left edge of sidebar container */
+.sidebar-container .resize-handle-left {
+    left: -7px;
 }
 
 /* Disable pointer events on frames during resize */
