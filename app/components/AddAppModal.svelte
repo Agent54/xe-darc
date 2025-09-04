@@ -134,9 +134,9 @@
         aria-labelledby="modal-title"
         tabindex="-1"
     >
-        <div class="bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] shadow-2xl" onmousedown={handleModalClick}>
+        <div class="bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl w-full max-w-4xl h-[70vh] shadow-2xl flex flex-col" onmousedown={handleModalClick} role="presentation">
             <!-- Header -->
-            <div class="flex items-center justify-between p-6 border-b border-white/10">
+            <div class="flex items-center justify-between p-6 border-b border-white/10 flex-shrink-0">
                 <h2 id="modal-title" class="text-xl font-semibold text-white/90">Add New App</h2>
                 <button 
                     class="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white/90"
@@ -150,7 +150,7 @@
             </div>
 
             <!-- Tabs -->
-            <div class="flex gap-2 p-4 pb-0">
+            <div class="flex gap-2 p-4 pb-4 flex-shrink-0">
                 <button 
                     class="px-4 py-2 text-sm font-medium transition-colors rounded-lg cursor-pointer {activeTab === 'catalog' ? 'text-white bg-white/14 border border-white/20' : 'text-white/70 bg-white/5 border border-white/5 hover:text-white/90 hover:bg-white/10 hover:border-white/10'}"
                     onmousedown={() => switchTab('catalog')}
@@ -172,13 +172,13 @@
             </div>
 
             <!-- Content -->
-            <div class="px-6 pt-4 pb-6 overflow-visible max-h-[calc(90vh-200px)]">
+            <div class="px-6 pt-4 pb-6 overflow-y-auto flex-1 min-h-0 modal-content">
                 {#if activeTab === 'catalog'}
                     <!-- Catalog Tab -->
                     <div class="space-y-6">
                         <p class="text-white/70 text-sm">Choose from our curated collection of apps</p>
                         
-                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto max-h-[60vh]">
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {#each catalogApps as app}
                                 <div 
                                     class="group relative p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all cursor-pointer hover:border-white/20 h-40"
@@ -271,8 +271,8 @@
                             </div>
                             
                             <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-white/70 mb-3">Application Type</label>
+                                <fieldset>
+                                    <legend class="block text-sm font-medium text-white/70 mb-3">Application Type</legend>
                                     <div class="flex items-center gap-6">
                                         <div class="flex items-center">
                                             <input 
@@ -308,7 +308,7 @@
                                             <label for="path-static" class="ml-2 text-sm text-white/80">Static HTML</label>
                                         </div>
                                     </div>
-                                </div>
+                                </fieldset>
                                 
                                 <div>
                                     <label for="app-path" class="block text-sm font-medium text-white/70 mb-2">
@@ -338,7 +338,7 @@
             </div>
 
             <!-- Footer -->
-            <div class="flex items-center justify-end gap-3 p-6 border-t border-white/10">
+            <div class="flex items-center justify-end gap-3 p-6 border-t border-white/10 flex-shrink-0">
                 <button 
                     class="px-4 py-2 text-sm font-medium text-white/70 hover:text-white/90 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                     onmousedown={handleClose}
@@ -513,6 +513,8 @@
                         {#each availablePartitions as partition}
                             <div 
                                 class="px-3 py-2 hover:bg-white/10 cursor-pointer flex items-center justify-between"
+                                role="button"
+                                tabindex="0"
                                 onmousedown={(e) => {
                                     e.stopPropagation()
                                     togglePartition(partition.id)
@@ -541,3 +543,27 @@
 
     </div>
 {/snippet}
+
+<style>
+    .modal-content {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+    
+    .modal-content::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .modal-content::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .modal-content::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+
+    .modal-content::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+</style>

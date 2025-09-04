@@ -1163,3 +1163,43 @@ app intercollabortaion of created apps, with backend interop
 
 xenon as ai browser toolkit
 
+force same tab vs force new tab per origin?
+
+ new agent/agent tabs in the sidebar buttons?
+
+ dont use inbox for new windows as tabs
+
+ make tab switching in right sidebar discoverable
+
+ back button etc accessibilty
+
+ ff shift click multitab select
+
+
+- recently closed button not changing label to clear menu 
+
+- ctl tab for tab activity ordder
+
+dids
+ucan cap system
+
+bug screenshots 4.9. (linux window contorls, context menu canvas, close button tab)
+
+proper drag drop targets with half half top down
+
+width handling for main tabs, default max width setting
+
+
+different stages of agent. eg. agents perform better with comments but final result if tested should not have verbose comments.
+
+https://docs.railway.com/quick-start ralway canvas ui inpsiration
+
+ast-grep and treesitter setups
+
+schroedingers code security > fully sealed computation with only pixels  being allowed out
+
+place pages aka gtd space context
+
+ceckpoint restore/ undo integration with opacity of inactive history below checkpoint
+
+sealed container apps for tainted agent output workflows

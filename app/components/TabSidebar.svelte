@@ -527,6 +527,8 @@
                  role="region"
                  aria-label="Recently closed tabs">
                 <button class="closed-tabs-header"
+                        onmouseenter={() => { closedTabsHeaderHovered = true }}
+                        onmouseleave={() => { closedTabsHeaderHovered = false }}
                         onclick={() => { data.clearClosedTabs(); handleClosedTabsMouseLeave() }}
                         aria-label="Clear all recently closed tabs">
                     <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
@@ -1478,13 +1480,13 @@
     .closed-tabs-section {
         position: absolute;
         bottom: 4px;
-        left: 4px;
-        right: 4px;
+        left: 12px;
+        right: 12px;
         z-index: 10;
         pointer-events: auto;
         display: flex;
         flex-direction: column;
-        width: calc(100% - 8px);
+        width: calc(100% - 24px);
         flex-shrink: 0;
     }
     
