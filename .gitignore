@@ -21,3 +21,4 @@ certs/localhost.csr
 certs/rootCA.srl
 certs/localhost.crt
 profile/*
+profile2/*

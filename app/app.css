@@ -1943,7 +1943,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .sidebar-container.window-controls-overlay {
     top: 38px;
-    height: calc(100vh - 35px);
+    height: calc(100vh - 46px);
 }
 
 .sidebar-panel {

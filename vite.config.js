@@ -165,7 +165,7 @@ export default defineConfig({
   define: { globals: 'window' },
   server: {
     host: '0.0.0.0',
-    port: 5193,
+    port: 5194,
     strictPort: true,
     https: {
       key: fs.readFileSync('./certs/device.key'),
@@ -191,7 +191,7 @@ export default defineConfig({
     // ...(process.env.container === 'true' && { allowedHosts: true }),
     hmr: {
       protocol: 'wss', 
-      clientPort: 5193,
+      clientPort: 5194,
       host: 'localhost' 
       // ...(process.env.container !== 'true' && { clientPort: 5193,  host: 'localhost' }),
     },

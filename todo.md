@@ -1203,3 +1203,10 @@ place pages aka gtd space context
 ceckpoint restore/ undo integration with opacity of inactive history below checkpoint
 
 sealed container apps for tainted agent output workflows
+
+chat with zoom in and out and different levels of abstraction
+
+fuzzy, optional calendar
+
+atproto based shared public and private social networking for social bookmarking and social app and mod, prompt etc sharing
+

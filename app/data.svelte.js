@@ -208,7 +208,7 @@ const refresh = throttle(async function (spaceId) {
 
         if (doc.type === 'space') {
             if (!spaceMeta.activeSpace) {
-                spaceMeta.activeSpace = doc._id
+                spaceMeta.activeSpace = 'darc:space_default'
             }
             if (!spaces[doc._id]) {
                 doc.tabs = []
@@ -443,8 +443,8 @@ const destroy = $effect.root(() => {
     $effect(() => {
         if (!spaceMeta.activeSpace && Object.keys(spaces).length > 0) {
             // Set the first space as active
-            const firstSpaceId = Object.keys(spaces)[0]
-            spaceMeta.activeSpace = firstSpaceId
+            // const firstSpaceId = Object.keys(spaces)[0]
+            spaceMeta.activeSpace = 'darc:space_default'
 
            
             // FIXME: // Set the first tab of that space as active
