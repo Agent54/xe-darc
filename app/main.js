@@ -29,10 +29,12 @@ if (typeof window !== 'undefined' && window.trustedTypes && window.trustedTypes.
 }
 
 document.addEventListener('touchmove', function (event) {
+  console.log('touchmove', event)
   if (event.scale !== 1) { event.preventDefault() }
 }, { passive: false })
 
 document.addEventListener("wheel", e => {
+  console.log('wheel', e)
   if (e.ctrlKey) {
     e.preventDefault()
   }

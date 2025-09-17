@@ -1210,3 +1210,23 @@ fuzzy, optional calendar
 
 atproto based shared public and private social networking for social bookmarking and social app and mod, prompt etc sharing
 
+cmd r for tabs, cmd alt r for browser
+
+zoom out on zoomed 0 trigger tab overview
+
+https://unduck.link?q=%s support
+
+crtl shift c: copy url
+
+hide top bar completely minimize option
+
+url bar in sidebar option?
+
+lanes: milestone time planning
+
+minimal launcher (installer, mousetrap, capslock, media keys) and release onboarding flows
+
+move new tab button when right pins!
+
+new tab left of right pins
+

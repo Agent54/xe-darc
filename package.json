@@ -25,6 +25,8 @@
     "@threlte/core": "8.0.4",
     "@threlte/extras": "9.2.1",
     "ai": "5.0.26",
+    "arktype": "2.1.20",
+    "comlink": "^4.4.2",
     "events": "3.3.0",
     "pouchdb-adapter-indexeddb": "^9.0.0",
     "pouchdb-browser": "9.0.0",
@@ -39,7 +41,6 @@
     "vite": "6.3.5",
     "vite-plugin-html-inject": "1.1.2",
     "wbn-sign": "0.2.1",
-    "wrangler": "4.32.0",
-    "arktype": "2.1.20"
+    "wrangler": "4.32.0"
   }
 }

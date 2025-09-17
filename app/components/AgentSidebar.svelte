@@ -2323,6 +2323,12 @@ The current system demonstrates strong performance and security characteristics.
 
 		// Listen for messages from ElevenLabs voice agent iframe
 		async function handleAgentMessage(event) {
+			// Validate origin for security
+			// if (event.origin !== 'https://localhost:5194') {
+			// 	return
+			// }
+			// console.log('event', event)
+			
 			if (event.data.type === 'agent-message') {
 				const message = event.data.data
 				console.log('Received agent message:', message)
