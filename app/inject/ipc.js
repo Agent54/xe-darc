@@ -13,6 +13,36 @@ document.addEventListener('keyup', function(event) {
 document.addEventListener('wheel', function(event) {
     // Check for Ctrl key (Windows/Linux) or Cmd key (Mac) - same as zoom prevention in main app
     if (event.ctrlKey || event.metaKey) {
+        // TODO: this is garbage by ai but not sure how to do a real implementation, revisit
+        // Check if grid view is open in parent window
+        // let gridViewOpen = false
+        // try {
+        //     gridViewOpen = window.parent?.document?.querySelector?.('.grid-view') !== null
+        // } catch (e) {
+        //     // Parent access blocked, check for grid view indicators in the URL or other methods
+        //     try {
+        //         // Try to check parent window location for grid view indicators
+        //         const parentUrl = window.parent?.location?.href || ''
+        //         gridViewOpen = parentUrl.includes('tile') || window.parent?.document?.body?.classList?.contains('grid-view-open')
+        //     } catch (e2) {
+        //         // If all parent access fails, be conservative and assume grid view might be open
+        //         gridViewOpen = false
+        //     }
+        // }
+        
+        // // Always prevent default zoom behavior when grid view is open
+        // if (gridViewOpen) {
+        //     event.preventDefault()
+        //     event.stopPropagation()
+        //     event.stopImmediatePropagation()
+            
+        //     // Still send zoom events for grid view handling
+        //     const zoomDirection = event.deltaY < 0 ? 'in' : 'out'
+        //     console.log(`iwa:zoom:${tabId}:` + zoomDirection)
+        //     return false
+        // }
+        
+        // Normal zoom handling when grid view is not open
         // event.preventDefault()
         // event.stopPropagation()
         // event.stopImmediatePropagation()

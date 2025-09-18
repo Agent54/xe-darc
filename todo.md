@@ -1230,3 +1230,9 @@ move new tab button when right pins!
 
 new tab left of right pins
 
+covo branching
+
+add an ainimation to the grid-view container element that does fade in from 0 100 opacity and flies in from scale 2 to scale normal.  the animmation has to be able to be controlled from js so make it react to a tick event that moves it forward by 10% but still run smooth and perfomant as hell not jumpy
+now add the trigger to start showing the grid view when hitting the zoom level point in the zoom handling to show tab overview. use zoom out and zoom in events from the handling to set an animation progression on the grid view that progresses in in or out direction depending on zoom direction. start with full transparency and scale of 2 and fade in and zoom in to full size for the grid view and only then trigger the screenshot replacement. DO NOT show animations/transitions when triggereing view mode change from the menu or other ways, only  from the zoom events. make the events progress the ainimation by one ticks so at least 10 events are needed to animate full in and out. also DO NOT animate the individual frames on the grid, animate only the FULL VIEW COMponent 
+
+clear closed tabs does not sync

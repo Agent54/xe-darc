@@ -37,6 +37,37 @@ document.addEventListener('touchmove', function (event) {
 document.addEventListener("wheel", e => {
 
   if (e.ctrlKey || e.metaKey) {
+    const gridViewOpen = viewMode === 'tile'
+    
+    // Always prevent default zoom behavior when grid view is open
+    if (gridViewOpen) {
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+      
+      // Still dispatch events for grid view handling
+      const zoomDirection = e.deltaY < 0 ? 'in' : 'out'
+      
+      if (zoomDirection === 'out') {
+        window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max-internal', {
+          detail: { 
+            source: 'app-shell-grid-view',
+            currentScale: 1.0,
+            direction: zoomDirection
+          }
+        }))
+      } else if (zoomDirection === 'in') {
+        window.dispatchEvent(new CustomEvent('darc-zoom-in', {
+          detail: { 
+            source: 'app-shell-grid-view',
+            direction: zoomDirection
+          }
+        }))
+      }
+      return false
+    }
+    
+    // Normal zoom handling when grid view is not open
     e.preventDefault()
     
     // Determine zoom direction based on deltaY
@@ -55,6 +86,14 @@ document.addEventListener("wheel", e => {
           }
         }))
       }
+    } else if (zoomDirection === 'in') {
+      // Dispatch zoom in event for grid view closing
+      window.dispatchEvent(new CustomEvent('darc-zoom-in', {
+        detail: { 
+          source: 'app-shell',
+          direction: zoomDirection
+        }
+      }))
     }
   }
 }, { passive: false })

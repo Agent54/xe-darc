@@ -36,6 +36,7 @@ const resources = $state({})
 const frames = $state({})
 const previews = $state({})
 const settings = $state({})
+const ui = $state({ viewMode: 'default' })
 
 // LED indicator states for all frames - using timestamps to avoid events
 const ledIndicators = $state({
@@ -570,6 +571,8 @@ export default {
     previews,
     settings,
     ledIndicators,
+
+    ui,
 
     activate,
     loadSampleData,

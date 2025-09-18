@@ -35,6 +35,8 @@
 
     let tab = $derived(data.docs[tabId])
 
+    let viewMode = $derived(data.ui.viewMode)
+
     let linkPreviewTimeout = null
     let anchor = $state(null)
 
@@ -1568,43 +1570,67 @@ document.addEventListener('input', function(event) {
                     const tabId = mytab.id
                     const zoomDirection = remainingMessage.substring(tabIdPattern.length)
                     
-                    console.log(`[Tab ${tabId}] Zoom direction:`, zoomDirection)
+                    // Check if grid view is open
+                    const gridViewOpen = viewMode === 'tile'
+                    
+                    // console.log(`[Tab ${tabId}] Zoom direction: ${zoomDirection}, Grid view open: ${gridViewOpen}`)
                     
                     if (zoomDirection === 'out') {
-                        // Check if we're at minimum zoom using visualViewport scale
-                        const frameScale = window.visualViewport?.scale || 1.0
-                        let parentScale = 1.0
-                        
-                        try {
-                            parentScale = window.parent?.visualViewport?.scale || 1.0
-                        } catch (e) {
-                            // Parent access blocked, use frame scale only
-                        }
-                        
-                        // Use the most relevant scale (prefer parent since frame zoom is disabled)
-                        const currentScale = parentScale !== 1.0 ? parentScale : frameScale
-                        
-                        console.log(`🟣 Current scale: ${currentScale} (frame: ${frameScale}, parent: ${parentScale})`)
-                        
-                        if (currentScale <= 1.0) {
-                            console.log(`🔍 [CONTROLLED-FRAME] Zoom out attempted at minimum scale (${Math.round(currentScale * 100)}%) - triggering handleZoomOutAtMax`)
-                            
-                            // Dispatch event to trigger the zoom-out-at-max handler in App.svelte
+                        if (gridViewOpen) {
+                            // When grid view is open, always trigger zoom-out-at-max to handle threshold
+                            console.log(`🔍 [CONTROLLED-FRAME] Grid view open - dispatching zoom out event for threshold handling`)
                             window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max-internal', {
                                 detail: { 
-                                    source: 'controlled-frame',
+                                    source: 'controlled-frame-grid-view',
                                     tabId: tabId,
-                                    currentScale: currentScale,
-                                    frameScale: frameScale,
-                                    parentScale: parentScale,
+                                    currentScale: 1.0,
                                     direction: zoomDirection
                                 }
                             }))
                         } else {
-                            console.log(`📊 [Tab ${tabId}] Zoom out at scale ${Math.round(currentScale * 100)}% - not at minimum`)
+                            // Check if we're at minimum zoom using visualViewport scale
+                            const frameScale = window.visualViewport?.scale || 1.0
+                            let parentScale = 1.0
+                            
+                            try {
+                                parentScale = window.parent?.visualViewport?.scale || 1.0
+                            } catch (e) {
+                                // Parent access blocked, use frame scale only
+                            }
+                            
+                            // Use the most relevant scale (prefer parent since frame zoom is disabled)
+                            const currentScale = parentScale !== 1.0 ? parentScale : frameScale
+                            
+                            console.log(`🟣 Current scale: ${currentScale} (frame: ${frameScale}, parent: ${parentScale})`)
+                            
+                            if (currentScale <= 1.0) {
+                                console.log(`🔍 [CONTROLLED-FRAME] Zoom out attempted at minimum scale (${Math.round(currentScale * 100)}%) - triggering handleZoomOutAtMax`)
+                                
+                                // Dispatch event to trigger the zoom-out-at-max handler in App.svelte
+                                window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max-internal', {
+                                    detail: { 
+                                        source: 'controlled-frame',
+                                        tabId: tabId,
+                                        currentScale: currentScale,
+                                        frameScale: frameScale,
+                                        parentScale: parentScale,
+                                        direction: zoomDirection
+                                    }
+                                }))
+                            } else {
+                                console.log(`📊 [Tab ${tabId}] Zoom out at scale ${Math.round(currentScale * 100)}% - not at minimum`)
+                            }
                         }
                     } else if (zoomDirection === 'in') {
                         console.log(`📊 [Tab ${tabId}] Zoom in detected`)
+                        // Dispatch event for zoom in to potentially close grid view
+                        window.dispatchEvent(new CustomEvent('darc-zoom-in', {
+                            detail: { 
+                                source: gridViewOpen ? 'controlled-frame-grid-view' : 'controlled-frame',
+                                tabId: tabId,
+                                direction: zoomDirection
+                            }
+                        }))
                     }
                 }
             } else if (message.startsWith('iwa:scale:')) {
@@ -1629,24 +1655,33 @@ document.addEventListener('input', function(event) {
                         let newZoom = currentZoom || 1.0
                         
                         // Check if zoom-out is attempted at minimum zoom level
-                        if (zoomDirection === 'out' && newZoom <= 0.3) {
-                            console.log(`🔍 [CONTROLLED-FRAME] Zoom out attempted at minimum zoom level (${Math.round(newZoom * 100)}%) - triggering handleZoomOutAtMax`)
+                        // if (zoomDirection === 'out' && newZoom <= 0.3) {
+                        //     console.log(`🔍 [CONTROLLED-FRAME] Zoom out attempted at minimum zoom level (${Math.round(newZoom * 100)}%) - triggering handleZoomOutAtMax`)
                             
-                            // Dispatch event to trigger the zoom-out-at-max handler in App.svelte
-                            window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max-internal', {
-                                detail: { 
-                                    source: 'controlled-frame',
-                                    tabId: tabId,
-                                    currentZoom: newZoom,
-                                    direction: zoomDirection
-                                }
-                            }))
-                            return // Don't process normal zoom
-                        }
+                        //     // Dispatch event to trigger the zoom-out-at-max handler in App.svelte
+                        //     window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max-internal', {
+                        //         detail: { 
+                        //             source: 'controlled-frame',
+                        //             tabId: tabId,
+                        //             currentZoom: newZoom,
+                        //             direction: zoomDirection
+                        //         }
+                        //     }))
+                        //     return // Don't process normal zoom
+                        // }
                         
                         // Normal zoom behavior - adjust zoom level based on direction (5% increments for smoother control)
                          if (zoomDirection === 'in') {
                              newZoom = Math.min(newZoom + 0.05, 3.0) // Max zoom 300%
+                             // Dispatch event for zoom in to potentially close grid view
+                            //  window.dispatchEvent(new CustomEvent('darc-zoom-in', {
+                            //      detail: { 
+                            //          source: 'controlled-frame-zoom',
+                            //          tabId: tabId,
+                            //          direction: zoomDirection,
+                            //          newZoom: newZoom
+                            //      }
+                            //  }))
                          } else if (zoomDirection === 'out') {
                              newZoom = Math.max(newZoom - 0.05, 0.3) // Min zoom 30%
                          }
