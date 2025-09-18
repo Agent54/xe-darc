@@ -1464,6 +1464,17 @@ document.addEventListener('input', function(event) {
                         sourceFrame: `tab_${mytab.id}`
                     }
                 }))
+            } else if (message.startsWith('iwa:reload-tab:')) {
+                // Extract tab ID from message - handle colons in tab ID
+                const tabId = message.substring('iwa:reload-tab:'.length)
+                
+                // Dispatch custom event to app shell to reload this tab
+                window.dispatchEvent(new CustomEvent('darc-reload-tab-from-frame', {
+                    detail: { 
+                        tabId: tabId,
+                        sourceFrame: `tab_${mytab.id}`
+                    }
+                }))
             } else if (message.startsWith('iwa:link-enter:')) {
                 const prefix = 'iwa:link-enter:'
                 const remainingMessage = message.substring(prefix.length)
@@ -1544,8 +1555,61 @@ document.addEventListener('input', function(event) {
                     }
                 }
             } else if (message.startsWith('iwa:zoom:')) {
-                // Parse zoom event
+                // Parse zoom event (pixel-based page zoom)
+                // Since controlled frame zoom is disabled, this indicates user zoom intent
                 const prefix = 'iwa:zoom:'
+                const remainingMessage = message.substring(prefix.length)
+                
+                // Find the tab ID by looking for our known mytab.id, then extract zoom direction after it
+                const tabIdPattern = mytab.id + ':'
+                const tabIdIndex = remainingMessage.indexOf(tabIdPattern)
+                
+                if (tabIdIndex === 0) {
+                    const tabId = mytab.id
+                    const zoomDirection = remainingMessage.substring(tabIdPattern.length)
+                    
+                    console.log(`[Tab ${tabId}] Zoom direction:`, zoomDirection)
+                    
+                    if (zoomDirection === 'out') {
+                        // Check if we're at minimum zoom using visualViewport scale
+                        const frameScale = window.visualViewport?.scale || 1.0
+                        let parentScale = 1.0
+                        
+                        try {
+                            parentScale = window.parent?.visualViewport?.scale || 1.0
+                        } catch (e) {
+                            // Parent access blocked, use frame scale only
+                        }
+                        
+                        // Use the most relevant scale (prefer parent since frame zoom is disabled)
+                        const currentScale = parentScale !== 1.0 ? parentScale : frameScale
+                        
+                        console.log(`🟣 Current scale: ${currentScale} (frame: ${frameScale}, parent: ${parentScale})`)
+                        
+                        if (currentScale <= 1.0) {
+                            console.log(`🔍 [CONTROLLED-FRAME] Zoom out attempted at minimum scale (${Math.round(currentScale * 100)}%) - triggering handleZoomOutAtMax`)
+                            
+                            // Dispatch event to trigger the zoom-out-at-max handler in App.svelte
+                            window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max-internal', {
+                                detail: { 
+                                    source: 'controlled-frame',
+                                    tabId: tabId,
+                                    currentScale: currentScale,
+                                    frameScale: frameScale,
+                                    parentScale: parentScale,
+                                    direction: zoomDirection
+                                }
+                            }))
+                        } else {
+                            console.log(`📊 [Tab ${tabId}] Zoom out at scale ${Math.round(currentScale * 100)}% - not at minimum`)
+                        }
+                    } else if (zoomDirection === 'in') {
+                        console.log(`📊 [Tab ${tabId}] Zoom in detected`)
+                    }
+                }
+            } else if (message.startsWith('iwa:scale:')) {
+                // Parse scale event
+                const prefix = 'iwa:scale:'
                 const remainingMessage = message.substring(prefix.length)
                 
                 // Find the tab ID by looking for our known mytab.id, then extract zoom direction after it
@@ -1564,7 +1628,23 @@ document.addEventListener('input', function(event) {
                     frame.getZoom?.().then((currentZoom) => {
                         let newZoom = currentZoom || 1.0
                         
-                                                 // Adjust zoom level based on direction (5% increments for smoother control)
+                        // Check if zoom-out is attempted at minimum zoom level
+                        if (zoomDirection === 'out' && newZoom <= 0.3) {
+                            console.log(`🔍 [CONTROLLED-FRAME] Zoom out attempted at minimum zoom level (${Math.round(newZoom * 100)}%) - triggering handleZoomOutAtMax`)
+                            
+                            // Dispatch event to trigger the zoom-out-at-max handler in App.svelte
+                            window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max-internal', {
+                                detail: { 
+                                    source: 'controlled-frame',
+                                    tabId: tabId,
+                                    currentZoom: newZoom,
+                                    direction: zoomDirection
+                                }
+                            }))
+                            return // Don't process normal zoom
+                        }
+                        
+                        // Normal zoom behavior - adjust zoom level based on direction (5% increments for smoother control)
                          if (zoomDirection === 'in') {
                              newZoom = Math.min(newZoom + 0.05, 3.0) // Max zoom 300%
                          } else if (zoomDirection === 'out') {
@@ -1579,7 +1659,25 @@ document.addEventListener('input', function(event) {
                             })
                         }).catch(() => {
                             // Fallback if getZoom fails - assume current zoom is 1.0
-                            let newZoom = 1.0
+                            let currentZoom = 1.0
+                            
+                            // Check if zoom-out is attempted at minimum zoom level (fallback case)
+                            if (zoomDirection === 'out' && currentZoom <= 1.0) {
+                                console.log(`🔍 [CONTROLLED-FRAME] Zoom out attempted at fallback zoom level - triggering handleZoomOutAtMax`)
+                                
+                                // Dispatch event to trigger the zoom-out-at-max handler in App.svelte
+                                window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max-internal', {
+                                    detail: { 
+                                        source: 'controlled-frame-fallback',
+                                        tabId: tabId,
+                                        currentZoom: currentZoom,
+                                        direction: zoomDirection
+                                    }
+                                }))
+                                return // Don't process normal zoom
+                            }
+                            
+                            let newZoom = currentZoom
                             if (zoomDirection === 'in') {
                                 newZoom = 1.05
                             } else if (zoomDirection === 'out') {

@@ -460,18 +460,31 @@
         handleTabClose(event.detail?.originalEvent || event)
     }
 
+    // Listen for the global Cmd+R/Ctrl+R custom event from main.js
+    function handleGlobalTabReload(event) {
+        handleTabReload(event.detail?.originalEvent || event)
+    }
+
     // Listen for keyboard events from controlled frames
     function handleFrameTabClose(event) {
         const { tabId, sourceFrame } = event.detail
         console.log(`Received tab close request from controlled frame: ${tabId}`)
         
-        // Find the tab with matching ID
         const tab = data.docs[tabId]
         if (tab) {
             console.log(`Closing tab: ${tab.title}`)
             closeTab(tab, event)
         } else {
             console.warn(`Tab with ID ${tabId} not found`)
+        }
+    }
+
+    function handleFrameTabReload(event) {
+        const { tabId, sourceFrame } = event.detail
+        
+        const tab = data.docs[tabId]
+        if (tab) {
+            reloadTab(tab)
         }
     }
 
@@ -490,11 +503,16 @@
     }
 
     window.addEventListener('darc-close-tab', handleGlobalTabClose)
+    window.addEventListener('darc-reload-tab', handleGlobalTabReload)
     window.addEventListener('darc-close-tab-from-frame', handleFrameTabClose)
+    window.addEventListener('darc-reload-tab-from-frame', handleFrameTabReload)
     window.addEventListener('darc-new-tab-from-frame', handleFrameNewTab)
     window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
     window.addEventListener('close-apps-overlay', () => { showAppsOverlay = false })
+    window.addEventListener('darc-zoom-out-at-max-internal', (event) => {
+        handleZoomOutAtMax(event.detail.source)
+    })
 
     function openNewTab() {  
         collapseAndRemovePlaceholders()      
@@ -570,6 +588,23 @@
         }
     }
 
+    function handleZoomOutAtMax(source = 'unknown') {
+        console.log(`🔍 [ZOOM-OUT-MAX] Zoom out attempted when already at maximum zoom level from ${source}`)
+        console.log('📱 [TAB-OVERVIEW] This will eventually trigger tab overview transition')
+        
+        // Future implementation: trigger gradual transition to tab overview
+        // For now, just log the event for testing
+        
+        // Dispatch a custom event that other components can listen to
+        window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max', {
+            detail: { 
+                source: source,
+                timestamp: Date.now(),
+                activeTabId: data.spaceMeta.activeTabId
+            }
+        }))
+    }
+
     function handleTabClose (event) {
         if (tabs.length > 0 && data.spaceMeta.activeTabId) {
             const activeTab = data.docs[data.spaceMeta.activeTabId]
@@ -578,6 +613,17 @@
             }
         } else {
             console.log('No tabs to close')
+        }
+    }
+
+    function handleTabReload (event) {
+        if (tabs.length > 0 && data.spaceMeta.activeTabId) {
+            const activeTab = data.docs[data.spaceMeta.activeTabId]
+            if (activeTab) {
+                reloadTab(activeTab)
+            }
+        } else {
+            console.log('No tabs to reload')
         }
     }
 
@@ -1015,7 +1061,9 @@
             }
 
             window.removeEventListener('darc-close-tab', handleGlobalTabClose)
+            window.removeEventListener('darc-reload-tab', handleGlobalTabReload)
             window.removeEventListener('darc-close-tab-from-frame', handleFrameTabClose)
+            window.removeEventListener('darc-reload-tab-from-frame', handleFrameTabReload)
             window.removeEventListener('darc-new-tab-from-frame', handleFrameNewTab)
             window.removeEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
             window.removeEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)

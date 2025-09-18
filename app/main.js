@@ -33,10 +33,29 @@ document.addEventListener('touchmove', function (event) {
   if (event.scale !== 1) { event.preventDefault() }
 }, { passive: false })
 
+
 document.addEventListener("wheel", e => {
-  console.log('wheel', e)
-  if (e.ctrlKey) {
+
+  if (e.ctrlKey || e.metaKey) {
     e.preventDefault()
+    
+    // Determine zoom direction based on deltaY
+    const zoomDirection = e.deltaY < 0 ? 'in' : 'out'
+    
+    if (zoomDirection === 'out') {
+      // Check if we're at minimum zoom using visualViewport scale
+      const currentScale = window.visualViewport?.scale || 1.0
+      
+      if (currentScale <= 1.0) {        
+        window.dispatchEvent(new CustomEvent('darc-zoom-out-at-max-internal', {
+          detail: { 
+            source: 'app-shell',
+            currentScale: currentScale,
+            direction: zoomDirection
+          }
+        }))
+      }
+    }
   }
 }, { passive: false })
 
@@ -46,6 +65,7 @@ window.addEventListener('gesturechange', e => e.preventDefault());
 window.addEventListener('gestureend', e => e.preventDefault());
 
 // Global Cmd+W / Ctrl+W interceptor to prevent window closing
+// Global Cmd+R / Ctrl+R interceptor to prevent full page reload
 document.addEventListener('keydown', function(event) {
   // Check for Cmd+W (Mac) or Ctrl+W (Windows/Linux)
   if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
@@ -60,6 +80,21 @@ document.addEventListener('keydown', function(event) {
     }))
     
     console.log('Intercepted Cmd+W/Ctrl+W - delegating to app')
+    return false
+  }
+  
+  // Check for Cmd+R (Mac) or Ctrl+R (Windows/Linux) or F5
+  if (((event.metaKey || event.ctrlKey) && event.key === 'r') || event.key === 'F5') {
+    // Prevent the browser's default behavior (reloading page)
+    event.preventDefault()
+    event.stopPropagation()
+    event.stopImmediatePropagation()
+    
+    // Dispatch a custom event that the Svelte app can listen for
+    window.dispatchEvent(new CustomEvent('darc-reload-tab', {
+      detail: { originalEvent: event }
+    }))
+    
     return false
   }
 }, { capture: true, passive: false })

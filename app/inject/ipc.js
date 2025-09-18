@@ -10,19 +10,21 @@ document.addEventListener('keyup', function(event) {
 }, { capture: true, passive: false });
 
 // Global wheel event listener for controlled frame zoom control
-// document.onwheel = function(event) {
-//     // Check for Ctrl key (Windows/Linux) or Cmd key (Mac) - same as zoom prevention in main app
-//     if (event.ctrlKey || event.metaKey) {
-//         event.preventDefault();
-//         event.stopPropagation();
-//         event.stopImmediatePropagation();       
-//         // Determine zoom direction based on deltaY
-//         const zoomDirection = event.deltaY < 0 ? 'in' : 'out';
-//         // Log zoom direction to console IPC system
-//         console.log('iwa:zoom:${tabId}:' + zoomDirection);
-//         return false;
-//     }
-// }, { capture: true, passive: false });
+document.addEventListener('wheel', function(event) {
+    // Check for Ctrl key (Windows/Linux) or Cmd key (Mac) - same as zoom prevention in main app
+    if (event.ctrlKey || event.metaKey) {
+        // event.preventDefault()
+        // event.stopPropagation()
+        // event.stopImmediatePropagation()
+        
+        // Determine zoom direction based on deltaY
+        const zoomDirection = event.deltaY < 0 ? 'in' : 'out'
+        
+        // Log zoom direction to console IPC system
+        console.log(`iwa:zoom:${tabId}:` + zoomDirection)
+        return false
+    }
+}, { capture: true, passive: false })
 
 // Global keyboard event listener for controlled frame
 document.addEventListener('keydown', function(event) {
@@ -43,6 +45,15 @@ document.addEventListener('keydown', function(event) {
     // Check for Cmd+T (Mac) or Ctrl+T (Windows/Linux) 
     if ((event.metaKey || event.ctrlKey) && event.key === 't') {
         console.log(`iwa:new-tab:${tabId}`);
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return false;
+    }
+    
+    // Check for Cmd+R (Mac) or Ctrl+R (Windows/Linux) or F5
+    if (((event.metaKey || event.ctrlKey) && event.key === 'r') || event.key === 'F5') {
+        console.log(`iwa:reload-tab:${tabId}`);
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
