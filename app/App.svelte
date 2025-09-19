@@ -506,7 +506,7 @@
     // Zoom threshold tracking
     let zoomOutCounter = $state(0)
     let zoomInCounter = $state(0)
-    const ZOOM_THRESHOLD = 25
+    const ZOOM_THRESHOLD = 22
     let zoomCounterTimeout = null
     
     // Handle zoom-out-at-max with threshold logic
@@ -2873,6 +2873,13 @@
                 {/if}
             {/each}
 
+            <button class="inline-new-tab-button" 
+                class:hidden={showFixedNewTabButton}
+                onmousedown={openNewTab}
+                title="New Tab (⌘T)">
+                <span class="new-tab-icon">+</span>
+            </button>
+
             {#if rightPinnedTabs.length}
                 <li class="tab-divider-container">
                     <div class="tab-divider-vertical"></div>
@@ -2923,12 +2930,7 @@
                 {/if}
             {/each}
             
-            <button class="inline-new-tab-button" 
-                class:hidden={showFixedNewTabButton}
-                onmousedown={openNewTab}
-                title="New Tab (⌘T)">
-                <span class="new-tab-icon">+</span>
-            </button>
+
             
             {#each Array.from({length: closedTabPlaceholderCount}, (_, i) => i) as placeholder (placeholder)}
                 <li class="tab-container tab-placeholder" class:collapsing={collapsingPlaceholders}>
@@ -3583,8 +3585,10 @@
      style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --right-pinned-width: {(rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
 
     {#if data.ui.viewMode === 'tile'}
-        <GridView {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} onTabActivate={activateTab} onViewModeChange={toggleViewMode} onTabClose={closeTab} />
-    {:else if data.ui.viewMode === 'canvas'}
+        <GridView {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} onTabActivate={activateTab} onViewModeChange={toggleViewMode} onTabClose={closeTab} {leftPinnedWidth} {rightPinnedWidth} {rightSidebarWidth} tabSidebarWidth={tabSidebarVisible ? (customTabSidebarWidth || 263) : 0} {spaceTaken} />
+    {/if} 
+        
+    {#if data.ui.viewMode === 'canvas'}
         <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
     <!-- {:else if data.ui.viewMode === 'reading'}
         {#each tabs as tab, tabIndex (tab.id)}
@@ -3903,7 +3907,9 @@
                                 {switchToActivity}
                                 switchToAgent={switchToAIAgent}
                                 {switchToDevTools}
-                                {devModeEnabled} />
+                                {devModeEnabled}
+                                {data}
+                                currentSpaceId={data.spaceMeta.activeSpace} />
             </div>
         {/if}
     </div>

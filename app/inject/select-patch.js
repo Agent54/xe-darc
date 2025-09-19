@@ -9,12 +9,12 @@
     const within = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
     const findSelectInPath = e => {
       const path = e.composedPath?.() || []
+      
+      // Only look for SELECT elements that are actually in the event path
+      // Don't use querySelector which can find unrelated selects in shadow roots
       for (const n of path) {
-        if (n && n.tagName === 'SELECT') return n
-        if (n && n.shadowRoot) {
-          // if retargeted, try deeper
-          const t = n.querySelector?.('select')
-          if (t) return t
+        if (n && n.tagName === 'SELECT') {
+          return n
         }
       }
       return null
@@ -234,6 +234,8 @@
     }
   
     const onGlobalPointerDown = e => {
+      const sel = findSelectInPath(e)
+      
       // close on outside down if menu open and click is outside overlay/select
       if (openMenu) {
         const path = e.composedPath?.() || []
@@ -241,15 +243,17 @@
           close()
         }
       }
-  
-      const sel = findSelectInPath(e)
+
       if (!sel) return
-  
+
+      // Don't process disabled selects
+      if (sel.disabled) return
+
       // block native popup
       e.preventDefault()
       e.stopPropagation()
       sel.focus()
-  
+
       if (openMenu && openMenu.sel === sel) {
         // request toggle on simple click
         openMenu.toggleRequest = true
@@ -257,7 +261,7 @@
         openMenu.moved = false
         return
       }
-  
+
       if (openMenu) close()
       openForSelect(sel, e)
     }

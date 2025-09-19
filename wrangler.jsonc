@@ -1,6 +1,6 @@
 {
   "name": "my-chat-agent",
-  "main": "workerd/agent.ts",
+  "main": "workerd/worker.ts",
   "compatibility_date": "2025-05-07",
   "compatibility_flags": [
     "nodejs_compat",

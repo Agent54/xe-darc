@@ -12,7 +12,12 @@
     getEnabledUserMods = () => { return { css: [], js: [] } },
     onTabActivate = () => {},
     onViewModeChange = () => {},
-    onTabClose = () => {}
+    onTabClose = () => {},
+    leftPinnedWidth = 0,
+    rightPinnedWidth = 0,
+    rightSidebarWidth = 0,
+    tabSidebarWidth = 0,
+    spaceTaken = 0
   } = $props()
 
   // Get tabs from current space
@@ -21,8 +26,6 @@
   
   // Grid container reference
   let gridContainer
-
-
 
   // Handle clicking on frame screenshot
   function handleFrameClick(tab, index) {
@@ -69,6 +72,7 @@
 <div 
   class="grid-view"
   bind:this={gridContainer}
+  style="--left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --tab-sidebar-width: {tabSidebarWidth}px; --sidebar-width: {rightSidebarWidth}px; --space-taken: {spaceTaken}px;"
 >
   {#each tabs as tab, index (tab.id)}
     <div 
@@ -77,7 +81,12 @@
     >
       <!-- Tab title and close button bar -->
       <div class="tab-header">
-        <div class="tab-info">
+        <div class="tab-info clickable"
+             onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index) }}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index) } }}
+             tabindex="0"
+             role="button"
+             aria-label="Activate {tab.title || 'Untitled'}">
           <div class="tab-favicon">
             <Favicon url={tab.url} />
           </div>
@@ -136,9 +145,13 @@
 
 <style>
   .grid-view {
-    width: 100%;
-    height: 100%;
-    background: #000;
+    position: fixed;
+    top: 35px;
+    left: calc(var(--left-pinned-width, 0px) + var(--tab-sidebar-width, 0px));
+    width: calc(100% - var(--space-taken, 0px));
+    height: calc(100vh - 35px);
+    background: rgba(0, 0, 0, 0.95);
+    backdrop-filter: blur(8px);
     overflow: hidden;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -147,6 +160,20 @@
     padding: 40px;
     place-content: center;
     place-items: center;
+    z-index: 2000;
+    opacity: 0;
+    animation: grid-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes grid-fade-in {
+    from {
+      opacity: 0;
+      transform: scale(1.3);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 
   .grid-frame {
@@ -268,6 +295,10 @@
     gap: 6px;
     flex: 1;
     min-width: 0;
+  }
+
+  .tab-info.clickable {
+    cursor: pointer;
   }
 
   .tab-favicon {

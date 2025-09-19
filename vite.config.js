@@ -179,6 +179,11 @@ export default defineConfig({
         target: 'ws://localhost:8787',
         ws: true,
         rewriteWsOrigin: true,
+      },
+      '/devtools-api': {
+        target: 'http://127.0.0.1:9226',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/devtools-api/, '')
       }
       
      // 'http://localhost:8787',

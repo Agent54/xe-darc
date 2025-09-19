@@ -1236,3 +1236,9 @@ add an ainimation to the grid-view container element that does fade in from 0 10
 now add the trigger to start showing the grid view when hitting the zoom level point in the zoom handling to show tab overview. use zoom out and zoom in events from the handling to set an animation progression on the grid view that progresses in in or out direction depending on zoom direction. start with full transparency and scale of 2 and fade in and zoom in to full size for the grid view and only then trigger the screenshot replacement. DO NOT show animations/transitions when triggereing view mode change from the menu or other ways, only  from the zoom events. make the events progress the ainimation by one ticks so at least 10 events are needed to animate full in and out. also DO NOT animate the individual frames on the grid, animate only the FULL VIEW COMponent 
 
 clear closed tabs does not sync
+
+demo to our google iwa / pwa contacts
+
+twitter, nostr, mastodon, bsky unify app
+
+pretty json editor and rest client integration
