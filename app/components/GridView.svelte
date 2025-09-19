@@ -162,7 +162,7 @@
     place-items: center;
     z-index: 2000;
     opacity: 0;
-    animation: grid-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: grid-fade-in 0.3s cubic-bezier(0, 1, 0.3, 1) forwards;
   }
 
   @keyframes grid-fade-in {

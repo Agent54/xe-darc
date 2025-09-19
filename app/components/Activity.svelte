@@ -8,7 +8,9 @@
         switchToSettings,
         switchToUserMods,
         switchToActivity,
-        switchToAgent
+        switchToAgent,
+        switchToDevTools,
+        devModeEnabled = false
     } = $props()
 
     // Dummy activity data with various types of actions
@@ -226,7 +228,7 @@
     }
 </script>
 
-<RightSidebar title="Activity" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent}>
+<RightSidebar title="Activity" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
         <div class="activity-timeline">
             {#each activityData.slice(0, visibleEntries) as activity, index (activity.id)}

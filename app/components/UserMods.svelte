@@ -10,6 +10,8 @@
         switchToUserMods,
         switchToActivity,
         switchToAgent,
+        switchToDevTools,
+        devModeEnabled = false,
         userMods = [],
         onUpdateUserMods,
         currentTab = null
@@ -211,7 +213,7 @@
     })
 </script>
 
-<RightSidebar title="User Mods" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent}>
+<RightSidebar title="User Mods" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
         <div style="margin-top: 16px;"></div>
         <!-- Add/Edit Form -->

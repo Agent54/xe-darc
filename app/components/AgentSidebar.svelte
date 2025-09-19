@@ -72,6 +72,8 @@
 		switchToUserMods,
 		switchToActivity,
 		switchToAIAgent,
+		switchToDevTools,
+		devModeEnabled = false,
 		viewMode = 'default',
 		currentTab = null,
 		conv = $bindable(false)
@@ -2466,6 +2468,8 @@ The current system demonstrates strong performance and security characteristics.
 	{switchToUserMods}
 	{switchToActivity}
 	switchToAgent={switchToAIAgent}
+	{switchToDevTools}
+	{devModeEnabled}
 >
 	{#snippet children()}
 		<div class="agent-sticky-header">

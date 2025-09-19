@@ -3847,7 +3847,9 @@
                          {switchToSettings}
                          {switchToUserMods}
                          {switchToActivity}
-                         switchToAgent={switchToAIAgent} />
+                         switchToAgent={switchToAIAgent}
+                         {switchToDevTools}
+                         {devModeEnabled} />
             </div>
         {/if}
         
@@ -3860,6 +3862,8 @@
                          {switchToUserMods}
                          {switchToActivity}
                          switchToAgent={switchToAIAgent}
+                         {switchToDevTools}
+                         {devModeEnabled}
                          {userMods}
                          onUpdateUserMods={updateUserMods}
                          currentTab={data.docs[data.spaceMeta.activeTabId]} />
@@ -3875,6 +3879,8 @@
                          {switchToUserMods}
                          {switchToActivity}
                          {switchToAIAgent}
+                         {switchToDevTools}
+                         {devModeEnabled}
                          viewMode={data.ui.viewMode}
                          currentTab={data.docs[data.spaceMeta.activeTabId]}
                          bind:conv={agentEnabled} />
