@@ -1,5 +1,5 @@
 <script>
-    let { title, padding = true, onClose, children, openSidebars = new Set(), switchToResources, switchToSettings, switchToUserMods, switchToActivity, switchToAgent } = $props()
+    let { title, padding = true, onClose, children, openSidebars = new Set(), switchToResources, switchToSettings, switchToUserMods, switchToActivity, switchToAgent, switchToDevTools, devModeEnabled = false } = $props()
 </script>
 
 <div class="sidebar">
@@ -63,6 +63,18 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                     </svg>
                 </button>
+                
+                {#if devModeEnabled}
+                    <button class="sidebar-nav-button" 
+                            class:active={openSidebars.has('devTools')}
+                            title="Dev Tools" 
+                            aria-label="Dev Tools"
+                            onmousedown={switchToDevTools}>
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+                        </svg>
+                    </button>
+                {/if}
             </div>
             
             <button class="close-button" onmousedown={onClose} title="Close {title}" aria-label="Close {title}">

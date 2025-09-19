@@ -11,6 +11,8 @@
         switchToUserMods,
         switchToActivity,
         switchToAgent,
+        switchToDevTools,
+        devModeEnabled = false,
         requestedResources
     } = $props()
 
@@ -169,7 +171,7 @@
 
 <svelte:window onclick={handleClickOutside} onmousedown={handleMouseDownOutside} />
 
-<RightSidebar title="Resources" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent}>
+<RightSidebar title="Resources" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
         {#each resourceSections as section}
             {#if resourceData[section.id].length > 0}
