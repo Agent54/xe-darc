@@ -159,40 +159,32 @@
         return url?.startsWith('about:newtab') || url?.startsWith('about:blank')
     }
 
-    function handlePermissionRequest(tabId, event) {
-        data.ledIndicators.permissionRequest = Date.now()
-
-        requestedResources.push({
-            permission: event.permission,
-            url: event.url,
-            tabId: tabId,
-            timestamp: new Date().toISOString(),
-            id: event.permission,
-            lastUsed: 'now',
-            status: 'Request'
-        })
-
-        console.log('📋 Permission request:', {
-            event,
-            tab
-        })
+    async function handlePermissionRequest(tabId, event) {
+        const { granted } = await data.permissionRequest(tabId, event)
         
-        try {
-            // event.request.allow()
-            // console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url}`)
-            event.request.deny()
-            
-            // Hide permission request LED after granting
-            setTimeout(() => {
-                data.ledIndicators.permissionRequest = 0
-            }, 1000)
-        } catch (error) {
-            console.error(`❌ [Permission Error] Failed to grant ${event.permission}:`, error)
-            // Hide permission request LED on error too
-            setTimeout(() => {
-                data.ledIndicators.permissionRequest = 0
-            }, 1000)
-        }
+        // console.log(event)
+        
+        // data.ledIndicators.permissionRequest = Date.now()
+
+        // requestedResources.push({
+        //     permission: event.permission,
+        //     url: event.url,
+        //     tabId: tabId,
+        //     timestamp: new Date().toISOString(),
+        //     id: event.permission,
+        //     lastUsed: 'now',
+        //     status: 'Request'
+        // })
+
+        // console.log('📋 Permission request:', {
+        //     event,
+        //     tab
+        // })
+
+        // event.request.allow()
+        // console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url}`)
+       
+        granted ? event.request.allow() : event.request.deny()
     }
 
     // Check if an error code represents a certificate issue
@@ -1200,6 +1192,7 @@ document.addEventListener('input', function(event) {
 
         // Handle response headers - strip some security headers and enhance CSP with app origin
         frame.request.onHeadersReceived.addListener((details) => {
+            console.log('onHeadersReceived', details)
             if (!details.responseHeaders) return
 
             const modifiedHeaders = []

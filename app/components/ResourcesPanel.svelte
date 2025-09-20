@@ -1,7 +1,9 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
     import resourceTypes from '../lib/resourceTypes.js'
-// FIXME: use app global click outside scrim handler
+	import data from '../data.svelte'
+    // FIXME: use app global click outside scrim handler
+    // filter: current page's resources/ all resources
 
     let {
         onClose,
@@ -15,6 +17,17 @@
         devModeEnabled = false,
         requestedResources
     } = $props()
+
+	const SCOPE_OPTIONS = [
+		{ id: 'global', label: 'Global' },
+		{ id: 'window', label: 'Current window' },
+		{ id: 'instance', label: 'Current instance' },
+        { id: 'origin', label: 'Current origin' },
+	]
+	let scope = $state(localStorage.getItem('resourcesScope') || 'global')
+	$effect(() => {
+		localStorage.setItem('resourcesScope', scope)
+	})
 
     const resourceSections = [
         { id: 'requested', title: 'Requested' },
@@ -138,34 +151,18 @@
             status: resource.status || 'Requested',
             requestType: resource.requestType || 'foreground'
         })),
-        used: [
-            { id: 'network', lastUsed: '2 minutes ago', status: 'Active' },
-            { id: 'ip', lastUsed: '2 minutes ago', status: 'Active' },
-            { id: 'javascript', lastUsed: '5 minutes ago', status: 'Active' },
-            { id: 'images', lastUsed: '1 minute ago', status: 'Active' },
-            { id: 'sound', lastUsed: '3 minutes ago', status: 'Active' },
-            { id: 'notifications', lastUsed: '10 minutes ago', status: 'Active' },
-            { id: 'background-sync', lastUsed: '10 minutes ago', status: 'Active' },
-            { id: 'local-storage', lastUsed: '10 minutes ago', status: 
-            'Active' },
-            { id: 'server-storage', lastUsed: '10 minutes ago', status: 
-            'Active' }
-        ],
-        mocked: [
-            { id: 'location', lastUsed: '5 minutes ago', status: 'Mocked', mockValue: 'San Francisco, CA' },
-            { id: 'camera', lastUsed: '8 minutes ago', status: 'Mocked', mockValue: 'Webcam test image' },
-            { id: 'microphone', lastUsed: '12 minutes ago', status: 'Mocked', mockValue: 'Silent audio stream' }
-        ],
-        blocked: [
-            { id: 'intrusive-ads', lastUsed: 'Blocked', status: 'Blocked' },
-            { id: 'popups', lastUsed: 'Blocked', status: 'Blocked' },
-            { id: 'automatic-downloads', lastUsed: 'Blocked', status: 'Blocked' }
-        ],
+
+        used: [],
+        mocked: [],
+        blocked: [],
         unused,
-        archived: [
-            { id: 'motion-sensors', lastUsed: '1 week ago', status: 'Archived' },
-            { id: 'midi-devices', lastUsed: '2 weeks ago', status: 'Archived' }
-        ]
+        archived: [],
+
+        ...Object.values(data.resources).reduce((acc, resource) => {
+            acc[resource.status] = [...(acc[resource.status] || []), resource]
+            return acc
+        }, {})
+       
     })
 </script>
 
@@ -173,6 +170,16 @@
 
 <RightSidebar title="Resources" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
+		<div class="resources-controls">
+			<div class="scope-control">
+				<label class="sr-only" for="resources-scope">Scope</label>
+				<select id="resources-scope" aria-label="Scope" bind:value={scope} onmousedown={(e) => e.stopPropagation()}>
+					{#each SCOPE_OPTIONS as opt}
+						<option value={opt.id}>{opt.label}</option>
+					{/each}
+				</select>
+			</div>
+		</div>
         {#each resourceSections as section}
             {#if resourceData[section.id].length > 0}
                 <div class="resource-section {section.id}">
@@ -275,6 +282,41 @@
 </RightSidebar>
 
 <style>
+	.resources-controls {
+		display: flex;
+		justify-content: flex-end;
+		padding: 14px 0 10px 0;
+	}
+	.scope-control select {
+		appearance: none;
+		background: rgba(255, 255, 255, 0.06);
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		color: rgba(255, 255, 255, 0.85);
+		font-size: 12px;
+		border-radius: 5px;
+		padding: 6px 26px 6px 10px;
+		line-height: 1;
+		cursor: pointer;
+	}
+	.scope-control select:focus {
+		outline: none;
+		border-color: rgba(255, 255, 255, 0.2);
+	}
+	.scope-control {
+		position: relative;
+	}
+	.scope-control::after {
+		content: '';
+		position: absolute;
+		right: 10px;
+		top: 50%;
+		transform: translateY(-50%);
+		border-width: 5px 4px 0 4px;
+		border-style: solid;
+		border-color: rgba(255, 255, 255, 0.6) transparent transparent transparent;
+		pointer-events: none;
+	}
+
     .resource-section {
         margin-bottom: 32px;
         margin-top: 16px;

@@ -168,7 +168,7 @@
   @keyframes grid-fade-in {
     from {
       opacity: 0;
-      transform: scale(1.3);
+      /* transform: scale(1.3); */
     }
     to {
       opacity: 1;

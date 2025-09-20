@@ -407,7 +407,7 @@
     })
 
 
-    const borderlessQuery = window.matchMedia('(display-mode: borderless)')
+    const borderlessQuery = { matches: true }// window.matchMedia('(display-mode: borderless)')
     const controlsOverlayQuery = window.matchMedia('(display-mode: window-controls-overlay)')
 
     headerPartOfMain = controlsOverlayQuery.matches || borderlessQuery.matches
@@ -444,7 +444,7 @@
         headerPartOfMain = e.matches
     })
 
-    borderlessQuery.addEventListener('change', e => {
+    borderlessQuery.addEventListener?.('change', e => {
         headerPartOfMain = e.matches
     })
 

@@ -10,6 +10,15 @@ import { tick } from 'svelte'
 
 import { colors as projectColors } from './lib/utils.js'
 
+window.darcWindowId = crypto.randomUUID()
+
+window.darcInstanceId = localStorage.getItem('darcInstanceId')
+if (!window.darcInstanceId) {
+    window.darcInstanceId = crypto.randomUUID()
+    localStorage.setItem('darcInstanceId', window.darcInstanceId)
+}
+
+
 PouchDB.plugin(findPlugin)
 const db = new PouchDB('darc', { adapter: 'idb' })
 
@@ -841,6 +850,30 @@ export default {
         }
     },
 
+    permissionRequest: (tabId, event) => {
+        console.log('permissionRequest', tabId, event)
+        
+        ledIndicators.permissionRequest = Date.now()
+        
+        resources.push({
+            id: crypto.randomUUID(),
+            permission: event.permission,
+            url: event.url,
+            tabId: tabId,
+            agentId: null,
+            status: 'requested',
+            timestamp: new Date().toISOString(),
+            instanceId: window.darcInstanceId,
+            windowId: window.darcWindowId
+        })
+
+        setTimeout(() => {
+            ledIndicators.permissionRequest = 0
+        }, 1000)
+
+        return { granted: false }
+    },
+
     closeTab,
 
     clearClosedTabs: () => {
@@ -928,7 +961,5 @@ export default {
         } else {
             return false
         }
-    },
-
-
+    }
 }

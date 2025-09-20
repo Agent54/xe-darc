@@ -176,7 +176,8 @@
     {#snippet children()}
         <div class="devtools-content">
             <div class="devtools-header">
-                <div class="section-title">DevTools</div>
+                <div class="section-title"></div>
+                
                 <button class="refresh-button" 
                         title="Refresh DevTools List" 
                         aria-label="Refresh DevTools List"
