@@ -1247,3 +1247,6 @@ pretty json editor and rest client integration
 CRAN, R’s central package manager, builds each package before publication, testing against a variety of R versions and operating systems. If one of your package’s unit tests fails on Windows Server 2022 plus a development version of R, you’ll receive an email from the CRAN team explaining why it can’t be published
 
 But… CRAN had also rerun the tests for all packages that depend on mine
+
+
+new tab from clipboard (long press/keyboard shortcut), copy current url keyboard, dnd tabs, edit current urls

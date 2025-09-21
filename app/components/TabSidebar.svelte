@@ -24,8 +24,7 @@
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
-
-
+    
     let isManualScroll = false
     let previousSpaceIndex = -1
     // let scrollActiveSpaceTimeout = null
@@ -313,7 +312,69 @@
         onShowApps()
     }
     
+    const partitions = [
+        'persist:1',
+        'persist:2',
+        'persist:3',
+        'ephemeral:1',
+        'ephemeral:2',
+        'ephemeral:3'
+    ]
 
+    async function handleNewFromClipboard(spaceId) {
+        try {
+            const text = (await navigator.clipboard.readText())?.trim()
+            if (!text) {
+                const tab = await data.newTab(spaceId, { shouldFocus: true })
+                if (tab) {
+                    data.spaceMeta.activeSpace = spaceId
+                    data.activate(tab.id)
+                }
+                return
+            }
+
+            let url = text
+            try {
+                // If scheme missing, try with https
+                if (!/^https?:\/\//i.test(url)) {
+                    new URL('https://' + url)
+                    url = 'https://' + url
+                } else {
+                    new URL(url)
+                }
+            } catch (e) {
+                // Fallback to about:newtab if invalid
+                url = 'about:newtab'
+            }
+
+            const tab = await data.newTab(spaceId, { url, shouldFocus: true })
+            if (tab) {
+                data.spaceMeta.activeSpace = spaceId
+                data.activate(tab.id)
+            }
+        } catch (err) {
+            const tab = await data.newTab(spaceId, { shouldFocus: true })
+            if (tab) {
+                data.spaceMeta.activeSpace = spaceId
+                data.activate(tab.id)
+            }
+        }
+    }
+
+    async function handleNewTabInPartition(spaceId, partition) {
+        const tab = await data.newTab(spaceId, { shouldFocus: true })
+        if (tab) {
+            // In-memory assignment mirrors App.svelte partition handling
+            data.docs[tab.id].partition = partition
+            const space = data.spaces[spaceId]
+            const idx = space.tabs.findIndex(t => t.id === tab.id)
+            if (idx !== -1) {
+                space.tabs[idx].partition = partition
+            }
+            data.spaceMeta.activeSpace = spaceId
+            data.activate(tab.id)
+        }
+    }
 
 </script>
 
@@ -458,18 +519,43 @@
                                     </div>
                                 {/if}
                                 
-                                <button class="new-tab-button" 
-                                        onmousedown={() => {
-                                            const newTab = data.newTab(spaceId)
-                                            if (newTab) {
-                                                data.spaceMeta.activeSpace = spaceId
-                                                data.activate(newTab.id)
-                                            }
-                                        }}
-                                        aria-label="Create new tab">
-                                    <span class="new-tab-icon">+</span>
-                                    <span class="new-tab-text">New Tab</span>
-                                </button>
+                                <div class="new-tab-row">
+                                    <button class="new-tab-button" 
+                                            onmousedown={() => {
+                                                const newTab = data.newTab(spaceId)
+                                                if (newTab) {
+                                                    data.spaceMeta.activeSpace = spaceId
+                                                    data.activate(newTab.id)
+                                                }
+                                            }}
+                                            aria-label="Create new tab">
+                                        <span class="new-tab-icon">+</span>
+                                        <span class="new-tab-text">New Tab</span>
+
+                                        <span class="new-tab-more-button" aria-label="New tab options">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="down-icon"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
+                                            <div class="new-tab-hover-menu" role="menu" aria-label="New tab options">
+                                          <span class="new-tab-hover-item" onmouseup={() => handleNewFromClipboard(spaceId)} role="menuitem">
+                                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
+                                              <span>New from clipboard</span>
+                                          </span>
+                                         <div class="new-tab-hover-item has-submenu" role="menuitem" aria-haspopup="true" aria-expanded="false">
+                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
+                                             <span>New tab in container…</span>
+                                             <svg class="chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
+                                             <div class="new-tab-submenu" role="menu">
+                                                 {#each partitions as partition}
+                                                     <button class="new-tab-submenu-item" onmouseup={() => handleNewTabInPartition(spaceId, partition)} role="menuitem">
+                                                         <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
+                                                         <span>{partition}</span>
+                                                     </button>
+                                                 {/each}
+                                             </div>
+                                         </div>
+                                            </div>
+                                        </span>
+                                    </button>
+                                 </div>
                                 
                                 <div class="tabs-list">
                                     {#each data.spaces[spaceId].tabs as tab (tab.id)}
@@ -1288,6 +1374,34 @@
         text-align: left;
     }
     
+    .new-tab-more-button {
+        background: transparent;
+        border: 1px solid transparent;
+        color: rgba(255, 255, 255, 0.4);
+        cursor: pointer;
+        height: 36px;
+        width: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        transition: all 150ms ease;
+        flex-shrink: 0;
+        margin-left: 6px;
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    .new-tab-row:hover .new-tab-more-button {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .down-icon {
+        width: 16px;
+        height: 16px;
+    }
+
     .new-tab-button:hover {
         background-color: rgb(255 255 255 / 9%);
         border: 1px solid hsl(0deg 0% 100% / 3%);
@@ -1328,6 +1442,144 @@
         color: #fff;
     }
     
+    .new-tab-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    
+    .new-tab-hover-menu {
+        position: absolute;
+        top: 10px;
+        right: 0;
+        background: rgba(0, 0, 0, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 4px 0;
+        min-width: 200px;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 150ms ease, visibility 150ms ease;
+        backdrop-filter: blur(12px);
+        pointer-events: none;
+        box-sizing: border-box;
+    }
+
+    .new-tab-more-button:hover .new-tab-hover-menu {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+    .new-tab-hover-menu:hover {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+    
+    .new-tab-hover-item {
+        padding: 6px 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
+        cursor: pointer;
+        background: transparent;
+        border: none;
+        width: 100%;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+        white-space: nowrap;
+        min-width: 0;
+    }
+    
+    .new-tab-hover-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.95);
+    }
+    
+    .new-tab-hover-item.has-submenu {
+        padding-right: 26px;
+    }
+    
+    .new-tab-hover-item .chevron {
+        width: 14px;
+        height: 14px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-left: auto;
+    }
+    
+    .new-tab-hover-item .item-icon {
+        width: 14px;
+        height: 14px;
+        color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .new-tab-submenu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        background: rgba(0, 0, 0, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 4px 0;
+        min-width: 170px;
+        z-index: 1001;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 120ms ease, visibility 120ms ease;
+        backdrop-filter: blur(12px);
+        pointer-events: none;
+        margin-top: 2px;
+    }
+    
+    .new-tab-hover-item.has-submenu:hover .new-tab-submenu {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+    
+    .new-tab-submenu-item {
+        padding: 6px 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
+        cursor: pointer;
+        background: transparent;
+        border: none;
+        width: 100%;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .new-tab-submenu-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.95);
+    }
+    
+    .partition-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.5);
+    }
+    
+    .partition-dot[data-variant="persist"] {
+        background: #8b5cf6;
+    }
+    
+    .partition-dot[data-variant="ephemeral"] {
+        background: #22c55e;
+    }
+
     /* Tab Group */
     .tab-group {
         display: flex;

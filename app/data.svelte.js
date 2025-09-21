@@ -855,8 +855,13 @@ export default {
         
         ledIndicators.permissionRequest = Date.now()
         
-        resources.push({
-            id: crypto.randomUUID(),
+        resources[event.permission] = {
+            // requester: resource.requester,
+            // explanation: resource.explanation || '',
+            // status: resource.status || 'Requested',
+            // requestType: resource.requestType || 'foreground'
+
+            requestId: crypto.randomUUID(),
             permission: event.permission,
             url: event.url,
             tabId: tabId,
@@ -865,7 +870,7 @@ export default {
             timestamp: new Date().toISOString(),
             instanceId: window.darcInstanceId,
             windowId: window.darcWindowId
-        })
+        }
 
         setTimeout(() => {
             ledIndicators.permissionRequest = 0

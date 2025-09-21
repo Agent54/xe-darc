@@ -142,16 +142,8 @@
         isCheckingAvailability = false
     }
 
-    // Mock data - in real app this would come from props or API
     const resourceData = $derived({
-        requested: requestedResources.map(resource => ({
-            ...resource,
-            requester: resource.requester || 'example.com',
-            explanation: resource.explanation || 'Required for core functionality',
-            status: resource.status || 'Requested',
-            requestType: resource.requestType || 'foreground'
-        })),
-
+        requested: [],
         used: [],
         mocked: [],
         blocked: [],
@@ -162,7 +154,6 @@
             acc[resource.status] = [...(acc[resource.status] || []), resource]
             return acc
         }, {})
-       
     })
 </script>
 
@@ -173,9 +164,9 @@
 		<div class="resources-controls">
 			<div class="scope-control">
 				<label class="sr-only" for="resources-scope">Scope</label>
-				<select id="resources-scope" aria-label="Scope" bind:value={scope} onmousedown={(e) => e.stopPropagation()}>
+				<select id="resources-scope" aria-label="Scope" bind:value={scope} onmousedown={(e) => e.stopPropagation()} title={`${SCOPE_OPTIONS.find(o => o.id === scope)?.label}${scope === 'origin' ? ` (${origin})` : ''}`}>
 					{#each SCOPE_OPTIONS as opt}
-						<option value={opt.id}>{opt.label}</option>
+						<option value={opt.id} title={`${opt.label}${opt.id === 'origin' ? ` (${origin})` : ''}`}>{opt.label}{opt.id === 'origin' ? ` (${origin})` : ''}</option>
 					{/each}
 				</select>
 			</div>
@@ -183,7 +174,7 @@
         {#each resourceSections as section}
             {#if resourceData[section.id].length > 0}
                 <div class="resource-section {section.id}">
-                    <button class="section-title" onclick={() => toggleSection(section.id)}>
+                    <button class="section-title" onmousedown={() => toggleSection(section.id)}>
                         <span class="collapse-icon" class:collapsed={collapsedSections[section.id]}>
                             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                                 <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -247,7 +238,7 @@
                                                     </svg>
                                                 </button>
                                                 {#if openAcceptDropdown === resource.id}
-                                                    <div class="dropdown-menu" role="menu" tabindex="-1" onclick={(event) => event.stopPropagation()} onmousedown={(event) => { event.stopPropagation(); event.preventDefault(); }} onkeydown={(event) => event.stopPropagation()}>
+                                                    <div class="dropdown-menu" role="menu" tabindex="-1" onmousedown={(event) => { event.stopPropagation(); event.preventDefault(); }} onkeydown={(event) => event.stopPropagation()}>
                                                         <button onmouseup={(event) => acceptResource(resource.id, 'once', event)}>Allow once</button>
                                                         <button onmouseup={(event) => acceptResource(resource.id, 'always', event)}>Always allow</button>
                                                         <button onmouseup={(event) => acceptResource(resource.id, 'until', event)}>Allow until...</button>
@@ -297,6 +288,12 @@
 		padding: 6px 26px 6px 10px;
 		line-height: 1;
 		cursor: pointer;
+		display: block;
+		width: 100%;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.scope-control select:focus {
 		outline: none;
@@ -304,6 +301,7 @@
 	}
 	.scope-control {
 		position: relative;
+		width: 220px;
 	}
 	.scope-control::after {
 		content: '';
