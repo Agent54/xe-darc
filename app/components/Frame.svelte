@@ -1,5 +1,6 @@
 <script>
     import { fade, scale } from 'svelte/transition'
+    import { tick } from 'svelte'
 
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
@@ -16,7 +17,6 @@
         onFrameFocus = () => {},
         onFrameBlur = () => {},
         userMods = { css: [], js: [] },
-        requestedResources = [],
         statusLightsEnabled = false,
         controlledFrameSupported = false,
         observer
@@ -201,6 +201,22 @@
             return false
         }
     })
+
+    async function instantlyCleanupGlobalPreview() {
+        if (globalHoverPreviewTimeout) {
+            clearTimeout(globalHoverPreviewTimeout)
+            globalHoverPreviewTimeout = null
+        }
+        globalHoverPreviewExpanding = true
+
+        await tick()
+
+        globalHoverPreviewExpanding = false
+        globalHoverPreviewVisible = false
+        globalHoverPreview = null
+        globalHoverPreviewTabId = null
+        globalHoverPreviewTab = null
+    }
 
     // Cleanup function to properly reset all preview state
     function cleanupGlobalPreview() {
@@ -523,10 +539,10 @@
                 {onFrameFocus}
                 {onFrameBlur}
                 {userMods}
-                {requestedResources}
                 {statusLightsEnabled}
                 {createOffOriginLightbox}
                 {observer}
+                {instantlyCleanupGlobalPreview}
                 bind:commandKeyPressed
                 bind:hoveredLink
             
@@ -537,7 +553,7 @@
             <!--  bind:linkPreviewTimeout bind:linkPreviewVisible    linkPreviewVisible &&  -->
 
             {#if hoveredLink}
-                <div class="link-preview" transition:fade={{duration: 150}}>
+                <div class="link-preview" transition:fade={{duration: 100}}>
                     {#if isDifferentOrigin}
                         <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
@@ -595,7 +611,7 @@
                 
                 <!-- Link preview for iframe fallback  linkPreviewVisible &&-->
                 {#if hoveredLink}
-                    <div class="link-preview" transition:fade={{duration: 150}}>
+                    <div class="link-preview" transition:fade={{duration: 100}}>
                         {#if isDifferentOrigin}
                             <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
@@ -792,7 +808,6 @@
                                 {onFrameFocus}
                                 {onFrameBlur}
                                 {userMods}
-                                {requestedResources}
                             />
                         {/if}
                     </div>
@@ -911,7 +926,6 @@
                             {onFrameFocus}
                             {onFrameBlur}
                             {userMods}
-                            {requestedResources}
                             {statusLightsEnabled}
                             bind:hoveredLink
                             

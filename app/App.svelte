@@ -2303,8 +2303,15 @@
 
 
     $effect(() => {
-        if (requestedResources.length > 0 && !openSidebars.has('resources')) {
-            console.log('requestedResources changed...', requestedResources)
+        // Check for unseen resource requests with matching window ID
+        const unseenResourcesForThisWindow = Object.values(data.resources).filter(resource => 
+            resource.unseen && 
+            resource.windowId === window.darcWindowId && 
+            resource.status === 'requested'
+        )
+        
+        if (unseenResourcesForThisWindow.length > 0 && !openSidebars.has('resources')) {
+            console.log('Opening resources sidebar for unseen requests:', unseenResourcesForThisWindow)
             untrack(() => {
                 openSidebars.add('resources')
                 openSidebars = new Set(openSidebars)
@@ -3499,9 +3506,10 @@
 
 <TabSidebar {isDragEnabled} onShowApps={toggleAppsOverlay} 
            {customTabSidebarWidth} 
-           {tabSidebarVisible}
+           {tabSidebarVisible} 
            {isResizingTabSidebar} 
-           onStartResizeTabSidebar={startResizeTabSidebar} />
+           onStartResizeTabSidebar={startResizeTabSidebar}
+           {devModeEnabled} />
 
 
 <div class="frame-title-bar" class:window-controls-overlay={headerPartOfMain} class:editing-url={isEditingUrl}>

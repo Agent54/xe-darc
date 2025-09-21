@@ -1250,3 +1250,9 @@ But… CRAN had also rerun the tests for all packages that depend on mine
 
 
 new tab from clipboard (long press/keyboard shortcut), copy current url keyboard, dnd tabs, edit current urls
+
+notifications
+
+origin defined containers
+
+download rules per domain and filename pattern.

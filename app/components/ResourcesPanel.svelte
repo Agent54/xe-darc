@@ -15,8 +15,13 @@
         switchToAgent,
         switchToDevTools,
         devModeEnabled = false,
-        requestedResources
     } = $props()
+
+    // Clear unseen flags when sidebar is closed
+    function handleClose() {
+        data.clearUnseenResourceFlags()
+        onClose()
+    }
 
 	const SCOPE_OPTIONS = [
 		{ id: 'global', label: 'Global' },
@@ -24,7 +29,7 @@
 		{ id: 'instance', label: 'Current instance' },
         { id: 'origin', label: 'Current origin' },
 	]
-	let scope = $state(localStorage.getItem('resourcesScope') || 'global')
+	let scope = $state(localStorage.getItem('resourcesScope') || 'origin')
 	$effect(() => {
 		localStorage.setItem('resourcesScope', scope)
 	})
@@ -59,6 +64,7 @@
 
     let unused = $state(Object.keys(resourceTypes).map(id => ({
         id,
+        type: id,
         lastUsed: 'Never',
         status: 'Not checked'
     })))
@@ -124,6 +130,7 @@
                 const result = await resourceTypes[resourceType].availability()
                 newUnused.push({
                     id: resourceType,
+                    type: resourceType,
                     lastUsed: 'Never',
                     status: result.available ? 'Available' : 'Unavailable',
                     error: result.error
@@ -131,6 +138,7 @@
             } catch (e) {
                 newUnused.push({
                     id: resourceType,
+                    type: resourceType,
                     lastUsed: 'Never',
                     status: 'Unavailable',
                     error: 'Test function failed'
@@ -159,7 +167,7 @@
 
 <svelte:window onclick={handleClickOutside} onmousedown={handleMouseDownOutside} />
 
-<RightSidebar title="Resources" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
+<RightSidebar title="Resources" onClose={handleClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
 		<div class="resources-controls">
 			<div class="scope-control">
@@ -185,14 +193,17 @@
                     {#if !collapsedSections[section.id]}
                         <div class="resource-cards">
                             {#each resourceData[section.id] as resource (resource.id)}
-                                {@const resourceType = resourceTypes[resource.id] || { name: resource.id, icon: '❓', description: 'Unknown resource type' }}
-                                <div class="resource-card">
+                                {@const resourceType = resourceTypes[resource.type] || { name: resource.type, icon: '❓', description: 'Unknown resource type' }}
+                                <div class="resource-card" class:unseen={resource.unseen}>
                                     <div class="resource-header">
                                         <span class="resource-icon">{@html resourceType.icon}</span>
                                         <div class="resource-info">
                                             <h4 class="resource-name">{resourceType.name}</h4>
                                             <p class="resource-description">{resourceType.description}</p>
                                         </div>
+                                        {#if resource.unseen}
+                                            <div class="unseen-indicator" title="New request"></div>
+                                        {/if}
                                     </div>
                                     <div class="resource-details">
                                         <div class="resource-status {resource.status.toLowerCase().replace(' ', '-')}">
@@ -231,23 +242,22 @@
                                         </div>
                                         <div class="resource-actions">
                                             <div class="accept-dropdown">
-                                                <button class="accept-btn main" onmousedown={() => acceptResource(resource.id)}>Allow</button>
-                                                <button class="accept-btn dropdown" aria-label="Accept options" onmousedown={(event) => toggleAcceptDropdown(resource.id, event)}>
+                                                <button class="accept-btn main" onmousedown={() => acceptResource(resource.type)}>Allow</button>
+                                                <button class="accept-btn dropdown" aria-label="Accept options" onmousedown={(event) => toggleAcceptDropdown(resource.type, event)}>
                                                     <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
                                                         <path d="M2 3L4 5L6 3" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
                                                     </svg>
                                                 </button>
-                                                {#if openAcceptDropdown === resource.id}
+                                                {#if openAcceptDropdown === resource.type}
                                                     <div class="dropdown-menu" role="menu" tabindex="-1" onmousedown={(event) => { event.stopPropagation(); event.preventDefault(); }} onkeydown={(event) => event.stopPropagation()}>
-                                                        <button onmouseup={(event) => acceptResource(resource.id, 'once', event)}>Allow once</button>
-                                                        <button onmouseup={(event) => acceptResource(resource.id, 'always', event)}>Always allow</button>
-                                                        <button onmouseup={(event) => acceptResource(resource.id, 'until', event)}>Allow until...</button>
+                                                        <button onmouseup={(event) => acceptResource(resource.type, 'always', event)}>Always allow (default)</button>
+                                                        <button onmouseup={(event) => acceptResource(resource.type, 'until-app-close', event)}>Allow until closing app</button>
                                                     </div>
                                                 {/if}
                                             </div>
-                                            <button class="action-btn deny" onmousedown={() => denyResource(resource.id)}>Deny</button>
-                                            <button class="action-btn mock" onmousedown={() => mockResource(resource.id)}>Mock</button>
-                                            <button class="action-btn ignore" onmousedown={() => ignoreResource(resource.id)}>Ignore</button>
+                                            <button class="action-btn deny" onmousedown={() => denyResource(resource.type)}>Deny</button>
+                                            <button class="action-btn mock" onmousedown={() => mockResource(resource.type)}>Mock</button>
+                                            <button class="action-btn ignore" onmousedown={() => ignoreResource(resource.type)}>Ignore</button>
                                         </div>
                                     {/if}
                                 </div>
@@ -385,11 +395,28 @@
         position: relative;
     }
 
+    .resource-card.unseen {
+        border-left: 2px solid rgba(59, 130, 246, 0.6);
+        padding-left: 8px;
+        margin-left: -2px;
+    }
+
     .resource-header {
         display: flex;
         align-items: flex-start;
         gap: 10px;
         margin-bottom: 6px;
+        position: relative;
+    }
+
+    .unseen-indicator {
+        width: 8px;
+        height: 8px;
+        background-color: #3b82f6;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 2px;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
     }
 
     .resource-icon {
@@ -703,6 +730,7 @@
         text-align: left;
         cursor: pointer;
         transition: background-color 0.15s ease;
+        white-space: nowrap;
     }
 
     .dropdown-menu button:hover {

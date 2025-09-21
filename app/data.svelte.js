@@ -852,6 +852,8 @@ export default {
 
     permissionRequest: (tabId, event) => {
         console.log('permissionRequest', tabId, event)
+
+        const origin = new URL(event.url).origin
         
         ledIndicators.permissionRequest = Date.now()
         
@@ -862,21 +864,30 @@ export default {
             // requestType: resource.requestType || 'foreground'
 
             requestId: crypto.randomUUID(),
-            permission: event.permission,
+            type: event.permission,
             url: event.url,
             tabId: tabId,
             agentId: null,
             status: 'requested',
             timestamp: new Date().toISOString(),
             instanceId: window.darcInstanceId,
-            windowId: window.darcWindowId
+            windowId: window.darcWindowId,
+            unseen: true
         }
 
         setTimeout(() => {
             ledIndicators.permissionRequest = 0
         }, 1000)
 
-        return { granted: false }
+        return { granted: true }
+    },
+
+    clearUnseenResourceFlags: () => {
+        for (const resourceKey of Object.keys(resources)) {
+            if (resources[resourceKey].unseen) {
+                resources[resourceKey].unseen = false
+            }
+        }
     },
 
     closeTab,

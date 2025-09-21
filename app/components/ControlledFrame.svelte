@@ -1,7 +1,7 @@
 <script>
     import data from '../data.svelte.js'
     import { fade } from 'svelte/transition'
-    import { untrack, onDestroy } from 'svelte'
+    import { untrack, onDestroy, tick } from 'svelte'
     import SSLErrorPage from './SSLErrorPage.svelte'
     import NetworkErrorPage from './NetworkErrorPage.svelte'
     import NewTab from './NewTab.svelte'
@@ -10,7 +10,6 @@
     import select from '../inject/select-patch.js?raw'
     import ipc from '../inject/ipc.js?raw'
     import contextMenu from '../inject/context-menu.js?raw'
-	import { DetachedBindMode } from 'three'
 
     let {
         tabId,
@@ -30,6 +29,7 @@
         inputDiffVisible = $bindable(),
         inputDiffTimeout = $bindable(),
         inputDiffData = $bindable(),
+        instantlyCleanupGlobalPreview = () => {},
         // observer,
     } = $props()
 
@@ -159,13 +159,9 @@
         return url?.startsWith('about:newtab') || url?.startsWith('about:blank')
     }
 
-    async function handlePermissionRequest(tabId, event) {
-        const { granted } = await data.permissionRequest(tabId, event)
-        
-        // console.log(event)
-        
-        // data.ledIndicators.permissionRequest = Date.now()
-
+    function handlePermissionRequest(tabId, event) {
+        const { granted } = data.permissionRequest(tabId, event)
+        // FIXME: permission requests only work sync?
         // requestedResources.push({
         //     permission: event.permission,
         //     url: event.url,
@@ -175,16 +171,17 @@
         //     lastUsed: 'now',
         //     status: 'Request'
         // })
+        console.log('handlePermissionRequesddd  Promiset', granted)
+        console.log('event', event)
+        //  event.cancel()
 
-        // console.log('📋 Permission request:', {
-        //     event,
-        //     tab
-        // })
-
-        // event.request.allow()
-        // console.log(`✅ [Permission Granted] ${event.permission} granted for ${event.url}`)
-       
-        granted ? event.request.allow() : event.request.deny()
+        if (res) {
+            event.request.allow()
+        } else {
+            event.request.deny()
+        }
+        // event.request.deny()
+        //    return granted ? event.request.allow() : event.request.deny()
     }
 
     // Check if an error code represents a certificate issue
@@ -499,6 +496,8 @@
             return
         }
 
+        hoveredLink = null
+        instantlyCleanupGlobalPreview()
         data.frames[tab.id].loading = true
 
         // console.log('handleLoadStart', event.url)
@@ -1192,7 +1191,6 @@ document.addEventListener('input', function(event) {
 
         // Handle response headers - strip some security headers and enhance CSP with app origin
         frame.request.onHeadersReceived.addListener((details) => {
-            console.log('onHeadersReceived', details)
             if (!details.responseHeaders) return
 
             const modifiedHeaders = []
@@ -1853,7 +1851,7 @@ document.addEventListener('input', function(event) {
         }, 3000)
     }
 
-     // user initiated clear data options clearData(options, types)
+    // user initiated clear data options clearData(options, types)
 
     let attached = false
     let frameWrapper = $state(null)
@@ -2012,7 +2010,6 @@ document.addEventListener('input', function(event) {
         oauthPopup = null
     }
 
-    // Handle OAuth popup events
     function handleOAuthPopupEvent(eventType, popupFrame, event) {
         if (!oauthPopup) return
 
@@ -2136,16 +2133,12 @@ document.addEventListener('input', function(event) {
         }
     }
 
-
-
-    // Handle keyboard events for OAuth popup
     function handleOAuthKeydown(event) {
         if (oauthPopup && event.key === 'Escape') {
             closeOAuthPopup()
         }
     }
 
-    // Svelte action to append the pre-created popup frame
     function appendPopupFrame(container, frame) {
         if (frame) {
             container.appendChild(frame)
@@ -2160,13 +2153,9 @@ document.addEventListener('input', function(event) {
         }
     }
 
-
-
-     // Auto-close timeout for OAuth popup
-     let oauthTimeout
+    let oauthTimeout
     $effect(() => {
         if (oauthPopup) {
-            // Set timeout to auto-close popup after 10 minutes
             oauthTimeout = setTimeout(() => {
                 console.log('[OAuth] Popup timeout - closing after 10 minutes')
                 closeOAuthPopup()
@@ -2176,7 +2165,6 @@ document.addEventListener('input', function(event) {
             oauthTimeout = null
         }
 
-        // Cleanup on component unmount
         return () => {
             if (oauthTimeout) {
                 clearTimeout(oauthTimeout)
@@ -2187,7 +2175,6 @@ document.addEventListener('input', function(event) {
 
 <svelte:window onkeydown={handleOAuthKeydown} />
 {#key tab?.partition || 'default'}
-    <!-- OAuth Popup Modal -->
     {#if oauthPopup}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -2197,7 +2184,6 @@ document.addEventListener('input', function(event) {
             transition:fade={{duration: 200}}
         ></div>
 
-        <!-- Popup frame container -->
         <div 
             class="oauth-popup-frame-container"
             style="width: {oauthPopup.width}px; height: {oauthPopup.height}px;"
@@ -2235,8 +2221,6 @@ document.addEventListener('input', function(event) {
 
         <div class="hidden" bind:this={anchor}></div>
 
-
-           
         {#if currentCertificateError}
             <SSLErrorPage
                 {tab}
