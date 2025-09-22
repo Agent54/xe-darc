@@ -26,8 +26,20 @@
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
-    let urlBarHovered = $state(false)
     let urlBarExpanded = $state(false)
+    let urlInput = $state(null)
+    let urlInputValue = $state('')
+    
+    // Focus the URL input when it becomes visible
+    $effect(() => {
+        if (urlBarExpanded && urlInput) {
+            urlInputValue = data.docs[data.spaceMeta.activeTabId]?.url || ''
+            setTimeout(() => {
+                urlInput.focus()
+                urlInput.select()
+            }, 1)
+        }
+    })
     
     let isManualScroll = false
     let previousSpaceIndex = -1
@@ -42,8 +54,11 @@
     }
     
     function handleMouseLeave() {
-        // Always set isHovered to false for resize handle logic
-        isHovered = false
+        // Don't hide sidebar when URL bar is expanded
+        if (!urlBarExpanded) {
+            // Always set isHovered to false for resize handle logic
+            isHovered = false
+        }
         
         // Close context menu when leaving sidebar
         if (spaceContextMenuId !== null) {
@@ -181,6 +196,10 @@
         }
         if (urlBarExpanded && !event.target.closest('.url-bar-container')) {
             urlBarExpanded = false
+            // Reset hover state since URL bar is no longer expanded
+            if (!event.target.closest('.sidebar-box')) {
+                isHovered = false
+            }
         }
     }
     
@@ -383,6 +402,52 @@
         }
     }
 
+    function handleUrlSubmit() {
+        if (!urlInputValue.trim() || !data.spaceMeta.activeTabId) {
+            urlBarExpanded = false
+            return
+        }
+        
+        try {
+            let url = new URL(urlInputValue)
+            data.navigate(data.spaceMeta.activeTabId, url.href)
+        } catch {
+            // Not a valid URL, treat as search
+            const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
+            let searchUrl
+            
+            switch (defaultSearchEngine) {
+                case 'kagi':
+                    searchUrl = new URL('https://kagi.com/search')
+                    break
+                case 'custom':
+                    const customUrl = localStorage.getItem('customSearchUrl')
+                    if (customUrl) {
+                        try {
+                            searchUrl = new URL(customUrl + encodeURIComponent(urlInputValue))
+                            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
+                            urlBarExpanded = false
+                            return
+                        } catch {
+                            // Fallback to Google if custom URL is invalid
+                            searchUrl = new URL('https://www.google.com/search')
+                        }
+                    } else {
+                        searchUrl = new URL('https://www.google.com/search')
+                    }
+                    break
+                default: // google
+                    searchUrl = new URL('https://www.google.com/search')
+                    break
+            }
+            
+            searchUrl.searchParams.set('q', urlInputValue)
+            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
+        }
+        
+        urlBarExpanded = false
+    }
+
 </script>
 
 <svelte:window onclick={handleClickOutside} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
@@ -420,15 +485,12 @@
         <div class="sidebar-content">
             <div class="url-bar-section">
                 <div class="url-bar-container" 
-                     class:hovered={urlBarHovered}
                      class:expanded={urlBarExpanded}
-                     onmouseenter={() => { urlBarHovered = true }}
-                     onmouseleave={() => { urlBarHovered = false }}
                      role="toolbar"
                      tabindex="0"
                      aria-label="URL bar with navigation controls">
                     
-                    <div class="url-bar-controls" class:visible={urlBarHovered && !urlBarExpanded}>
+                    <div class="url-bar-controls">
                         <button class="url-bar-button" title="Back" aria-label="Back">
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -457,11 +519,26 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                             </svg>
                         </button>
+                        <button class="url-bar-button" title="Copy URL" aria-label="Copy URL" onclick={() => { navigator.clipboard.writeText(data.docs[data.spaceMeta.activeTabId]?.url || '') }}>
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+                            </svg>
+                        </button>
+                        <button class="url-bar-button" title="Close" aria-label="Close" onclick={() => { urlBarExpanded = false }}>
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                     </div>
+
+                    {#if urlBarExpanded}
+                         <input bind:this={urlInput} bind:value={urlInputValue} style=" z-index: 2000; width: 100%; color: white; font-size: 12px; border: none; outline: none; background: transparent; padding: 8px;" onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUrlSubmit(); } else if (e.key === 'Escape') { e.preventDefault(); urlBarExpanded = false; } }} onblur={() => { urlBarExpanded = false }} />
+                    {:else}
+                        <button class="url-bar-url" onmousedown={() => { if (!urlBarExpanded) { urlBarExpanded = true; } }}>
+                            <UrlRenderer url={data.docs[data.spaceMeta.activeTabId]?.url || ''} variant="compact" />
+                        </button>
+                    {/if}
                     
-                    <button class="url-bar-url" onclick={() => { urlBarExpanded = !urlBarExpanded }}>
-                        <UrlRenderer url={data.docs[data.spaceMeta.activeTabId]?.url || ''} variant="compact" />
-                    </button>
                 </div>
             </div>
             
@@ -2102,7 +2179,6 @@
         right: -5px;
     }
     
-    /* URL Bar Section */
     .url-bar-section {
         flex-shrink: 0;
         margin-bottom: 10px;
@@ -2123,11 +2199,10 @@
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
-        width: calc(100% - 16px);
-        margin: 4px 8px;
+        width: calc(100% - 6px);
+        margin: -4px 4px;
         position: relative;
         overflow: visible;
-        z-index: 100;
     }
     
     .url-bar-container:hover {
@@ -2141,7 +2216,7 @@
         backdrop-filter: blur(20px);
         border: 1px solid hsl(0deg 0% 100% / 10%);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-        z-index: 1000;
+        z-index: 2000;
     }
     
     .url-bar-controls {
@@ -2150,21 +2225,26 @@
         gap: 4px;
         flex-shrink: 0;
         position: absolute;
-        left: 8px;
         top: 50%;
         transform: translateY(-50%);
         opacity: 0;
         visibility: hidden;
-        transition: opacity 150ms ease, visibility 150ms ease;
+        transition: opacity 150ms ease, visibility 150ms ease, left 150ms ease, right 150ms ease;
         background: rgba(0, 0, 0, 0.8);
         padding: 2px 4px;
         border-radius: 6px;
         backdrop-filter: blur(8px);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        z-index: 10;
+        z-index: 2010;
     }
     
-    .url-bar-controls.visible {
+    /* Position on left when not expanded (navigation controls) */
+    .url-bar-container:not(.expanded) .url-bar-controls {
+        left: 4px;
+    }
+    
+    
+    .url-bar-container:hover:not(.expanded) .url-bar-controls {
         opacity: 1;
         visibility: visible;
     }

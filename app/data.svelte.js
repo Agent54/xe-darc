@@ -626,6 +626,30 @@ export default {
         return result[0]
     },
 
+    disableZoomForAllFrames: () => {
+        Object.values(frames).forEach(frameData => {
+            if (frameData?.frame?.executeScript) {
+                frameData.frame.executeScript({
+                    code: 'window.darcZoomControl?.disable()'
+                }).catch(err => {
+                    console.log('Failed to disable zoom for frame:', err)
+                })
+            }
+        })
+    },
+
+    enableZoomForAllFrames: () => {
+        Object.values(frames).forEach(frameData => {
+            if (frameData?.frame?.executeScript) {
+                frameData.frame.executeScript({
+                    code: 'window.darcZoomControl?.enable()'
+                }).catch(err => {
+                    console.log('Failed to enable zoom for frame:', err)
+                })
+            }
+        })
+    },
+
     hibernateOthers: (keepTabId) => {
         for (const tabId of Object.keys(frames)) {
             if (!docs[tabId].pinned && tabId !== keepTabId) {

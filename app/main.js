@@ -37,7 +37,7 @@ document.addEventListener('touchmove', function (event) {
 document.addEventListener("wheel", e => {
 
   if (e.ctrlKey || e.metaKey) {
-    const gridViewOpen = viewMode === 'tile'
+    const gridViewOpen = data.ui.viewMode === 'tile'
     
     // Always prevent default zoom behavior when grid view is open
     if (gridViewOpen) {
@@ -140,6 +140,7 @@ document.addEventListener('keydown', function(event) {
 
 import { mount } from 'svelte'
 import App from './App.svelte'
+import data from './data.svelte.js'
 
 const app = mount(App, {
   target: document.getElementById('app'),

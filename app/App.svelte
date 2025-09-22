@@ -169,10 +169,9 @@
 
     let userMods = $state([])
     
-    let isEditingUrl = $state(false)
-    let editingUrlValue = $state('')
-    let urlInput = $state(null)
-
+    // let isEditingUrl = $state(false)
+    // let editingUrlValue = $state('')
+    // let urlInput = $state(null)
 
     function getEnabledUserMods(tab) {
         if (!tab?.url) return { css: [], js: [] }
@@ -506,7 +505,7 @@
     // Zoom threshold tracking
     let zoomOutCounter = $state(0)
     let zoomInCounter = $state(0)
-    const ZOOM_THRESHOLD = 22
+    const ZOOM_THRESHOLD = 20
     let zoomCounterTimeout = null
     
     // Handle zoom-out-at-max with threshold logic
@@ -2109,6 +2108,18 @@
         permissionRequestActive = data.ledIndicators.permissionRequest > 0
     })
 
+    let oldViewMode = null
+    // Control zoom state for all frames based on viewMode
+    $effect(() => {
+        if (data.ui.viewMode === 'tile') {
+            oldViewMode = data.ui.viewMode
+            data.disableZoomForAllFrames()
+        } else if (oldViewMode === 'tile') {
+            oldViewMode = null
+            data.enableZoomForAllFrames()
+        }
+    })
+
     // Auto-fade network and blocked request indicators after their duration
     $effect(() => {
         if (data.ledIndicators.networkAccess > 0) {
@@ -2366,77 +2377,77 @@
     }
 
     // URL editing functions
-    function startEditingUrl() {
-        if (!data.spaceMeta.activeTabId) return
-        isEditingUrl = true
-        const activeTab = data.docs[data.spaceMeta.activeTabId]
-        editingUrlValue = activeTab.url || ''
-        // Focus the input after it's rendered
-        setTimeout(() => {
-            if (urlInput) {
-                urlInput.focus()
-                urlInput.select()
-            }
-        }, 10)
-    }
+    // function startEditingUrl() {
+    //     if (!data.spaceMeta.activeTabId) return
+    //     isEditingUrl = true
+    //     const activeTab = data.docs[data.spaceMeta.activeTabId]
+    //     editingUrlValue = activeTab.url || ''
+    //     // Focus the input after it's rendered
+    //     setTimeout(() => {
+    //         if (urlInput) {
+    //             urlInput.focus()
+    //             urlInput.select()
+    //         }
+    //     }, 10)
+    // }
 
-    function stopEditingUrl() {
-        isEditingUrl = false
-        editingUrlValue = ''
-    }
+    // function stopEditingUrl() {
+    //     isEditingUrl = false
+    //     editingUrlValue = ''
+    // }
 
-    function handleUrlSubmit(event) {
-        event.preventDefault()
-        if (!editingUrlValue.trim() || !data.spaceMeta.activeTabId) {
-            stopEditingUrl()
-            return
-        }
+    // function handleUrlSubmit(event) {
+    //     event.preventDefault()
+    //     if (!editingUrlValue.trim() || !data.spaceMeta.activeTabId) {
+    //         stopEditingUrl()
+    //         return
+    //     }
         
-        try {
-            let url = new URL(editingUrlValue)
-            data.navigate(data.spaceMeta.activeTabId, url.href)
-        } catch {
-            // Not a valid URL, treat as search
-            const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
-            let searchUrl
+    //     try {
+    //         let url = new URL(editingUrlValue)
+    //         data.navigate(data.spaceMeta.activeTabId, url.href)
+    //     } catch {
+    //         // Not a valid URL, treat as search
+    //         const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
+    //         let searchUrl
             
-            switch (defaultSearchEngine) {
-                case 'kagi':
-                    searchUrl = new URL('https://kagi.com/search')
-                    break
-                case 'custom':
-                    const customUrl = localStorage.getItem('customSearchUrl')
-                    if (customUrl) {
-                        try {
-                            searchUrl = new URL(customUrl + encodeURIComponent(editingUrlValue))
-                            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
-                            stopEditingUrl()
-                            return
-                        } catch {
-                            // Fallback to Google if custom URL is invalid
-                            searchUrl = new URL('https://www.google.com/search')
-                        }
-                    } else {
-                        searchUrl = new URL('https://www.google.com/search')
-                    }
-                    break
-                default: // google
-                    searchUrl = new URL('https://www.google.com/search')
-                    break
-            }
+    //         switch (defaultSearchEngine) {
+    //             case 'kagi':
+    //                 searchUrl = new URL('https://kagi.com/search')
+    //                 break
+    //             case 'custom':
+    //                 const customUrl = localStorage.getItem('customSearchUrl')
+    //                 if (customUrl) {
+    //                     try {
+    //                         searchUrl = new URL(customUrl + encodeURIComponent(editingUrlValue))
+    //                         data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
+    //                         stopEditingUrl()
+    //                         return
+    //                     } catch {
+    //                         // Fallback to Google if custom URL is invalid
+    //                         searchUrl = new URL('https://www.google.com/search')
+    //                     }
+    //                 } else {
+    //                     searchUrl = new URL('https://www.google.com/search')
+    //                 }
+    //                 break
+    //             default: // google
+    //                 searchUrl = new URL('https://www.google.com/search')
+    //                 break
+    //         }
             
-            searchUrl.searchParams.set('q', editingUrlValue)
-            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
-        }
+    //         searchUrl.searchParams.set('q', editingUrlValue)
+    //         data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
+    //     }
         
-        stopEditingUrl()
-    }
+    //     stopEditingUrl()
+    // }
 
-    function handleUrlKeydown(event) {
-        if (event.key === 'Escape') {
-            stopEditingUrl()
-        }
-    }
+    // function handleUrlKeydown(event) {
+    //     if (event.key === 'Escape') {
+    //         stopEditingUrl()
+    //     }
+    // }
 
     function setupFallbackColor() {
         if (!controlledFrameSupported) {
@@ -3512,7 +3523,8 @@
            {devModeEnabled} />
 
 
-<div class="frame-title-bar" class:window-controls-overlay={headerPartOfMain} class:editing-url={isEditingUrl}>
+<!-- 
+<div class="frame-title-bar" class:window-controls-overlay={headerPartOfMain} class:editing-url={isEditingUrl} >
     <div class="frame-header-controls">
         <button class="frame-button" title="Back" aria-label="Back" onclick={goBack}>
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
@@ -3554,7 +3566,7 @@
     </div>
 
     <div class="frame-header-actions">
-        <!-- <button class="frame-button" title="{tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.pinned ? 'Unpin Tab' : 'Pin Tab'}" aria-label="{tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.pinned ? 'Unpin Tab' : 'Pin Tab'}" onclick={() => togglePinTab(tabs.find(tab => tab.id === data.spaceMeta.activeTab))}>
+       <button class="frame-button" title="{tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.pinned ? 'Unpin Tab' : 'Pin Tab'}" aria-label="{tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.pinned ? 'Unpin Tab' : 'Pin Tab'}" onclick={() => togglePinTab(tabs.find(tab => tab.id === data.spaceMeta.activeTab))}>
             {#if tabs.find(tab => tab.id === data.spaceMeta.activeTab)?.pinned}
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2a1 1 0 0 1 2 0v2h6V2a1 1 0 0 1 2 0v2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v6a1 1 0 0 1-1 1h-2v3a1 1 0 0 1-2 0v-3H8a1 1 0 0 1-1-1V9H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1z" />
@@ -3564,20 +3576,23 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2a1 1 0 0 1 2 0v2h6V2a1 1 0 0 1 2 0v2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v6a1 1 0 0 1-1 1h-2v3a1 1 0 0 1-2 0v-3H8a1 1 0 0 1-1-1V9H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1z" />
                 </svg>
             {/if}
-        </button> -->
+        </button>
+
         <button class="frame-button" title="Settings" aria-label="Settings">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
             </svg>
         </button>
+
+        TODO: ? 
         <button class="frame-button frame-close" title="Close Tab" aria-label="Close Tab" onmousedown={(e) => closeTab(data.docs[data.spaceMeta.activeTabId], e)}>
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
         </button>
     </div>
-</div>
+</div> -->
 
 <div class="controlled-frame-container browser-frame" 
      class:window-controls-overlay={headerPartOfMain} 

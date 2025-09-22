@@ -1256,3 +1256,11 @@ notifications
 origin defined containers
 
 download rules per domain and filename pattern.
+
+hermetic frames mode with same origin apradim where after accessing one origin no other communication is allowed
+
+atreyu app framework base setup for apps?
+
+coactivity loop with random triggers/ schedule integration/ location/ time aware!
+
+setup prper frame IPC

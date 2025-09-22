@@ -67,11 +67,19 @@
     event.stopPropagation()
     onTabClose(tab, event)
   }
+
+  // Handle background click to close tab overview
+  function handleBackgroundClick(event) {
+    if (event.target === gridContainer) {
+      onViewModeChange()
+    }
+  }
 </script>
 
 <div 
   class="grid-view"
   bind:this={gridContainer}
+  onmousedown={handleBackgroundClick}
   style="--left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --tab-sidebar-width: {tabSidebarWidth}px; --sidebar-width: {rightSidebarWidth}px; --space-taken: {spaceTaken}px;"
 >
   {#each tabs as tab, index (tab.id)}
