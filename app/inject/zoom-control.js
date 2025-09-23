@@ -23,4 +23,4 @@ document.addEventListener('wheel', function(event) {
         const zoomDirection = event.deltaY < 0 ? 'in' : 'out'
         console.log(`iwa:zoom:${tabId}:${zoomDirection}`)
     }
-}, { passive: false, capture: true })
+}, { passive: false, capture: false })

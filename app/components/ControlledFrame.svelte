@@ -176,7 +176,7 @@
         console.log('event', event)
         //  event.cancel()
 
-        if (res) {
+        if (granted) {
             event.request.allow()
         } else {
             event.request.deny()

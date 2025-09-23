@@ -777,7 +777,7 @@ export default {
         // })
     },
     
-    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus } = {}) => {
+    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned } = {}) => {
         // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
 
@@ -793,7 +793,8 @@ export default {
             opener,
             preview: !!preview,
             archive: preview ? 'preview' : undefined,
-            lightbox: !!lightbox
+            lightbox: !!lightbox,
+            pinned
         }
 
         if (!spaces[spaceId].tabs?.length) {
@@ -915,7 +916,7 @@ export default {
             ledIndicators.permissionRequest = 0
         }, 1000)
 
-        return { granted: true }
+        return { granted: false }
     },
 
     clearUnseenResourceFlags: () => {

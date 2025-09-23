@@ -989,7 +989,10 @@
 
     function reloadActiveTab() {
         if (data.spaceMeta.activeTabId) {
-            reloadTab(data.spaceMeta.activeTabId)
+            const activeTab = data.docs[data.spaceMeta.activeTabId]
+            if (activeTab) {
+                reloadTab(activeTab)
+            }
         }
     }
 
@@ -3520,7 +3523,18 @@
            {tabSidebarVisible} 
            {isResizingTabSidebar} 
            onStartResizeTabSidebar={startResizeTabSidebar}
-           {devModeEnabled} />
+           {devModeEnabled}
+           onGoBack={goBack}
+           onGoForward={goForward}
+           onReload={reloadActiveTab}
+           onCloseTab={() => {
+               if (data.spaceMeta.activeTabId) {
+                   const activeTab = data.docs[data.spaceMeta.activeTabId]
+                   if (activeTab) {
+                       closeTab(activeTab)
+                   }
+               }
+           }} />
 
 
 <!-- 

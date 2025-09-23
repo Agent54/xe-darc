@@ -7,7 +7,11 @@
         tabSidebarVisible = false,
         isResizingTabSidebar = false,
         onStartResizeTabSidebar = null,
-        devModeEnabled = false
+        devModeEnabled = false,
+        onGoBack = null,
+        onGoForward = null,
+        onReload = null,
+        onCloseTab = null
     } = $props()
     import data from '../data.svelte.js'
     import Favicon from './Favicon.svelte'
@@ -29,6 +33,8 @@
     let urlBarExpanded = $state(false)
     let urlInput = $state(null)
     let urlInputValue = $state('')
+    let copyUrlSuccess = $state(false)
+    let navigationStateRefresh = $state(0)
     
     // Focus the URL input when it becomes visible
     $effect(() => {
@@ -48,6 +54,8 @@
     // TODO: active tab on tab title and track active tabs per space, show active tab in each space
 
     const globallyPinnedTabs = $derived(data.spaceMeta.globalPins)
+    
+
     
     function handleMouseEnter() {
         isHovered = true
@@ -448,6 +456,124 @@
         urlBarExpanded = false
     }
 
+    // Navigation button handlers
+    function handleBackClick() {
+        if (onGoBack) {
+            onGoBack()
+        }
+    }
+
+    function handleForwardClick() {
+        if (onGoForward) {
+            onGoForward()
+        }
+    }
+
+    function handleReloadClick() {
+        if (onReload) {
+            onReload()
+        }
+    }
+
+    function handleCloseTabClick() {
+        if (onCloseTab) {
+            onCloseTab()
+        }
+    }
+
+    async function handleCopyUrlClick() {
+        const activeTab = data.docs[data.spaceMeta.activeTabId]
+        if (activeTab?.url) {
+            try {
+                await navigator.clipboard.writeText(activeTab.url)
+                copyUrlSuccess = true
+                setTimeout(() => {
+                    copyUrlSuccess = false
+                }, 1500) // Show checkmark for 1.5 seconds
+            } catch (err) {
+                console.error('Failed to copy URL:', err)
+            }
+        }
+    }
+
+    async function handleDevToolsClick() {
+        try {
+            // Get dev tools list to find the correct context ID
+            const response = await fetch('/devtools-api/json/list')
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+            }
+            const devToolsData = await response.json()
+            
+            const activeTab = data.docs[data.spaceMeta.activeTabId]
+            if (!activeTab?.url) return
+            
+            // Find matching dev tools entry for current tab URL
+            let matchingItem = devToolsData.find(item => {
+                return item.url === activeTab.url || item.title === activeTab.title
+            })
+            
+            // If multiple URLs exist for the same site, use hash trick to find correct ID
+            if (!matchingItem && devToolsData.length > 1) {
+                const originalUrl = activeTab.url
+                const randomHash = Math.random().toString(36).substring(2, 15)
+                
+                try {
+                    // Change URL hash to identify this specific tab
+                    const urlWithHash = originalUrl.includes('#') 
+                        ? originalUrl.replace(/#.*$/, `#${randomHash}`)
+                        : `${originalUrl}#${randomHash}`
+                    
+                    // Navigate to the URL with hash
+                    data.navigate(data.spaceMeta.activeTabId, urlWithHash)
+                    
+                    // Wait a moment for the change to register
+                    await new Promise(resolve => setTimeout(resolve, 1))
+                    
+                    // Fetch updated dev tools list
+                    const updatedResponse = await fetch('/devtools-api/json/list')
+                    if (updatedResponse.ok) {
+                        const updatedData = await updatedResponse.json()
+                        matchingItem = updatedData.find(item => item.url?.includes(randomHash))
+                    }
+                    
+                    // Restore original URL
+                    data.navigate(data.spaceMeta.activeTabId, originalUrl)
+                } catch (err) {
+                    console.warn('Hash trick failed:', err)
+                }
+            }
+            
+            // Default to first item if still no match
+            if (!matchingItem && devToolsData.length > 0) {
+                matchingItem = devToolsData[0]
+            }
+            
+            if (matchingItem?.devtoolsFrontendUrl) {
+                // Replace the remote DevTools frontend with local one while keeping WebSocket params
+                const originalUrl = new URL(matchingItem.devtoolsFrontendUrl)
+                const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html${originalUrl.search}`
+                
+                await data.newTab(data.spaceMeta.activeSpace, { 
+                    url: localDevToolsUrl, 
+                    title: `DevTools - ${activeTab.title || 'Untitled'}`,
+                    shouldFocus: true,
+                    pinned: 'right'
+                })
+                
+                // if (devToolsTab) {
+                //     // Pin the dev tools tab to the right after a small delay to ensure DB persistence
+                //     setTimeout(() => {
+                //         data.pin({ tabId: devToolsTab.id, pinned: 'right' })
+                //     }, 1)
+                //     data.activate(devToolsTab.id)
+                // }
+            }
+        } catch (err) {
+            console.error('Failed to open dev tools:', err)
+        }
+    }
+
 </script>
 
 <svelte:window onclick={handleClickOutside} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
@@ -491,23 +617,30 @@
                      aria-label="URL bar with navigation controls">
                     
                     <div class="url-bar-controls">
-                        <button class="url-bar-button" title="Back" aria-label="Back">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                            </svg>
-                        </button>
-                        <button class="url-bar-button" title="Forward" aria-label="Forward">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                            </svg>
-                        </button>
-                        <button class="url-bar-button" title="Reload" aria-label="Reload">
+                        {#if true} 
+                        <!-- canGoBack -->
+                            <button class="url-bar-button" title="Back" aria-label="Back" onmousedown={handleBackClick}>
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                                </svg>
+                            </button>
+                        {/if}
+
+                        <!-- canGoForward -->
+                        {#if true}
+                            <button class="url-bar-button" title="Forward" aria-label="Forward" onmousedown={handleForwardClick}>
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                </svg>
+                            </button>
+                        {/if}
+                        <button class="url-bar-button" title="Reload" aria-label="Reload" onmousedown={handleReloadClick}>
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
                             </svg>
                         </button>
                         {#if devModeEnabled}
-                            <button class="url-bar-button" title="Open Developer Tools" aria-label="Open Developer Tools">
+                            <button class="url-bar-button" title="Open Developer Tools" aria-label="Open Developer Tools" onmousedown={handleDevToolsClick}>
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
                                 </svg>
@@ -519,12 +652,22 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                             </svg>
                         </button>
-                        <button class="url-bar-button" title="Copy URL" aria-label="Copy URL" onclick={() => { navigator.clipboard.writeText(data.docs[data.spaceMeta.activeTabId]?.url || '') }}>
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
-                            </svg>
+                        <button class="url-bar-button" 
+                                class:success={copyUrlSuccess}
+                                title={copyUrlSuccess ? "Copied!" : "Copy URL"} 
+                                aria-label={copyUrlSuccess ? "Copied!" : "Copy URL"} 
+                                onmousedown={handleCopyUrlClick}>
+                            {#if copyUrlSuccess}
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                            {:else}
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+                                </svg>
+                            {/if}
                         </button>
-                        <button class="url-bar-button" title="Close" aria-label="Close" onclick={() => { urlBarExpanded = false }}>
+                        <button class="url-bar-button" title="Close Tab" aria-label="Close Tab" onmousedown={handleCloseTabClick}>
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                             </svg>
@@ -2301,6 +2444,11 @@
     
     .url-bar-url:hover {
         color: rgba(255, 255, 255, 0.9);
+    }
+    
+    .url-bar-button.success {
+        color: #22c55e !important;
+        background: rgba(34, 197, 94, 0.1) !important;
     }
 </style>
 
