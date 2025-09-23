@@ -510,11 +510,11 @@
     
     // Handle zoom-out-at-max with threshold logic
     function handleZoomOutAtMaxInternal(event) {
-        console.log('📱 [TAB-OVERVIEW] Zoom out at max detected, checking threshold [v2.0]')
+        // console.log('📱 [TAB-OVERVIEW] Zoom out at max detected, checking threshold [v2.0]')
         
         // Only process if we're not already in grid view
         if (data.ui.viewMode !== 'default') {
-            console.log('🔍 [ZOOM-THRESHOLD] Already in non-default view mode, ignoring')
+            // console.log('🔍 [ZOOM-THRESHOLD] Already in non-default view mode, ignoring')
             return
         }
         
@@ -522,7 +522,7 @@
         zoomInCounter = 0
         zoomOutCounter++
         
-        console.log(`🔍 [ZOOM-THRESHOLD] Zoom out counter: ${zoomOutCounter}/${ZOOM_THRESHOLD} (viewMode: ${data.ui.viewMode})`)
+        // console.log(`🔍 [ZOOM-THRESHOLD] Zoom out counter: ${zoomOutCounter}/${ZOOM_THRESHOLD} (viewMode: ${data.ui.viewMode})`)
         
         // Clear existing timeout
         if (zoomCounterTimeout) {
@@ -537,7 +537,7 @@
         
         // Only open grid view if threshold is reached
         if (zoomOutCounter >= ZOOM_THRESHOLD) {
-            console.log('📱 [TAB-OVERVIEW] Opening grid view - threshold reached')
+            // console.log('📱 [TAB-OVERVIEW] Opening grid view - threshold reached')
             selectViewMode('tile')
             // Reset both counters after action to prevent immediate bounce back
             zoomOutCounter = 0
@@ -552,11 +552,11 @@
     
     // Handle zoom-in events to close grid view
     function handleZoomIn(event) {
-        console.log('🔍 [ZOOM-IN] Zoom in detected, checking threshold [v2.0]')
+        // console.log('🔍 [ZOOM-IN] Zoom in detected, checking threshold [v2.0]')
         
         // Only process if we're currently in tile view
         if (data.ui.viewMode !== 'tile') {
-            console.log('🔍 [ZOOM-THRESHOLD] Not in tile view mode, ignoring')
+            // console.log('🔍 [ZOOM-THRESHOLD] Not in tile view mode, ignoring')
             return
         }
         
@@ -564,7 +564,7 @@
         zoomOutCounter = 0
         zoomInCounter++
         
-        console.log(`🔍 [ZOOM-THRESHOLD] Zoom in counter: ${zoomInCounter}/${ZOOM_THRESHOLD} (viewMode: ${data.ui.viewMode})`)
+        // console.log(`🔍 [ZOOM-THRESHOLD] Zoom in counter: ${zoomInCounter}/${ZOOM_THRESHOLD} (viewMode: ${data.ui.viewMode})`)
         
         // Clear existing timeout
         if (zoomCounterTimeout) {
@@ -579,7 +579,7 @@
         
         // Only close grid view if threshold is reached
         if (zoomInCounter >= ZOOM_THRESHOLD) {
-            console.log('🔍 [ZOOM-IN] Closing grid view - threshold reached')
+            // console.log('🔍 [ZOOM-IN] Closing grid view - threshold reached')
             selectViewMode('default')
             // Reset both counters after action to prevent immediate bounce back
             zoomOutCounter = 0
@@ -2111,7 +2111,9 @@
     let oldViewMode = null
     // Control zoom state for all frames based on viewMode
     $effect(() => {
+        
         if (data.ui.viewMode === 'tile') {
+            console.log('viewMode changed to:', { mode : data.ui.viewMode })
             oldViewMode = data.ui.viewMode
             data.disableZoomForAllFrames()
         } else if (oldViewMode === 'tile') {
@@ -2520,8 +2522,6 @@
         return baseSpace - reduction
     })
 </script>
-
-<svelte:body class:grid-view-open={data.ui.viewMode === 'tile'} />
 
 <!-- {#snippet trashIcon()}
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
@@ -3594,18 +3594,20 @@
     </div>
 </div> -->
 
-<div class="controlled-frame-container browser-frame" 
-     class:window-controls-overlay={headerPartOfMain} 
-     class:scrolling={isScrolling}
-     class:sidebar-open={openSidebars.size > 0}
-     class:no-transitions={isWindowResizing}
-     class:resizing-pinned-frames={isResizingPinnedFrames}
-     class:has-left-pins={leftPinnedTabs.length > 0 && !invisiblePins.left}
-     class:has-right-pins={rightPinnedTabs.length > 0 && !invisiblePins.right}
-     class:has-tab-sidebar={tabSidebarVisible}
-     onscroll={handleScroll} 
-     bind:this={scrollContainer}
-     style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --right-pinned-width: {(rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
+<div 
+    class:overlay-open={data.ui.viewMode === 'tile'}
+    class="controlled-frame-container browser-frame" 
+    class:window-controls-overlay={headerPartOfMain} 
+    class:scrolling={isScrolling}
+    class:sidebar-open={openSidebars.size > 0}
+    class:no-transitions={isWindowResizing}
+    class:resizing-pinned-frames={isResizingPinnedFrames}
+    class:has-left-pins={leftPinnedTabs.length > 0 && !invisiblePins.left}
+    class:has-right-pins={rightPinnedTabs.length > 0 && !invisiblePins.right}
+    class:has-tab-sidebar={tabSidebarVisible}
+    onscroll={handleScroll} 
+    bind:this={scrollContainer}
+    style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --right-pinned-width: {(rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
 
     {#if data.ui.viewMode === 'tile'}
         <GridView {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} onTabActivate={activateTab} onViewModeChange={toggleViewMode} onTabClose={closeTab} {leftPinnedWidth} {rightPinnedWidth} {rightSidebarWidth} tabSidebarWidth={tabSidebarVisible ? (customTabSidebarWidth || 263) : 0} {spaceTaken} />
@@ -3988,13 +3990,13 @@
     .apps-overlay {
         border-top: 10px solid black;
         position: fixed;
-        top: 33px;
+        top: 35px;
         left: 0;
         right: 0;
         bottom: 0;
         background: rgba(0, 0, 0, 0.8);
         backdrop-filter: blur(12px);
-        z-index: 4;
+        z-index: 1002;
         display: flex;
         align-items: center;
         justify-content: center;

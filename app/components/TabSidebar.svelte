@@ -781,7 +781,7 @@
     .sidebar-box {
         background: transparent;
         position: fixed;
-        z-index: 5;
+        z-index: 2000;
         bottom: 9px;
         top: 43px;
         left: 0px;
@@ -2225,7 +2225,7 @@
         gap: 4px;
         flex-shrink: 0;
         position: absolute;
-        top: 50%;
+        top: 150%;
         transform: translateY(-50%);
         opacity: 0;
         visibility: hidden;
@@ -2236,6 +2236,7 @@
         backdrop-filter: blur(8px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         z-index: 2010;
+        box-shadow: 1px 16px 10px 10px #000000bf;
     }
     
     /* Position on left when not expanded (navigation controls) */

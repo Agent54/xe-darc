@@ -80,6 +80,10 @@
   class="grid-view"
   bind:this={gridContainer}
   onmousedown={handleBackgroundClick}
+  onkeydown={(e) => { if (e.key === 'Escape') handleBackgroundClick(e) }}
+  role="button"
+  tabindex="0"
+  aria-label="Close tab overview"
   style="--left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --tab-sidebar-width: {tabSidebarWidth}px; --sidebar-width: {rightSidebarWidth}px; --space-taken: {spaceTaken}px;"
 >
   {#each tabs as tab, index (tab.id)}
@@ -156,7 +160,7 @@
     position: fixed;
     top: 35px;
     left: calc(var(--left-pinned-width, 0px) + var(--tab-sidebar-width, 0px));
-    width: calc(100% - var(--space-taken, 0px));
+    width: calc(100% - var(--space-taken, 0px) - 2px);
     height: calc(100vh - 35px);
     background: rgba(0, 0, 0, 0.95);
     backdrop-filter: blur(8px);
@@ -168,7 +172,7 @@
     padding: 40px;
     place-content: center;
     place-items: center;
-    z-index: 2000;
+    z-index: 1000;
     opacity: 0;
     animation: grid-fade-in 0.3s cubic-bezier(0, 1, 0.3, 1) forwards;
   }

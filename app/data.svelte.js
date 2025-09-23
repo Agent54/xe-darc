@@ -626,14 +626,22 @@ export default {
         return result[0]
     },
 
+
+    // TODO: this is not reliable, move to ipc scoped method
     disableZoomForAllFrames: () => {
+        console.log('🔍 [ZOOM-CONTROL] disabling zoom for all frames')
         Object.values(frames).forEach(frameData => {
+            console.log('frameData', frameData)
             if (frameData?.frame?.executeScript) {
-                frameData.frame.executeScript({
-                    code: 'window.darcZoomControl?.disable()'
-                }).catch(err => {
+                try {   
+                    console.log(frameData.frame.executeScript({
+                        code: 'window.darcZoomControl?.disable()'
+                    }).catch(err => {
+                        console.log('Failed to disable zoom for frame:', err)
+                    }))
+                } catch (err) {
                     console.log('Failed to disable zoom for frame:', err)
-                })
+                }
             }
         })
     },
@@ -641,11 +649,15 @@ export default {
     enableZoomForAllFrames: () => {
         Object.values(frames).forEach(frameData => {
             if (frameData?.frame?.executeScript) {
-                frameData.frame.executeScript({
-                    code: 'window.darcZoomControl?.enable()'
-                }).catch(err => {
+                try {   
+                    frameData.frame.executeScript({
+                        code: 'window.darcZoomControl?.enable()'
+                    }).catch(err => {
+                        console.log('Failed to enable zoom for frame:', err)
+                    })
+                } catch (err) {
                     console.log('Failed to enable zoom for frame:', err)
-                })
+                }
             }
         })
     },

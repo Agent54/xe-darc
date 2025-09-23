@@ -37,6 +37,12 @@ document.addEventListener('touchmove', function (event) {
 document.addEventListener("wheel", e => {
 
   if (e.ctrlKey || e.metaKey) {
+
+    e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+      return false
+
     const gridViewOpen = data.ui.viewMode === 'tile'
     
     // Always prevent default zoom behavior when grid view is open

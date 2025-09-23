@@ -1264,3 +1264,5 @@ atreyu app framework base setup for apps?
 coactivity loop with random triggers/ schedule integration/ location/ time aware!
 
 setup prper frame IPC
+
+window options to size and position to nice ratios

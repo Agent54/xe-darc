@@ -11,6 +11,7 @@ window.darcZoomControl = {
 }
 
 document.addEventListener('wheel', function(event) {
+    // console.log('wheel', { zoomDisabled, event})
     if (event.ctrlKey || event.metaKey) {
         if (zoomDisabled) {
             event.preventDefault()
