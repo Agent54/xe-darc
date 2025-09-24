@@ -2391,12 +2391,6 @@
         box-shadow: 1px 16px 10px 10px #000000bf;
     }
     
-    /* Position on left when not expanded (navigation controls) */
-    .url-bar-container:not(.expanded) .url-bar-controls {
-        left: 4px;
-    }
-    
-    
     .url-bar-section:hover:not(.expanded) .url-bar-controls {
         opacity: 1;
         visibility: visible;

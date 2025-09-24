@@ -80,14 +80,40 @@
             event.stopPropagation()
             event.preventDefault()
         }
-        console.log('Accept resource:', resourceId, 'with permission:', permission)
+        
+        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
+        if (!currentUrl) {
+            console.warn('No current URL found for permission request')
+            return
+        }
+        
+        const origin = new URL(currentUrl).origin
+        const success = data.allowPermission(resourceId, origin, permission)
+        
+        if (success) {
+            console.log('Accept resource:', resourceId, 'with permission:', permission, 'for origin:', origin)
+        } else {
+            console.warn('Failed to accept resource:', resourceId)
+        }
+        
         openAcceptDropdown = null
-        // TODO: Implement actual acceptance logic
     }
     
     function denyResource(resourceId) {
-        console.log('Deny resource:', resourceId)
-        // TODO: Implement actual denial logic
+        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
+        if (!currentUrl) {
+            console.warn('No current URL found for permission request')
+            return
+        }
+        
+        const origin = new URL(currentUrl).origin
+        const success = data.denyPermission(resourceId, origin)
+        
+        if (success) {
+            console.log('Deny resource:', resourceId, 'for origin:', origin)
+        } else {
+            console.warn('Failed to deny resource:', resourceId)
+        }
     }
     
     function mockResource(resourceId) {
@@ -96,9 +122,22 @@
     }
     
     function ignoreResource(resourceId) {
-        console.log('Ignore resource:', resourceId)
-        // TODO: Implement actual ignore logic
+        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
+        if (!currentUrl) {
+            console.warn('No current URL found for permission request')
+            return
+        }
+        
+        const origin = new URL(currentUrl).origin
+        const success = data.ignorePermission(resourceId, origin)
+        
+        if (success) {
+            console.log('Ignore resource:', resourceId, 'for origin:', origin)
+        } else {
+            console.warn('Failed to ignore resource:', resourceId)
+        }
     }
+    
     
     function toggleAcceptDropdown(resourceId, event) {
         event.stopPropagation()
@@ -150,18 +189,70 @@
         isCheckingAvailability = false
     }
 
-    const resourceData = $derived({
-        requested: [],
-        used: [],
-        mocked: [],
-        blocked: [],
-        unused,
-        archived: [],
+    const resourceData = $derived.by(() => {
 
-        ...Object.values(data.resources).reduce((acc, resource) => {
-            acc[resource.status] = [...(acc[resource.status] || []), resource]
-            return acc
-        }, {})
+        const requested = []
+        const used = []
+        const mocked = []
+        const blocked = []
+
+        const archived = []
+
+        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
+        if (!currentUrl && scope === 'origin') {
+            return {
+                requested,
+                used,
+                mocked,
+                blocked,
+                unused: unused.filter(unusedResource => !usedResourceTypes.has(unusedResource.type)),
+                archived
+            }
+        }
+        const origin = new URL(currentUrl).origin // scope === 'origin' ? origin(tab.url) : null
+      
+
+        const usedResourceTypes = new Set()
+
+        Object.entries(data.permissions).forEach(([resourceType, permission]) => {
+            if (scope === 'origin') {
+                const request = permission.origins?.[origin]?.requests?.at(-1)
+                if (request?.status === 'requested') {
+                    requested.push(request)
+                    usedResourceTypes.add(resourceType)
+                } else if (request?.status === 'granted') {
+                    used.push(request)
+                    usedResourceTypes.add(resourceType)
+                } else if (request?.status === 'denied') {
+                    blocked.push(request)
+                    usedResourceTypes.add(resourceType)
+                } else if (request?.status === 'mocked') {
+                    mocked.push(request)
+                    usedResourceTypes.add(resourceType)
+                } else if (request?.status === 'ignored') {
+                    archived.push(request)
+                    usedResourceTypes.add(resourceType)
+                }
+            } else {
+                console.warn('permission scopes other than origin not implemented')
+                return
+            }
+        })
+
+        return {
+            requested,
+            used,
+            mocked,
+            blocked,
+            unused: unused.filter(unusedResource => !usedResourceTypes.has(unusedResource.type)),
+            archived
+        }
+
+
+        // ...Object.values(data.resources).reduce((acc, resource) => {
+        //     acc[resource.status] = [...(acc[resource.status] || []), resource]
+        //     return acc
+        // }, {})
     })
 </script>
 
@@ -172,9 +263,9 @@
 		<div class="resources-controls">
 			<div class="scope-control">
 				<label class="sr-only" for="resources-scope">Scope</label>
-				<select id="resources-scope" aria-label="Scope" bind:value={scope} onmousedown={(e) => e.stopPropagation()} title={`${SCOPE_OPTIONS.find(o => o.id === scope)?.label}${scope === 'origin' ? ` (${origin})` : ''}`}>
+				<select id="resources-scope" aria-label="Scope" bind:value={scope} onmousedown={(e) => e.stopPropagation()} title={`${SCOPE_OPTIONS.find(o => o.id === scope)?.label}${scope === 'origin' && data.docs[data.spaceMeta.activeTabId]?.url ? ` (${new URL(data.docs[data.spaceMeta.activeTabId].url).origin})` : ''}`}>
 					{#each SCOPE_OPTIONS as opt}
-						<option value={opt.id} title={`${opt.label}${opt.id === 'origin' ? ` (${origin})` : ''}`}>{opt.label}{opt.id === 'origin' ? ` (${origin})` : ''}</option>
+						<option value={opt.id} title={`${opt.label}${opt.id === 'origin' && data.docs[data.spaceMeta.activeTabId]?.url ? ` (${new URL(data.docs[data.spaceMeta.activeTabId].url).origin})` : ''}`}>{opt.label}{opt.id === 'origin' && data.docs[data.spaceMeta.activeTabId]?.url ? ` (${new URL(data.docs[data.spaceMeta.activeTabId].url).origin})` : ''}</option>
 					{/each}
 				</select>
 			</div>
@@ -212,7 +303,7 @@
                                         </div>
                                         <div class="resource-last-used">
                                             <span class="last-used-label">Last used:</span>
-                                            <span class="last-used-time">{resource.lastUsed}</span>
+                                            <span class="last-used-time">{resource.timestamp ? new Date(resource.timestamp).toLocaleString('de-DE') : 'Never'}</span>
                                         </div>
                                         {#if resource.mockValue}
                                             <div class="resource-mock-value">
@@ -221,11 +312,66 @@
                                             </div>
                                         {/if}
                                     </div>
+                                    {#if resource.needsReload && (section.id === 'used' || section.id === 'blocked')}
+                                        <div class="resource-reload-reminder">
+                                            <div class="reload-message">
+                                                {#if section.id === 'used'}
+                                                    <span class="reload-text">You might need to reload the page for changes to take effect</span>
+                                                    <button class="reload-btn" onmousedown={() => data.reloadCurrentTab()} title="Reload page">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                                                            <path d="M21 3v5h-5"/>
+                                                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                                                            <path d="M3 21v-5h5"/>
+                                                        </svg>
+                                                        Reload
+                                                    </button>
+                                                {:else if section.id === 'blocked'}
+                                                    <span class="reload-text">Changes might require restarting Darc</span>
+                                                    <button class="reload-btn" onmousedown={() => console.log('Restart Darc - to be implemented')} title="Restart Darc">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                                        </svg>
+                                                        Restart Darc
+                                                    </button>
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    {/if}
+                                    {#if section.id !== 'requested'}
+                                        {#if section.id === 'unused'}
+                                            <button class="change-btn" onmousedown={() => data.permissionRequest(data.spaceMeta.activeTabId, {
+                                                permission: resource.type,
+                                                url: data.docs[data.spaceMeta.activeTabId]?.url,
+                                                requester: 'User (proactive)',
+                                                explanation: 'User-initiated proactive permission request',
+                                                requestType: 'always'
+                                            })} title="Request permission proactively">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                                                    <path d="M21 3v5h-5"/>
+                                                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                                                    <path d="M3 21v-5h5"/>
+                                                </svg>
+                                                Change
+                                            </button>
+                                        {:else}
+                                            <button class="change-btn" onmousedown={() => data.changePermission(resource.type, new URL(data.docs[data.spaceMeta.activeTabId]?.url).origin)} title="Change permission decision">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                                                    <path d="M21 3v5h-5"/>
+                                                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                                                    <path d="M3 21v-5h5"/>
+                                                </svg>
+                                                Change
+                                            </button>
+                                        {/if}
+                                    {/if}
                                     {#if section.id === 'requested'}
                                         <div class="resource-request-info">
                                             <div class="requester-info">
                                                 <span class="requester-label">Requested by:</span>
-                                                <span class="requester-name">{resource.requester}</span>
+                                                <span class="requester-name">{resource.requester || new URL(resource.url).origin}</span>
                                             </div>
                                             <div class="request-type-info">
                                                 <span class="request-type-label">Access type:</span>
@@ -287,6 +433,13 @@
 		display: flex;
 		justify-content: flex-end;
 		padding: 14px 0 10px 0;
+		position: sticky;
+		top: 0;
+		background: rgba(0, 0, 0, 0.95);
+		backdrop-filter: blur(12px);
+		z-index: 10;
+		margin: 0 -20px;
+		padding: 14px 20px 10px 20px;
 	}
 	.scope-control select {
 		appearance: none;
@@ -393,6 +546,7 @@
 
     .resource-card {
         position: relative;
+        padding-bottom: 30px; /* Make room for change button */
     }
 
     .resource-card.unseen {
@@ -804,5 +958,101 @@
     .action-btn.ignore:focus {
         background: rgba(107, 114, 128, 0.22);
         color: rgba(107, 114, 128, 1);
+    }
+
+    /* Resource Reload Reminder */
+    .resource-reload-reminder {
+        margin-top: 8px;
+        margin-right: 85px; /* Space for change button */
+        padding: 6px 8px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 4px;
+    }
+
+    .reload-message {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .reload-text {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.4);
+        line-height: 1.3;
+        flex: 1;
+    }
+
+    .reload-btn {
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.6);
+        border: none;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 500;
+        padding: 4px 6px;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        transition: background-color 0.15s ease, color 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        line-height: 1;
+        box-sizing: border-box;
+        outline: 0;
+        margin: 0;
+        flex-shrink: 0;
+    }
+
+    .reload-btn:hover,
+    .reload-btn:focus {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .reload-btn svg {
+        width: 10px;
+        height: 10px;
+    }
+    .change-btn {
+        position: absolute;
+        bottom: 6px;
+        right: 6px;
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.6);
+        border: none;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: 500;
+        padding: 4px 6px;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        transition: background-color 0.15s ease, color 0.15s ease, opacity 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        line-height: 1;
+        box-sizing: border-box;
+        outline: 0;
+        margin: 0;
+        opacity: 0;
+    }
+
+    .resource-card:hover .change-btn {
+        opacity: 1;
+    }
+
+    .change-btn:hover,
+    .change-btn:focus {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .change-btn svg {
+        width: 10px;
+        height: 10px;
     }
 </style>

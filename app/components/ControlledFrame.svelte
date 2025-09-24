@@ -172,8 +172,7 @@
         //     lastUsed: 'now',
         //     status: 'Request'
         // })
-        console.log('handlePermissionRequesddd  Promiset', granted)
-        console.log('event', event)
+
         //  event.cancel()
 
         if (granted) {
@@ -1342,25 +1341,29 @@ document.addEventListener('input', function(event) {
             console.log('Context Menus API not available')
             return
         }
-
         // Set up event handlers using the new API
-        frame.contextMenus.onclick = (event) => {
-            console.log('🎯 Context menu clicked:', {
-                menuItem: event.menuItem,
-                frameId: event.frameId,
-                frameURL: event.frameURL,
-                pageURL: event.pageURL,
-                editable: event.editable,
-                linkURL: event.linkURL,
-                mediaType: event.mediaType,
-                selectionText: event.selectionText,
-                srcURL: event.srcURL
-            })
-        }
+        frame.contextMenus.addEventListener('click', (event) => {
+            console.log('🎯 Context menu clicked:', event)
 
-        frame.contextMenus.onshow = (event) => {
+            if (event.menuItem.id === 'reload') {
+                reloadTab(tab)
+            }
+        })
+        frame.contextMenus.addEventListener('show', (event) => {
             console.log('👁️ Context menu shown:', event)
-        }
+        })
+
+        // frame.contextMenus.create({
+        //     id: 'root',
+        //     title: 'Darc',
+        //     contexts: ['all'], // Show on all types of content
+        //     enabled: true,
+        //     type: 'normal'
+        // }).then(() => {
+        //     console.log('✅ Context menu "Here" created successfully')
+        // }).catch((err) => {
+        //     console.error('❌ Failed to create context menu:', err)
+        // })
 
         // Create a context menu item called "Here"
         frame.contextMenus.create({
@@ -1368,12 +1371,26 @@ document.addEventListener('input', function(event) {
             title: 'Here',
             contexts: ['all'], // Show on all types of content
             enabled: true,
-            type: 'normal'
+            type: 'normal',
+            parentId: null
         }).then(() => {
             console.log('✅ Context menu "Here" created successfully')
         }).catch((err) => {
             console.error('❌ Failed to create context menu:', err)
         })
+
+        // // Create a reload context menu item
+        // frame.contextMenus.create(        {
+        //     id: 'reload',
+        //     title: 'Reload',
+        //     contexts: ['all'],
+        //     enabled: true,
+        //     type: 'normal',
+        // }).then(() => {
+        //     console.log('✅ Context menu "Reload" created successfully')
+        // }).catch((err) => {
+        //     console.error('❌ Failed to create reload context menu:', err)
+        // })
     }
 
     // Input text diff state

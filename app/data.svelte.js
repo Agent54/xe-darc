@@ -7,6 +7,7 @@ import { tick } from 'svelte'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
+import permissionTypes from './lib/resourceTypes.js'
 
 import { colors as projectColors } from './lib/utils.js'
 
@@ -18,6 +19,7 @@ if (!window.darcInstanceId) {
     localStorage.setItem('darcInstanceId', window.darcInstanceId)
 }
 
+let permissions = $state(permissionTypes)
 
 PouchDB.plugin(findPlugin)
 const db = new PouchDB('darc', { adapter: 'idb' })
@@ -580,6 +582,7 @@ export default {
     previews,
     settings,
     ledIndicators,
+    permissions,
 
     ui,
 
@@ -888,44 +891,184 @@ export default {
     },
 
     permissionRequest: (tabId, event) => {
-        console.log('permissionRequest', tabId, event)
-
+        const permission = permissions[event.permission]
         const origin = new URL(event.url).origin
-        
-        ledIndicators.permissionRequest = Date.now()
-        
-        resources[event.permission] = {
-            // requester: resource.requester,
-            // explanation: resource.explanation || '',
-            // status: resource.status || 'Requested',
-            // requestType: resource.requestType || 'foreground'
 
-            requestId: crypto.randomUUID(),
-            type: event.permission,
-            url: event.url,
-            tabId: tabId,
-            agentId: null,
-            status: 'requested',
-            timestamp: new Date().toISOString(),
-            instanceId: window.darcInstanceId,
-            windowId: window.darcWindowId,
-            unseen: true
-        }
+        permission.origins ??= {}
+        permission.origins[origin] ??= {}
+        permission.origins[origin].requests ??= []
+
+        ledIndicators.permissionRequest = Date.now()
 
         setTimeout(() => {
             ledIndicators.permissionRequest = 0
         }, 1000)
 
-        return { granted: false }
+        console.log('permissionRequest', event, permission)
+
+
+        if (permission.origins[origin].permission === 'denied') {
+            return { granted: false }
+        }
+
+        const granted = permission.origins[origin].permission === 'always' || permission.origins[origin].permission === 'ephemeral'
+
+        if (granted) {
+            permission.origins[origin].requests.at(-1).timestamp = Date.now()
+            return { granted }
+        }
+
+        permission.origins[origin].requests.push({
+            requestId: crypto.randomUUID(),
+            type: event.permission,
+            url: event.url,
+            tabId: tabId,
+            agentId: null,
+            status: granted ? 'granted' : 'requested',
+            timestamp: Date.now(),
+            created: Date.now(),
+            instanceId: window.darcInstanceId,
+            windowId: window.darcWindowId,
+            unseen: true,
+            requester: event.requester,
+            explanation: event.explanation || '',
+            // status: resource.status || 'Requested',
+            requestType: event.requestType || 'always' // foreground
+        })
+        
+        return { granted }
     },
 
     clearUnseenResourceFlags: () => {
-        for (const resourceKey of Object.keys(resources)) {
-            if (resources[resourceKey].unseen) {
-                resources[resourceKey].unseen = false
+        for (const resourceKey of Object.keys(permissions)) {
+            for (const origin of Object.keys(permissions[resourceKey].origins || {})) {
+                if (permissions[resourceKey].origins[origin].requests?.at(-1)?.unseen) {
+                    permissions[resourceKey].origins[origin].requests.at(-1).unseen = false
+                }
             }
         }
     },
+
+    clearNeedsReloadFlags: () => {
+        for (const resourceKey of Object.keys(permissions)) {
+            for (const origin of Object.keys(permissions[resourceKey].origins || {})) {
+                const requests = permissions[resourceKey].origins[origin].requests || []
+                requests.forEach(request => {
+                    if (request.needsReload) {
+                        request.needsReload = false
+                    }
+                })
+            }
+        }
+    },
+
+    reloadCurrentTab: () => {
+        const currentTabId = spaceMeta.activeTabId
+        if (currentTabId && frames[currentTabId]?.frame) {
+            frames[currentTabId].frame.reload()
+            // Clear needsReload flags after reload
+            for (const resourceKey of Object.keys(permissions)) {
+                for (const origin of Object.keys(permissions[resourceKey].origins || {})) {
+                    const requests = permissions[resourceKey].origins[origin].requests || []
+                    requests.forEach(request => {
+                        if (request.needsReload) {
+                            request.needsReload = false
+                        }
+                    })
+                }
+            }
+        }
+    },
+
+    allowPermission: (permissionType, origin, permission = 'always') => {
+        const permissionObj = permissions[permissionType]
+        console.log('allowPermission', permissionType, origin, permission, permissionObj)
+        if (!permissionObj?.origins?.[origin]?.requests?.length) {
+            return false
+        }
+
+        const latestRequest = permissionObj.origins[origin].requests.at(-1)
+        if (latestRequest.status === 'requested') {
+            latestRequest.status = 'granted'
+            latestRequest.unseen = false
+            latestRequest.needsReload = true
+            latestRequest.timestamp = Date.now()
+            
+            if (permission === 'always') {
+                permissionObj.origins[origin].permission = 'always'
+            } else {
+                permissionObj.origins[origin].permission = 'ephemeral'
+            }
+            
+            return true
+        }
+        return false
+    },
+
+    denyPermission: (permissionType, origin) => {
+        const permissionObj = permissions[permissionType]
+        if (!permissionObj?.origins?.[origin]?.requests?.length) {
+            return false
+        }
+
+        // Find the latest request for this permission type and origin
+        const latestRequest = permissionObj.origins[origin].requests.at(-1)
+        if (latestRequest.status === 'requested') {
+            // Update the request status
+            latestRequest.status = 'denied'
+            latestRequest.unseen = false
+            latestRequest.needsReload = true
+            latestRequest.timestamp = Date.now()
+            
+            // Set the permission to denied for this origin
+            permissionObj.origins[origin].permission = 'denied'
+            
+            return true
+        }
+        
+        return false
+    },
+
+    ignorePermission: (permissionType, origin) => {
+        const permissionObj = permissions[permissionType]
+        if (!permissionObj?.origins?.[origin]?.requests?.length) {
+            return false
+        }
+
+        const latestRequest = permissionObj.origins[origin].requests.at(-1)
+        if (latestRequest.status === 'requested') {
+            latestRequest.status = 'ignored'
+            latestRequest.unseen = false
+            latestRequest.timestamp = Date.now()
+            
+            return true
+        }
+        
+        return false
+    },
+
+    changePermission: (permissionType, origin) => {
+        const permissionObj = permissions[permissionType]
+        if (!permissionObj?.origins?.[origin]?.requests?.length) {
+            return false
+        }
+
+        const latestRequest = permissionObj.origins[origin].requests.at(-1)
+        if (latestRequest.status !== 'requested') {
+            latestRequest.status = 'requested'
+            latestRequest.unseen = true
+            latestRequest.needsReload = false
+            latestRequest.timestamp = Date.now()
+            
+            // Clear the persistent permission setting
+            permissionObj.origins[origin].permission = null
+            
+            return true
+        }
+        
+        return false
+    },
+
 
     closeTab,
 

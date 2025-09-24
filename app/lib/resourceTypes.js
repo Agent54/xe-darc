@@ -133,7 +133,7 @@ export default {
             if (Notification.permission === 'denied') {
                 return { available: false, error: 'Notification permission denied by user' }
             }
-            return { available: true, error: null }
+            return { available: false, error: null }
         }
     },
     javascript: {
@@ -143,7 +143,7 @@ export default {
         </svg>`,
         description: 'JavaScript execution and scripting',
         availability: async () => {
-            return { available: true, error: null } // Always available if this code is running
+            return { available: true, error: null }
         }
     },
     images: {
@@ -153,7 +153,7 @@ export default {
         </svg>`,
         description: 'Image loading and display',
         availability: async () => {
-            return { available: true, error: null } // Images are generally always available
+            return { available: true, error: null }
         }
     },
     popups: {
@@ -173,7 +173,7 @@ export default {
         </svg>`,
         description: 'Ad blocking and intrusive content filtering',
         availability: async () => {
-            return { available: false, error: 'Blocked by ad blocker or browser settings' } // Always blocked
+            return { available: true, error: '' }
         }
     },
     'background-sync': {
@@ -299,7 +299,7 @@ export default {
                 }
                 return { available: true, error: null }
             } catch (e) {
-                return { available: true, error: null } // Fallback for older browsers
+                return { available: false, error: null }
             }
         }
     },
@@ -322,7 +322,7 @@ export default {
                 }
                 return { available: true, error: null }
             } catch (e) {
-                return { available: true, error: null } // Fallback for older browsers
+                return { available: false, error: null }
             }
         }
     },
@@ -344,7 +344,7 @@ export default {
                 }
                 return { available: true, error: null }
             } catch (e) {
-                return { available: true, error: null } // Fallback for older browsers
+                return { available: false, error: null } 
             }
         }
     },
@@ -371,7 +371,7 @@ export default {
                 }
                 return { available: true, error: null }
             } catch (e) {
-                return { available: true, error: null } // Fallback for older browsers
+                return { available: false, error: null }
             }
         }
     },
@@ -396,7 +396,7 @@ export default {
                 }
                 return { available: true, error: null }
             } catch (e) {
-                return { available: true, error: null } // Fallback for older browsers
+                return { available: false, error: null }
             }
         }
     },
@@ -525,7 +525,7 @@ export default {
         }
     },
     fonts: {
-        name: 'Fonts',
+        name: 'Web Fonts',
         icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 5.25h4.5m0 0L12 5.25m-4.5 0L12 5.25m0 0L16.5 21M12 5.25l4.5 15.75M12 5.25 16.5 21m-9.75-8.25h9" />
         </svg>`,

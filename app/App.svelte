@@ -2319,12 +2319,20 @@
 
 
     $effect(() => {
-        // Check for unseen resource requests with matching window ID
-        const unseenResourcesForThisWindow = Object.values(data.resources).filter(resource => 
-            resource.unseen && 
-            resource.windowId === window.darcWindowId && 
-            resource.status === 'requested'
-        )
+        // Check for unseen permission requests with matching window ID
+        const unseenResourcesForThisWindow = []
+        Object.values(data.permissions).forEach(permission => {
+            Object.values(permission.origins || {}).forEach(origin => {
+                const requests = origin.requests || []
+                requests.forEach(request => {
+                    if (request.unseen && 
+                        request.windowId === window.darcWindowId && 
+                        request.status === 'requested') {
+                        unseenResourcesForThisWindow.push(request)
+                    }
+                })
+            })
+        })
         
         if (unseenResourcesForThisWindow.length > 0 && !openSidebars.has('resources')) {
             console.log('Opening resources sidebar for unseen requests:', unseenResourcesForThisWindow)
