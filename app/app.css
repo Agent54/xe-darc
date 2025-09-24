@@ -1936,7 +1936,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     width: var(--sidebar-width, 330px);
     /* width: calc(320px * var(--sidebar-count, 1)); */
     height: 100vh;
-    z-index: 1005;
+    z-index: 500;
     display: flex;
     flex-direction: row;
 }

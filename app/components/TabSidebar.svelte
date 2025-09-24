@@ -2324,7 +2324,7 @@
     
     .url-bar-section {
         flex-shrink: 0;
-        margin-bottom: 10px;
+        padding-bottom: 12px;
     }
     
     .url-bar-container {
@@ -2348,18 +2348,27 @@
         overflow: visible;
     }
     
-    .url-bar-container:hover {
-        background-color: rgb(255 255 255 / 9%);
-        border: 1px solid hsl(0deg 0% 100% / 3%);
+    .url-bar-container:not(.expanded):not(:hover) {
+        transition-delay: 0ms;
     }
     
     .url-bar-container.expanded {
         width: min(600px, 90vw);
-        background: rgba(0, 0, 0, 0.95);
+        background: rgba(0, 0, 0, 0.98);
         backdrop-filter: blur(20px);
         border: 1px solid hsl(0deg 0% 100% / 10%);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
         z-index: 2000;
+    }
+    
+    .url-bar-section:hover .url-bar-container:not(.expanded) {
+        width: min(600px, 90vw);
+        background: rgba(0, 0, 0, 0.98);
+        backdrop-filter: blur(20px);
+        border: 1px solid hsl(0deg 0% 100% / 10%);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        z-index: 1000;
+        transition-delay: 200ms;
     }
     
     .url-bar-controls {
@@ -2388,7 +2397,7 @@
     }
     
     
-    .url-bar-container:hover:not(.expanded) .url-bar-controls {
+    .url-bar-section:hover:not(.expanded) .url-bar-controls {
         opacity: 1;
         visibility: visible;
     }

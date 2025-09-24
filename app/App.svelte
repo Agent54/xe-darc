@@ -3962,6 +3962,7 @@
 
 {#if showAppsOverlay}
     <div class="apps-overlay" 
+         style="--left-pinned-width: {(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px; --sidebar-width: {rightSidebarWidth}px;"
          role="dialog" 
          aria-label="All Apps"
          tabindex="-1"
@@ -4005,8 +4006,8 @@
         border-top: 10px solid black;
         position: fixed;
         top: 35px;
-        left: 0;
-        right: 0;
+        left: calc(var(--left-pinned-width, 0px) + var(--tab-sidebar-width, 0px));
+        right: calc(var(--sidebar-width, 0px) + 9px);
         bottom: 0;
         background: rgba(0, 0, 0, 0.8);
         backdrop-filter: blur(12px);
