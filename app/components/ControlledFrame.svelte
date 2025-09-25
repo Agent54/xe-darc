@@ -1765,11 +1765,13 @@ document.addEventListener('input', function(event) {
                 }
             } else if (message.startsWith('iwa:mousedown:')) {
                 // Handle mousedown from controlled frame - handle colons in tab ID
-                const tabId = message.substring('iwa:mousedown:'.length)
+                const parts = message.substring('iwa:mousedown:'.length).split(':')
+                const button = parts.length > 1 ? parseInt(parts.pop()) : undefined
+                const tabId = parts.join(':')
                 
                 // Dispatch mousedown event to parent app
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
-                    detail: { tabId: tabId }
+                    detail: { tabId: tabId, button: button }
                 }))
             } else if (message.startsWith('iwa:mouseup:')) {
                 // Handle mouseup from controlled frame - handle colons in tab ID
@@ -2206,9 +2208,9 @@ document.addEventListener('input', function(event) {
 
         role="tabpanel"
         tabindex="0"
-        onmousedown={() => {
+        onmousedown={(event) => {
             window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
-                detail: { tabId: tab?.id || tabId }
+                detail: { tabId: tab?.id || tabId, button: event.button }
             }))
             onFrameFocus()
         }}

@@ -632,7 +632,7 @@ export default {
 
     // TODO: this is not reliable, move to ipc scoped method
     disableZoomForAllFrames: () => {
-        console.log('🔍 [ZOOM-CONTROL] disabling zoom for all frames')
+        // console.log('🔍 [ZOOM-CONTROL] disabling zoom for all frames')
         Object.values(frames).forEach(frameData => {
             console.log('frameData', frameData)
             if (frameData?.frame?.executeScript) {

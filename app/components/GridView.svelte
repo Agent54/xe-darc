@@ -17,11 +17,20 @@
     rightPinnedWidth = 0,
     rightSidebarWidth = 0,
     tabSidebarWidth = 0,
-    spaceTaken = 0
+    spaceTaken = 0,
+    onSpaceSwitch = () => {}
   } = $props()
 
   // Get tabs from current space
   let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs.filter(tab => !tab.pinned)) || []))
+  let spaceOrder = $derived(data.spaceMeta.spaceOrder || [])
+  let activeSpaceId = $derived(data.spaceMeta.activeSpace)
+  
+  function switchSpace(id) {
+    if (id && id !== activeSpaceId) {
+      onSpaceSwitch(id)
+    }
+  }
   
   
   // Grid container reference
@@ -86,6 +95,25 @@
   aria-label="Close tab overview"
   style="--left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --tab-sidebar-width: {tabSidebarWidth}px; --sidebar-width: {rightSidebarWidth}px; --space-taken: {spaceTaken}px;"
 >
+  <div class="spaces-switcher" role="navigation" aria-label="Spaces">
+    {#each spaceOrder as id}
+      {@const space = data.spaces[id]}
+      {#if space}
+        <button 
+          class="space-chip"
+          class:active={id === activeSpaceId}
+          style="--space-color: {space.color || '#5b5b5b'}"
+          onmousedown={() => switchSpace(id)}
+          aria-current={id === activeSpaceId ? 'true' : 'false'}
+          title={space.title || space.name}
+          type="button"
+        >
+          <span class="space-color-dot" aria-hidden="true"></span>
+          <span class="space-name">{space.name || 'Space'}</span>
+        </button>
+      {/if}
+    {/each}
+  </div>
   {#each tabs as tab, index (tab.id)}
     <div 
       class="grid-frame"
@@ -175,6 +203,69 @@
     z-index: 1000;
     opacity: 0;
     animation: grid-fade-in 0.3s cubic-bezier(0, 1, 0.3, 1) forwards;
+  }
+
+  .spaces-switcher {
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: rgba(10, 10, 10, 0.36);
+    backdrop-filter: blur(4px);
+    border: none;
+    border-radius: 9999px;
+    max-width: calc(100% - 32px);
+    overflow-x: auto;
+  }
+
+  .space-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: none;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .space-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .space-chip.active {
+    background: rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 1);
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  }
+
+  .space-chip.active .space-color-dot {
+    opacity: 0.8;
+    filter: saturate(0.95) brightness(0.9) contrast(1.05);
+  }
+
+  .space-color-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--space-color, #6b7280);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+    opacity: 0.6;
+    filter: saturate(0.85) brightness(0.75) contrast(0.95);
+  }
+
+  .space-chip:not(.active) .space-color-dot {
+    opacity: 0.55;
   }
 
   @keyframes grid-fade-in {

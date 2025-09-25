@@ -38,10 +38,10 @@ document.addEventListener("wheel", e => {
 
   if (e.ctrlKey || e.metaKey) {
 
-    e.preventDefault()
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-      return false
+    // e.preventDefault()
+    //   e.stopPropagation()
+    //   e.stopImmediatePropagation()
+    //   return false
 
     const gridViewOpen = data.ui.viewMode === 'tile'
     

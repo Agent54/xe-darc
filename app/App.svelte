@@ -495,6 +495,7 @@
     }
 
     function handleFrameMouseDown(event) {
+        console.log('Mouse button pressed:', event.detail.button)
         isMouseDown = true
     }
 

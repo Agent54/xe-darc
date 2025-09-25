@@ -53,7 +53,7 @@ document.addEventListener('mousedown', function(event) {
     //     clientX: event.clientX,
     //     clientY: event.clientY
     // });
-    console.log(`iwa:mousedown:${tabId}`);
+    console.log(`iwa:mousedown:${tabId}:${event.button}`);
 }, { capture: true, passive: true });
 
 document.addEventListener('mouseup', function(event) {
