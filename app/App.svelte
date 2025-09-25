@@ -3632,7 +3632,22 @@
     style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --right-pinned-width: {(rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
 
     {#if data.ui.viewMode === 'tile'}
-        <GridView {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} onTabActivate={activateTab} onViewModeChange={toggleViewMode} onTabClose={closeTab} {leftPinnedWidth} {rightPinnedWidth} {rightSidebarWidth} tabSidebarWidth={tabSidebarVisible ? (customTabSidebarWidth || 263) : 0} {spaceTaken} />
+        <GridView 
+            {controlledFrameSupported} 
+            onFrameFocus={handleFrameFocus} 
+            onFrameBlur={handleFrameBlur} 
+            {getEnabledUserMods} 
+            onTabActivate={activateTab} 
+            onViewModeChange={toggleViewMode} 
+            onTabClose={closeTab} 
+            {leftPinnedWidth} 
+            {rightPinnedWidth} 
+            {rightSidebarWidth} 
+            tabSidebarWidth={tabSidebarVisible ? (customTabSidebarWidth || 263) : 0} 
+            {spaceTaken}
+            spaces={data.spaces}
+            activeSpaceId={data.spaceMeta.activeSpace}
+            onSpaceSwitch={(spaceId) => { data.spaceMeta.activeSpace = spaceId }} />
     {/if} 
         
     {#if data.ui.viewMode === 'canvas'}

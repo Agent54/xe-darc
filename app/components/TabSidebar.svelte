@@ -574,6 +574,15 @@
         }
     }
 
+    function handleBackgroundDoubleClick() {
+        if (data.spaceMeta.activeSpace) {
+            const newTab = data.newTab(data.spaceMeta.activeSpace)
+            if (newTab) {
+                data.activate(newTab.id)
+            }
+        }
+    }
+
 </script>
 
 <svelte:window onclick={handleClickOutside} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
@@ -754,6 +763,9 @@
                 <div class="tab-content-container" 
                      bind:this={tabListRef}
                      onscroll={handleTabScroll}
+                     ondblclick={handleBackgroundDoubleClick}
+                     role="region"
+                     aria-label="Tab content area - double-click to create new tab"
                     >
                     <div class="tab-content-track">
                         {#each data.spaceMeta.spaceOrder as spaceId (spaceId)}
@@ -994,11 +1006,10 @@
         overflow-y: visible;
         overflow-x: visible;
         background: transparent;
-        padding: 4px;
+        padding: 10px 4px 0 4px;
         display: flex;
         flex-direction: column;
         position: relative;
-        padding-bottom: 0;
         border-radius: 9px;
         box-shadow: 0 0 16px 0 #000, -18px 0px 2px 1px #000;
         border: 1px solid hsl(0 0% 12% / 1);

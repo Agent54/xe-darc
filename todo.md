@@ -1266,3 +1266,5 @@ coactivity loop with random triggers/ schedule integration/ location/ time aware
 setup prper frame IPC
 
 window options to size and position to nice ratios
+
+drag window in empty space in tab sidebar
