@@ -5,7 +5,7 @@ services:
     build:
       context: .
     ports:
-      - 5193:5193
+      - 5194:5194
       # - name: main
       #   target: 8086
       #   app_protocol: http
