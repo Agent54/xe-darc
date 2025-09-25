@@ -15,6 +15,7 @@
         switchToAgent,
         switchToDevTools,
         devModeEnabled = false,
+        autoOpened = false,
     } = $props()
 
     // Clear unseen flags when sidebar is closed
@@ -111,7 +112,9 @@
         
         if (success) {
             console.log('Deny resource:', resourceId, 'for origin:', origin)
-            onClose()
+            if (autoOpened) {
+                onClose()
+            }
         } else {
             console.warn('Failed to deny resource:', resourceId)
         }
@@ -134,7 +137,9 @@
         
         if (success) {
             console.log('Ignore resource:', resourceId, 'for origin:', origin)
-            onClose()
+            if (autoOpened) {
+                onClose()
+            }
         } else {
             console.warn('Failed to ignore resource:', resourceId)
         }

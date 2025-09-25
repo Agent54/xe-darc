@@ -37,6 +37,24 @@
     }
   }
   
+  // Handle new tab creation in specific space
+  function handleNewTabInSpace(spaceId) {
+    // Switch to the space first if not already active
+    if (spaceId !== activeSpaceId) {
+      switchSpace(spaceId)
+      // Wait for space switch, then create new tab
+      setTimeout(() => {
+        data.newTab(spaceId, { shouldFocus: true })
+        // Close the grid view after creating tab
+        onViewModeChange()
+      }, 150)
+    } else {
+      // Already in the right space, just create tab
+      data.newTab(spaceId, { shouldFocus: true })
+      onViewModeChange()
+    }
+  }
+  
   // Grid container and scroll references
   let gridContainer
   let scrollContainer
@@ -165,7 +183,7 @@
     }
   }
 
-  // Handle background click to close tab overview
+  // Handle background click to switch space or close tab overview
   function handleBackgroundClick(event) {
     // Check if clicked on background areas (not on tabs or UI elements)
     const target = event.target
@@ -182,15 +200,23 @@
       (target.tagName === 'path' && target.closest('.empty-space'))
     )
     
-    // Don't close if clicking on tabs, space chips, or other interactive elements
+    // Don't handle if clicking on tabs, space chips, or other interactive elements
     const isInteractiveElement = (
       target.closest('.grid-frame') ||
       target.closest('.space-chip') ||
-      target.closest('.spaces-switcher')
+      target.closest('.spaces-switcher') ||
+      target.closest('.new-tab-button')
     )
     
     if (isBackgroundClick && !isInteractiveElement) {
-      onViewModeChange()
+      // If we're viewing a different space than the active one, switch to it
+      if (highlightedSpaceId && highlightedSpaceId !== activeSpaceId) {
+        switchSpace(highlightedSpaceId)
+        onViewModeChange()
+      } else {
+        // If we're already in the active space, just close the view
+        onViewModeChange()
+      }
     }
   }
 </script>
@@ -237,11 +263,18 @@
       <div class="space-page">
         {#if tabs.length === 0}
           <div class="empty-space">
-            <div class="empty-space-icon">
+            <button 
+              class="empty-space-icon new-tab-button"
+              onmousedown={(e) => { e.stopPropagation(); handleNewTabInSpace(spaceId); }}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleNewTabInSpace(spaceId); } }}
+              title="New Tab (⌘T)"
+              aria-label="New Tab"
+              type="button"
+            >
               <svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
-            </div>
+            </button>
             <div class="empty-space-title">No open tabs</div>
             <div class="empty-space-subtitle">This space is empty</div>
           </div>
@@ -368,6 +401,26 @@
     width: 48px;
     height: 48px;
     color: rgba(255, 255, 255, 0.4);
+    background: none;
+    border: none;
+    cursor: pointer;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+  }
+
+  .empty-space-icon:hover {
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.08);
+    transform: scale(1.05);
+  }
+
+  .empty-space-icon:active {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.12);
+    transform: scale(0.98);
   }
 
   .empty-space-title {
@@ -402,7 +455,7 @@
     align-items: center;
     gap: 6px;
     padding: 4px 10px;
-    border-radius: 10px;
+    border-radius: 6px;
     background: rgba(255, 255, 255, 0.04);
     border: none;
     color: rgba(255, 255, 255, 0.72);
@@ -419,21 +472,33 @@
   }
 
   .space-chip.active {
-    background: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.07);
     color: rgba(255, 255, 255, 1);
     font-weight: 600;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .space-chip.highlighted:not(.active) {
-    background: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.95);
-    font-weight: 500;
+    position: relative;
+  }
+
+  .space-chip.highlighted:not(.active)::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 1px;
   }
 
   .space-chip.active .space-color-dot {
-    opacity: 0.8;
-    filter: saturate(0.95) brightness(0.9) contrast(1.05);
+    opacity: 0.9;
+    filter: saturate(1.1) brightness(1.0) contrast(1.1);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3) inset;
   }
 
   .space-chip.highlighted:not(.active) .space-color-dot {

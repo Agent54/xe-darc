@@ -1268,3 +1268,9 @@ setup prper frame IPC
 window options to size and position to nice ratios
 
 drag window in empty space in tab sidebar
+
+gesture animation sync for tab overview/ integrate app launcher
+
+back should close lightbox no first history entr
+
+rss integration in tab group (auto expand rss entries as virtual tab groups)

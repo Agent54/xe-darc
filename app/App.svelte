@@ -169,6 +169,8 @@
 
     let userMods = $state([])
     
+    let resourcesSidebarAutoOpened = $state(false)
+    
     // let isEditingUrl = $state(false)
     // let editingUrlValue = $state('')
     // let urlInput = $state(null)
@@ -496,11 +498,11 @@
 
     function handleFrameMouseDown(event) {
         console.log('Mouse button pressed:', event.detail.button)
-        isMouseDown = true
+        isMouseDown = event.detail.button
     }
 
     function handleFrameMouseUp(event) {
-        isMouseDown = false
+        isMouseDown = null
     }
 
     // Zoom threshold tracking
@@ -948,7 +950,7 @@
 
     function goBack() {
         // If mouse is down, navigate spaces instead of frame navigation
-        if (isMouseDown) {
+        if (isMouseDown === 0 || isMouseDown === 1) {
             data.previousSpace()
             return
         }
@@ -975,7 +977,7 @@
 
     function goForward() {
         // If mouse is down, navigate spaces instead of frame navigation
-        if (isMouseDown) {
+        if (isMouseDown === 0 || isMouseDown === 1) {
             data.nextSpace()
             return
         }
@@ -1380,7 +1382,7 @@
     }
 
     // Track mouse position and state globally
-    let isMouseDown = false
+    let isMouseDown = null // null or button number (0, 1, 2, etc.)
     
     function handleGlobalMouseMove(event) {
         window.mouseX = event.clientX
@@ -1388,11 +1390,11 @@
     }
 
     function handleGlobalMouseDown(event) {
-        isMouseDown = true
+        isMouseDown = event.button
     }
 
     function handleGlobalMouseUp(event) {
-        isMouseDown = false
+        isMouseDown = null
     }
 
     function handleScroll() {
@@ -1590,6 +1592,10 @@
             openSidebars.add(targetSidebar)
             openSidebars = new Set(openSidebars)
             updateSidebarState()
+            
+            if (targetSidebar === 'resources') {
+                resourcesSidebarAutoOpened = false
+            }
         }
     }
 
@@ -1635,6 +1641,10 @@
         openSidebars.delete(sidebarName)
         openSidebars = new Set(openSidebars)
         updateSidebarState()
+        
+        if (sidebarName === 'resources') {
+            resourcesSidebarAutoOpened = false
+        }
     }
     
     function togglePinnedFrames(side) {
@@ -2340,6 +2350,7 @@
             untrack(() => {
                 openSidebars.add('resources')
                 openSidebars = new Set(openSidebars)
+                resourcesSidebarAutoOpened = true
             })
         }
     })
@@ -3898,7 +3909,8 @@
                           {switchToActivity}
                           switchToAgent={switchToAIAgent}
                           {switchToDevTools}
-                          {devModeEnabled} />
+                          {devModeEnabled}
+                          autoOpened={resourcesSidebarAutoOpened} />
             </div>
         {/if}
         
