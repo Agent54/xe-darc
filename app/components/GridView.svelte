@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import Frame from './Frame.svelte'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
@@ -21,29 +21,109 @@
     onSpaceSwitch = () => {}
   } = $props()
 
-  // Get tabs from current space
-  let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs.filter(tab => !tab.pinned)) || []))
+  // Get all spaces and their tabs
   let spaceOrder = $derived(data.spaceMeta.spaceOrder || [])
   let activeSpaceId = $derived(data.spaceMeta.activeSpace)
+  let highlightedSpaceId = $state(data.spaceMeta.activeSpace)
   
   function switchSpace(id) {
     if (id && id !== activeSpaceId) {
       onSpaceSwitch(id)
+      // Scroll to the new space after switching
+      setTimeout(() => {
+        highlightedSpaceId = id
+        scrollToSpace(id)
+      }, 50)
     }
   }
   
-  
-  // Grid container reference
+  // Grid container and scroll references
   let gridContainer
+  let scrollContainer
+  let isScrolling = $state(false)
+  let scrollTimeout = null
+  
+  // Handle scroll to highlight current space
+  function handleScroll() {
+    if (!scrollContainer) return
+    
+    isScrolling = true
+    if (scrollTimeout) clearTimeout(scrollTimeout)
+    
+    const containerWidth = scrollContainer.clientWidth
+    const scrollLeft = scrollContainer.scrollLeft
+    const currentPage = Math.round(scrollLeft / containerWidth)
+    const spaceId = spaceOrder[currentPage]
+    
+    if (spaceId && spaceId !== highlightedSpaceId) {
+      highlightedSpaceId = spaceId
+    }
+    
+    scrollTimeout = setTimeout(() => {
+      isScrolling = false
+    }, 150)
+  }
+  
+  // Scroll to specific space
+  function scrollToSpace(spaceId) {
+    if (!scrollContainer) return
+    const spaceIndex = spaceOrder.indexOf(spaceId)
+    if (spaceIndex >= 0) {
+      const containerWidth = scrollContainer.clientWidth
+      scrollContainer.scrollTo({
+        left: spaceIndex * containerWidth,
+        behavior: 'smooth'
+      })
+    }
+  }
+  
+  // Initialize scroll position immediately without animation
+  let hasInitialized = $state(false)
+  
+  onMount(async () => {
+    // Wait for DOM to be ready
+    await tick()
+    if (scrollContainer && !hasInitialized) {
+      highlightedSpaceId = activeSpaceId
+      // Scroll immediately without animation
+      const spaceIndex = spaceOrder.indexOf(activeSpaceId)
+      if (spaceIndex >= 0) {
+        const containerWidth = scrollContainer.clientWidth
+        scrollContainer.scrollLeft = spaceIndex * containerWidth
+      }
+      hasInitialized = true
+    }
+  })
+  
+  $effect(() => {
+    // Fallback effect in case onMount doesn't work
+    if (!hasInitialized && scrollContainer && scrollContainer.clientWidth > 0) {
+      highlightedSpaceId = activeSpaceId
+      // Scroll immediately without animation
+      const spaceIndex = spaceOrder.indexOf(activeSpaceId)
+      if (spaceIndex >= 0) {
+        const containerWidth = scrollContainer.clientWidth
+        scrollContainer.scrollLeft = spaceIndex * containerWidth
+      }
+      hasInitialized = true
+    }
+  })
 
   // Handle clicking on frame screenshot
-  function handleFrameClick(tab, index) {
-    // If this tab is already active, only toggle view mode (same logic as toggleViewMode)
-    if (tab.id === data.spaceMeta.activeTabId) {
-      // Use the same toggle logic as the view mode button
+  function handleFrameClick(tab, index, spaceId) {
+    // If clicking a tab from a different space, switch to that space first
+    if (spaceId !== activeSpaceId) {
+      switchSpace(spaceId)
+      // Wait for space switch, then activate tab and close view
+      setTimeout(() => {
+        onTabActivate(tab, index)
+        onViewModeChange()
+      }, 100)
+    } else if (tab.id === data.spaceMeta.activeTabId) {
+      // Same space, same tab - just toggle view mode
       onViewModeChange()
     } else {
-      // Activate the tab and toggle view mode
+      // Same space, different tab - activate tab and toggle view mode
       onTabActivate(tab, index)
       onViewModeChange()
     }
@@ -71,15 +151,45 @@
   }
 
   // Handle close button click
-  function handleCloseTab(event, tab, index) {
+  function handleCloseTab(event, tab, index, spaceId) {
     event.preventDefault()
     event.stopPropagation()
-    onTabClose(tab, event)
+    // If closing a tab from a different space, switch to that space first
+    if (spaceId !== activeSpaceId) {
+      switchSpace(spaceId)
+      setTimeout(() => {
+        onTabClose(tab, event)
+      }, 100)
+    } else {
+      onTabClose(tab, event)
+    }
   }
 
   // Handle background click to close tab overview
   function handleBackgroundClick(event) {
-    if (event.target === gridContainer) {
+    // Check if clicked on background areas (not on tabs or UI elements)
+    const target = event.target
+    const isBackgroundClick = (
+      target === gridContainer || 
+      target === scrollContainer ||
+      target.classList.contains('space-page') ||
+      target.classList.contains('space-grid') ||
+      target.classList.contains('empty-space') ||
+      target.classList.contains('empty-space-icon') ||
+      target.classList.contains('empty-space-title') ||
+      target.classList.contains('empty-space-subtitle') ||
+      (target.tagName === 'svg' && target.closest('.empty-space')) ||
+      (target.tagName === 'path' && target.closest('.empty-space'))
+    )
+    
+    // Don't close if clicking on tabs, space chips, or other interactive elements
+    const isInteractiveElement = (
+      target.closest('.grid-frame') ||
+      target.closest('.space-chip') ||
+      target.closest('.spaces-switcher')
+    )
+    
+    if (isBackgroundClick && !isInteractiveElement) {
       onViewModeChange()
     }
   }
@@ -102,6 +212,7 @@
         <button 
           class="space-chip"
           class:active={id === activeSpaceId}
+          class:highlighted={id === highlightedSpaceId}
           style="--space-color: {space.color || '#5b5b5b'}"
           onmousedown={() => switchSpace(id)}
           aria-current={id === activeSpaceId ? 'true' : 'false'}
@@ -114,73 +225,82 @@
       {/if}
     {/each}
   </div>
-  {#each tabs as tab, index (tab.id)}
-    <div 
-      class="grid-frame"
-      class:active={tab.id === data.spaceMeta.activeTabId}
-    >
-      <!-- Tab title and close button bar -->
-      <div class="tab-header">
-        <div class="tab-info clickable"
-             onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index) }}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index) } }}
-             tabindex="0"
-             role="button"
-             aria-label="Activate {tab.title || 'Untitled'}">
-          <div class="tab-favicon">
-            <Favicon url={tab.url} />
-          </div>
-          <div class="header-tab-title">{tab.title || 'Untitled'}</div>
-        </div>
-        <button 
-          class="close-button"
-          onmousedown={(e) => handleCloseTab(e, tab, index)}
-          aria-label="Close {tab.title || 'Untitled'}"
-          type="button"
-        >×</button>
-      </div>
-      
-      <!-- Screenshot layer - always visible, no replacement -->
-      <div 
-        class="frame-screenshot clickable" 
-        onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index) }}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index) } }}
-        onwheel={(e) => handleFrameWheel(e, tab, index)}
-        tabindex="0"
-        role="button"
-        aria-label="Activate {tab.title || 'Untitled'}"
-      >
-        {#if tab.screenshot}
-          <AttachmentImage src={tab.screenshot} alt="Tab preview" />
-        {:else}
-          <div class="no-screenshot">
-            <div class="favicon-container">
-              <Favicon url={tab.url} />
+  
+  <div 
+    class="spaces-scroll-container"
+    bind:this={scrollContainer}
+    onscroll={handleScroll}
+  >
+    {#each spaceOrder as spaceId}
+      {@const space = data.spaces[spaceId]}
+      {@const tabs = space?.tabs?.filter(tab => !tab.pinned) || []}
+      <div class="space-page">
+        {#if tabs.length === 0}
+          <div class="empty-space">
+            <div class="empty-space-icon">
+              <svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
             </div>
-            <div class="tab-title">{tab.title || 'Untitled'}</div>
+            <div class="empty-space-title">No open tabs</div>
+            <div class="empty-space-subtitle">This space is empty</div>
+          </div>
+        {:else}
+          <div class="space-grid">
+            {#each tabs as tab, index (tab.id)}
+              <div 
+                class="grid-frame"
+                class:active={tab.id === data.spaceMeta.activeTabId}
+              >
+                <!-- Tab title and close button bar -->
+                <div class="tab-header">
+                  <div class="tab-info clickable"
+                       onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
+                       tabindex="0"
+                       role="button"
+                       aria-label="Activate {tab.title || 'Untitled'}">
+                    <div class="tab-favicon">
+                      <Favicon url={tab.url} />
+                    </div>
+                    <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                  </div>
+                  <button 
+                    class="close-button"
+                    onmousedown={(e) => handleCloseTab(e, tab, index, spaceId)}
+                    aria-label="Close {tab.title || 'Untitled'}"
+                    type="button"
+                  >×</button>
+                </div>
+                
+                <!-- Screenshot layer - always visible, no replacement -->
+                <div 
+                  class="frame-screenshot clickable" 
+                  onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
+                  onwheel={(e) => handleFrameWheel(e, tab, index)}
+                  tabindex="0"
+                  role="button"
+                  aria-label="Activate {tab.title || 'Untitled'}"
+                >
+                  {#if tab.screenshot}
+                    <AttachmentImage src={tab.screenshot} alt="Tab preview" />
+                  {:else}
+                    <div class="no-screenshot">
+                      <div class="favicon-container">
+                        <Favicon url={tab.url} />
+                      </div>
+                      <div class="tab-title">{tab.title || 'Untitled'}</div>
+                    </div>
+                  {/if}
+                </div>
+              </div>
+            {/each}
           </div>
         {/if}
       </div>
-      
-      <!-- Frame layer - commented out to disable replacement -->
-      <!-- 
-      {#if isFullyOpen}
-        <div class="frame-scaler" style="opacity: {frameOpacity};">
-          <Frame 
-            tabId={tab.id} 
-            {controlledFrameSupported} 
-            headerPartOfMain={false}
-            isScrolling={false}
-            onFrameFocus={() => onFrameFocus(tab.id)} 
-            onFrameBlur={onFrameBlur} 
-            userMods={getEnabledUserMods(tab)} 
-            statusLightsEnabled={false}
-          />
-        </div>
-      {/if}
-      -->
-    </div>
-  {/each}
+    {/each}
+  </div>
 </div>
 
 <style>
@@ -193,16 +313,72 @@
     background: rgba(0, 0, 0, 0.95);
     backdrop-filter: blur(8px);
     overflow: hidden;
+    z-index: 1000;
+    opacity: 0;
+    animation: grid-fade-in 0.3s cubic-bezier(0, 1, 0.3, 1) forwards;
+  }
+
+  .spaces-scroll-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .spaces-scroll-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .space-page {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    scroll-snap-align: start;
+    padding: 40px;
+    box-sizing: border-box;
+  }
+
+  .space-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     grid-auto-rows: 180px;
     gap: 24px;
-    padding: 40px;
     place-content: center;
     place-items: center;
-    z-index: 1000;
-    opacity: 0;
-    animation: grid-fade-in 0.3s cubic-bezier(0, 1, 0.3, 1) forwards;
+    width: 100%;
+    height: 100%;
+  }
+
+  .empty-space {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    gap: 16px;
+    opacity: 0.6;
+  }
+
+  .empty-space-icon {
+    width: 48px;
+    height: 48px;
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .empty-space-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .empty-space-subtitle {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.45);
   }
 
   .spaces-switcher {
@@ -249,9 +425,20 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   }
 
+  .space-chip.highlighted:not(.active) {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 500;
+  }
+
   .space-chip.active .space-color-dot {
     opacity: 0.8;
     filter: saturate(0.95) brightness(0.9) contrast(1.05);
+  }
+
+  .space-chip.highlighted:not(.active) .space-color-dot {
+    opacity: 0.75;
+    filter: saturate(0.9) brightness(0.85) contrast(1.0);
   }
 
   .space-color-dot {

@@ -111,6 +111,7 @@
         
         if (success) {
             console.log('Deny resource:', resourceId, 'for origin:', origin)
+            onClose()
         } else {
             console.warn('Failed to deny resource:', resourceId)
         }
@@ -133,6 +134,7 @@
         
         if (success) {
             console.log('Ignore resource:', resourceId, 'for origin:', origin)
+            onClose()
         } else {
             console.warn('Failed to ignore resource:', resourceId)
         }
