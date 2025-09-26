@@ -204,6 +204,7 @@
         const blocked = []
 
         const archived = []
+        const usedResourceTypes = new Set()
 
         const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
         if (!currentUrl && scope === 'origin') {
@@ -217,9 +218,6 @@
             }
         }
         const origin = new URL(currentUrl).origin // scope === 'origin' ? origin(tab.url) : null
-      
-
-        const usedResourceTypes = new Set()
 
         Object.entries(data.permissions).forEach(([resourceType, permission]) => {
             if (scope === 'origin') {
