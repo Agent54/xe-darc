@@ -5,3 +5,6 @@ subjectAltName = @alt_names
     
 [alt_names]
 DNS.1 = %%DOMAIN%%
+DNS.2 = localhost
+DNS.3 = wandervogel7.local
+IP.1 = 192.168.31.196

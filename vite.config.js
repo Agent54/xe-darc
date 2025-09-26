@@ -197,7 +197,7 @@ export default defineConfig({
     hmr: {
       protocol: 'wss', 
       clientPort: 5194,
-      host: 'localhost' 
+      host: '192.168.31.196' // FIXME: localhost
       // ...(process.env.container !== 'true' && { clientPort: 5193,  host: 'localhost' }),
     },
     watch: {

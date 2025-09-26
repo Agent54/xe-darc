@@ -21,6 +21,7 @@
     import data from './data.svelte.js'
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
+    import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
     window.darc = { data }
 
     // Proper detection of ControlledFrame API support
@@ -142,6 +143,22 @@
     let statusLightsEnabled = $state(false)
     let certificateMonitorForTab = $state(null)
     let devModeEnabled = $state(false)
+    let isMaximized = $state(false)
+    
+    // Update maximize state reactively
+    $effect(() => {
+        const updateMaximizeState = () => {
+            isMaximized = isWindowMaximized()
+        }
+        
+        // Check initial state
+        updateMaximizeState()
+        
+        // Update on window resize (which might indicate maximize/restore)
+        const interval = setInterval(updateMaximizeState, 100)
+        
+        return () => clearInterval(interval)
+    })
 
     // LED indicator reactive states
     let networkAccessActive = $state(false)
@@ -497,7 +514,7 @@
     }
 
     function handleFrameMouseDown(event) {
-        console.log('Mouse button pressed:', event.detail.button)
+        // console.log('Mouse button pressed:', event.detail.button)
         isMouseDown = event.detail.button
     }
 
@@ -2855,7 +2872,11 @@
                             {:else if tab.muted}
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
+                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                    </svg>
+                                </button>
                         </div>
                     </li>
                 {/if}
@@ -2908,7 +2929,11 @@
                             {:else if tab.muted}
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
+                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                    </svg>
+                                </button>
                         </div>
                     </li>
                 {/if}
@@ -2918,7 +2943,9 @@
                 class:hidden={showFixedNewTabButton}
                 onmousedown={openNewTab}
                 title="New Tab (⌘T)">
-                <span class="new-tab-icon">+</span>
+                <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+                </svg>
             </button>
 
             {#if rightPinnedTabs.length}
@@ -2965,7 +2992,11 @@
                             {:else if tab.muted}
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>×</button>
+                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                    </svg>
+                                </button>
                         </div>
                     </li>
                 {/if}
@@ -3100,7 +3131,9 @@
          title="New Tab (⌘T)"
          style="{devModeEnabled ? 'right: 174px;' : 'right: 133px;'}"
          class:visible={showFixedNewTabButton && (!focusModeEnabled || focusModeHovered)}>
-        <span class="new-tab-icon">+</span>
+        <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+             <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+         </svg>
     </div>
 
     <!-- {#if closed.length > 0}
@@ -3453,6 +3486,52 @@
                     <span>Code</span>
                 </div>
             </div>
+        </div>
+    {/if}
+    
+    <!-- Window controls when NOT showing dev badge -->
+    {#if !(!controlledFrameSupported && fallbackColor)}
+        <div class="window-controls-container">
+            <button class="window-control-btn close" onmousedown={closeWindow} title="Close">
+                <svg viewBox="0 0 12 12">
+                    <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <button class="window-control-btn minimize" onmousedown={minimizeWindow} title="Minimize">
+                <svg viewBox="0 0 12 12">
+                    <path d="M3 6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <div class="window-positioning-menu">
+                    <div class="menu-item" onmousedown={maximizeLeft}>← Left Half</div>
+                    <div class="menu-item" onmousedown={maximizeRight}>Right Half →</div>
+                    <div class="menu-item" onmousedown={maximizeTop}>↑ Top Half</div>
+                    <div class="menu-item" onmousedown={maximizeBottom}>Bottom Half ↓</div>
+                    <div class="menu-item" onmousedown={centerGoldenRatio}>◈ Golden Center</div>
+                    <div class="menu-item" onmousedown={bottomRightPane}>↘ Corner Pane</div>
+                </div>
+            </button>
+            <button class="window-control-btn maximize" onmousedown={maximizeWindow} title={isMaximized ? "Restore" : "Maximize"}>
+                {#if isMaximized}
+                    <!-- Restore icon - two overlapping squares -->
+                    <svg viewBox="0 0 12 12">
+                        <rect x="1.5" y="3" width="5.5" height="5.5" stroke="currentColor" stroke-width="1.2" fill="none" rx="0.3"/>
+                        <rect x="4.5" y="0.5" width="5.5" height="5.5" stroke="currentColor" stroke-width="1.2" fill="none" rx="0.3"/>
+                    </svg>
+                {:else}
+                    <!-- Maximize icon - single square -->
+                    <svg viewBox="0 0 12 12">
+                        <rect x="2.5" y="2.5" width="7" height="7" stroke="currentColor" stroke-width="1.2" fill="none" rx="0.5"/>
+                    </svg>
+                {/if}
+                <div class="window-positioning-menu">
+                    <div class="menu-item" onmousedown={maximizeLeft}>← Left Half</div>
+                    <div class="menu-item" onmousedown={maximizeRight}>Right Half →</div>
+                    <div class="menu-item" onmousedown={maximizeTop}>↑ Top Half</div>
+                    <div class="menu-item" onmousedown={maximizeBottom}>Bottom Half ↓</div>
+                    <div class="menu-item" onmousedown={centerGoldenRatio}>◈ Golden Center</div>
+                    <div class="menu-item" onmousedown={bottomRightPane}>↘ Corner Pane</div>
+                </div>
+            </button>
         </div>
     {/if}
 </header>
@@ -4041,6 +4120,96 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    .window-controls-container {
+        position: absolute;
+        top: 8px;
+        left: 10px;
+        display: flex;
+        gap: 0px;
+        z-index: 10000;
+        -webkit-app-region: no-drag;
+        user-select: none;
+    }
+
+    .window-control-btn {
+        width: 24px;
+        height: 30px;
+        border: none;
+        background: transparent;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border-radius: 6px;
+        padding-bottom: 8px;
+        position: relative;
+        margin-left: 1px;
+    }
+
+    .window-control-btn:first-child {
+        margin-left: 0;
+    }
+
+    .window-control-btn > svg {
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+        width: 14px;
+        height: 14px;
+    }
+
+    .window-control-btn:hover > svg {
+        opacity: 1;
+    }
+
+    .window-positioning-menu {
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.95);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 8px;
+        display: none;
+        flex-direction: column;
+        gap: 4px;
+        white-space: nowrap;
+        z-index: 10001;
+        min-width: 160px;
+    }
+
+    .window-control-btn:hover .window-positioning-menu {
+        display: flex;
+        animation: menuFadeIn 0.2s ease;
+    }
+
+    .menu-item {
+        padding: 6px 8px;
+        color: rgba(255, 255, 255, 0.8);
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 11px;
+        transition: all 0.15s ease;
+    }
+
+    .menu-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+    }
+
+    @keyframes menuFadeIn {
+        from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-4px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
     }
 
     .apps-overlay {

@@ -2495,7 +2495,7 @@ The current system demonstrates strong performance and security characteristics.
 
 			<div class="agent-target-selector">
 				<div class="agent-selector-row">
-					<label class="agent-context-label">Context:</label>
+					<label class="agent-context-label" for="agent-context-select">Context:</label>
 					<select class="agent-context-select" bind:value={selectedTarget}>
 						{#each availableTargets as target}
 							<option value={target.id}>{target.name}</option>

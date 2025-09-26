@@ -741,7 +741,9 @@
                         <button class="new-space-button" 
                                 onmousedown={(e) => { e.stopPropagation(); handleNewSpaceMenuToggle(); }}
                                 aria-label="Create new space">
-                            <span class="plus-icon">+</span>
+                            <svg class="plus-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+                            </svg>
                         </button>
                         <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
                             <button class="new-space-menu-item"
@@ -815,7 +817,9 @@
                                                 }
                                             }}
                                             aria-label="Create new tab">
-                                        <span class="new-tab-icon">+</span>
+                                        <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+                                        </svg>
                                         <span class="new-tab-text">New Tab</span>
 
                                         <span class="new-tab-more-button" aria-label="New tab options">
@@ -860,7 +864,11 @@
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>
                                                 </button>
-                                                <button class="tab-close" aria-label="Close tab" onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}>×</button>
+                                                <button class="tab-close" aria-label="Close tab" onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                                        </svg>
+                                                    </button>
                                             </div>
                                         {/if}
                                     {/each}
@@ -1154,8 +1162,8 @@
     }
     
     .new-space-button {
-        width: 22px;
-        height: 22px;
+        width: 20px;
+        height: 20px;
         border-radius: 10px;
         background: transparent;
         display: flex;
@@ -1184,10 +1192,7 @@
         font-size: 16px;
         line-height: 1;
         color: rgba(255, 255, 255, 0.3);
-    }
-
-
-    
+    }    
     .new-space-menu-dropdown {
         position: absolute;
         top: 100%;
@@ -1203,7 +1208,7 @@
         transform: translateY(-4px);
         transition: all 150ms ease;
         backdrop-filter: blur(12px);
-        overflow: visible;
+        overflow: hidden;
     }
     
     .new-space-menu-dropdown.open {
@@ -1596,7 +1601,7 @@
     
     .tab-item-container:hover .tab-close {
         opacity: 1;
-        width: 20px;
+        width: 25px;
         padding: 0 4px;
     }
     
@@ -1696,8 +1701,8 @@
         font-size: 18px;
         line-height: 1;
         flex-shrink: 0;
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1740,7 +1745,7 @@
         background: rgba(0, 0, 0, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
-        padding: 4px 0;
+        padding: 0;
         min-width: 200px;
         z-index: 1000;
         opacity: 0;
@@ -1786,6 +1791,16 @@
         background: rgba(255, 255, 255, 0.1);
         color: rgba(255, 255, 255, 0.95);
     }
+
+    .new-tab-hover-item:first-child:hover {
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
+
+    .new-tab-hover-item:last-child:hover {
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+    }
     
     .new-tab-hover-item.has-submenu {
         padding-right: 26px;
@@ -1795,7 +1810,10 @@
         width: 14px;
         height: 14px;
         color: rgba(255, 255, 255, 0.5);
-        margin-left: auto;
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
     }
     
     .new-tab-hover-item .item-icon {
@@ -1806,12 +1824,12 @@
     
     .new-tab-submenu {
         position: absolute;
-        top: 100%;
-        right: 0;
+        top: 95%;
+        right: 5px;
         background: rgba(0, 0, 0, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
-        padding: 4px 0;
+        padding: 0;
         min-width: 170px;
         z-index: 1001;
         opacity: 0;
@@ -1819,7 +1837,7 @@
         transition: opacity 120ms ease, visibility 120ms ease;
         backdrop-filter: blur(12px);
         pointer-events: none;
-        margin-top: 2px;
+        margin-top: -4px;
     }
     
     .new-tab-hover-item.has-submenu:hover .new-tab-submenu {
@@ -1848,6 +1866,16 @@
     .new-tab-submenu-item:hover {
         background: rgba(255, 255, 255, 0.1);
         color: rgba(255, 255, 255, 0.95);
+    }
+
+    .new-tab-submenu-item:first-child:hover {
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
+
+    .new-tab-submenu-item:last-child:hover {
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
     }
     
     .partition-dot {
@@ -2388,8 +2416,9 @@
         gap: 4px;
         flex-shrink: 0;
         position: absolute;
-        top: 150%;
-        transform: translateY(-50%);
+        top: 109%;
+        left: 0;
+        /* transform: translateY(-50%); */
         opacity: 0;
         visibility: hidden;
         transition: opacity 150ms ease, visibility 150ms ease, left 150ms ease, right 150ms ease;
