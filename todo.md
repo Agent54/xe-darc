@@ -1276,3 +1276,13 @@ back should close lightbox no first history entr
 rss integration in tab group (auto expand rss entries as virtual tab groups)
 
 text zoom and zoom scale in canvas impl. incl keyboard shortcuts
+
+window blur and focus broken
+
+still broken space title click on tile view
+
+pie menu context menu replacement (ff)
+
+scrolling up and down on the spaces dots and tab list top should scroll horizontal for mouse that only has mousewheel
+
+tile space overflow and mouse usage
