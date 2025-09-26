@@ -1274,3 +1274,5 @@ gesture animation sync for tab overview/ integrate app launcher
 back should close lightbox no first history entr
 
 rss integration in tab group (auto expand rss entries as virtual tab groups)
+
+text zoom and zoom scale in canvas impl. incl keyboard shortcuts

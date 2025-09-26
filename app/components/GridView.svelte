@@ -61,25 +61,35 @@
   let isScrolling = $state(false)
   let scrollTimeout = null
   
-  // Handle scroll to highlight current space
+  // Handle scroll to highlight current space (throttled for performance)
+  let scrollThrottleFrame = null
   function handleScroll() {
-    if (!scrollContainer) return
+    if (!scrollContainer || scrollThrottleFrame) return
     
-    isScrolling = true
-    if (scrollTimeout) clearTimeout(scrollTimeout)
-    
-    const containerWidth = scrollContainer.clientWidth
-    const scrollLeft = scrollContainer.scrollLeft
-    const currentPage = Math.round(scrollLeft / containerWidth)
-    const spaceId = spaceOrder[currentPage]
-    
-    if (spaceId && spaceId !== highlightedSpaceId) {
-      highlightedSpaceId = spaceId
-    }
-    
-    scrollTimeout = setTimeout(() => {
-      isScrolling = false
-    }, 150)
+    scrollThrottleFrame = requestAnimationFrame(() => {
+      if (!scrollContainer) {
+        scrollThrottleFrame = null
+        return
+      }
+      
+      isScrolling = true
+      if (scrollTimeout) clearTimeout(scrollTimeout)
+      
+      const containerWidth = scrollContainer.clientWidth
+      const scrollLeft = scrollContainer.scrollLeft
+      const currentPage = Math.round(scrollLeft / containerWidth)
+      const spaceId = spaceOrder[currentPage]
+      
+      if (spaceId && spaceId !== highlightedSpaceId) {
+        highlightedSpaceId = spaceId
+      }
+      
+      scrollTimeout = setTimeout(() => {
+        isScrolling = false
+      }, 150)
+      
+      scrollThrottleFrame = null
+    })
   }
   
   // Scroll to specific space
@@ -103,11 +113,20 @@
     await tick()
     if (scrollContainer && !hasInitialized) {
       highlightedSpaceId = activeSpaceId
-      // Scroll immediately without animation
+      // Scroll immediately without animation by setting scrollLeft directly
       const spaceIndex = spaceOrder.indexOf(activeSpaceId)
       if (spaceIndex >= 0) {
+        // Temporarily disable smooth scrolling for instant positioning
+        const originalBehavior = scrollContainer.style.scrollBehavior
+        scrollContainer.style.scrollBehavior = 'auto'
+        
         const containerWidth = scrollContainer.clientWidth
         scrollContainer.scrollLeft = spaceIndex * containerWidth
+        
+        // Restore smooth scrolling for user interactions
+        setTimeout(() => {
+          scrollContainer.style.scrollBehavior = originalBehavior
+        }, 0)
       }
       hasInitialized = true
     }
@@ -120,8 +139,17 @@
       // Scroll immediately without animation
       const spaceIndex = spaceOrder.indexOf(activeSpaceId)
       if (spaceIndex >= 0) {
+        // Temporarily disable smooth scrolling for instant positioning
+        const originalBehavior = scrollContainer.style.scrollBehavior
+        scrollContainer.style.scrollBehavior = 'auto'
+        
         const containerWidth = scrollContainer.clientWidth
         scrollContainer.scrollLeft = spaceIndex * containerWidth
+        
+        // Restore smooth scrolling for user interactions
+        setTimeout(() => {
+          scrollContainer.style.scrollBehavior = originalBehavior
+        }, 0)
       }
       hasInitialized = true
     }
@@ -168,24 +196,13 @@
     }
   }
 
-  // Handle close button click
   function handleCloseTab(event, tab, index, spaceId) {
     event.preventDefault()
     event.stopPropagation()
-    // If closing a tab from a different space, switch to that space first
-    if (spaceId !== activeSpaceId) {
-      switchSpace(spaceId)
-      setTimeout(() => {
-        onTabClose(tab, event)
-      }, 100)
-    } else {
-      onTabClose(tab, event)
-    }
+    onTabClose(tab, event)
   }
 
-  // Handle background click to switch space or close tab overview
   function handleBackgroundClick(event) {
-    // Check if clicked on background areas (not on tabs or UI elements)
     const target = event.target
     const isBackgroundClick = (
       target === gridContainer || 
@@ -254,6 +271,7 @@
   
   <div 
     class="spaces-scroll-container"
+    class:scrolling={isScrolling}
     bind:this={scrollContainer}
     onscroll={handleScroll}
   >
@@ -360,6 +378,16 @@
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    will-change: scroll-position;
+    scroll-behavior: smooth;
+  }
+
+  .spaces-scroll-container.scrolling .space-page {
+    pointer-events: none;
+  }
+
+  .spaces-scroll-container.scrolling .grid-frame {
+    pointer-events: none;
   }
 
   .spaces-scroll-container::-webkit-scrollbar {
@@ -373,6 +401,7 @@
     scroll-snap-align: start;
     padding: 40px;
     box-sizing: border-box;
+    transform: translateZ(0);
   }
 
   .space-grid {
@@ -384,6 +413,8 @@
     place-items: center;
     width: 100%;
     height: 100%;
+    will-change: auto;
+    contain: layout style;
   }
 
   .empty-space {
@@ -493,6 +524,19 @@
     height: 2px;
     background: rgba(255, 255, 255, 0.8);
     border-radius: 1px;
+    opacity: 0;
+    animation: underline-fade-in 0.3s ease-out 0.15s forwards;
+  }
+
+  @keyframes underline-fade-in {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) scaleX(0.5);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) scaleX(1);
+    }
   }
 
   .space-chip.active .space-color-dot {
@@ -539,16 +583,29 @@
     box-shadow: 
       0 8px 24px rgba(0, 0, 0, 0.3),
       0 2px 8px rgba(0, 0, 0, 0.2);
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease-out;
-    opacity: 0.7;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
   }
 
-  .grid-frame:hover {
-    opacity: 1;
+  .grid-frame::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    z-index: 1;
+    transition: opacity 0.2s ease-out;
   }
 
-  .grid-frame.active {
-    opacity: 1;
+  .grid-frame:hover::before {
+    opacity: 0;
+  }
+
+  .grid-frame.active::before {
+    opacity: 0;
   }
 
   /* Frame scaler styles commented out - no longer used since replacement is disabled
