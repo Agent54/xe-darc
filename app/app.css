@@ -7,7 +7,7 @@ header {
     top: env(titlebar-area-y, 0);
     width: env(titlebar-area-width, 100%);
     height: env(titlebar-area-height, 35px);
-    z-index: 1000;
+    z-index: 2100;
     background-color: #000;
     color: #fff;
     display: flex;
@@ -16,7 +16,6 @@ header {
     font-size: 16px;
     font-weight: 600;
     padding: 0;
-    z-index: 1000;
     gap: 8px;
     flex-direction: row;
     flex-wrap: nowrap;
@@ -2345,4 +2344,18 @@ header:hover .hover-menu {
 
 .overlay-open controlledframe {
     pointer-events: none;
+}
+
+:global(select) {
+    background: black;
+    border: 1px solid rgb(79, 79, 79);
+    border-radius: 4px;
+}
+
+:global(select option) {
+    background-color: #000;
+}
+/* selected option */
+:global(select option[selected]) {
+    background-color: gray;
 }

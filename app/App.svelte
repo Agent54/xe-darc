@@ -108,7 +108,7 @@
     let tabBarHovered = $state(false)
     let collapsingPlaceholders = $state(false)
 
-    let lastUsedViewMode = $state('canvas')
+    let lastUsedViewMode = $state('tile')
     let showFixedNewTabButton = $state(false)
     let openSidebars = $state(new Set())
     let sidebarStateLoaded = $state(false)
@@ -144,6 +144,7 @@
     let certificateMonitorForTab = $state(null)
     let devModeEnabled = $state(false)
     let isMaximized = $state(false)
+    let isMacPlatform = $state(false)
     
     // Update maximize state reactively
     $effect(() => {
@@ -158,6 +159,11 @@
         const interval = setInterval(updateMaximizeState, 100)
         
         return () => clearInterval(interval)
+    })
+    
+    // Detect Mac platform
+    onMount(() => {
+        isMacPlatform = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent) || navigator.platform.includes('Mac')
     })
 
     // LED indicator reactive states
@@ -3057,19 +3063,6 @@
             </div> -->
 
             <div class="view-mode-menu-item menu-item" 
-                    class:active={data.ui.viewMode === 'canvas'}
-                    role="button"
-                    tabindex="0"
-                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('canvas'); closeMenuImmediately() }}
-                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('canvas') } }}>
-                <span class="view-mode-icon-item menu-icon-item">
-                    {@html getViewModeIcon('canvas')}
-                </span>
-                <span>Canvas</span>
-                {#if data.ui.viewMode === 'canvas'}<span class="checkmark">•</span>{/if}
-            </div>
-
-            <div class="view-mode-menu-item menu-item" 
                     class:active={data.ui.viewMode === 'tile'}
                     role="button"
                     tabindex="0"
@@ -3080,6 +3073,19 @@
                 </span>
                 <span>Tiles</span>
                 {#if data.ui.viewMode === 'tile'}<span class="checkmark">•</span>{/if}
+            </div>
+
+            <div class="view-mode-menu-item menu-item" 
+                    class:active={data.ui.viewMode === 'canvas'}
+                    role="button"
+                    tabindex="0"
+                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('canvas'); closeMenuImmediately() }}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('canvas') } }}>
+                <span class="view-mode-icon-item menu-icon-item">
+                    {@html getViewModeIcon('canvas')}
+                </span>
+                <span>Canvas</span>
+                {#if data.ui.viewMode === 'canvas'}<span class="checkmark">•</span>{/if}
             </div>
 
             <div class="view-mode-menu-item menu-item" 
@@ -3489,8 +3495,8 @@
         </div>
     {/if}
     
-    <!-- Window controls when NOT showing dev badge -->
-    {#if !(!controlledFrameSupported && fallbackColor)}
+    <!-- Window controls when NOT showing dev badge and NOT on Mac -->
+    {#if !(!controlledFrameSupported && fallbackColor) && !isMacPlatform}
         <div class="window-controls-container">
             <button class="window-control-btn close" onmousedown={closeWindow} title="Close">
                 <svg viewBox="0 0 12 12">
@@ -3501,14 +3507,6 @@
                 <svg viewBox="0 0 12 12">
                     <path d="M3 6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                 </svg>
-                <div class="window-positioning-menu">
-                    <div class="menu-item" onmousedown={maximizeLeft}>← Left Half</div>
-                    <div class="menu-item" onmousedown={maximizeRight}>Right Half →</div>
-                    <div class="menu-item" onmousedown={maximizeTop}>↑ Top Half</div>
-                    <div class="menu-item" onmousedown={maximizeBottom}>Bottom Half ↓</div>
-                    <div class="menu-item" onmousedown={centerGoldenRatio}>◈ Golden Center</div>
-                    <div class="menu-item" onmousedown={bottomRightPane}>↘ Corner Pane</div>
-                </div>
             </button>
             <button class="window-control-btn maximize" onmousedown={maximizeWindow} title={isMaximized ? "Restore" : "Maximize"}>
                 {#if isMaximized}
@@ -3524,12 +3522,12 @@
                     </svg>
                 {/if}
                 <div class="window-positioning-menu">
-                    <div class="menu-item" onmousedown={maximizeLeft}>← Left Half</div>
-                    <div class="menu-item" onmousedown={maximizeRight}>Right Half →</div>
-                    <div class="menu-item" onmousedown={maximizeTop}>↑ Top Half</div>
-                    <div class="menu-item" onmousedown={maximizeBottom}>Bottom Half ↓</div>
-                    <div class="menu-item" onmousedown={centerGoldenRatio}>◈ Golden Center</div>
-                    <div class="menu-item" onmousedown={bottomRightPane}>↘ Corner Pane</div>
+                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); maximizeLeft() }}>← Left Half</div>
+                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); maximizeRight() }}>Right Half →</div>
+                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); maximizeTop() }}>↑ Top Half</div>
+                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); maximizeBottom() }}>Bottom Half ↓</div>
+                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); centerGoldenRatio() }}>◈ Golden Center</div>
+                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); bottomRightPane() }}>↘ Corner Pane</div>
                 </div>
             </button>
         </div>
@@ -4164,27 +4162,52 @@
         opacity: 1;
     }
 
+    .focus-mode .window-control-btn > svg {
+        opacity: 0.34;
+    }
+
+    header.focus-mode:hover .window-control-btn > svg {
+        opacity: 0.7;
+    }
+
     .window-positioning-menu {
         position: absolute;
         top: 100%;
-        left: 50%;
-        transform: translateX(-50%);
+        left: 0;
+        transform: translateY(-10px);
         background: rgba(0, 0, 0, 0.95);
         backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 8px;
         padding: 8px;
+        opacity: 0;
+        visibility: hidden;
         display: none;
         flex-direction: column;
         gap: 4px;
         white-space: nowrap;
         z-index: 10001;
         min-width: 160px;
+        transition: none;
     }
 
-    .window-control-btn:hover .window-positioning-menu {
+    .window-control-btn.maximize:hover .window-positioning-menu {
         display: flex;
-        animation: menuFadeIn 0.2s ease;
+        animation: menuDelayedShow 0.3s ease forwards;
+        animation-delay: 1200ms;
+    }
+
+    @keyframes menuDelayedShow {
+        0% {
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+        }
+        100% {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
     }
 
     .menu-item {

@@ -158,6 +158,45 @@ async function saveCurrentState() {
     }
 }
 
+// Position verification and retry system
+async function verifyAndRetryPosition(targetX, targetY, targetWidth, targetHeight, maxRetries = 3) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        // Wait a moment for the browser to complete the positioning
+        await new Promise(resolve => setTimeout(resolve, 100 + (attempt * 50)))
+        
+        const currentX = window.screenX ?? window.screenLeft
+        const currentY = window.screenY ?? window.screenTop
+        const currentW = window.outerWidth
+        const currentH = window.outerHeight
+        
+        // Check if position is close enough (within 10 pixels tolerance)
+        const positionOk = Math.abs(currentX - targetX) < 10 && Math.abs(currentY - targetY) < 10
+        const sizeOk = Math.abs(currentW - targetWidth) < 10 && Math.abs(currentH - targetHeight) < 10
+        
+        console.log(`Position attempt ${attempt + 1}:`, {
+            current: { x: currentX, y: currentY, w: currentW, h: currentH },
+            target: { x: targetX, y: targetY, w: targetWidth, h: targetHeight },
+            positionOk,
+            sizeOk
+        })
+        
+        if (positionOk && sizeOk) {
+            console.log('✅ Position verified successfully')
+            return true
+        }
+        
+        // Retry positioning
+        if (attempt < maxRetries - 1) {
+            console.log(`🔄 Retrying position (attempt ${attempt + 2})...`)
+            window.moveTo(Math.round(targetX), Math.round(targetY))
+            window.resizeTo(Math.round(targetWidth), Math.round(targetHeight))
+        }
+    }
+    
+    console.warn('❌ Position verification failed after all retries')
+    return false
+}
+
 // Restore window to previous state
 async function restoreWindow() {
     try {
@@ -176,25 +215,11 @@ async function restoreWindow() {
             console.log('Restoring to:', { width, height, x, y })
             
             if (window.moveTo && window.resizeTo) {
-                // Force immediate execution - browsers may ignore rapid calls
                 window.moveTo(Math.round(x), Math.round(y))
                 window.resizeTo(Math.round(width), Math.round(height))
                 
-                // Also try with requestAnimationFrame for better browser compatibility
-                requestAnimationFrame(() => {
-                    window.moveTo(Math.round(x), Math.round(y))
-                    window.resizeTo(Math.round(width), Math.round(height))
-                })
-                
-                // Final verification
-                setTimeout(() => {
-                    const currentX = window.screenX ?? window.screenLeft
-                    const currentY = window.screenY ?? window.screenTop
-                    console.log('Result:', {
-                        current: { x: currentX, y: currentY, w: window.outerWidth, h: window.outerHeight },
-                        target: { x, y, w: width, h: height }
-                    })
-                }, 200)
+                // Verify and retry if needed
+                await verifyAndRetryPosition(x, y, width, height)
             }
         }
         
@@ -290,18 +315,26 @@ export async function maximizeLeft() {
     await saveCurrentState()
     const dimensions = await getScreenDimensions()
     if (window.resizeTo && window.moveTo) {
+        const halfWidth = Math.round(dimensions.workAreaWidth / 2)
         window.moveTo(0, 0)
-        setTimeout(() => window.resizeTo(dimensions.workAreaWidth / 2, dimensions.workAreaHeight), 10)
+        window.resizeTo(halfWidth, dimensions.workAreaHeight)
+        
+        // Verify positioning
+        await verifyAndRetryPosition(0, 0, halfWidth, dimensions.workAreaHeight)
     }
-    windowStateHistory.isMaximized = false // These aren't "maximized" states
+    windowStateHistory.isMaximized = false
 }
 
 export async function maximizeRight() {
     await saveCurrentState()
     const dimensions = await getScreenDimensions()
     if (window.resizeTo && window.moveTo) {
-        window.moveTo(dimensions.workAreaWidth / 2, 0)
-        setTimeout(() => window.resizeTo(dimensions.workAreaWidth / 2, dimensions.workAreaHeight), 10)
+        const halfWidth = Math.round(dimensions.workAreaWidth / 2)
+        window.moveTo(halfWidth, 0)
+        window.resizeTo(halfWidth, dimensions.workAreaHeight)
+        
+        // Verify positioning
+        await verifyAndRetryPosition(halfWidth, 0, halfWidth, dimensions.workAreaHeight)
     }
     windowStateHistory.isMaximized = false
 }
@@ -310,8 +343,12 @@ export async function maximizeTop() {
     await saveCurrentState()
     const dimensions = await getScreenDimensions()
     if (window.resizeTo && window.moveTo) {
+        const halfHeight = Math.round(dimensions.workAreaHeight / 2)
         window.moveTo(0, 0)
-        setTimeout(() => window.resizeTo(dimensions.workAreaWidth, dimensions.workAreaHeight / 2), 10)
+        window.resizeTo(dimensions.workAreaWidth, halfHeight)
+        
+        // Verify positioning
+        await verifyAndRetryPosition(0, 0, dimensions.workAreaWidth, halfHeight)
     }
     windowStateHistory.isMaximized = false
 }
@@ -320,8 +357,12 @@ export async function maximizeBottom() {
     await saveCurrentState()
     const dimensions = await getScreenDimensions()
     if (window.resizeTo && window.moveTo) {
-        window.moveTo(0, dimensions.workAreaHeight / 2)
-        setTimeout(() => window.resizeTo(dimensions.workAreaWidth, dimensions.workAreaHeight / 2), 10)
+        const halfHeight = Math.round(dimensions.workAreaHeight / 2)
+        window.moveTo(0, halfHeight)
+        window.resizeTo(dimensions.workAreaWidth, halfHeight)
+        
+        // Verify positioning
+        await verifyAndRetryPosition(0, halfHeight, dimensions.workAreaWidth, halfHeight)
     }
     windowStateHistory.isMaximized = false
 }
@@ -331,23 +372,31 @@ export async function centerGoldenRatio() {
     const dimensions = await getScreenDimensions()
     if (window.resizeTo && window.moveTo) {
         // Calculate golden ratio dimensions
-        const maxWidth = dimensions.workAreaWidth * 0.8
-        const maxHeight = dimensions.workAreaHeight * 0.8
+        const maxWidth = dimensions.workAreaWidth * 0.75
+        const maxHeight = dimensions.workAreaHeight * 0.75
         
         let width, height
+        
+        // Use golden ratio for aspect ratio: width/height = golden ratio
         if (maxWidth / maxHeight > GOLDEN_RATIO) {
+            // Height is the constraint
             height = maxHeight
             width = height * GOLDEN_RATIO
         } else {
+            // Width is the constraint  
             width = maxWidth
             height = width / GOLDEN_RATIO
         }
         
-        const x = (dimensions.workAreaWidth - width) / 2
-        const y = (dimensions.workAreaHeight - height) / 2
+        // Simply center the window on screen
+        const x = Math.round((dimensions.workAreaWidth - width) / 2)
+        const y = Math.round((dimensions.workAreaHeight - height) / 2)
         
         window.moveTo(x, y)
-        setTimeout(() => window.resizeTo(width, height), 10)
+        window.resizeTo(Math.round(width), Math.round(height))
+        
+        // Verify positioning
+        await verifyAndRetryPosition(x, y, Math.round(width), Math.round(height))
     }
     windowStateHistory.isMaximized = false
 }
@@ -357,13 +406,16 @@ export async function bottomRightPane() {
     const dimensions = await getScreenDimensions()
     if (window.resizeTo && window.moveTo) {
         // Quarter size in bottom right
-        const width = dimensions.workAreaWidth / 3
-        const height = dimensions.workAreaHeight / 3
-        const x = dimensions.workAreaWidth - width
-        const y = dimensions.workAreaHeight - height
+        const width = Math.round(dimensions.workAreaWidth / 3)
+        const height = Math.round(dimensions.workAreaHeight / 3)
+        const x = Math.round(dimensions.workAreaWidth - width)
+        const y = Math.round(dimensions.workAreaHeight - height)
         
         window.moveTo(x, y)
-        setTimeout(() => window.resizeTo(width, height), 10)
+        window.resizeTo(width, height)
+        
+        // Verify positioning
+        await verifyAndRetryPosition(x, y, width, height)
     }
     windowStateHistory.isMaximized = false
 }
