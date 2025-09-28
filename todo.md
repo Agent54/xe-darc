@@ -1286,3 +1286,8 @@ pie menu context menu replacement (ff)
 scrolling up and down on the spaces dots and tab list top should scroll horizontal for mouse that only has mousewheel
 
 tile space overflow and mouse usage
+
+keyaboard ctrl l for omnibar focus
+
+download implementation
+
