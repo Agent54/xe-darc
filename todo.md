@@ -1291,3 +1291,4 @@ keyaboard ctrl l for omnibar focus
 
 download implementation
 
+white mode
