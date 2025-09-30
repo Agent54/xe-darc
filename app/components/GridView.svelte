@@ -399,9 +399,10 @@
     width: 100%;
     height: 100%;
     scroll-snap-align: start;
-    padding: 40px;
+    padding: 60px 40px 40px 40px;
     box-sizing: border-box;
     transform: translateZ(0);
+    overflow-y: auto;
   }
 
   .space-grid {
@@ -412,7 +413,7 @@
     place-content: center;
     place-items: center;
     width: 100%;
-    height: 100%;
+    min-height: 100%;
     will-change: auto;
     contain: layout style;
   }
@@ -479,6 +480,7 @@
     border-radius: 9999px;
     max-width: calc(100% - 32px);
     overflow-x: auto;
+    z-index: 10;
   }
 
   .space-chip {
@@ -594,18 +596,18 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.65);
     pointer-events: none;
     z-index: 1;
-    transition: opacity 0.2s ease-out;
+    transition: background 0.2s ease-out;
   }
 
   .grid-frame:hover::before {
-    opacity: 0;
+    background: rgba(0, 0, 0, 0.25);
   }
 
   .grid-frame.active::before {
-    opacity: 0;
+    background: rgba(0, 0, 0, 0);
   }
 
   /* Frame scaler styles commented out - no longer used since replacement is disabled
@@ -699,6 +701,11 @@
     padding: 3px 8px;
     border-radius: 8px 8px 0 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.2s ease-out;
+  }
+
+  .grid-frame.active .tab-header {
+    background: rgba(50, 50, 50, 0.95);
   }
 
   .tab-info {

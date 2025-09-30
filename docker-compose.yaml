@@ -4,6 +4,8 @@ services:
     restart: always
     build:
       context: .
+    extra_hosts:
+      - "dockerhost:172.17.0.1"
     ports:
       - 5194:5194
       # - name: main
