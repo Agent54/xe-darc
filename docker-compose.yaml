@@ -5,7 +5,7 @@ services:
     build:
       context: .
     extra_hosts:
-      - "dockerhost:172.17.0.1"
+      - "host.docker.internal:host-gateway"
     ports:
       - 5194:5194
       # - name: main
@@ -16,6 +16,8 @@ services:
     deploy:
       mode: replicated
       replicas: 1
+    environment:
+      container: true
     develop:
       # replicas: 3
       watch:

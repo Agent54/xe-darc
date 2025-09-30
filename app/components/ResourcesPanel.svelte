@@ -206,8 +206,6 @@
         const archived = []
         const usedResourceTypes = new Set()
 
-        const usedResourceTypes = new Set()
-
         const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
         if (!currentUrl && scope === 'origin') {
             return {

@@ -181,8 +181,8 @@ export default defineConfig({
         rewriteWsOrigin: true,
       },
       '/devtools-api': {
-        target: 'http://127.0.0.1:9226',
-        changeOrigin: true,
+        target: `http://${process.env.container === 'true' ? 'host.docker.internal' : '127.0.0.1'}:9226`,
+        changeOrigin: process.env.container === 'true' ? false : true,
         rewrite: (path) => path.replace(/^\/devtools-api/, '')
       }
       
