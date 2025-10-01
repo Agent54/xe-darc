@@ -78,6 +78,7 @@
   "dark_background_color": "black",
   "permissions": ["audioCapture", "window-management", "presentation-api","publickey-credentials-create","publickey-credentials-get", "display-capture", "picture-in-picture", "clipboard-read", "clipboard-write", " screen-wake-lock"],
   "permissions_policy": {
+    "sub-apps": ["self", "*"],
     "screen-wake-lock": ["self"],
     "controlled-frame": ["self"],
     "picture-in-picture": ["self", "*"],
