@@ -7,7 +7,7 @@ RUN npm install -g pnpm
 RUN npm install -g @anthropic-ai/claude-code
 
 ENV PATH=$PATH:/root/.cargo/bin
-RUN apt-get update && apt-get install -y build-essential
+RUN apt-get update && apt-get install -y build-essential lsof
 
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 # RUN cargo install --locked --bin jj jj-cli

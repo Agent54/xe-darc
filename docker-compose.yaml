@@ -8,6 +8,7 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - 5194:5194
+      - 8787:8787
       # - name: main
       #   target: 8086
       #   app_protocol: http

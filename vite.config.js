@@ -160,6 +160,8 @@ if (process.env.NODE_ENV === 'production') {
 // })
 // }
 
+console.log('Vite config loaded - Server port: 5194, DevTools proxy port: 9226');
+
 export default defineConfig({
   plugins,
   define: { globals: 'window' },
@@ -183,7 +185,8 @@ export default defineConfig({
       '/devtools-api': {
         target: `http://${process.env.container === 'true' ? 'host.docker.internal' : '127.0.0.1'}:9226`,
         changeOrigin: process.env.container === 'true' ? false : true,
-        rewrite: (path) => path.replace(/^\/devtools-api/, '')
+        rewrite: (path) => path.replace(/^\/devtools-api/, ''),
+        ws: true 
       }
       
      // 'http://localhost:8787',
@@ -195,13 +198,13 @@ export default defineConfig({
     },
     // ...(process.env.container === 'true' && { allowedHosts: true }),
     hmr: {
-      protocol: 'wss', 
+      protocol: 'wss',
       clientPort: 5194,
-      host: '192.168.31.196' // FIXME: localhost
+      host: 'localhost' // FIXME: localhost
       // ...(process.env.container !== 'true' && { clientPort: 5193,  host: 'localhost' }),
     },
     watch: {
-      ignored: ['**/todo.md']
+      ignored: ['**/todo.md', '!**/src/**', '!**/app/**', '!**/index.html', '!**/agent_app.html', '!**/public/**']
     }
   },
   resolve:{

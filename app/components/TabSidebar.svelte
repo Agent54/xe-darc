@@ -35,7 +35,7 @@
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
     let navigationStateRefresh = $state(0)
-    
+
     // Focus the URL input when it becomes visible
     $effect(() => {
         if (urlBarExpanded && urlInput) {
@@ -46,7 +46,7 @@
             }, 1)
         }
     })
-    
+
     let isManualScroll = false
     let previousSpaceIndex = -1
     // let scrollActiveSpaceTimeout = null
@@ -552,7 +552,7 @@
             if (matchingItem?.devtoolsFrontendUrl) {
                 // Replace the remote DevTools frontend with local one while keeping WebSocket params
                 const originalUrl = new URL(matchingItem.devtoolsFrontendUrl)
-                const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html${originalUrl.search}`
+                const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html?wss=localhost:5194/devtools-api/devtools/${originalUrl.search.split('/devtools/')[1]}`
                 
                 await data.newTab(data.spaceMeta.activeSpace, { 
                     url: localDevToolsUrl, 
@@ -989,7 +989,7 @@
     }
     
     .sidebar-box.visible .sidebar {
-        background: rgb(0, 0, 0);
+        background: black;
         backdrop-filter: none;
     }
     
@@ -1721,7 +1721,7 @@
         flex: 1;
         line-height: 1.2;
         margin-top: 1px;
-        max-width: 180px;
+        /* max-width: 180px; */
     }
     
     .new-tab-button:hover .new-tab-icon {
@@ -2044,15 +2044,22 @@
     /* Recently Closed Tabs */
     .closed-tabs-section {
         position: absolute;
-        bottom: 4px;
-        left: 12px;
-        right: 12px;
+        bottom: 8px;
+        left: 8px;
+        right: 8px;
         z-index: 10;
         pointer-events: auto;
         display: flex;
         flex-direction: column;
-        width: calc(100% - 24px);
+        width: calc(100% - 16px);
         flex-shrink: 0;
+    }
+
+    :global(.sidebar-box.visible .closed-tabs-section)   {
+        bottom: 4px;
+        left: 12px;
+        right: 12px;
+        width: calc(100% - 24px);
     }
     
     .closed-tabs-header {

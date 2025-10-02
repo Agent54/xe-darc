@@ -99,7 +99,7 @@
         if (item.devtoolsFrontendUrl && data && currentSpaceId) {
             // Replace the remote DevTools frontend with local one while keeping WebSocket params
             const originalUrl = new URL(item.devtoolsFrontendUrl)
-            const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html${originalUrl.search}`
+            const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html?wss=localhost:5194/devtools-api/devtools/${originalUrl.search.split('/devtools/')[1]}`
             
             data.newTab(currentSpaceId, { 
                 url: localDevToolsUrl, 

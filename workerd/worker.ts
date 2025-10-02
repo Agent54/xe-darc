@@ -1,3 +1,5 @@
+import cdpProxy from './cdp-proxy';
+
 // import { routeAgentRequest, type Schedule } from "agents";
 
 // import { unstable_getSchedulePrompt } from "agents/schedule";
@@ -163,8 +165,16 @@ function getModel(modelId: string = 'claude-4-sonnet-20250514') {
 // }
 
 export default {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
+
+    // Route CDP requests to the CDP proxy
+    if (url.pathname.startsWith('/json') ||
+        url.pathname.startsWith('/devtools') ||
+        url.pathname === '/' ||
+        request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+      return cdpProxy.fetch(request, env, ctx);
+    }
 
     return (
       // Route the request to our agent or return 404 if not found
