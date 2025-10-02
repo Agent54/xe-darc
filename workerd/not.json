@@ -1,0 +1,452 @@
+⎔ Reloading local server...
+[CDP-PROXY] *** REQUEST: GET /json/version/
+[CDP-PROXY] -> Handling as HTTP request
+[CDP-PROXY] HTTP Response JSON: {
+  "Browser": "Chrome/142.0.7444.3",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+  "V8-Version": "14.2.231.1",
+  "WebKit-Version": "537.36 (@0efad6c543710f374075ec00d91df1ccdcad4f5a)",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:8787/devtools/browser/43a66d99-4fb9-4cef-8f64-b17d14c5db8f"
+}
+[wrangler:info] GET /json/version/ 200 OK (9ms)
+[CDP-PROXY] *** REQUEST: GET /devtools/browser/43a66d99-4fb9-4cef-8f64-b17d14c5db8f
+[CDP-PROXY] -> Handling as WebSocket
+[wrangler:info] GET /devtools/browser/43a66d99-4fb9-4cef-8f64-b17d14c5db8f 101 Switching Protocols (9ms)
+[CDP-PROXY] Cached 1 contexts
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 1,
+  "method": "Browser.getVersion"
+}
+    [CDP-PROXY] Target ->
+    {
+      "id": 1,
+      "result": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/142.0.7444.3",
+        "revision": "@0efad6c543710f374075ec00d91df1ccdcad4f5a",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "jsVersion": "14.2.231.1"
+      }
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 2,
+  "method": "Target.setAutoAttach",
+  "params": {
+    "autoAttach": true,
+    "waitForDebuggerOnStart": true,
+    "flatten": true
+  }
+}
+    [CDP-PROXY] Sent context:
+    {
+      "method": "Target.attachedToTarget",
+      "params": {
+        "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1",
+        "targetInfo": {
+          "targetId": "01722449B715F987F947A3986446AE6D",
+          "type": "page",
+          "title": "Basic HTML Sample Page",
+          "url": "https://www.sheldonbrown.com/web_sample1.html",
+          "attached": true,
+          "canAccessOpener": false,
+          "browserContextId": "71463BAF59E5CF623B643D124A33E930"
+        },
+        "waitingForDebugger": false
+      }
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 3,
+  "method": "Browser.setDownloadBehavior",
+  "params": {
+    "behavior": "allowAndName",
+    "downloadPath": "/var/folders/9w/zlr863t144b33k372htpjh5c0000gn/T/playwright-artifacts-dRiYEY",
+    "eventsEnabled": true
+  }
+}
+[CDP-PROXY] Cached 1 contexts
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 4,
+  "method": "Page.enable",
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 5,
+  "method": "Page.getFrameTree",
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 6,
+  "method": "Log.enable",
+  "params": {},
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 7,
+  "method": "Page.setLifecycleEventsEnabled",
+  "params": {
+    "enabled": true
+  },
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 8,
+  "method": "Runtime.enable",
+  "params": {},
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+    [CDP-PROXY] Sent Runtime.executionContextCreated for target 01722449B715F987F947A3986446AE6D:
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 699,
+          "origin": "https://www.sheldonbrown.com",
+          "name": "",
+          "uniqueId": "-9288871967234918000.4051165847927751000",
+          "auxData": {
+            "isDefault": true,
+            "type": "default",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      }
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 9,
+  "method": "Page.addScriptToEvaluateOnNewDocument",
+  "params": {
+    "source": "",
+    "worldName": "__playwright_utility_world_page@6c04fdf5dc740084c5d749c7b9f52812"
+  },
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+    [CDP-PROXY] Sent Runtime.executionContextCreated for script:
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 690,
+          "origin": "",
+          "name": "__playwright_utility_world_page@6c04fdf5dc740084c5d749c7b9f52812",
+          "uniqueId": "-4541376089763881000.808341281046259800",
+          "auxData": {
+            "isDefault": false,
+            "type": "isolated",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      }
+    }
+[CDP-PROXY] Cached 1 contexts
+[CDP-PROXY] Cached 1 contexts
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 10,
+  "method": "Network.enable",
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 11,
+  "method": "Target.setAutoAttach",
+  "params": {
+    "autoAttach": true,
+    "waitForDebuggerOnStart": true,
+    "flatten": true
+  },
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 12,
+  "method": "Emulation.setFocusEmulationEnabled",
+  "params": {
+    "enabled": true
+  },
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 13,
+  "method": "Emulation.setEmulatedMedia",
+  "params": {
+    "media": "",
+    "features": [
+      {
+        "name": "prefers-color-scheme",
+        "value": "light"
+      },
+      {
+        "name": "prefers-reduced-motion",
+        "value": "no-preference"
+      },
+      {
+        "name": "forced-colors",
+        "value": "none"
+      },
+      {
+        "name": "prefers-contrast",
+        "value": "no-preference"
+      }
+    ]
+  },
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 14,
+  "method": "Runtime.runIfWaitingForDebugger",
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+[CDP-PROXY] Cached 1 contexts
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 2,
+      "result": {}
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 3,
+      "result": {}
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 15,
+  "method": "Target.getTargetInfo"
+}
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 4,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 5,
+      "result": {
+        "frameTree": {
+          "frame": {
+            "id": "01722449B715F987F947A3986446AE6D",
+            "loaderId": "321BA579D87E5ECC",
+            "url": "https://www.sheldonbrown.com/web_sample1.html",
+            "domainAndRegistry": "www.sheldonbrown.com",
+            "securityOrigin": "https://www.sheldonbrown.com",
+            "mimeType": "text/html",
+            "secureContextType": "Secure",
+            "crossOriginIsolatedContextType": "NotIsolated",
+            "gatedAPIFeatures": [],
+            "securityOriginDetails": {
+              "isLocalhost": false
+            },
+            "adFrameStatus": {
+              "adFrameType": "none"
+            }
+          },
+          "childFrames": []
+        }
+      },
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 6,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 7,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 8,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 9,
+      "result": {
+        "identifier": "647582"
+      },
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 16,
+  "method": "Page.createIsolatedWorld",
+  "params": {
+    "frameId": "01722449B715F987F947A3986446AE6D",
+    "grantUniveralAccess": true,
+    "worldName": "__playwright_utility_world_page@6c04fdf5dc740084c5d749c7b9f52812"
+  },
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+    [CDP-PROXY] Sent Runtime.executionContextCreated event:
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 501,
+          "origin": "",
+          "name": "__playwright_utility_world_page@6c04fdf5dc740084c5d749c7b9f52812",
+          "uniqueId": "-7405745011372045000.4994343826896254000",
+          "auxData": {
+            "isDefault": false,
+            "type": "isolated",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      }
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 10,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 11,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 12,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 13,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 14,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 15,
+      "result": {
+        "targetInfo": {
+          "targetId": "0010be96-90f2-45f8-83e7-20c699a41151",
+          "originalType": "browser",
+          "title": "",
+          "url": "",
+          "attached": true,
+          "canAccessOpener": false
+        }
+      }
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 17,
+  "method": "Page.setInterceptFileChooserDialog",
+  "params": {
+    "enabled": true
+  },
+  "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+}
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 16,
+      "result": {
+        "executionContextId": 501
+      },
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 17,
+      "result": {},
+      "sessionId": "41DC0767CD5000FFA68D5DC9C1E784A1"
+    }

@@ -1,0 +1,585 @@
+// this works correctly:
+⎔ Reloading local server...
+⎔ Reloading local server...
+[CDP-PROXY] *** REQUEST: GET /json/version/
+[CDP-PROXY] -> Handling as HTTP request
+[CDP-PROXY] HTTP Response JSON: {
+  "Browser": "Chrome/142.0.7444.3",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+  "V8-Version": "14.2.231.1",
+  "WebKit-Version": "537.36 (@0efad6c543710f374075ec00d91df1ccdcad4f5a)",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:8787/devtools/browser/43a66d99-4fb9-4cef-8f64-b17d14c5db8f"
+}
+[wrangler:info] GET /json/version/ 200 OK (19ms)
+[CDP-PROXY] *** REQUEST: GET /devtools/browser/43a66d99-4fb9-4cef-8f64-b17d14c5db8f
+[CDP-PROXY] -> Handling as WebSocket
+[wrangler:info] GET /devtools/browser/43a66d99-4fb9-4cef-8f64-b17d14c5db8f 101 Switching Protocols (2ms)
+[CDP-PROXY] Cached 1 contexts
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 1,
+  "method": "Browser.getVersion"
+}
+    [CDP-PROXY] Target ->
+    {
+      "id": 1,
+      "result": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/142.0.7444.3",
+        "revision": "@0efad6c543710f374075ec00d91df1ccdcad4f5a",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "jsVersion": "14.2.231.1"
+      }
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 2,
+  "method": "Target.setAutoAttach",
+  "params": {
+    "autoAttach": true,
+    "waitForDebuggerOnStart": true,
+    "flatten": true
+  }
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 3,
+  "method": "Browser.setDownloadBehavior",
+  "params": {
+    "behavior": "allowAndName",
+    "downloadPath": "/var/folders/9w/zlr863t144b33k372htpjh5c0000gn/T/playwright-artifacts-W1eakI",
+    "eventsEnabled": true
+  }
+}
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 3,
+      "result": {}
+    }
+    [CDP-PROXY] Target ->
+    {
+      "method": "Target.attachedToTarget",
+      "params": {
+        "sessionId": "434697048E8A9675F2B9B587F764CF98",
+        "targetInfo": {
+          "targetId": "01722449B715F987F947A3986446AE6D",
+          "type": "page",
+          "title": "Basic HTML Sample Page",
+          "url": "https://www.sheldonbrown.com/web_sample1.html",
+          "attached": true,
+          "canAccessOpener": false,
+          "browserContextId": "204F1C9855E208B1E64B90317EE0FC30"
+        },
+        "waitingForDebugger": false
+      }
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 2,
+      "result": {}
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 4,
+  "method": "Page.enable",
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 5,
+  "method": "Page.getFrameTree",
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 6,
+  "method": "Log.enable",
+  "params": {},
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 6,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 7,
+  "method": "Page.setLifecycleEventsEnabled",
+  "params": {
+    "enabled": true
+  },
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 7,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 8,
+  "method": "Runtime.enable",
+  "params": {},
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 9,
+  "method": "Page.addScriptToEvaluateOnNewDocument",
+  "params": {
+    "source": "",
+    "worldName": "__playwright_utility_world_page@ae188407fc7251bd5f0373342e8abcc2"
+  },
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 10,
+  "method": "Network.enable",
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 11,
+  "method": "Target.setAutoAttach",
+  "params": {
+    "autoAttach": true,
+    "waitForDebuggerOnStart": true,
+    "flatten": true
+  },
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 12,
+  "method": "Emulation.setFocusEmulationEnabled",
+  "params": {
+    "enabled": true
+  },
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 13,
+  "method": "Emulation.setEmulatedMedia",
+  "params": {
+    "media": "",
+    "features": [
+      {
+        "name": "prefers-color-scheme",
+        "value": "light"
+      },
+      {
+        "name": "prefers-reduced-motion",
+        "value": "no-preference"
+      },
+      {
+        "name": "forced-colors",
+        "value": "none"
+      },
+      {
+        "name": "prefers-contrast",
+        "value": "no-preference"
+      }
+    ]
+  },
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 14,
+  "method": "Runtime.runIfWaitingForDebugger",
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+    [CDP-PROXY] Target ->
+    {
+      "id": 4,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 5,
+      "result": {
+        "frameTree": {
+          "frame": {
+            "id": "01722449B715F987F947A3986446AE6D",
+            "loaderId": "36B7397DF70A3C7C50ED82B27B173A97",
+            "url": "https://www.sheldonbrown.com/web_sample1.html",
+            "domainAndRegistry": "sheldonbrown.com",
+            "securityOrigin": "https://www.sheldonbrown.com",
+            "securityOriginDetails": {
+              "isLocalhost": false
+            },
+            "mimeType": "text/html",
+            "adFrameStatus": {
+              "adFrameType": "none"
+            },
+            "secureContextType": "Secure",
+            "crossOriginIsolatedContextType": "NotIsolated",
+            "gatedAPIFeatures": []
+          }
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 7,
+          "origin": "",
+          "name": "__playwright_utility_world_page@dcb431ebb5fce04705c51f6d17754147",
+          "uniqueId": "3275679189909201180.321058970996603059",
+          "auxData": {
+            "isDefault": false,
+            "type": "isolated",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 6,
+          "origin": "",
+          "name": "__playwright_utility_world_page@755dc636f7278908723bf3e80b5e6343",
+          "uniqueId": "-1056663314662409083.-326465237944842453",
+          "auxData": {
+            "isDefault": false,
+            "type": "isolated",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 5,
+          "origin": "",
+          "name": "__playwright_utility_world_page@af9679d91cc15e2859b111e5a58bcee1",
+          "uniqueId": "-4742687310005434241.-3247470063463384961",
+          "auxData": {
+            "isDefault": false,
+            "type": "isolated",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 4,
+          "origin": "",
+          "name": "__playwright_utility_world_page@48b8aedaf2f355fea5dafb5dcc8d1a25",
+          "uniqueId": "875430036996412926.6438165587344853384",
+          "auxData": {
+            "isDefault": false,
+            "type": "isolated",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 3,
+          "origin": "",
+          "name": "__playwright_utility_world_page@2a36e4c61e1e89851c60fee3161c1989",
+          "uniqueId": "-2697475269555462109.5215188187090108652",
+          "auxData": {
+            "isDefault": false,
+            "type": "isolated",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 2,
+          "origin": "",
+          "name": "__playwright_utility_world_page@761b4e58888a3abd6eb432e69657677d",
+          "uniqueId": "-4756990924769249467.9223039481375764124",
+          "auxData": {
+            "isDefault": false,
+            "type": "isolated",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 1,
+          "origin": "https://www.sheldonbrown.com",
+          "name": "",
+          "uniqueId": "-3915242719240577280.-1499112669313792923",
+          "auxData": {
+            "isDefault": true,
+            "type": "default",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 8,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 9,
+      "result": {
+        "identifier": "1"
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 10,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 11,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 12,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 13,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 14,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 15,
+  "method": "Target.getTargetInfo"
+}
+    [CDP-PROXY] Target ->
+    {
+      "id": 15,
+      "result": {
+        "targetInfo": {
+          "targetId": "25b0e240-181f-41bb-ab49-c96433fcda65",
+          "type": "browser",
+          "title": "",
+          "url": "",
+          "attached": true,
+          "canAccessOpener": false
+        }
+      }
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 16,
+  "method": "Page.createIsolatedWorld",
+  "params": {
+    "frameId": "01722449B715F987F947A3986446AE6D",
+    "grantUniveralAccess": true,
+    "worldName": "__playwright_utility_world_page@ae188407fc7251bd5f0373342e8abcc2"
+  },
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+    [CDP-PROXY] Target ->
+    {
+      "method": "Runtime.executionContextCreated",
+      "params": {
+        "context": {
+          "id": 8,
+          "origin": "",
+          "name": "__playwright_utility_world_page@ae188407fc7251bd5f0373342e8abcc2",
+          "uniqueId": "-3649892206605754227.8485601994914555665",
+          "auxData": {
+            "isDefault": false,
+            "type": "isolated",
+            "frameId": "01722449B715F987F947A3986446AE6D"
+          }
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+    [CDP-PROXY] Target ->
+    {
+      "id": 16,
+      "result": {
+        "executionContextId": 8
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 17,
+  "method": "Page.setInterceptFileChooserDialog",
+  "params": {
+    "enabled": true
+  },
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+
+
+    [CDP-PROXY] Target -> (mocked):
+    {
+      "id": 17,
+      "result": {},
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 18,
+  "method": "Runtime.evaluate",
+  "params": {
+    "expression": "\n      (() => {\n        const module = {};\n        \nvar __commonJS = obj => {\n  let required = false;\n  let result;\n  return function __require() {\n    if (!required) {\n      required = true;\n      let fn;\n      for (const name in obj) { fn = obj[name]; break; }\n      const module = { exports: {} };\n      fn(module.exports, module);\n      result = module.exports;\n    }\n    return result;\n  }\n};\nvar __export = (target, all) => {for (var name in all) target[name] = all[name];};\nvar __toESM = mod => ({ ...mod, 'default': mod });\nvar __toCommonJS = mod => ({ ...mod, __esModule: true });\n\n\n// packages/injected/src/utilityScript.ts\nvar utilityScript_exports = {};\n__export(utilityScript_exports, {\n  UtilityScript: () => UtilityScript\n});\nmodule.exports = __toCommonJS(utilityScript_exports);\n\n// packages/playwright-core/src/utils/isomorphic/utilityScriptSerializers.ts\nfunction isRegExp(obj) {\n  try {\n    return obj instanceof RegExp || Object.prototype.toString.call(obj) === \"[object RegExp]\";\n  } catch (error) {\n    return false;\n  }\n}\nfunction isDate(obj) {\n  try {\n    return obj instanceof Date || Object.prototype.toString.call(obj) === \"[object Date]\";\n  } catch (error) {\n    return false;\n  }\n}\nfunction isURL(obj) {\n  try {\n    return obj instanceof URL || Object.prototype.toString.call(obj) === \"[object URL]\";\n  } catch (error) {\n    return false;\n  }\n}\nfunction isError(obj) {\n  var _a;\n  try {\n    return obj instanceof Error || obj && ((_a = Object.getPrototypeOf(obj)) == null ? void 0 : _a.name) === \"Error\";\n  } catch (error) {\n    return false;\n  }\n}\nfunction isTypedArray(obj, constructor) {\n  try {\n    return obj instanceof constructor || Object.prototype.toString.call(obj) === `[object ${constructor.name}]`;\n  } catch (error) {\n    return false;\n  }\n}\nvar typedArrayConstructors = {\n  i8: Int8Array,\n  ui8: Uint8Array,\n  ui8c: Uint8ClampedArray,\n  i16: Int16Array,\n  ui16: Uint16Array,\n  i32: Int32Array,\n  ui32: Uint32Array,\n  // TODO: add Float16Array once it's in baseline\n  f32: Float32Array,\n  f64: Float64Array,\n  bi64: BigInt64Array,\n  bui64: BigUint64Array\n};\nfunction typedArrayToBase64(array) {\n  if (\"toBase64\" in array)\n    return array.toBase64();\n  const binary = Array.from(new Uint8Array(array.buffer, array.byteOffset, array.byteLength)).map((b) => String.fromCharCode(b)).join(\"\");\n  return btoa(binary);\n}\nfunction base64ToTypedArray(base64, TypedArrayConstructor) {\n  const binary = atob(base64);\n  const bytes = new Uint8Array(binary.length);\n  for (let i = 0; i < binary.length; i++)\n    bytes[i] = binary.charCodeAt(i);\n  return new TypedArrayConstructor(bytes.buffer);\n}\nfunction parseEvaluationResultValue(value, handles = [], refs = /* @__PURE__ */ new Map()) {\n  if (Object.is(value, void 0))\n    return void 0;\n  if (typeof value === \"object\" && value) {\n    if (\"ref\" in value)\n      return refs.get(value.ref);\n    if (\"v\" in value) {\n      if (value.v === \"undefined\")\n        return void 0;\n      if (value.v === \"null\")\n        return null;\n      if (value.v === \"NaN\")\n        return NaN;\n      if (value.v === \"Infinity\")\n        return Infinity;\n      if (value.v === \"-Infinity\")\n        return -Infinity;\n      if (value.v === \"-0\")\n        return -0;\n      return void 0;\n    }\n    if (\"d\" in value) {\n      return new Date(value.d);\n    }\n    if (\"u\" in value)\n      return new URL(value.u);\n    if (\"bi\" in value)\n      return BigInt(value.bi);\n    if (\"e\" in value) {\n      const error = new Error(value.e.m);\n      error.name = value.e.n;\n      error.stack = value.e.s;\n      return error;\n    }\n    if (\"r\" in value)\n      return new RegExp(value.r.p, value.r.f);\n    if (\"a\" in value) {\n      const result = [];\n      refs.set(value.id, result);\n      for (const a of value.a)\n        result.push(parseEvaluationResultValue(a, handles, refs));\n      return result;\n    }\n    if (\"o\" in value) {\n      const result = {};\n      refs.set(value.id, result);\n      for (const { k, v } of value.o) {\n        if (k === \"__proto__\")\n          continue;\n        result[k] = parseEvaluationResultValue(v, handles, refs);\n      }\n      return result;\n    }\n    if (\"h\" in value)\n      return handles[value.h];\n    if (\"ta\" in value)\n      return base64ToTypedArray(value.ta.b, typedArrayConstructors[value.ta.k]);\n  }\n  return value;\n}\nfunction serializeAsCallArgument(value, handleSerializer) {\n  return serialize(value, handleSerializer, { visited: /* @__PURE__ */ new Map(), lastId: 0 });\n}\nfunction serialize(value, handleSerializer, visitorInfo) {\n  if (value && typeof value === \"object\") {\n    if (typeof globalThis.Window === \"function\" && value instanceof globalThis.Window)\n      return \"ref: <Window>\";\n    if (typeof globalThis.Document === \"function\" && value instanceof globalThis.Document)\n      return \"ref: <Document>\";\n    if (typeof globalThis.Node === \"function\" && value instanceof globalThis.Node)\n      return \"ref: <Node>\";\n  }\n  return innerSerialize(value, handleSerializer, visitorInfo);\n}\nfunction innerSerialize(value, handleSerializer, visitorInfo) {\n  var _a;\n  const result = handleSerializer(value);\n  if (\"fallThrough\" in result)\n    value = result.fallThrough;\n  else\n    return result;\n  if (typeof value === \"symbol\")\n    return { v: \"undefined\" };\n  if (Object.is(value, void 0))\n    return { v: \"undefined\" };\n  if (Object.is(value, null))\n    return { v: \"null\" };\n  if (Object.is(value, NaN))\n    return { v: \"NaN\" };\n  if (Object.is(value, Infinity))\n    return { v: \"Infinity\" };\n  if (Object.is(value, -Infinity))\n    return { v: \"-Infinity\" };\n  if (Object.is(value, -0))\n    return { v: \"-0\" };\n  if (typeof value === \"boolean\")\n    return value;\n  if (typeof value === \"number\")\n    return value;\n  if (typeof value === \"string\")\n    return value;\n  if (typeof value === \"bigint\")\n    return { bi: value.toString() };\n  if (isError(value)) {\n    let stack;\n    if ((_a = value.stack) == null ? void 0 : _a.startsWith(value.name + \": \" + value.message)) {\n      stack = value.stack;\n    } else {\n      stack = `${value.name}: ${value.message}\n${value.stack}`;\n    }\n    return { e: { n: value.name, m: value.message, s: stack } };\n  }\n  if (isDate(value))\n    return { d: value.toJSON() };\n  if (isURL(value))\n    return { u: value.toJSON() };\n  if (isRegExp(value))\n    return { r: { p: value.source, f: value.flags } };\n  for (const [k, ctor] of Object.entries(typedArrayConstructors)) {\n    if (isTypedArray(value, ctor))\n      return { ta: { b: typedArrayToBase64(value), k } };\n  }\n  const id = visitorInfo.visited.get(value);\n  if (id)\n    return { ref: id };\n  if (Array.isArray(value)) {\n    const a = [];\n    const id2 = ++visitorInfo.lastId;\n    visitorInfo.visited.set(value, id2);\n    for (let i = 0; i < value.length; ++i)\n      a.push(serialize(value[i], handleSerializer, visitorInfo));\n    return { a, id: id2 };\n  }\n  if (typeof value === \"object\") {\n    const o = [];\n    const id2 = ++visitorInfo.lastId;\n    visitorInfo.visited.set(value, id2);\n    for (const name of Object.keys(value)) {\n      let item;\n      try {\n        item = value[name];\n      } catch (e) {\n        continue;\n      }\n      if (name === \"toJSON\" && typeof item === \"function\")\n        o.push({ k: name, v: { o: [], id: 0 } });\n      else\n        o.push({ k: name, v: serialize(item, handleSerializer, visitorInfo) });\n    }\n    let jsonWrapper;\n    try {\n      if (o.length === 0 && value.toJSON && typeof value.toJSON === \"function\")\n        jsonWrapper = { value: value.toJSON() };\n    } catch (e) {\n    }\n    if (jsonWrapper)\n      return innerSerialize(jsonWrapper.value, handleSerializer, visitorInfo);\n    return { o, id: id2 };\n  }\n}\n\n// packages/injected/src/utilityScript.ts\nvar UtilityScript = class {\n  constructor(global, isUnderTest) {\n    var _a, _b, _c, _d, _e, _f, _g, _h;\n    this.global = global;\n    this.isUnderTest = isUnderTest;\n    if (global.__pwClock) {\n      this.builtins = global.__pwClock.builtins;\n    } else {\n      this.builtins = {\n        setTimeout: (_a = global.setTimeout) == null ? void 0 : _a.bind(global),\n        clearTimeout: (_b = global.clearTimeout) == null ? void 0 : _b.bind(global),\n        setInterval: (_c = global.setInterval) == null ? void 0 : _c.bind(global),\n        clearInterval: (_d = global.clearInterval) == null ? void 0 : _d.bind(global),\n        requestAnimationFrame: (_e = global.requestAnimationFrame) == null ? void 0 : _e.bind(global),\n        cancelAnimationFrame: (_f = global.cancelAnimationFrame) == null ? void 0 : _f.bind(global),\n        requestIdleCallback: (_g = global.requestIdleCallback) == null ? void 0 : _g.bind(global),\n        cancelIdleCallback: (_h = global.cancelIdleCallback) == null ? void 0 : _h.bind(global),\n        performance: global.performance,\n        Intl: global.Intl,\n        Date: global.Date\n      };\n    }\n    if (this.isUnderTest)\n      global.builtins = this.builtins;\n  }\n  evaluate(isFunction, returnByValue, expression, argCount, ...argsAndHandles) {\n    const args = argsAndHandles.slice(0, argCount);\n    const handles = argsAndHandles.slice(argCount);\n    const parameters = [];\n    for (let i = 0; i < args.length; i++)\n      parameters[i] = parseEvaluationResultValue(args[i], handles);\n    let result = this.global.eval(expression);\n    if (isFunction === true) {\n      result = result(...parameters);\n    } else if (isFunction === false) {\n      result = result;\n    } else {\n      if (typeof result === \"function\")\n        result = result(...parameters);\n    }\n    return returnByValue ? this._promiseAwareJsonValueNoThrow(result) : result;\n  }\n  jsonValue(returnByValue, value) {\n    if (value === void 0)\n      return void 0;\n    return serializeAsCallArgument(value, (value2) => ({ fallThrough: value2 }));\n  }\n  _promiseAwareJsonValueNoThrow(value) {\n    const safeJson = (value2) => {\n      try {\n        return this.jsonValue(true, value2);\n      } catch (e) {\n        return void 0;\n      }\n    };\n    if (value && typeof value === \"object\" && typeof value.then === \"function\") {\n      return (async () => {\n        const promiseValue = await value;\n        return safeJson(promiseValue);\n      })();\n    }\n    return safeJson(value);\n  }\n};\n\n        return new (module.exports.UtilityScript())(globalThis, false);\n      })();",
+    "contextId": 8
+  },
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+    [CDP-PROXY] Target ->
+    {
+      "id": 18,
+      "result": {
+        "result": {
+          "type": "object",
+          "className": "UtilityScript",
+          "description": "UtilityScript",
+          "objectId": "8199704006095199276.8.1"
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
+
+
+[CDP-PROXY] Client ->
+{
+  "id": 19,
+  "method": "Runtime.callFunctionOn",
+  "params": {
+    "functionDeclaration": "(utilityScript, ...args) => utilityScript.evaluate(...args)",
+    "objectId": "8199704006095199276.8.1",
+    "arguments": [
+      {
+        "objectId": "8199704006095199276.8.1"
+      },
+      {
+        "value": true
+      },
+      {
+        "value": true
+      },
+      {
+        "value": "() => document.title"
+      },
+      {
+        "value": 1
+      },
+      {
+        "value": {
+          "v": "undefined"
+        }
+      }
+    ],
+    "returnByValue": true,
+    "awaitPromise": true,
+    "userGesture": true
+  },
+  "sessionId": "434697048E8A9675F2B9B587F764CF98"
+}
+    [CDP-PROXY] Target ->
+    {
+      "id": 19,
+      "result": {
+        "result": {
+          "type": "string",
+          "value": "Basic HTML Sample Page"
+        }
+      },
+      "sessionId": "434697048E8A9675F2B9B587F764CF98"
+    }
