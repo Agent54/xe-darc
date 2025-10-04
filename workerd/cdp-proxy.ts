@@ -14,10 +14,8 @@ let CDP_SERVER: CloudflareWebSocket | null = null
 // Track sent context target IDs to avoid duplicates
 const SENT_CONTEXT_TARGET_IDS = new Set<string>()
 
-// Global context cache
+// Global context cache (no TTL, updated on fetch)
 let CONTEXT_CACHE: any[] = []
-let CONTEXT_CACHE_TIMESTAMP = 0
-const CONTEXT_CACHE_TTL = 5000 // 5 seconds TTL
 
 // Map sessionId to targetId for context lookups
 const SESSION_TO_TARGET_MAP = new Map<string, string>()
@@ -27,8 +25,9 @@ const TARGET_TO_SESSION_MAP = new Map<string, string>()
 // Whitelist of CDP methods that are always forwarded to the browser
 // Use '*' as first entry to whitelist all methods (useful for debugging)
 const CDP_METHOD_WHITELIST = [
-    // '*', // Whitelist all methods - custom handlers still take precedence
+     '*', // Whitelist all methods - custom handlers still take precedence
     'Browser.getVersion',
+    'Target.getBrowserContexts'
     // 'Target.createTarget',
     // 'Target.setAutoAttach',
     // 'Target.getTargetInfo'
@@ -297,19 +296,16 @@ const CDP_METHOD_BLOCKLIST = [
 //     },
 //     "sessionId": "2CB8195164A6F0DA8F2124F5C021469E"
 //   }
-const CDP_CUSTOM_HANDLERS_DISABLED = {}
+const CDP_CUSTOM_HANDLERS = {}
 // Custom handlers for CDP methods (mocked responses instead of forwarding)
-const CDP_CUSTOM_HANDLERS: Record<string, (params: any, id: number, sessionId: string) => any> = {
+const CDP_CUSTOM_HANDLERS_DISABLED: Record<string, (params: any, id: number, sessionId: string) => any> = {
     'Target.setAutoAttach': async (params, id, sessionId) => {
         const response = { id, result: {}, sessionId }
         
-        // Send contexts immediately after returning response
-        // Don't await - let it happen async but start immediately
-        setTimeout(() => {
-            sendContexts().then(() => {
-                // console.log(`[CDP-PROXY] Sent contexts`)
-            })
-        }, 0)
+        // Send contexts immediately
+        sendContexts().catch(error => {
+            console.error(`[CDP-PROXY] Failed to send contexts:`, error)
+        })
         
         return response
     },
@@ -433,10 +429,12 @@ const CDP_CUSTOM_HANDLERS: Record<string, (params: any, id: number, sessionId: s
                     sessionId
                 }
                 
-                CDP_SERVER.send(JSON.stringify(contextCreatedEvent))
-                console.log('\n')
-                console.log(`    [CDP-PROXY] Sent Runtime.executionContextCreated for target ${target.id}:`)
-                console.log('    ' + JSON.stringify(contextCreatedEvent, null, 2).split('\n').join('\n    '))
+                if (CDP_SERVER && CDP_SERVER.readyState === WebSocket.OPEN) {
+                    CDP_SERVER.send(JSON.stringify(contextCreatedEvent))
+                    console.log('\n')
+                    console.log(`    [CDP-PROXY] Sent Runtime.executionContextCreated for target ${target.id}:`)
+                    console.log('    ' + JSON.stringify(contextCreatedEvent, null, 2).split('\n').join('\n    '))
+                }
             }
         }
         
@@ -478,21 +476,20 @@ const CDP_CUSTOM_HANDLERS: Record<string, (params: any, id: number, sessionId: s
             sessionId
         }
         
-        // Send the event after a small delay to ensure proper order
-        setTimeout(() => {
+        if (CDP_SERVER && CDP_SERVER.readyState === WebSocket.OPEN) {
             CDP_SERVER.send(JSON.stringify(contextCreatedEvent))
             console.log('\n')
             console.log(`    [CDP-PROXY] Sent Runtime.executionContextCreated event:`)
             console.log('    ' + JSON.stringify(contextCreatedEvent, null, 2).split('\n').join('\n    '))
-        }, 10)
+        }
         
         return response
     },
 
     'Page.getFrameTree': async (params, id, sessionId) => {
         try {
-            // Use cached targets to generate frame tree
-            const targets = await getCachedContexts()
+            // Fetch targets directly
+            const targets = await fetchContexts()
             
             // Find the main page target (first one with type 'page' or fallback to first target)
             const mainTarget = targets.find(t => t.type === 'page') || targets[0]
@@ -567,6 +564,16 @@ const CDP_CUSTOM_HANDLERS: Record<string, (params: any, id: number, sessionId: s
         return { id, result: { targetId }, sessionId }
     },
     
+    // 'Target.getBrowserContexts': (params, id, sessionId) => {
+    //     // Return empty browser contexts list
+    //     return { 
+    //         id, 
+    //         result: { 
+    //             browserContextIds: [] 
+    //         }
+    //     }
+    // },
+    
     'Page.addScriptToEvaluateOnNewDocument': (params, id, sessionId) => {
         // Generate random script identifier
         const identifier = Math.floor(Math.random() * 999999).toString()
@@ -598,10 +605,12 @@ const CDP_CUSTOM_HANDLERS: Record<string, (params: any, id: number, sessionId: s
                 sessionId: targetSessionId
             }
             
-            CDP_SERVER.send(JSON.stringify(contextCreatedEvent))
-            console.log('\n')
-            console.log(`    [CDP-PROXY] Sent Runtime.executionContextCreated for script with session ${targetSessionId}:`)
-            console.log('    ' + JSON.stringify(contextCreatedEvent, null, 2).split('\n').join('\n    '))
+            if (CDP_SERVER && CDP_SERVER.readyState === WebSocket.OPEN) {
+                CDP_SERVER.send(JSON.stringify(contextCreatedEvent))
+                console.log('\n')
+                console.log(`    [CDP-PROXY] Sent Runtime.executionContextCreated for script with session ${targetSessionId}:`)
+                console.log('    ' + JSON.stringify(contextCreatedEvent, null, 2).split('\n').join('\n    '))
+            }
         }
         
         const response = {
@@ -684,14 +693,6 @@ async function proxyHttpRequest(request: Request, env: Env): Promise<Response> {
     // Set global target from env
     CDP_TARGET_HOST = env.CDP_TARGET_HOST || CDP_DEFAULT_HOST
     CDP_TARGET_PORT = env.CDP_TARGET_PORT || CDP_DEFAULT_PORT
-    
-    // Trigger background cache refresh for /json/list requests
-    if (url.pathname === '/json/list') {
-        // Refresh cache in background (don't block response)
-        fetchAndCacheContexts().catch(error => {
-            console.error(`[CDP-PROXY] Background cache refresh failed:`, error)
-        })
-    }
     
     // Build target URL
     const targetUrl = `http://${CDP_TARGET_HOST}:${CDP_TARGET_PORT}${url.pathname}${url.search}`
@@ -807,42 +808,21 @@ async function proxyHttpRequest(request: Request, env: Env): Promise<Response> {
     }
 }
 
-async function fetchAndCacheContexts(): Promise<any[]> {
+async function fetchContexts(): Promise<any[]> {
     try {
         const listUrl = `http://${CDP_TARGET_HOST}:${CDP_TARGET_PORT}/json/list`
         const response = await fetch(listUrl)
         const targets = await response.json() as any[]
         
-        // Update cache
+        // Update cache for handlers that need it
         CONTEXT_CACHE = targets
-        CONTEXT_CACHE_TIMESTAMP = Date.now()
         
-        console.log(`[CDP-PROXY] Cached ${targets.length} contexts`)
+        console.log(`[CDP-PROXY] Fetched ${targets.length} contexts`)
         return targets
     } catch (error) {
         console.error(`[CDP-PROXY] Failed to fetch contexts:`, error)
         return CONTEXT_CACHE // Return existing cache on error
     }
-}
-
-async function getCachedContexts(): Promise<any[]> {
-    const now = Date.now()
-    
-    // If cache is empty, fetch synchronously
-    if (CONTEXT_CACHE.length === 0) {
-        return await fetchAndCacheContexts()
-    }
-    
-    // If cache is expired, refresh in background but return stale data immediately
-    // if ((now - CONTEXT_CACHE_TIMESTAMP) > CONTEXT_CACHE_TTL) {
-        // Refresh in background (don't await)
-        fetchAndCacheContexts().catch(error => {
-            console.error(`[CDP-PROXY] Background cache refresh failed:`, error)
-        })
-    // }
-    
-    // Always return current cache immediately
-    return CONTEXT_CACHE
 }
 
 async function sendContexts() {
@@ -851,7 +831,7 @@ async function sendContexts() {
     }
     
     try {
-        const targets = await getCachedContexts()
+        const targets = await fetchContexts()
         // console.log(`[CDP-PROXY] Found ${targets.length} targets`)
         for (const target of targets) {
             // Skip if we already sent this target ID
@@ -901,9 +881,13 @@ async function sendContexts() {
                 }
             }
             
-            CDP_SERVER.send(JSON.stringify(message))
-            console.log(`    [CDP-PROXY] Sent context:`)
-            console.log('    ' + JSON.stringify(message, null, 2).split('\n').join('\n    '))
+            if (CDP_SERVER.readyState === WebSocket.OPEN) {
+                CDP_SERVER.send(JSON.stringify(message))
+                console.log(`    [CDP-PROXY] Sent context:`)
+                console.log('    ' + JSON.stringify(message, null, 2).split('\n').join('\n    '))
+            } else {
+                console.log(`    [CDP-PROXY] WebSocket closed, cannot send context for target ${target.id}`)
+            }
             
             // Mark this target ID as sent and store session mapping
             SENT_CONTEXT_TARGET_IDS.add(target.id)
@@ -947,8 +931,8 @@ async function handleWebSocket(request: Request, env: Env): Promise<Response> {
         
         // Handle target WebSocket events
         targetWs.addEventListener('open', async () => {
-            // Fetch and cache contexts on startup
-            await fetchAndCacheContexts()
+            // Fetch contexts on startup
+            await fetchContexts()
         })
         
         targetWs.addEventListener('message', (event) => {
@@ -1066,7 +1050,6 @@ async function handleWebSocket(request: Request, env: Env): Promise<Response> {
         // Send custom handler response if available
         if (customHandlerResponse) {
             try {
-                await new Promise(resolve => setTimeout(resolve, 200))
                 server.send(JSON.stringify(customHandlerResponse))
                 console.log('\n')
                 console.log(`    [CDP-PROXY] Target -> (mocked):`)

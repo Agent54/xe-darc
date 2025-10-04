@@ -41,6 +41,7 @@
     "vite": "6.4.1",
     "vite-plugin-html-inject": "1.1.2",
     "wbn-sign": "0.2.1",
-    "wrangler": "4.32.0"
+    "wrangler": "4.32.0",
+    "puppeteer": "24.23.0"
   }
 }
