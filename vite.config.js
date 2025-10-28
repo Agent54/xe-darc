@@ -165,6 +165,12 @@ console.log('Vite config loaded - Server port: 5194, DevTools proxy port: 9226')
 export default defineConfig({
   plugins,
   define: { globals: 'window' },
+  handleHotUpdate({ file }) {
+    console.log({file})
+    if (file.endsWith('.md') || file.startWith('.')) {
+      return []
+    }
+  },
   server: {
     host: '0.0.0.0',
     port: 5194,
@@ -188,8 +194,7 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/devtools-api/, ''),
         ws: true 
       }
-      
-     // 'http://localhost:8787',
+     // 'http://localhost:8787'
     },
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',
@@ -201,10 +206,13 @@ export default defineConfig({
       protocol: 'wss',
       clientPort: 5194,
       host: 'localhost' // FIXME: localhost
-      // ...(process.env.container !== 'true' && { clientPort: 5193,  host: 'localhost' }),
+      // ...(process.env.container !== 'true' && { clientPort: 5193,  host: 'localhost' })
+      
     },
     watch: {
-      ignored: ['**/todo.md', '!**/src/**', '!**/app/**', '!**/index.html', '!**/agent_app.html', '!**/public/**']
+      ignored: ["**/todo.md"]
+        //file, stat) => { console.log(file, stat); return false; }
+      // ['*/todo.md']
     }
   },
   resolve:{

@@ -537,9 +537,11 @@
     }
 
     function handleLoadStop(tab) {
+        // console.log('stopped', {tab})
         // console.log('handleLoadStop', data.frames[tab.id]?.frame?.src)
         const wasLoading = data.frames[tab.id].loading
         data.frames[tab.id].loading = false
+        data.frames[tab.id].initialLoad = true
         
         const originValue = origin(tab.url)
         const currentNetworkErr = data.origins[originValue]?.networkError

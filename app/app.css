@@ -1351,7 +1351,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     -webkit-app-region: no-drag;
     border: 1px solid transparent;
     z-index: 100;
-    padding-bottom: 2px;
+    /* padding-bottom: 2px; */
     transform: translateX(20px);
 }
 

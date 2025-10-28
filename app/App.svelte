@@ -1661,6 +1661,8 @@
     }
 
     function closeSidebar(sidebarName) {
+        console.log(openSidebars)
+
         openSidebars.delete(sidebarName)
         openSidebars = new Set(openSidebars)
         updateSidebarState()
@@ -3983,16 +3985,17 @@
              title="Drag to resize sidebar"></div>
         {#if openSidebars.has('resources')}
             <div class="sidebar-panel" class:new-panel={openSidebars.has('resources') && !prevOpenSidebars.has('resources') && !isSwitchingSidebars && !isWindowResizing}>
-                <Resources onClose={() => closeSidebar('resources')}  {requestedResources}
-                          {openSidebars}
-                          {switchToResources} 
-                          {switchToSettings}
-                          {switchToUserMods}
-                          {switchToActivity}
-                          switchToAgent={switchToAIAgent}
-                          {switchToDevTools}
-                          {devModeEnabled}
-                          autoOpened={resourcesSidebarAutoOpened} />
+                <Resources
+                    onClose={() => closeSidebar('resources')}        {requestedResources}
+                    {openSidebars}
+                    {switchToResources} 
+                    {switchToSettings}
+                    {switchToUserMods}
+                    {switchToActivity}
+                    switchToAgent={switchToAIAgent}
+                    {switchToDevTools}
+                    {devModeEnabled}
+                    autoOpened={resourcesSidebarAutoOpened} />
             </div>
         {/if}
         

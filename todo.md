@@ -1294,3 +1294,16 @@ download implementation
 white mode
 
 space rules
+
+xenon as the social browser with community of rapid browser innovation and sharing with their community what they buld, distibution/defaults, roblox of browsers?!
+
+3d browser demo (tree of websites with links)
+
+user modes for the browser layer itself and r/firefoxCSS like community
+
+pw mcp fork but with our xenon direct cdp protocol
+
+atproto social layer, web of trust etc.
+
+tanlged and tagging support for code and projects
+

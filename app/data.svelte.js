@@ -757,14 +757,16 @@ export default {
         const tab = docs[tabId]
         const frame = frames[tabId]
 
+        // TODO: central dataside favicon handling and title invalidation
+
         if (frame.frame) {
             frame.frame.src = url
-        } else {
-            db.put({
-                ...tab,
-                url
-            })
         }
+
+        db.put({
+            ...tab,
+            url
+        })
 
         // db.put({d
         //     _id: `darc:activity_${crypto.randomUUID()}`,
@@ -935,11 +937,13 @@ export default {
             // status: resource.status || 'Requested',
             requestType: event.requestType || 'always' // foreground
         })
-        
+
         return { granted }
     },
 
+   
     clearUnseenResourceFlags: () => {
+        console.log('TODO: fix cleanup and improve state design:', { permissions })
         for (const resourceKey of Object.keys(permissions)) {
             for (const origin of Object.keys(permissions[resourceKey].origins || {})) {
                 if (permissions[resourceKey].origins[origin].requests?.at(-1)?.unseen) {

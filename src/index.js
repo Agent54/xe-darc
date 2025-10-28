@@ -1,6 +1,12 @@
 import { $, Log, ttPolicy } from './common.js';
 import { ControlledFrameController } from './controlledframe_api.js';
 
+if (import.meta.hot) {
+  import.meta.hot.accept((newMod) => {
+    console.log({newMod})
+  })
+}
+
 /**
  * Service worker
  */

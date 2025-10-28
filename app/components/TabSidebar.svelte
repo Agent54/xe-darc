@@ -55,8 +55,6 @@
 
     const globallyPinnedTabs = $derived(data.spaceMeta.globalPins)
     
-
-    
     function handleMouseEnter() {
         isHovered = true
     }
