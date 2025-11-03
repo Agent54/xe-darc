@@ -17,6 +17,7 @@
     import Favicon from './Favicon.svelte'
     import Tooltip from './Tooltip.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
+    import TabHoverCard from './TabHoverCard.svelte'
     import { untrack } from 'svelte'
     
     let isHovered = $state(false)
@@ -35,6 +36,15 @@
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
     let navigationStateRefresh = $state(0)
+    
+    // Hover card state
+    let hoveredTab = $state(null)
+    let hoverTimeout = null
+    let hovercardPosition = $state({ x: 0, y: 0 })
+    let hovercardShowTime = null
+    let hovercardRecentlyActive = $state(false)
+    let hovercardResetTimer = null
+    let hovercardCheckInterval = null
 
     // Focus the URL input when it becomes visible
     $effect(() => {
@@ -319,8 +329,135 @@
             if (closedTabsHideTimeout) {
                 clearTimeout(closedTabsHideTimeout)
             }
+            if (hoverTimeout) {
+                clearTimeout(hoverTimeout)
+            }
+            if (hovercardResetTimer) {
+                clearTimeout(hovercardResetTimer)
+            }
+            stopHovercardPositionCheck()
         }
     })
+    
+    function startHovercardPositionCheck() {
+        stopHovercardPositionCheck()
+        
+        hovercardCheckInterval = setInterval(() => {
+            if (!hoveredTab) {
+                stopHovercardPositionCheck()
+                return
+            }
+            
+            const mouseX = window.mouseX || 0
+            const mouseY = window.mouseY || 0
+            const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+            
+            if (!elementUnderCursor) {
+                hoveredTab = null
+                stopHovercardPositionCheck()
+                return
+            }
+            
+            // Check if cursor is still over the triggering element or the hovercard
+            let isStillHovering = false
+            
+            // Check if hovering over the entire hovercard (including padding)
+            if (elementUnderCursor.closest('.tab-hovercard-sidebar')) {
+                isStillHovering = true
+            } else {
+                // Check if still over the tab
+                const hoveredTabElement = elementUnderCursor.closest('.tab-item-container')
+                if (hoveredTabElement) {
+                    isStillHovering = true
+                }
+            }
+            
+            if (!isStillHovering) {
+                hoveredTab = null
+                hovercardShowTime = null
+                stopHovercardPositionCheck()
+            }
+        }, 50)
+    }
+    
+    function stopHovercardPositionCheck() {
+        if (hovercardCheckInterval) {
+            clearInterval(hovercardCheckInterval)
+            hovercardCheckInterval = null
+        }
+    }
+    
+    function handleTabMouseEnter(tab, event) {
+        if (hoverTimeout) {
+            clearTimeout(hoverTimeout)
+        }
+        
+        const delay = hovercardRecentlyActive ? 200 : 800
+        
+        hoverTimeout = setTimeout(() => {
+            const tabElement = event.target.closest('.tab-item-container')
+            if (!tabElement) return
+            
+            const rect = tabElement.getBoundingClientRect()
+            const hovercardWidth = 320
+            
+            let x = rect.right
+            let y = rect.top - 26
+            
+            // Check if hovercard would go off right edge
+            if (x + hovercardWidth > window.innerWidth - 10) {
+                x = rect.left - hovercardWidth - 10
+            }
+            
+            // Check if hovercard would go off left edge
+            if (x < 10) {
+                x = 10
+            }
+            
+            hovercardPosition = { x, y }
+            hoveredTab = tab
+            hovercardShowTime = Date.now()
+            
+            hovercardRecentlyActive = true
+            
+            if (hovercardResetTimer) {
+                clearTimeout(hovercardResetTimer)
+            }
+            hovercardResetTimer = setTimeout(() => {
+                hovercardRecentlyActive = false
+            }, 3000)
+            
+            // Start checking cursor position
+            startHovercardPositionCheck()
+        }, delay)
+    }
+
+    function handleTabMouseLeave() {
+        if (hoverTimeout) {
+            clearTimeout(hoverTimeout)
+            hoverTimeout = null
+        }
+        
+        setTimeout(() => {
+            if (hovercardShowTime && Date.now() - hovercardShowTime < 300) {
+                return
+            }
+            
+            const mouseX = window.mouseX || 0
+            const mouseY = window.mouseY || 0
+            const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+            
+            // Check if still over info or hovercard
+            const isOverInfo = elementUnderCursor?.closest('.hovercard-info')
+            const isOverHovercard = elementUnderCursor?.closest('.tab-hovercard-sidebar')
+            
+            if (!isOverInfo && !isOverHovercard) {
+                hoveredTab = null
+                hovercardShowTime = null
+                stopHovercardPositionCheck()
+            }
+        }, 250)
+    }
     
     function handleSpaceContextMenuAction(action, spaceId) {
         if (action === 'rename') {
@@ -707,7 +844,7 @@
                         </svg>
                     </button>
                     {#each globallyPinnedTabs as tab}
-                        <button class="pinned-tab" title={tab.url}>
+                        <button class="pinned-tab">
                             <Favicon {tab} showButton={false} />
                         </button>
                     {/each}
@@ -798,7 +935,7 @@
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
                                         {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
-                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} title={tab.url} onmousedown={() => activateTab(tab.id, spaceId)}>
+                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} onmousedown={() => activateTab(tab.id, spaceId)}>
                                                 <Favicon {tab} showButton={false} />
                                             </button>
                                         {/each}
@@ -857,11 +994,14 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} data-tab-id={tab.id}>
-                                                <button class="tab-item-main" title={tab.url} onmousedown={() => activateTab(tab.id, spaceId)}>
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} data-tab-id={tab.id}
+                                                 onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                                                 onmouseleave={handleTabMouseLeave}>
+                                                <button class="tab-item-main" onmousedown={() => activateTab(tab.id, spaceId)}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>
                                                 </button>
+                                                
                                                 <button class="tab-close" aria-label="Close tab" onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}>
                                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                                             <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
@@ -915,7 +1055,7 @@
                 <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
                         {#each data.spaceMeta.closedTabs as tab}
-                            <button class="closed-tab-item" title={tab.url} onmousedown={() => data.restoreClosedTab(tab.id)}>
+                            <button class="closed-tab-item" onmousedown={() => data.restoreClosedTab(tab.id)}>
                                 <Favicon {tab} showButton={false} />
                                 <div class="tab-text">
                                     <span class="tab-title">{tab.title}</span>
@@ -937,6 +1077,28 @@
                 title="Drag to resize tab sidebar"></button>
     </div>
 </div>
+
+{#if hoveredTab}
+    <div class="tab-hovercard-sidebar" 
+         style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
+        <TabHoverCard tab={hoveredTab} onMouseLeave={() => {
+            setTimeout(() => {
+                const mouseX = window.mouseX || 0
+                const mouseY = window.mouseY || 0
+                const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+                
+                // Check if hovering over the info part (keep open) or screenshot (hide)
+                const isOverInfo = elementUnderCursor?.closest('.hovercard-info')
+                const isOverTab = elementUnderCursor?.closest('.tab-item-container')
+                
+                if (!isOverInfo && !isOverTab) {
+                    hoveredTab = null
+                    hovercardShowTime = null
+                }
+            }, 100)
+        }} />
+    </div>
+{/if}
 
 <style>
     .sidebar-box {
@@ -2497,6 +2659,27 @@
     .url-bar-button.success {
         color: #22c55e !important;
         background: rgba(34, 197, 94, 0.1) !important;
+    }
+    
+    .tab-hovercard-sidebar {
+        position: fixed;
+        z-index: 10006;
+        pointer-events: all;
+        opacity: 0;
+        animation: hovercard-sidebar-fade-in 0.2s ease-out forwards;
+        -webkit-app-region: no-drag;
+        user-select: none;
+    }
+    
+    @keyframes hovercard-sidebar-fade-in {
+        from {
+            opacity: 0;
+            transform: translateX(-10px) scale(0.95);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0) scale(1);
+        }
     }
 </style>
 

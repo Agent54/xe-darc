@@ -31,3 +31,80 @@
         </div>
     {/if}
 </div>
+
+<style>
+    /* Ensure these styles are scoped to this component */
+    .hovercard-content {
+        background: rgba(0, 0, 0, 0.95);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        overflow: visible;
+        box-shadow: 
+            0 20px 40px rgba(0, 0, 0, 0.4),
+            0 8px 16px rgba(0, 0, 0, 0.2);
+        width: 320px;
+        max-width: 90vw;
+        margin-top: 8px;
+        margin-left: 8px;
+    }
+
+    .hovercard-info {
+        padding: 16px;
+        font-family: 'Inter', sans-serif;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        overflow: visible;
+    }
+
+    .hovercard-info:last-child {
+        border-bottom: none;
+    }
+
+    .hovercard-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .hovercard-text {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .hovercard-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 6px;
+        line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .hovercard-url {
+        font-size: 12px;
+        line-height: 1.3;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        opacity: 0.5;
+    }
+
+    .hovercard-screenshot {
+        width: 100%;
+        height: 180px;
+        overflow: hidden;
+        border-bottom-left-radius: 12px;
+        border-bottom-right-radius: 12px;
+    }
+
+    .hibernation-icon {
+        width: 16px;
+        height: 16px;
+        color: rgba(255, 255, 255, 0.7);
+        flex-shrink: 0;
+        margin-left: 8px;
+    }
+</style>

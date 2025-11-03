@@ -1097,6 +1097,8 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     }
 }
 
+/* Hovercard styles moved to TabHoverCard.svelte component */
+/* Keeping here for backwards compatibility if used elsewhere */
 .hovercard-content {
     background: rgba(0, 0, 0, 0.95);
     backdrop-filter: blur(20px);
