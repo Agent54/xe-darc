@@ -11,6 +11,7 @@
     import Excalidraw from './components/Excalidraw.svelte'
     import GridView from './components/GridView.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
+    import TabHoverCard from './components/TabHoverCard.svelte'
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import Favicon from './components/Favicon.svelte'
@@ -3564,61 +3565,37 @@
     <div class="tab-hovercard" 
          class:trash-item={isTrashItemHover}
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
-        <div class="hovercard-content">
-            <div class="hovercard-info"
-                 role="region"
-                 onmouseenter={() => {}}
-                 onmouseleave={() => {
-                     setTimeout(() => {
-                        // return
-                         // Only close if not hovering over the original trigger element
-                         const mouseX = window.mouseX || 0
-                         const mouseY = window.mouseY || 0
-                         const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
-                         
-                         let shouldKeepOpen = false
-                         
-                         if (isTrashItemHover) {
-                             shouldKeepOpen = elementUnderCursor?.closest('.trash-menu-item') || 
-                                            elementUnderCursor?.closest('.trash-menu') ||
-                                            elementUnderCursor?.closest('.trash-icon')
-                         } else {
-                             const hoveredTabElement = elementUnderCursor?.closest('.tab-container')
-                             if (hoveredTabElement) {
-                                 // Find the tab by checking all tab arrays (leftPinned, regular, rightPinned)
-                                 const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => !tab.pinned), ...rightPinnedTabs]
-                                 const matchingTab = allTabs.find(tab => tabButtons[tab.id] === hoveredTabElement)
-                                 shouldKeepOpen = matchingTab?.id === hoveredTab?.id
-                             }
-                         }
-                         
-                         if (!shouldKeepOpen) {
-                             hoveredTab = null
-                             isTrashItemHover = false
-                             stopHovercardPositionCheck()
-                         }
-                     }, 100)
-                 }}>
-                <div class="hovercard-header">
-                    <div class="hovercard-text">
-                        <div class="hovercard-title">{hoveredTab.title || 'Untitled'}</div>
-                        <div class="hovercard-url">
-                            <UrlRenderer url={hoveredTab.url} variant="compact" />
-                        </div>
-                    </div>
-                    {#if !data.frames[hoveredTab.id]?.frame}
-                        <svg class="hibernation-icon" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
-                        </svg>
-                    {/if}
-                </div>
-            </div>
-            {#if hoveredTab.screenshot}
-                <div class="hovercard-screenshot">
-                    <AttachmentImage src={hoveredTab.screenshot} alt="Page preview" />
-                </div>
-            {/if}
-        </div>
+        <TabHoverCard tab={hoveredTab} onMouseLeave={() => {
+            setTimeout(() => {
+               // return
+                // Only close if not hovering over the original trigger element
+                const mouseX = window.mouseX || 0
+                const mouseY = window.mouseY || 0
+                const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+                
+                let shouldKeepOpen = false
+                
+                if (isTrashItemHover) {
+                    shouldKeepOpen = elementUnderCursor?.closest('.trash-menu-item') || 
+                                   elementUnderCursor?.closest('.trash-menu') ||
+                                   elementUnderCursor?.closest('.trash-icon')
+                } else {
+                    const hoveredTabElement = elementUnderCursor?.closest('.tab-container')
+                    if (hoveredTabElement) {
+                        // Find the tab by checking all tab arrays (leftPinned, regular, rightPinned)
+                        const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => !tab.pinned), ...rightPinnedTabs]
+                        const matchingTab = allTabs.find(tab => tabButtons[tab.id] === hoveredTabElement)
+                        shouldKeepOpen = matchingTab?.id === hoveredTab?.id
+                    }
+                }
+                
+                if (!shouldKeepOpen) {
+                    hoveredTab = null
+                    isTrashItemHover = false
+                    stopHovercardPositionCheck()
+                }
+            }, 100)
+        }} />
     </div>
 {/if}
 
