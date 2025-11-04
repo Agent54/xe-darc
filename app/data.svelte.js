@@ -682,27 +682,45 @@ export default {
             return false // No previous tab available
         }
         
-        // Get the previous tab ID (at index 1)
-        const previousTabId = activeSpace.activeTabsOrder[1]
-        
-        // Find the tab to make sure it still exists
-        const previousTab = activeSpace.tabs?.find(t => t.id === previousTabId)
-        if (!previousTab) {
-            // Previous tab doesn't exist anymore, clean up the order and try again
-            activeSpace.activeTabsOrder = activeSpace.activeTabsOrder.filter(id => 
-                activeSpace.tabs?.some(t => t.id === id)
-            )
-            return false
-        }
-        
         // Remove the current tab (at index 0) from the order
         activeSpace.activeTabsOrder.shift()
+        
+        // Pop pinned tabs and invalid tabs until we find a non-pinned tab
+        let previousTabId = null
+        let previousTab = null
+        
+        while (activeSpace.activeTabsOrder.length > 0) {
+            const tabId = activeSpace.activeTabsOrder[0]
+            const tab = activeSpace.tabs?.find(t => t.id === tabId)
+            
+            // If tab doesn't exist, pop it and continue
+            if (!tab) {
+                activeSpace.activeTabsOrder.shift()
+                continue
+            }
+            
+            // If tab is pinned, pop it and continue
+            if (docs[tabId]?.pinned) {
+                activeSpace.activeTabsOrder.shift()
+                continue
+            }
+            
+            // Found a non-pinned tab
+            previousTabId = tabId
+            previousTab = tab
+            break
+        }
+        
+        if (!previousTabId) {
+            // No non-pinned previous tab found
+            return false
+        }
         
         // Set the previous tab as active
         spaceMeta.activeTabId = previousTab.id
 
-        if (frames[previousTab]) {
-            frames[previousTab].active = Date.now()
+        if (frames[previousTabId]) {
+            frames[previousTabId].active = Date.now()
         }
         
         return true
@@ -810,6 +828,8 @@ export default {
             spaces[spaceId].tabs.push(tab)
             docs[tab._id] = tab
         }
+
+        frames[tab.id].initialLoad = true
 
         if (shouldFocus && !preview && !lightbox) {
             await tick()
