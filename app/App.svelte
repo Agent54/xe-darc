@@ -1,6 +1,6 @@
 <script>
     // import { flip } from 'svelte/animate'
-
+ 
     import Frame from './components/Frame.svelte'
     import Resources from './components/ResourcesPanel.svelte'
     import Settings from './components/Settings.svelte'
@@ -97,7 +97,8 @@
     let hovercardRecentlyActive = $state(false)
     let hovercardResetTimer = null
     let closeButtonHovered = $state(false)
-    let lastHovercardCloseTime = null
+    let instantHovercardsMode = $state(false)
+    let instantModeResetTimer = null
     let headerPartOfMain = $state(false)
     let isScrolling = $state(false)
     let scrollTimeout = null
@@ -1194,12 +1195,15 @@
             clearTimeout(hoverTimeout)
         }
         
-        // No delay if last hovercard closed less than 1s ago
-        const timeSinceLastClose = lastHovercardCloseTime ? (Date.now() - lastHovercardCloseTime) : 999999
-        const delay = timeSinceLastClose < 1000 ? 0 : 800
-        console.log('[App] Hover delay:', delay, 'timeSinceLastClose:', timeSinceLastClose)
+        const delay = instantHovercardsMode ? 0 : 800
         
         hoverTimeout = setTimeout(() => {
+            instantHovercardsMode = true
+            
+            if (instantModeResetTimer) {
+                clearTimeout(instantModeResetTimer)
+            }
+            
             const tabElement = event.target.closest('.tab-container')
             const rect = tabElement.getBoundingClientRect()
             
@@ -1409,16 +1413,14 @@
             }
             
             if (!isStillHovering) {
-                console.log('[App] Closing hovercard, setting lastCloseTime')
-                lastHovercardCloseTime = Date.now()
-                // Reset after 1s to go back to normal delay
-                setTimeout(() => {
-                    console.log('[App] Resetting lastCloseTime')
-                    lastHovercardCloseTime = null
-                }, 1000)
                 hoveredTab = null
                 isTrashItemHover = false
                 stopHovercardPositionCheck()
+                
+                instantModeResetTimer = setTimeout(() => {
+                    instantHovercardsMode = false
+                    instantModeResetTimer = null
+                }, 1000)
             }
         }, 50) // Reduced from 100ms to 50ms for more responsive checking
     }
@@ -3609,13 +3611,15 @@
 {/if}
 
 {#if hoveredTab}
+  {#key hoveredTab.id}
     <div class="tab-hovercard" 
          class:trash-item={isTrashItemHover}
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
-        <TabHoverCard tab={hoveredTab} 
-                      isClosedTab={false} 
-                      showHistoryImmediately={closeButtonHovered}
-                      onMouseLeave={() => {
+       
+            <TabHoverCard tab={hoveredTab} 
+                          isClosedTab={false} 
+                          showHistoryImmediately={closeButtonHovered}
+                          onMouseLeave={() => {
             setTimeout(() => {
                 const mouseX = window.mouseX || 0
                 const mouseY = window.mouseY || 0
@@ -3648,6 +3652,7 @@
             }, 100)
         }} />
     </div>
+  {/key}
 {/if}
 
 <TabSidebar {isDragEnabled} onShowApps={toggleAppsOverlay} 

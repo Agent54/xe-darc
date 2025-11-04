@@ -870,7 +870,7 @@ export default {
             } else {
                 newProps.archive = undefined
             }
-        }
+        } 
     
         if (typeof screenshot !== 'undefined') {
             if (screenshot && screenshot.startsWith('data:')) {

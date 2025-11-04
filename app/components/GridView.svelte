@@ -1,15 +1,11 @@
 <script>
+  // FIXME: serious performance degradation!
   import { onMount, tick } from 'svelte'
-  import Frame from './Frame.svelte'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
   import data from '../data.svelte.js'
 
   let {
-    controlledFrameSupported,
-    onFrameFocus = () => {},
-    onFrameBlur = () => {},
-    getEnabledUserMods = () => { return { css: [], js: [] } },
     onTabActivate = () => {},
     onViewModeChange = () => {},
     onTabClose = () => {},
