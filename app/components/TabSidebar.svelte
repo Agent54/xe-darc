@@ -45,6 +45,8 @@
     let hovercardRecentlyActive = $state(false)
     let hovercardResetTimer = null
     let hovercardCheckInterval = null
+    let closeButtonHovered = $state(false)
+    let lastHovercardCloseTime = null
 
     // Focus the URL input when it becomes visible
     $effect(() => {
@@ -367,7 +369,7 @@
             // Check if cursor is still over the triggering element or the hovercard
             let isStillHovering = false
             
-            // Check if hovering over the entire hovercard (including padding)
+            // Check if hovering over the hovercard (including history list and screenshot)
             if (elementUnderCursor.closest('.tab-hovercard-sidebar')) {
                 isStillHovering = true
             } else {
@@ -381,6 +383,11 @@
             }
             
             if (!isStillHovering) {
+                lastHovercardCloseTime = Date.now()
+                // Reset after 1s to go back to normal delay
+                setTimeout(() => {
+                    lastHovercardCloseTime = null
+                }, 1000)
                 hoveredTab = null
                 hovercardShowTime = null
                 stopHovercardPositionCheck()
@@ -400,7 +407,10 @@
             clearTimeout(hoverTimeout)
         }
         
-        const delay = hovercardRecentlyActive ? 200 : 800
+        // No delay if last hovercard closed less than 1s ago
+        const timeSinceLastClose = lastHovercardCloseTime ? (Date.now() - lastHovercardCloseTime) : 999999
+        const delay = timeSinceLastClose < 1000 ? 0 : 800
+        console.log('[TabSidebar] Hover delay:', delay, 'timeSinceLastClose:', timeSinceLastClose)
         
         hoverTimeout = setTimeout(() => {
             const tabElement = event.target.closest('.tab-item-container') || 
@@ -739,7 +749,7 @@
 <svelte:window onclick={handleClickOutside} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 <div class="sidebar-box" 
-     class:hovered={isHovered}
+     class:hovered={isHovered || hoveredTab || urlBarExpanded}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
      onmouseenter={handleMouseEnter} 
@@ -1020,7 +1030,10 @@
                                                     <span class="tab-title">{tab.title}</span>
                                                 </button>
                                                 
-                                                <button class="tab-close" aria-label="Close tab" onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}>
+                                                <button class="tab-close" aria-label="Close tab" 
+                                                        onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}
+                                                        onmouseenter={() => closeButtonHovered = true}
+                                                        onmouseleave={() => closeButtonHovered = false}>
                                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                                             <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                                                         </svg>
@@ -1102,17 +1115,22 @@
 {#if hoveredTab}
     <div class="tab-hovercard-sidebar" 
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
-        <TabHoverCard tab={hoveredTab} isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === hoveredTab.id)} onMouseLeave={() => {
+        <TabHoverCard tab={hoveredTab} 
+                      isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === hoveredTab.id)} 
+                      showHistoryImmediately={closeButtonHovered}
+                      onMouseLeave={() => {
             setTimeout(() => {
                 const mouseX = window.mouseX || 0
                 const mouseY = window.mouseY || 0
                 const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
                 
-                // Check if hovering over the info part (keep open) or screenshot (hide)
-                const isOverInfo = elementUnderCursor?.closest('.hovercard-info')
-                const isOverTab = elementUnderCursor?.closest('.tab-item-container')
+                // Keep open if hovering hovercard container (includes screenshot and history)
+                const isOverHovercard = elementUnderCursor?.closest('.tab-hovercard-sidebar')
+                const isOverTab = elementUnderCursor?.closest('.tab-item-container') ||
+                                 elementUnderCursor?.closest('.closed-tab-item') ||
+                                 elementUnderCursor?.closest('.pinned-tab')
                 
-                if (!isOverInfo && !isOverTab) {
+                if (!isOverHovercard && !isOverTab) {
                     hoveredTab = null
                     hovercardShowTime = null
                 }
