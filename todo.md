@@ -1310,3 +1310,6 @@ tanlged and tagging support for code and projects
 skip  pinned tabs for activation
 
 ad new tab with loaded state to skip hibernation screen
+
+global sidebin tabs
+

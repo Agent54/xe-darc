@@ -741,21 +741,35 @@
             }
         }
         
-        // For pinned tabs, always toggle frame visibility (don't activate the tab)
+        // If activating a collapsed pinned tab, expand it first
         if (tab.pinned === 'left' || tab.pinned === true) {
-            togglePinnedFrames('left')
-        } else if (tab.pinned === 'right') {
-            togglePinnedFrames('right')
-        } else {
-            // For unpinned tabs, use the original behavior
-            if (tab.id === data.spaceMeta.activeTabId) {
-                data.previous()
-            } else {
-                // Set this tab as active using the data store function
-                data.spaceMeta.activeTabId = tab.id  
-                await tick()
-                data.activate(tab.id)
+            if (invisiblePins.left) {
+                invisiblePins.left = false
+                try {
+                    localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+                } catch (error) {
+                    console.warn('Failed to save invisible pins state:', error)
+                }
             }
+        } else if (tab.pinned === 'right') {
+            if (invisiblePins.right) {
+                invisiblePins.right = false
+                try {
+                    localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+                } catch (error) {
+                    console.warn('Failed to save invisible pins state:', error)
+                }
+            }
+        }
+        
+        // For unpinned tabs, use the original behavior
+        if (tab.id === data.spaceMeta.activeTabId) {
+            data.previous()
+        } else {
+            // Set this tab as active using the data store function
+            data.spaceMeta.activeTabId = tab.id  
+            await tick()
+            data.activate(tab.id)
         }
         
         // // Immediate scroll for user interaction
@@ -2881,10 +2895,19 @@
                             {:else if tab.muted}
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                                    </svg>
+                            <button class="close-btn" 
+                                    aria-label={invisiblePins.left ? "Expand pinned tabs" : "Collapse pinned tabs"}
+                                    onmousedown={(e) => { e.stopPropagation(); togglePinnedFrames('left') }} 
+                                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('left') } }}>
+                                    {#if invisiblePins.left}
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                                        </svg>
+                                    {:else}
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                                        </svg>
+                                    {/if}
                                 </button>
                         </div>
                     </li>
@@ -3001,10 +3024,19 @@
                             {:else if tab.muted}
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                                    </svg>
+                            <button class="close-btn" 
+                                    aria-label={invisiblePins.right ? "Expand pinned tabs" : "Collapse pinned tabs"}
+                                    onmousedown={(e) => { e.stopPropagation(); togglePinnedFrames('right') }} 
+                                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('right') } }}>
+                                    {#if invisiblePins.right}
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M7.21 5.23a.75.75 0 011.06.02L11.168 10l-3.938 3.71a.75.75 0 11-1.04-1.08l4.25-4.25a.75.75 0 01.08-.06 1 1 0 010-1.08l-4.25-4.25a.75.75 0 01-.02-1.06z" clip-rule="evenodd" />
+                                        </svg>
+                                    {:else}
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                                        </svg>
+                                    {/if}
                                 </button>
                         </div>
                     </li>

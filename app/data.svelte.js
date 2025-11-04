@@ -829,6 +829,7 @@ export default {
             docs[tab._id] = tab
         }
 
+        frames[tab.id] ??= {}
         frames[tab.id].initialLoad = true
 
         if (shouldFocus && !preview && !lightbox) {
