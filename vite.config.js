@@ -210,7 +210,7 @@ export default defineConfig({
       
     },
     watch: {
-      ignored: ["**/todo.md"]
+      ignored: ["**/*.md"]
         //file, stat) => { console.log(file, stat); return false; }
       // ['*/todo.md']
     }

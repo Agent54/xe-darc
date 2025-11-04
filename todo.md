@@ -2340,3 +2340,20 @@ associate website with github repo via URL in description
 sticky pinned tabs
 
 back and forward in hvoer or context menu crad
+
+history cleaning feature in history menu and all activity/history visibility
+
+resize and hide per pinned tab not for full sidebar
+
+ellipsis for url and titles in hovercards
+
+show history menu on hover of url toolbar
+
+dev tools theme
+
+tiles view performance broken
+
+tab api as extandable concept with wich apps can integrate/can be linked to data
+
+ff pie menu backport
+

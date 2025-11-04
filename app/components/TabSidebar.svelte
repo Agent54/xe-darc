@@ -1,6 +1,6 @@
 <script>
     // Tab sidebar component with Firefox-like hover behavior
-    // let { isDragEnabled = true } = $props()
+    // let { isDragEnabled = true } = $props() 
     let { 
         onShowApps = () => {},
         customTabSidebarWidth = null,
@@ -35,18 +35,17 @@
     let urlInput = $state(null)
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
-    let navigationStateRefresh = $state(0)
     
     // Hover card state
     let hoveredTab = $state(null)
     let hoverTimeout = null
     let hovercardPosition = $state({ x: 0, y: 0 })
     let hovercardShowTime = null
-    let hovercardRecentlyActive = $state(false)
     let hovercardResetTimer = null
     let hovercardCheckInterval = null
     let closeButtonHovered = $state(false)
-    let lastHovercardCloseTime = null
+    let instantHovercardsMode = $state(false)
+    let instantModeResetTimer = null
 
     // Focus the URL input when it becomes visible
     $effect(() => {
@@ -383,14 +382,14 @@
             }
             
             if (!isStillHovering) {
-                lastHovercardCloseTime = Date.now()
-                // Reset after 1s to go back to normal delay
-                setTimeout(() => {
-                    lastHovercardCloseTime = null
-                }, 1000)
                 hoveredTab = null
                 hovercardShowTime = null
                 stopHovercardPositionCheck()
+                
+                instantModeResetTimer = setTimeout(() => {
+                    instantHovercardsMode = false
+                    instantModeResetTimer = null
+                }, 1000)
             }
         }, 50)
     }
@@ -407,12 +406,15 @@
             clearTimeout(hoverTimeout)
         }
         
-        // No delay if last hovercard closed less than 1s ago
-        const timeSinceLastClose = lastHovercardCloseTime ? (Date.now() - lastHovercardCloseTime) : 999999
-        const delay = timeSinceLastClose < 1000 ? 0 : 800
-        console.log('[TabSidebar] Hover delay:', delay, 'timeSinceLastClose:', timeSinceLastClose)
+        const delay = instantHovercardsMode ? 0 : 800
         
         hoverTimeout = setTimeout(() => {
+            instantHovercardsMode = true
+            
+            if (instantModeResetTimer) {
+                clearTimeout(instantModeResetTimer)
+            }
+            
             const tabElement = event.target.closest('.tab-item-container') || 
                               event.target.closest('.closed-tab-item') ||
                               event.target.closest('.pinned-tab')
@@ -444,14 +446,9 @@
             hoveredTab = tab
             hovercardShowTime = Date.now()
             
-            hovercardRecentlyActive = true
-            
             if (hovercardResetTimer) {
                 clearTimeout(hovercardResetTimer)
             }
-            hovercardResetTimer = setTimeout(() => {
-                hovercardRecentlyActive = false
-            }, 3000)
             
             // Start checking cursor position
             startHovercardPositionCheck()
@@ -1042,7 +1039,8 @@
                                         {/if}
                                     {/each}
                                     
-                                    <!-- TODO: <div class="tab-group" title="April - 10 tabs">
+                                    <!-- TODO: -->
+                                     <div class="tab-group" title="April - 10 tabs">
                                         <div class="tab-group-main">
                                             <div class="tab-group-favicons">
                                                 <div class="tab-group-favicon">
@@ -1059,7 +1057,7 @@
                                         </div>
                                         <span class="tab-group-count">10</span>
                                         <button class="tab-group-close" aria-label="Close tab group">×</button>
-                                    </div> -->
+                                    </div><!-- -->
                                 </div>
                             </div>
                         {/each}
@@ -1113,30 +1111,33 @@
 </div>
 
 {#if hoveredTab}
-    <div class="tab-hovercard-sidebar" 
+    {#key hoveredTab.id}
+        <div class="tab-hovercard-sidebar" 
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
-        <TabHoverCard tab={hoveredTab} 
-                      isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === hoveredTab.id)} 
-                      showHistoryImmediately={closeButtonHovered}
-                      onMouseLeave={() => {
-            setTimeout(() => {
-                const mouseX = window.mouseX || 0
-                const mouseY = window.mouseY || 0
-                const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
-                
-                // Keep open if hovering hovercard container (includes screenshot and history)
-                const isOverHovercard = elementUnderCursor?.closest('.tab-hovercard-sidebar')
-                const isOverTab = elementUnderCursor?.closest('.tab-item-container') ||
-                                 elementUnderCursor?.closest('.closed-tab-item') ||
-                                 elementUnderCursor?.closest('.pinned-tab')
-                
-                if (!isOverHovercard && !isOverTab) {
-                    hoveredTab = null
-                    hovercardShowTime = null
-                }
-            }, 100)
-        }} />
+        
+            <TabHoverCard tab={hoveredTab} 
+                        isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === hoveredTab.id)} 
+                        showHistoryImmediately={closeButtonHovered}
+                        onMouseLeave={() => {
+                setTimeout(() => {
+                    const mouseX = window.mouseX || 0
+                    const mouseY = window.mouseY || 0
+                    const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+                    
+                    // Keep open if hovering hovercard container (includes screenshot and history)
+                    const isOverHovercard = elementUnderCursor?.closest('.tab-hovercard-sidebar')
+                    const isOverTab = elementUnderCursor?.closest('.tab-item-container') ||
+                                    elementUnderCursor?.closest('.closed-tab-item') ||
+                                    elementUnderCursor?.closest('.pinned-tab')
+                    
+                    if (!isOverHovercard && !isOverTab) {
+                        hoveredTab = null
+                        hovercardShowTime = null
+                    }
+                }, 100)
+            }} />
     </div>
+    {/key}
 {/if}
 
 <style>

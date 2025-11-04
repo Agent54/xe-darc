@@ -1,3 +1,9 @@
+if (import.meta?.hot) {
+    import.meta.hot.on('vite:beforeFullReload', () => {
+        throw '(skipping full reload)';
+    })
+}
+
 if (typeof window !== 'undefined' && window.trustedTypes && window.trustedTypes.createPolicy) {
   try {
     // Create the policy directly - if it already exists, the browser will throw an error

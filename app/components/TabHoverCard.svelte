@@ -7,36 +7,26 @@
     let { tab, onMouseLeave, isClosedTab = false, showHistoryImmediately = false } = $props()
     
     let hovercardHovered = $state(false)
-    let showHistory = $state(false)
+    let showHistory = $state(showHistoryImmediately)
     let historyShowTimer = null
     let hoveredHistoryEntry = $state(null)
-    let wasInitiallyTriggeredByCloseButton = showHistoryImmediately
     
     // Get space for this tab to access activeTabsOrder
     let tabSpace = $derived(data.spaces[tab.spaceId])
     let historyEntries = $derived(tabSpace?.activeTabsOrder?.slice(1, 11).map(id => data.docs[id]).filter(t => t && t.id !== tab.id) || [])
     
-    // Show history immediately only if initially triggered by close button, otherwise delay
     $effect(() => {
-        if (showHistoryImmediately) {
+        if (showHistoryImmediately && !showHistory) {
             if (historyShowTimer) clearTimeout(historyShowTimer)
-            
-            if (wasInitiallyTriggeredByCloseButton) {
-                showHistory = true
-            } else {
-                historyShowTimer = setTimeout(() => {
-                    showHistory = true
-                }, 400)
-            }
+            showHistory = true
         }
     })
     
-    // Show history after delay if hovercard hovered, keep it shown once triggered
     $effect(() => {
         if (hovercardHovered && !showHistory) {
             historyShowTimer = setTimeout(() => {
                 showHistory = true
-            }, 300)
+            }, 1000)
         }
         
         return () => {
@@ -46,6 +36,7 @@
 </script>
 
 <div class="hovercard-content"
+     role="tooltip"
      onmouseenter={() => hovercardHovered = true}
      onmouseleave={() => hovercardHovered = false}>
     <div class="hovercard-info"
@@ -57,7 +48,7 @@
                 <div class="hovercard-title">{tab.title || 'Untitled'}</div>
                 <div class="hovercard-url">
                     <UrlRenderer url={tab.url} variant="compact" />
-                </div>
+                </div> 
             </div>
             {#if isClosedTab}
                 <svg class="hibernation-icon" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -70,9 +61,26 @@
             {/if}
         </div>
     </div>
-    {#if tab.screenshot || hoveredHistoryEntry?.screenshot}
+    {#if hoveredHistoryEntry}
+        {#if hoveredHistoryEntry.screenshot}
+            <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
+                {#key hoveredHistoryEntry.id}
+                    <AttachmentImage src={hoveredHistoryEntry.screenshot} alt="Page preview" />
+                {/key}
+                {#if hovercardHovered}
+                    <button class="expand-button" aria-label="Expand screenshot">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                        </svg>
+                    </button>
+                {/if}
+            </div>
+        {/if}
+    {:else if tab.screenshot}
         <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
-            <AttachmentImage src={hoveredHistoryEntry?.screenshot || tab.screenshot} alt="Page preview" />
+            {#key tab.id}
+                <AttachmentImage src={tab.screenshot} alt="Page preview" />
+            {/key}
             {#if hovercardHovered}
                 <button class="expand-button" aria-label="Expand screenshot">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
