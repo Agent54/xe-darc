@@ -255,7 +255,13 @@
             clearTimeout(closedTabsHideTimeout)
             closedTabsHideTimeout = null
         }
-        closedTabsHovered = false
+        closedTabsHideTimeout = setTimeout(() => {
+            // Don't close if hovercard is open for a closed tab
+            if (hoveredTab && data.spaceMeta.closedTabs.some(t => t.id === hoveredTab.id)) {
+                return
+            }
+            closedTabsHovered = false
+        }, 200)
     }
     
     // onMount(() => {
@@ -365,8 +371,10 @@
             if (elementUnderCursor.closest('.tab-hovercard-sidebar')) {
                 isStillHovering = true
             } else {
-                // Check if still over the tab
-                const hoveredTabElement = elementUnderCursor.closest('.tab-item-container')
+                // Check if still over the tab, closed tab, or pinned tab
+                const hoveredTabElement = elementUnderCursor.closest('.tab-item-container') ||
+                                         elementUnderCursor.closest('.closed-tab-item') ||
+                                         elementUnderCursor.closest('.pinned-tab')
                 if (hoveredTabElement) {
                     isStillHovering = true
                 }
@@ -395,7 +403,9 @@
         const delay = hovercardRecentlyActive ? 200 : 800
         
         hoverTimeout = setTimeout(() => {
-            const tabElement = event.target.closest('.tab-item-container')
+            const tabElement = event.target.closest('.tab-item-container') || 
+                              event.target.closest('.closed-tab-item') ||
+                              event.target.closest('.pinned-tab')
             if (!tabElement) return
             
             const rect = tabElement.getBoundingClientRect()
@@ -412,6 +422,12 @@
             // Check if hovercard would go off left edge
             if (x < 10) {
                 x = 10
+            }
+            
+            // Check if hovercard would go off bottom
+            const hovercardHeight = tab.screenshot ? 180 + 80 : 80 // screenshot height + info padding + margins
+            if (y + hovercardHeight > window.innerHeight - 10) {
+                y = window.innerHeight - hovercardHeight - 10
             }
             
             hovercardPosition = { x, y }
@@ -844,7 +860,9 @@
                         </svg>
                     </button>
                     {#each globallyPinnedTabs as tab}
-                        <button class="pinned-tab">
+                        <button class="pinned-tab"
+                                onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                                onmouseleave={handleTabMouseLeave}>
                             <Favicon {tab} showButton={false} />
                         </button>
                     {/each}
@@ -1055,7 +1073,10 @@
                 <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
                         {#each data.spaceMeta.closedTabs as tab}
-                            <button class="closed-tab-item" onmousedown={() => data.restoreClosedTab(tab.id)}>
+                            <button class="closed-tab-item" 
+                                    onmousedown={() => data.restoreClosedTab(tab.id)}
+                                    onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                                    onmouseleave={handleTabMouseLeave}>
                                 <Favicon {tab} showButton={false} />
                                 <div class="tab-text">
                                     <span class="tab-title">{tab.title}</span>
@@ -1081,7 +1102,7 @@
 {#if hoveredTab}
     <div class="tab-hovercard-sidebar" 
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
-        <TabHoverCard tab={hoveredTab} onMouseLeave={() => {
+        <TabHoverCard tab={hoveredTab} isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === hoveredTab.id)} onMouseLeave={() => {
             setTimeout(() => {
                 const mouseX = window.mouseX || 0
                 const mouseY = window.mouseY || 0
