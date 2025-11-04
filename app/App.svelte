@@ -2857,7 +2857,7 @@
      
         <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {devModeEnabled ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
-        <ul class="tab-list" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
+        <ul class="tab-list tabs" class:pinned-collapsed-left={invisiblePins.left} class:pinned-collapsed-right={invisiblePins.right} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each leftPinnedTabs as tabPinned, i (tabPinned.id)}
                 {@const tab = data.docs[tabPinned.id]}
                 {@const frameData = data.frames[tab.id]}

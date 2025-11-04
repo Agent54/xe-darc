@@ -488,6 +488,14 @@ ul::-webkit-scrollbar {
     padding-top: 2px;
 }
 
+/* Always show toggle button on pinned tabs when collapsed */
+.tabs.pinned-collapsed-left .close-btn,
+.tabs.pinned-collapsed-right .close-btn {
+    opacity: 1;
+    width: 17px;
+    padding-top: 2px;
+}
+
 
 /* Shared base class for header icon buttons */
 .header-icon-button {
