@@ -1313,6 +1313,17 @@ ad new tab with loaded state to skip hibernation screen
 
 global sidebin tabs
 
+better camel UI integration
+
+unify sidebar and global sidepins
+
+atproto social layer, web of trust etc.
+
+lightbox button on screenshot of tabhovercards
+
+remove delay after first hovercard
+
+tab title hovercard scroll and ellipsis style
 
 xenon as the social browser with community of rapid browser innovation and sharing with their community what they buld, distibution/defaults, roblox of browsers?!
 
