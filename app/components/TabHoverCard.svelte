@@ -1,11 +1,48 @@
 <script>
     import UrlRenderer from './UrlRenderer.svelte'
     import AttachmentImage from './AttachmentImage.svelte'
+    import Favicon from './Favicon.svelte'
     import data from '../data.svelte.js'
     
-    let { tab, onMouseLeave, isClosedTab = false } = $props()
+    let { tab, onMouseLeave, isClosedTab = false, showHistoryImmediately = false } = $props()
     
     let hovercardHovered = $state(false)
+    let showHistory = $state(false)
+    let historyShowTimer = null
+    let hoveredHistoryEntry = $state(null)
+    let wasInitiallyTriggeredByCloseButton = showHistoryImmediately
+    
+    // Get space for this tab to access activeTabsOrder
+    let tabSpace = $derived(data.spaces[tab.spaceId])
+    let historyEntries = $derived(tabSpace?.activeTabsOrder?.slice(1, 11).map(id => data.docs[id]).filter(t => t && t.id !== tab.id) || [])
+    
+    // Show history immediately only if initially triggered by close button, otherwise delay
+    $effect(() => {
+        if (showHistoryImmediately) {
+            if (historyShowTimer) clearTimeout(historyShowTimer)
+            
+            if (wasInitiallyTriggeredByCloseButton) {
+                showHistory = true
+            } else {
+                historyShowTimer = setTimeout(() => {
+                    showHistory = true
+                }, 400)
+            }
+        }
+    })
+    
+    // Show history after delay if hovercard hovered, keep it shown once triggered
+    $effect(() => {
+        if (hovercardHovered && !showHistory) {
+            historyShowTimer = setTimeout(() => {
+                showHistory = true
+            }, 300)
+        }
+        
+        return () => {
+            if (historyShowTimer) clearTimeout(historyShowTimer)
+        }
+    })
 </script>
 
 <div class="hovercard-content"
@@ -33,9 +70,9 @@
             {/if}
         </div>
     </div>
-    {#if tab.screenshot}
-        <div class="hovercard-screenshot">
-            <AttachmentImage src={tab.screenshot} alt="Page preview" />
+    {#if tab.screenshot || hoveredHistoryEntry?.screenshot}
+        <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
+            <AttachmentImage src={hoveredHistoryEntry?.screenshot || tab.screenshot} alt="Page preview" />
             {#if hovercardHovered}
                 <button class="expand-button" aria-label="Expand screenshot">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -43,6 +80,28 @@
                     </svg>
                 </button>
             {/if}
+        </div>
+    {/if}
+    {#if showHistory && historyEntries.length > 0}
+        <div class="history-section">
+            <div class="history-section-title">Tab History</div>
+            <div class="history-list">
+                <div class="history-connector-line"></div>
+                {#each historyEntries as historyTab, index}
+                <button class="history-item"
+                        onmouseenter={() => hoveredHistoryEntry = historyTab}
+                        onmouseleave={() => hoveredHistoryEntry = null}>
+                    <div class="history-icon-wrapper">
+                        <div class="connector-dot"></div>
+                        <Favicon tab={historyTab} showButton={false} />
+                    </div>
+                    <div class="history-text">
+                        <span class="history-title">{historyTab.title || 'Untitled'}</span>
+                        <span class="history-url"><UrlRenderer url={historyTab.url} variant="compact" /></span>
+                    </div>
+                </button>
+            {/each}
+            </div>
         </div>
     {/if}
 </div>
@@ -116,6 +175,11 @@
         position: relative;
     }
     
+    .hovercard-screenshot.has-history {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+    
     .expand-button {
         position: absolute;
         top: 8px;
@@ -165,5 +229,115 @@
         color: rgba(255, 255, 255, 0.7);
         flex-shrink: 0;
         margin-left: 8px;
+    }
+    
+    .history-section {
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .history-section-title {
+        padding: 8px 12px 4px 12px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: rgba(255, 255, 255, 0.5);
+        font-family: 'Inter', sans-serif;
+    }
+    
+    .history-list {
+        max-height: 50vh;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        position: relative;
+    }
+    
+    .history-connector-line {
+        position: absolute;
+        left: 19px;
+        top: 30px;
+        bottom: 30px;
+        width: 2px;
+        background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .history-list::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .history-list::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .history-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+    
+    .history-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        width: 100%;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        transition: background 100ms ease;
+        text-align: left;
+        font-family: 'Inter', sans-serif;
+        position: relative;
+    }
+    
+    .history-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .history-icon-wrapper {
+        position: relative;
+        flex-shrink: 0;
+    }
+    
+    .connector-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.3);
+        border: 2px solid rgba(0, 0, 0, 0.95);
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1;
+    }
+    
+    .history-item:hover .connector-dot {
+        background: rgba(255, 255, 255, 0.6);
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+    }
+    
+    .history-text {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    
+    .history-title {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .history-url {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 </style>

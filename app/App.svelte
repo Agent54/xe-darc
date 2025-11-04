@@ -96,6 +96,8 @@
     let isDragEnabled = $state(true)
     let hovercardRecentlyActive = $state(false)
     let hovercardResetTimer = null
+    let closeButtonHovered = $state(false)
+    let lastHovercardCloseTime = null
     let headerPartOfMain = $state(false)
     let isScrolling = $state(false)
     let scrollTimeout = null
@@ -1192,8 +1194,10 @@
             clearTimeout(hoverTimeout)
         }
         
-        // Use longer delay initially, shorter delay if recently active
-        const delay = hovercardRecentlyActive ? 200 : 800
+        // No delay if last hovercard closed less than 1s ago
+        const timeSinceLastClose = lastHovercardCloseTime ? (Date.now() - lastHovercardCloseTime) : 999999
+        const delay = timeSinceLastClose < 1000 ? 0 : 800
+        console.log('[App] Hover delay:', delay, 'timeSinceLastClose:', timeSinceLastClose)
         
         hoverTimeout = setTimeout(() => {
             const tabElement = event.target.closest('.tab-container')
@@ -1405,6 +1409,13 @@
             }
             
             if (!isStillHovering) {
+                console.log('[App] Closing hovercard, setting lastCloseTime')
+                lastHovercardCloseTime = Date.now()
+                // Reset after 1s to go back to normal delay
+                setTimeout(() => {
+                    console.log('[App] Resetting lastCloseTime')
+                    lastHovercardCloseTime = null
+                }, 1000)
                 hoveredTab = null
                 isTrashItemHover = false
                 stopHovercardPositionCheck()
@@ -2961,7 +2972,11 @@
                             {:else if tab.muted}
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" onmousedown={() => closeTab(tab, event, true)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}>
+                            <button class="close-btn" 
+                                    onmousedown={() => closeTab(tab, event, true)} 
+                                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}
+                                    onmouseenter={() => closeButtonHovered = true}
+                                    onmouseleave={() => closeButtonHovered = false}>
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                         <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                                     </svg>
@@ -3597,17 +3612,21 @@
     <div class="tab-hovercard" 
          class:trash-item={isTrashItemHover}
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
-        <TabHoverCard tab={hoveredTab} onMouseLeave={() => {
+        <TabHoverCard tab={hoveredTab} 
+                      isClosedTab={false} 
+                      showHistoryImmediately={closeButtonHovered}
+                      onMouseLeave={() => {
             setTimeout(() => {
-               // return
-                // Only close if not hovering over the original trigger element
                 const mouseX = window.mouseX || 0
                 const mouseY = window.mouseY || 0
                 const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
                 
                 let shouldKeepOpen = false
                 
-                if (isTrashItemHover) {
+                // Keep open if hovering over the hovercard container (includes screenshot and history)
+                if (elementUnderCursor?.closest('.tab-hovercard')) {
+                    shouldKeepOpen = true
+                } else if (isTrashItemHover) {
                     shouldKeepOpen = elementUnderCursor?.closest('.trash-menu-item') || 
                                    elementUnderCursor?.closest('.trash-menu') ||
                                    elementUnderCursor?.closest('.trash-icon')

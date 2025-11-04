@@ -2337,3 +2337,6 @@ prepend darc code to tab titles + favicon
 
 associate website with github repo via URL in description
 
+sticky pinned tabs
+
+back and forward in hvoer or context menu crad
