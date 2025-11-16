@@ -341,6 +341,15 @@
                                                     </button>
                                                 {/if}
                                             </div>
+                                            <button class="change-btn-inline" onmousedown={() => data.changePermission(resource.type, new URL(data.docs[data.spaceMeta.activeTabId]?.url).origin)} title="Change permission decision">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                                                    <path d="M21 3v5h-5"/>
+                                                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                                                    <path d="M3 21v-5h5"/>
+                                                </svg>
+                                                Change
+                                            </button>
                                         </div>
                                     {/if}
                                     {#if section.id !== 'requested'}
@@ -968,11 +977,49 @@
     /* Resource Reload Reminder */
     .resource-reload-reminder {
         margin-top: 8px;
-        margin-right: 85px; /* Space for change button */
         padding: 6px 8px;
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 4px;
+    }
+
+    /* Hide change button when reload reminder is visible */
+    .resource-reload-reminder ~ .change-btn {
+        display: none;
+    }
+
+    .change-btn-inline {
+        margin-top: 6px;
+        margin-left: auto;
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.6);
+        border: none;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 500;
+        padding: 4px 6px;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        transition: background-color 0.15s ease, color 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        line-height: 1;
+        box-sizing: border-box;
+        outline: 0;
+        flex-shrink: 0;
+    }
+
+    .change-btn-inline:hover,
+    .change-btn-inline:focus {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .change-btn-inline svg {
+        width: 10px;
+        height: 10px;
     }
 
     .reload-message {

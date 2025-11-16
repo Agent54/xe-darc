@@ -881,6 +881,18 @@
     function closeTab(tab, event, createPlaceholder = false) {
         if (event) event.stopPropagation()
 
+        // Check if closing the last pinned tab and reset collapsed state
+        if (tab.pinned) {
+            const pinnedSide = tab.pinned === 'right' ? 'right' : 'left'
+            const sameSidePins = tabs.filter(t => 
+                pinnedSide === 'right' ? t.pinned === 'right' : (t.pinned === true || t.pinned === 'left')
+            )
+            if (sameSidePins.length === 1 && invisiblePins[pinnedSide]) {
+                invisiblePins[pinnedSide] = false
+                localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+            }
+        }
+
         data.closeTab(data.spaceMeta.activeSpace, tab.id)
         closed[tab._rev] = Date.now()
 
@@ -1053,6 +1065,18 @@
     }
 
     function unpinTab(tab) {
+        // Check if unpinning the last pinned tab and reset collapsed state
+        if (tab.pinned) {
+            const pinnedSide = tab.pinned === 'right' ? 'right' : 'left'
+            const sameSidePins = tabs.filter(t => 
+                pinnedSide === 'right' ? t.pinned === 'right' : (t.pinned === true || t.pinned === 'left')
+            )
+            if (sameSidePins.length === 1 && invisiblePins[pinnedSide]) {
+                invisiblePins[pinnedSide] = false
+                localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+            }
+        }
+        
         data.pin({ tabId: tab.id, pinned: null })
         hideContextMenu()
     }
@@ -1771,7 +1795,7 @@
         // Use requestAnimationFrame for smooth updates
         resizeAnimationFrame = requestAnimationFrame(() => {
             const deltaX = event.clientX - resizeStartX
-            const newWidth = Math.max(200, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 200px, max 50% viewport
+            const newWidth = Math.max(345, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 345px, max 50% viewport
             customLeftPinnedWidth = newWidth
             
             // Keep the visible frame in view
@@ -1820,7 +1844,7 @@
         // Use requestAnimationFrame for smooth updates
         resizeAnimationFrame = requestAnimationFrame(() => {
             const deltaX = resizeStartX - event.clientX // Inverted for right side
-            const newWidth = Math.max(200, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 200px, max 50% viewport
+            const newWidth = Math.max(345, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 345px, max 50% viewport
             customRightPinnedWidth = newWidth
             
             // Keep the visible frame in view
@@ -1869,7 +1893,7 @@
         // Use requestAnimationFrame for smooth updates
         resizeAnimationFrame = requestAnimationFrame(() => {
             const deltaX = resizeStartX - event.clientX // Inverted for right side
-            const newWidth = Math.max(200, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 200px, max 50% viewport
+            const newWidth = Math.max(345, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 345px, max 50% viewport
             customRightSidebarWidth = newWidth
             
             // Keep the visible frame in view
