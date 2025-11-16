@@ -22,6 +22,17 @@
         }
     })
     
+    // Reset showHistory when tab changes to prevent delay carryover
+    $effect(() => {
+        const tabId = tab.id
+        showHistory = showHistoryImmediately
+        hovercardHovered = false
+        if (historyShowTimer) {
+            clearTimeout(historyShowTimer)
+            historyShowTimer = null
+        }
+    })
+    
     $effect(() => {
         if (hovercardHovered && !showHistory) {
             historyShowTimer = setTimeout(() => {

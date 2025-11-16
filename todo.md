@@ -2357,3 +2357,16 @@ tab api as extandable concept with wich apps can integrate/can be linked to data
 
 ff pie menu backport
 
+google.iwa-studio
+
+close of permission sidebar broken again
+
+hibernate this/ hibernate others
+
+move tot top
+
+
+shelve for items and urls that should not immediately be full tabs?
+
+
+app folders (my rarely used cloud provider settings etc.)
