@@ -153,6 +153,16 @@
     function handleTabScroll(event) {
         if (!tabListRef) return
         
+        console.log('[DEBUG:SCROLL] Tab list scroll event', {
+            scrollLeft: tabListRef.scrollLeft,
+            scrollTop: event.target.scrollTop,
+            clientWidth: tabListRef.clientWidth,
+            isHorizontalScroll: event.target === tabListRef,
+            target: event.target.className,
+            pointerEvents: window.getComputedStyle(event.target).pointerEvents,
+            zIndex: window.getComputedStyle(event.target).zIndex
+        })
+        
         const scrollLeft = tabListRef.scrollLeft
         const containerWidth = tabListRef.clientWidth
         const spaceWidth = containerWidth + 20
@@ -265,6 +275,63 @@
         }, 200)
     }
     
+    let lastScrolledTabId = $state(null)
+    let scrollHoverTimeout = null
+    
+    function handleTabsListScroll(event) {
+        const tabsList = event.target
+        console.log('[DEBUG:SCROLL] Tabs list vertical scroll', {
+            scrollTop: tabsList.scrollTop,
+            scrollHeight: tabsList.scrollHeight,
+            clientHeight: tabsList.clientHeight,
+            pointerEvents: window.getComputedStyle(tabsList).pointerEvents,
+            zIndex: window.getComputedStyle(tabsList).zIndex,
+            overflow: window.getComputedStyle(tabsList).overflow,
+            overflowY: window.getComputedStyle(tabsList).overflowY,
+            position: window.getComputedStyle(tabsList).position
+        })
+        
+        // Check if any tabs are being hovered during scroll
+        const mouseX = window.mouseX || 0
+        const mouseY = window.mouseY || 0
+        const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+        console.log('[DEBUG:SCROLL] Element under cursor during scroll', {
+            element: elementUnderCursor?.className,
+            isTabItem: !!elementUnderCursor?.closest('.tab-item-container'),
+            pointerEvents: elementUnderCursor ? window.getComputedStyle(elementUnderCursor).pointerEvents : 'N/A'
+        })
+        
+        // Manually trigger hover when scrolling moves tabs under cursor
+        if (scrollHoverTimeout) {
+            clearTimeout(scrollHoverTimeout)
+        }
+        
+        scrollHoverTimeout = setTimeout(() => {
+            const mouseX = window.mouseX || 0
+            const mouseY = window.mouseY || 0
+            const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+            const tabContainer = elementUnderCursor?.closest('.tab-item-container')
+            
+            if (tabContainer && instantHovercardsMode) {
+                const tabId = tabContainer.getAttribute('data-tab-id')
+                if (tabId && tabId !== lastScrolledTabId && tabId !== hoveredTab?.id) {
+                    console.log('[DEBUG:SCROLL] Triggering hover for tab under cursor after scroll', tabId)
+                    const tab = data.docs[tabId]
+                    if (tab) {
+                        // Create a synthetic event for handleTabMouseEnter
+                        const syntheticEvent = {
+                            target: tabContainer,
+                            clientX: mouseX,
+                            clientY: mouseY
+                        }
+                        handleTabMouseEnter(tab, syntheticEvent)
+                        lastScrolledTabId = tabId
+                    }
+                }
+            }
+        }, 150) // Small delay after scroll stops
+    }
+    
     // onMount(() => {
     //     scrollToCurrentSpace('instant')
     //     previousSpaceIndex = data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace)
@@ -311,6 +378,38 @@
                 }
             }
         }, 50) // Small delay to ensure DOM is updated
+    })
+    
+    // Track global mouse position and log pointer event state
+    $effect(() => {
+        const handleMouseMove = (e) => {
+            window.mouseX = e.clientX
+            window.mouseY = e.clientY
+        }
+        
+        const handlePointerEvent = (e) => {
+            const target = e.target
+            if (target.closest('.tabs-list') || target.closest('.tab-item-container')) {
+                console.log('[DEBUG:POINTER] Pointer event on tab area', {
+                    type: e.type,
+                    target: target.className,
+                    pointerEvents: window.getComputedStyle(target).pointerEvents,
+                    zIndex: window.getComputedStyle(target).zIndex,
+                    mouseX: e.clientX,
+                    mouseY: e.clientY
+                })
+            }
+        }
+        
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('pointerenter', handlePointerEvent, true)
+        window.addEventListener('pointerleave', handlePointerEvent, true)
+        
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('pointerenter', handlePointerEvent, true)
+            window.removeEventListener('pointerleave', handlePointerEvent, true)
+        }
     })
 
     // Watch for new closed tabs and auto-show menu, might be a bit much?
@@ -372,11 +471,41 @@
             if (elementUnderCursor.closest('.tab-hovercard-sidebar')) {
                 isStillHovering = true
             } else {
-                // Check if still over the tab, closed tab, or pinned tab
+                // Check if still over a tab, closed tab, or pinned tab
                 const hoveredTabElement = elementUnderCursor.closest('.tab-item-container') ||
                                          elementUnderCursor.closest('.closed-tab-item') ||
                                          elementUnderCursor.closest('.pinned-tab')
                 if (hoveredTabElement) {
+                    // Check if it's a DIFFERENT tab - if so, switch to it instantly
+                    const tabId = hoveredTabElement.getAttribute('data-tab-id')
+                    if (tabId && tabId !== hoveredTab.id && instantHovercardsMode) {
+                        const newTab = data.docs[tabId] || data.spaceMeta.closedTabs.find(t => t.id === tabId)
+                        if (newTab) {
+                            console.log('[DEBUG:HOVER] Switching to new tab during position check', tabId)
+                            // Update to new tab immediately
+                            const rect = hoveredTabElement.getBoundingClientRect()
+                            const hovercardWidth = 320
+                            
+                            let x = rect.right
+                            let y = rect.top - 26
+                            
+                            if (x + hovercardWidth > window.innerWidth - 10) {
+                                x = rect.left - hovercardWidth - 10
+                            }
+                            if (x < 10) {
+                                x = 10
+                            }
+                            
+                            const hovercardHeight = newTab.screenshot ? 180 + 80 : 80
+                            if (y + hovercardHeight > window.innerHeight - 10) {
+                                y = window.innerHeight - hovercardHeight - 10
+                            }
+                            
+                            hovercardPosition = { x, y }
+                            hoveredTab = newTab
+                            hovercardShowTime = Date.now()
+                        }
+                    }
                     isStillHovering = true
                 }
             }
@@ -402,6 +531,17 @@
     }
     
     function handleTabMouseEnter(tab, event) {
+        console.log('[DEBUG:HOVER] Tab mouse enter', {
+            tabId: tab.id,
+            tabTitle: tab.title,
+            targetElement: event.target.className,
+            pointerEvents: window.getComputedStyle(event.target).pointerEvents,
+            zIndex: window.getComputedStyle(event.target).zIndex,
+            mouseX: event.clientX,
+            mouseY: event.clientY,
+            instantMode: instantHovercardsMode
+        })
+        
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
         }
@@ -409,6 +549,7 @@
         const delay = instantHovercardsMode ? 0 : 800
         
         hoverTimeout = setTimeout(() => {
+            console.log('[DEBUG:HOVER] Showing hovercard for tab', tab.id)
             instantHovercardsMode = true
             
             if (instantModeResetTimer) {
@@ -455,7 +596,14 @@
         }, delay)
     }
 
-    function handleTabMouseLeave() {
+    function handleTabMouseLeave(event) {
+        console.log('[DEBUG:HOVER] Tab mouse leave', {
+            targetElement: event?.target?.className,
+            currentHoveredTab: hoveredTab?.id,
+            mouseX: window.mouseX,
+            mouseY: window.mouseY
+        })
+        
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
             hoverTimeout = null
@@ -470,11 +618,18 @@
             const mouseY = window.mouseY || 0
             const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
             
+            console.log('[DEBUG:HOVER] Checking if still hovering', {
+                elementUnderCursor: elementUnderCursor?.className,
+                isOverInfo: !!elementUnderCursor?.closest('.hovercard-info'),
+                isOverHovercard: !!elementUnderCursor?.closest('.tab-hovercard-sidebar')
+            })
+            
             // Check if still over info or hovercard
             const isOverInfo = elementUnderCursor?.closest('.hovercard-info')
             const isOverHovercard = elementUnderCursor?.closest('.tab-hovercard-sidebar')
             
             if (!isOverInfo && !isOverHovercard) {
+                console.log('[DEBUG:HOVER] Clearing hovered tab')
                 hoveredTab = null
                 hovercardShowTime = null
                 stopHovercardPositionCheck()
@@ -1007,8 +1162,8 @@
                                     </button>
                                  </div>
                                 
-                                <div class="tabs-list">
-                                    {#each data.spaces[spaceId].tabs as tab (tab.id)}
+                                <div class="tabs-list" onscroll={handleTabsListScroll}>
+                                   {#each data.spaces[spaceId].tabs as tab (tab.id)}
                                         {#if tab.type === 'divider'}
                                             <div class="tab-divider">
                                                 {#if tab.title}
