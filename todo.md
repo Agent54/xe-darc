@@ -308,7 +308,7 @@ swirch tabs and spaces / tab groups from sidebar to header?
 
 zoom gesture support to trigger overview/ assistant mode
 
-os window manager for littel desktp aps that can be ad hoc created (> peek overlap?)
+os window manager for little desktp aps that can be ad hoc created (> peek overlap?)
 
 arc easle
 
@@ -592,7 +592,7 @@ todos, milestones, plan and voting/ feedback
 
 lightbox navigation and history, display, closed tabs handling
 
-spacemanager like multipreviews? next to lightbox
+stage manager like multipreviews? next to lightbox
 
 docker build + start from github url > website + xterm + vscode?
 
@@ -1359,3 +1359,293 @@ quick heads up session to check weather or currency, agent etc.
 
 docker image snapshotting and diff mangagement
 
+make real kind of feature
+
+do you type out whole words talking to your computers or stop whenever you know it will understand?  why use fill words. do we develop intimate languages over time as do identical twins?
+
+fetch only safe if provided by user or result of websearch of public urls
+
+n8n like features/ui for workerd
+
+add extension compatible api for code sharing and dev mind share/onboarding?
+
+close closes all windows
+
+Perhaps we call it browser plus experiences
+In that is going beyond the browser
+I’ll think about it a bit and see what comes up. Another would be unbundling the browser but perhaps that’s too complex a concept
+
+
+Efficient log handling: Browser logs are written to files that Agent can grep 
+
+Visual feedback with images: Screenshots are integrated directly with the file reading tool, so Agent actually sees the browser state as images rather than relying on text descriptions.
+
+Smart prompts: Agent receives additional context about browser logs, including total line counts and preview snippets, 
+
+"super human computing"
+
+tab seearch + keyboard shortcuts
+
+prevent duplicate same link open feature
+
+spaces manager arc view
+
+mine aggregate data from sites, eg adresses, emails etc.
+
+sidebar with textractors fom singular
+
+replace screenshots on page  full loaded
+
+main tab to sidebar annimation on link open
+
+We just need to add a few demos that wouldn’t be possible in a regular browser in time for the us visit
+
+bug: dev tool uuid context changes on reload, use tab ids instead in intermediate!!
+
+open image in new tab
+
+
+second seec bar for videos longer 60 minutes for just the current section! > how to have generic video play ui everywhere?
+
+research/outcome post publishing like ink and switch?
+
+open collective setup/ formalize the entity communication...
+
+make a post from the diff of this file with llm once a week/month?
+
+scoped extensinos for only some domains
+
+app store, share sheet, native app shim with sub app install
+
+
+my screenshots app and social posts
+
+amp code cmd d not working clash!
+
+
+co owned shared data space
+
+abilty to cloes/hide tabs in shared spaces without deleting for everyone
+
+https://github.com/ComposioHQ/open-chatgpt-atlas/blob/master/content.ts and devtools mcp extension mode code reuse?
+
+vscode server favicon, replace password + upgrade
+
+fullscreen broken
+
+todo: skip pinned tabs in active tab order
+
+persist recent active tab history
+
+website: whats wrong with browsers > whats wrong with browsers?
+
+support browser matrix for xenon/darc with limits stated
+
+move tab to folder/space by search and select, bump tab to top, activate counts, age
+
+make darc features plugins/extensions
+
+browser packs: dev, atproto, post privacy
+
+
+the superwebapp needs/has identity and storage baked in on atproto?
+
+identity/relationships/data/widgets
+
+
+https://its.whenthetimeca.me/p/for-server-user-agents / https://berjon.com/web-tiles/
+    It should be something that could be self-hosted or cloud hosted.
+
+    It should be able to be assigned a custom domain.
+
+    It should be able to respond to (at least) the breadth of protocols that a browser uses (http, web sockets, server-sent events, etc)
+
+    It may be able to act as a STUN/TURN server
+
+    It should be able to install some flavor of Web Tiles (packaged, sandboxed, content-addressed, web content)
+
+    These packages would likely come in two flavors: extensions vs tiles.
+
+    Extensions - require more trust and would be able to connect to the outside world, implementing new protocols, directly handling external requests etc.
+
+    Tiles - more like the original proposal. Can only interact with the capabilities it is given. Cannot exfiltrate.
+
+    It should have a digital wallet
+
+    It should have persistent storage capable of handling a variety of storage needs
+
+    It should be able to manage keys and signing operations
+
+    It should be able to act as an ATProto PDS or speak ActivityPub
+
+quick pin tab button/context menu?
+
+darc framing:
+    trying to build something between mozilla labs/ ink and switch focussed on user agency and future of the missing layer between the web and browsers
+
+    darc trying to unapologetically focus on a 
+        - desktop first and
+        - power user first design with
+        - hover events as first class interaction
+        - try to build what could be possible without resource constraints (eg screenshots, history store, etc)
+
+    logical conclusion of a few mental shifts:
+        - tabs, folders and spaces independet of windows/instances
+        - tabs + bookmarks are the same
+        - the browser UI layer is separate from the browser engine and is changeable and in control of the user not the companies
+        - there is a centrally visible resource/ permission layer underneath everything
+        - there is a local/edge server inside conneted to the  browser that can is also under users control and there for the user
+
+buttons: close, bump, pin
+
+tab aging, opening counts etc.
+
+
+app shims and llm implementation workflow for specs like web extensions api implementaion
+
+hermetic frames + app distribution
+
+pds for xenon
+
+multi spaace pane view when biggerthan x
+
+double click any atab or folder rename
+
+alternate envorinments configuration see as  side views or as dropdown siwthcer eg local prod site
+
+3 month sub projects with voting, backlog, posts/videos and product releases
+
+hovercard title click opens tab
+
+add url controls to hovercards, add scroll tab into view tab to tools.
+
+show error page icons in hovercard as info glyphs
+
+add toolbar options to context menu
+
+install app from github page/ codespace like button/ start editing/ instant code browse (vscode  server with lazy virtual fs?)
+
+window in background styles broken
+
+closed tabs menu position shifted
+
+(socks5) proxy controls in browser as first class citicen
++ accounts manager
+
+skewed preview card aspect ration screenshots
+
+restore optimal performing snapshot for context but not reset the cahnges!!
+
+hermetic frames spec posts!
+
+surprise factor scan of ai to unsurface interesting things
+
+no network error pages with screenshots!!!
+
+fade beind new tab button in sidebar
+
+edits for any mesage in history
+
+model regex lookback toolcalls for realtime edit ux
+
+model interactions that feel realtime
+
+codex model with regex replace and content editables with accessibility tree?
+
+history tagging
+
+demos: messenger extractions (doctorow/ subversion interoperation), youtube optimiztion)
+
+space opened in other window badge, click to focus
+
+proactive agents crawling topics and ummarizing/notifying users once a day or week
+
+link collectino of all github links etc encountered
+
+multi post app
+
+download feature!
+
+two finger swipe support setting
+
+scroll horizontal tabs hides hovercards
+
+hovercard toolbar
+
+website preview image 
+
+mobile image
+
+pr model with slop and stacks in mind from day zero/ social
+
+sticky tabs for pinned tabs
+
+text middle ellipsis for tab titles etc.
+
+url trim input
+
+history diff for tab history titles
+
+2 line title break
+
+ipfs local and asset sharing
+
+Agentic JWT
+
+agent_checksum
+
+universal share sheet
+
+"move tab to..." context menu
+
+own your data.org
+
+"create new project button"
+
+shared mood board with submission feature
+
+is building a new kind of software the core to this all?
+
+widdget sidebar
+
+clipboard manager + collector
+
+snippet sidebar/ temp collection
+
+full tiling with horizontal and vertical?
+
+dynamic window manager/ tiling, non overlapping?
+
+always hover how title on maximized windows
+
+fix chrome window max title
+
+flder for stuff you just want to see if relevant or random discovery. eg a tech blogger i dont align with in stack but who has interesting views.
+
+onboarding permissions, flash permission card for current request!
+
+zoom only current tab, not whole ui
+
+new groups for own your data and ad free life
+
+feature drag tab directly to split view 
+
+annotations/ context layer
+
+https://github.com/sst/opencode support
+
+https://github.com/rrweb-io/rrweb?tab=readme-ov-file
+
+resurface  relevant tabs sidebar/ comment sidebar integration? 
+
+https://yourdigitalrights.org/
+
+tos dr
+
+fullscreen
+
+make spotify pplaylist to capture my open music tabs
+
+prepend darc code to tab titles + favicon
+
+associate website with github repo via URL in description
