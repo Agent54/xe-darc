@@ -1346,3 +1346,16 @@ tabs snooze until date X
 mini apps! / superapp concepts?
 
 in email/ conversation app like features (gmail etc)
+
+more exciting onsite proposition ("paid" designer/ tester?)
+
+video diary + story telling with arch for onsites, retreats
+
+tab in a split, just hold Option while clicking the New Tab ➕ button
+
+ipfs / cbor/ atproto / ucan support
+
+quick heads up session to check weather or currency, agent etc.
+
+docker image snapshotting and diff mangagement
+
