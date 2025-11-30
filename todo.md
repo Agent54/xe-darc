@@ -1313,3 +1313,36 @@ ad new tab with loaded state to skip hibernation screen
 
 global sidebin tabs
 
+
+xenon as the social browser with community of rapid browser innovation and sharing with their community what they buld, distibution/defaults, roblox of browsers?!
+
+3d browser demo (tree of websites with links)
+
+user modes for the browser layer itself and r/firefoxCSS like community
+
+pw mcp fork but with our xenon direct cdp protocol
+
+atproto social layer, web of trust etc.
+
+tanlged and tagging support for code and projects
+
+skip  pinned tabs for activation
+
+ad new tab with loaded state to skip hibernation screen
+
+global sidebin tabs
+
+
+atproto / ucan POC
+
+what would around like video space look like with melleable cocreated application?
+
+space rules youtbe > profile / or space or both / or specific tab group
+
+social action/ scitivity application building
+
+tabs snooze until date X
+
+mini apps! / superapp concepts?
+
+in email/ conversation app like features (gmail etc)
