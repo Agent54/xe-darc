@@ -2370,3 +2370,11 @@ shelve for items and urls that should not immediately be full tabs?
 
 
 app folders (my rarely used cloud provider settings etc.)
+
+tab crash sidebar drag
+
+new tab width glitch sidebar
+
+stuck resource request
+
+glich width resource request card width

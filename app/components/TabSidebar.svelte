@@ -1123,7 +1123,7 @@
                                 {/if}
                                 
                                 <div class="new-tab-row">
-                                    <button class="new-tab-button" 
+                                    <div class="new-tab-button" 
                                             onmousedown={() => {
                                                 const newTab = data.newTab(spaceId)
                                                 if (newTab) {
@@ -1131,6 +1131,8 @@
                                                     data.activate(newTab.id)
                                                 }
                                             }}
+                                            role="button"
+                                            tabindex="0"
                                             aria-label="Create new tab">
                                         <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                             <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
@@ -1140,27 +1142,27 @@
                                         <span class="new-tab-more-button" aria-label="New tab options">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="down-icon"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
                                             <div class="new-tab-hover-menu" role="menu" aria-label="New tab options">
-                                          <span class="new-tab-hover-item" onmouseup={() => handleNewFromClipboard(spaceId)} role="menuitem">
+                                          <span class="new-tab-hover-item" onmouseup={() => handleNewFromClipboard(spaceId)} role="menuitem" tabindex="0">
                                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
                                               <span>New from clipboard</span>
                                           </span>
-                                         <div class="new-tab-hover-item has-submenu" role="menuitem" aria-haspopup="true" aria-expanded="false">
+                                         <div class="new-tab-hover-item has-submenu" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
                                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
                                              <span>New tab in container…</span>
                                              <svg class="chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
                                              <div class="new-tab-submenu" role="menu">
                                                  {#each partitions as partition}
-                                                     <button class="new-tab-submenu-item" onmouseup={() => handleNewTabInPartition(spaceId, partition)} role="menuitem">
+                                                     <span class="new-tab-submenu-item" onmouseup={() => handleNewTabInPartition(spaceId, partition)} role="menuitem" tabindex="0">
                                                          <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
                                                          <span>{partition}</span>
-                                                     </button>
+                                                     </span>
                                                  {/each}
                                              </div>
                                          </div>
                                             </div>
                                         </span>
-                                    </button>
-                                 </div>
+                                    </div>
+                                </div>
                                 
                                 <div class="tabs-list" onscroll={handleTabsListScroll}>
                                    {#each data.spaces[spaceId].tabs as tab (tab.id)}
@@ -1175,6 +1177,7 @@
                                             </div>
                                         {:else}
                                             <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} data-tab-id={tab.id}
+                                                 role="listitem"
                                                  onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                  onmouseleave={handleTabMouseLeave}>
                                                 <button class="tab-item-main" onmousedown={() => activateTab(tab.id, spaceId)}>
@@ -1255,13 +1258,18 @@
             </div>
         {/if}
         
-        <button class="resize-handle resize-handle-right" 
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div class="resize-handle resize-handle-right" 
                 class:active={isResizingTabSidebar}
-                role="separator"
+                role="slider"
                 aria-orientation="vertical"
                 aria-label="Resize tab sidebar"
+                aria-valuemin={150}
+                aria-valuemax={600}
+                aria-valuenow={customTabSidebarWidth || 263}
+                tabindex="0"
                 onmousedown={onStartResizeTabSidebar}
-                title="Drag to resize tab sidebar"></button>
+                title="Drag to resize tab sidebar"></div>
     </div>
 </div>
 
