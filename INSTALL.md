@@ -15,8 +15,13 @@ As of today, it’s recommended to use int, as things change so rapidly that mai
 
 Run pnpm install.
 
-Run the cert creation script: ./certs/create.sh
+Cd into the ./certs and
+Run the cert creation script: ./create.sh
 Just press enter for all prompts except Common Name, where you must enter localhost.
+
+navigate the browser to about:settings and search for certificate open privacy and security and click security.
+go to manage certificates, local certificates and click trusted.
+open installed by you. select the localhost.crt certificate.
 
 Start the dev server with: pnpm dev.
 

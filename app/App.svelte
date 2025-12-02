@@ -1216,7 +1216,7 @@
         }
     })
 
-    function handleTabMouseEnter(tab, event) {
+    function handleTabMouseEnter(tab, event, positionHint = null) {
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
         }
@@ -1230,7 +1230,8 @@
                 clearTimeout(instantModeResetTimer)
             }
             
-            const tabElement = event.target.closest('.tab-container')
+            // For pinned tabs, look for .pinned-tab-container, otherwise .tab-container
+            const tabElement = event.target.closest('.pinned-tab-container') || event.target.closest('.tab-container')
             const rect = tabElement.getBoundingClientRect()
             
             // Calculate hovercard dimensions
@@ -2609,6 +2610,20 @@
         return openSidebars.size * data.spaceMeta.config.rightSidebarWidth
     })
     
+    // Width of left pinned tabs section in header (30px per tab + 4px gap)
+    let leftPinnedTabsWidth = $derived.by(() => {
+        const count = leftPinnedTabs.length
+        if (count === 0) return 0
+        return count * 30 + 8 // 26px button + 4px gap per tab, plus padding
+    })
+    
+    // Width of right pinned tabs section in header (30px per tab + 4px gap)
+    let rightPinnedTabsWidth = $derived.by(() => {
+        const count = rightPinnedTabs.length
+        if (count === 0) return 0
+        return count * 30 + 8 // 26px button + 4px gap per tab, plus padding
+    })
+    
     // Total space taken by all UI elements (affects available width)
     let spaceTaken = $derived.by(() => {
         const visibleLeftWidth = (leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0
@@ -2892,27 +2907,32 @@
 />
 
 <header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) focusModeHovered = true }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) focusModeHovered = false }}>
+    <!-- Main background drag handle -->
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 178px;' : 'right: 137px;'}"></div>
-     
-        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="width: {devModeEnabled ? 'calc(100% - 413px)' : 'calc(100% - 383px)'};" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
-       <!-- transition:flip={{duration: 100}} -->
-        <ul class="tab-list tabs" class:pinned-collapsed-left={invisiblePins.left} class:pinned-collapsed-right={invisiblePins.right} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
+    
+    <!-- Left pinned tabs section (favicon only, fixed left of scrolling tabs) -->
+    {#if leftPinnedTabs.length > 0}
+        <div class="fixed-pinned-tabs fixed-pinned-tabs-left" 
+             class:hidden={focusModeEnabled && !focusModeHovered}
+             style="left: 110px;">
             {#each leftPinnedTabs as tabPinned, i (tabPinned.id)}
                 {@const tab = data.docs[tabPinned.id]}
                 {@const frameData = data.frames[tab.id]}
                 {#if tab.type !== 'divider'}
                     <li 
                         bind:this={tabButtons[tab.id]}
-                        class="tab-container" 
+                        class="tab-container pinned-tab-container" 
                         class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
+                        class:collapsed={invisiblePins.left}
                         role="tab"
                         tabindex="0"
+                        title={tab.title || tab.url}
                         onmousedown={(e) => { if (e.button === 0) activateTab(tab, i) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
                         oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
-                        onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                        onmouseenter={(e) => handleTabMouseEnter(tab, e, 'left-pin')}
                         onmouseleave={handleTabMouseLeave}
                         >
                         <div class="tab">
@@ -2925,40 +2945,40 @@
                                         stroke-linecap="round"/>
                                 </svg>
                             {/if}
-
                             <div class="favicon-wrapper">    
                                 <Favicon {tab} />
                             </div>
-                            <span class="tab-title"> {#if tab.audioPlaying && !tab.muted}
-                                🔊 &nbsp;
+                            {#if tab.audioPlaying && !tab.muted}
+                                <span class="pinned-audio-indicator">🔊</span>
                             {:else if tab.muted}
-                                🔇 &nbsp;
-                            {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" 
+                                <span class="pinned-audio-indicator">🔇</span>
+                            {/if}
+                            <button class="pinned-toggle-btn" 
                                     aria-label={invisiblePins.left ? "Expand pinned tabs" : "Collapse pinned tabs"}
-                                    onmousedown={(e) => { e.stopPropagation(); togglePinnedFrames('left') }} 
+                                    onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); togglePinnedFrames('left') } }} 
                                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('left') } }}>
-                                    {#if invisiblePins.left}
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
-                                        </svg>
-                                    {:else}
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
-                                        </svg>
-                                    {/if}
-                                </button>
+                                {#if invisiblePins.left}
+                                    <!-- Closed: point left (toward where panel would appear) -->
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                                    </svg>
+                                {:else}
+                                    <!-- Open: point down -->
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                                    </svg>
+                                {/if}
+                            </button>
                         </div>
                     </li>
                 {/if}
             {/each}
-
-            {#if leftPinnedTabs.length}
-                <li class="tab-divider-container">
-                    <div class="tab-divider-vertical"></div>
-                </li>
-            {/if}
-
+        </div>
+    {/if}
+     
+        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: {110 + leftPinnedTabsWidth}px; width: calc(100% - {devModeEnabled ? 413 + leftPinnedTabsWidth : 383 + leftPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+       <!-- transition:flip={{duration: 100}} -->
+        <ul class="tab-list tabs" class:pinned-collapsed-left={invisiblePins.left} class:pinned-collapsed-right={invisiblePins.right} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
                 {@const tab = data.docs[unpinned.id]}
                 {@const frameData = data.frames[tab.id]}
@@ -3024,71 +3044,6 @@
                     <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
                 </svg>
             </button>
-
-            {#if rightPinnedTabs.length}
-                <li class="tab-divider-container">
-                    <div class="tab-divider-vertical"></div>
-                </li>
-            {/if}
-
-            {#each rightPinnedTabs as rightPinned, i (rightPinned.id)}
-                {@const tab = data.docs[rightPinned.id]}
-                {@const frameData = data.frames[tab.id]}
-                <!-- FIXME: restructure other frame instance metadata like audio etc. -->
-                {#if tab.type !== 'divider'}
-                    <li 
-                        bind:this={tabButtons[tab.id]}
-                        class="tab-container" 
-                        class:active={tab.id === data.spaceMeta.activeTabId} 
-                        class:hovered={tab.id === hoveredTab?.id}
-                        class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
-                        role="tab"
-                        tabindex="0"
-                        onmousedown={(e) => { if (e.button === 0) activateTab(tab, i) }}
-                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
-                        oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
-                        onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                        onmouseleave={handleTabMouseLeave}
-                        >
-                        <div class="tab">
-                            {#if frameData?.loading}
-                                <svg class="tab-loading-spinner" viewBox="0 0 16 16">
-                                    <path d="M8 2 A6 6 0 0 1 14 8" 
-                                        fill="none" 
-                                        stroke="rgba(255, 255, 255, 0.8)" 
-                                        stroke-width="2" 
-                                        stroke-linecap="round"/>
-                                </svg>
-                            {/if}
-
-                            <div class="favicon-wrapper">    
-                                <Favicon {tab} />
-                            </div>
-                            <span class="tab-title"> {#if tab.audioPlaying && !tab.muted}
-                                🔊 &nbsp;
-                            {:else if tab.muted}
-                                🔇 &nbsp;
-                            {/if}{tab.title || tab.url}</span>
-                            <button class="close-btn" 
-                                    aria-label={invisiblePins.right ? "Expand pinned tabs" : "Collapse pinned tabs"}
-                                    onmousedown={(e) => { e.stopPropagation(); togglePinnedFrames('right') }} 
-                                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('right') } }}>
-                                    {#if invisiblePins.right}
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fill-rule="evenodd" d="M7.21 5.23a.75.75 0 011.06.02L11.168 10l-3.938 3.71a.75.75 0 11-1.04-1.08l4.25-4.25a.75.75 0 01.08-.06 1 1 0 010-1.08l-4.25-4.25a.75.75 0 01-.02-1.06z" clip-rule="evenodd" />
-                                        </svg>
-                                    {:else}
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
-                                        </svg>
-                                    {/if}
-                                </button>
-                        </div>
-                    </li>
-                {/if}
-            {/each}
-            
-
             
             {#each Array.from({length: closedTabPlaceholderCount}, (_, i) => i) as placeholder (placeholder)}
                 <li class="tab-container tab-placeholder" class:collapsing={collapsingPlaceholders}>
@@ -3100,11 +3055,77 @@
             
             <div class="tab-spacer"></div>
         </ul>
+        
+        <!-- Right pinned tabs section (inside tab-wrapper, after scroll area) -->
+        {#if rightPinnedTabs.length > 0}
+            <div class="fixed-pinned-tabs fixed-pinned-tabs-right" style="right: {-18 - (rightPinnedTabs.length * 20) }px;">
+                {#each rightPinnedTabs as rightPinned, i (rightPinned.id)}
+                    {@const tab = data.docs[rightPinned.id]}
+                    {@const frameData = data.frames[tab.id]}
+                    {#if tab.type !== 'divider'}
+                        <li 
+                            bind:this={tabButtons[tab.id]}
+                            class="tab-container pinned-tab-container" 
+                            class:active={tab.id === data.spaceMeta.activeTabId} 
+                            class:hovered={tab.id === hoveredTab?.id}
+                            class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
+                            class:collapsed={invisiblePins.right}
+                            role="tab"
+                            tabindex="0"
+                            title={tab.title || tab.url}
+                            onmousedown={(e) => { if (e.button === 0) activateTab(tab, i) }}
+                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
+                            oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
+                            onmouseenter={(e) => handleTabMouseEnter(tab, e, 'right-pin')}
+                            onmouseleave={handleTabMouseLeave}
+                            >
+                            <div class="tab">
+                                {#if frameData?.loading}
+                                    <svg class="tab-loading-spinner" viewBox="0 0 16 16">
+                                        <path d="M8 2 A6 6 0 0 1 14 8" 
+                                            fill="none" 
+                                            stroke="rgba(255, 255, 255, 0.8)" 
+                                            stroke-width="2" 
+                                            stroke-linecap="round"/>
+                                    </svg>
+                                {/if}
+                                <div class="favicon-wrapper">    
+                                    <Favicon {tab} />
+                                </div>
+                                {#if tab.audioPlaying && !tab.muted}
+                                    <span class="pinned-audio-indicator">🔊</span>
+                                {:else if tab.muted}
+                                    <span class="pinned-audio-indicator">🔇</span>
+                                {/if}
+                                <button class="pinned-toggle-btn" 
+                                        aria-label={invisiblePins.right ? "Expand pinned tabs" : "Collapse pinned tabs"}
+                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); togglePinnedFrames('right') } }} 
+                                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('right') } }}>
+                                    {#if invisiblePins.right}
+                                        <!-- Closed: point right (toward where panel would appear) -->
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                                        </svg>
+                                    {:else}
+                                        <!-- Open: point down -->
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                                        </svg>
+                                    {/if}
+                                </button>
+                            </div>
+                        </li>
+                    {/if}
+                {/each}
+            </div>
+        {/if}
     </div>
 
+    <!-- Left drag handle -->
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 105px;"></div>
 
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 115px; left: unset; {devModeEnabled ? 'right: 190px;' : 'right: 158px;'}"></div>
+    <!-- Right drag handle (width adjusts for right pinned tabs) -->
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {115 - rightPinnedTabsWidth}px; left: unset; {devModeEnabled ? 'right: 190px;' : 'right: 158px;'}"></div>
 
     <div class="header-icon-button view-mode-icon hover-menu-button" 
         role="button"
@@ -3215,7 +3236,7 @@
          onmousedown={openNewTab}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
          title="New Tab (⌘T)"
-         style="{devModeEnabled ? 'right: 174px;' : 'right: 133px;'}"
+         style="right: {devModeEnabled ? 174 : 133}px;"
          class:visible={showFixedNewTabButton && (!focusModeEnabled || focusModeHovered)}>
         <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
              <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>

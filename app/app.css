@@ -198,6 +198,14 @@ header.focus-mode .header-drag-handle {
     z-index: 1;
     top: 6px;
     left: 110px;
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+}
+
+.tab-wrapper .tab-list {
+    flex: 1;
+    min-width: 0;
 }
 
 .tab-wrapper.overflowing-right::after {
@@ -477,9 +485,8 @@ ul::-webkit-scrollbar {
 }
 
 .close-btn:hover {
-    background-color: #2a2a2a;
+    background: transparent;
     color: #fff;
-    /* padding: 0 4px; */
 }
 
 .tab-container:hover .close-btn, .tab-container.hovered .close-btn, .tab-container.menu-open .close-btn {
@@ -1431,6 +1438,95 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .inline-new-tab-button:hover .new-tab-icon {
     color: rgba(255, 255, 255, 1);
+}
+
+/* Fixed pinned tabs section - positioned outside scroll area */
+.fixed-pinned-tabs {
+    position: fixed;
+    top: 6px;
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    z-index: 100;
+    -webkit-app-region: no-drag;
+    user-select: none;
+}
+
+.fixed-pinned-tabs.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Right pinned tabs - positioned inside tab-wrapper, not fixed */
+.fixed-pinned-tabs-right {
+    position: absolute;
+    top: 0;
+    flex-shrink: 0;
+   right: -38px;
+}
+
+/* Pinned tab container - same as regular tabs but compact (no title) */
+.pinned-tab-container {
+    min-width: unset !important;
+    max-width: unset !important;
+    flex: 0 0 auto !important;
+    position: relative;
+}
+
+.pinned-tab-container .tab {
+    padding: 0 2px;
+    min-height: 18px;
+}
+
+/* Pinned tab toggle button - overlays the entire tab */
+.pinned-toggle-btn {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    opacity: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 5;
+    color: #fff;
+}
+
+.pinned-toggle-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Show toggle on hover, make favicon transparent */
+.pinned-tab-container:hover .pinned-toggle-btn {
+    opacity: 1;
+}
+
+.pinned-tab-container:hover .favicon-wrapper {
+    opacity: 0.3;
+}
+
+/* When collapsed, always show toggle */
+.pinned-tab-container.collapsed .pinned-toggle-btn {
+    opacity: 1;
+}
+
+.pinned-tab-container.collapsed .favicon-wrapper {
+    opacity: 0.3;
+}
+
+.pinned-audio-indicator {
+    font-size: 10px;
+    line-height: 1;
+    margin-left: 2px;
 }
 
 .context-menu {

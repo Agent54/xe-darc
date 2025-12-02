@@ -2382,3 +2382,35 @@ glich width resource request card width
 type to find tab and quicksich ala cmd shift p in vscode
 
 permission search box
+
+tab in menu mode
+
+media keys
+
+shortcuts, tab left tab right, overlay link opens, select, copy paste
+
+disable fade on switching hovercards directly
+
+ubiquity
+
+click current tab for activation history must be on click not mouedown for dnd support, close on click not mousedown for same reason
+
+
+always show pinned tabs/ no scrollinto view
+
+world time ,calculator, wheather etc usecases and kunkun
+
+unified sidebar for commit, agents, stories
+
+
+reset scrollposition on hiding tabsidebar
+
+active tab lost on space change
+
+show list of active containers per app pin
+
+quick toggle between spaces similar to acitve tab
+
+pair programming ai
+
+youtube watch without recos or comments.
