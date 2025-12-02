@@ -16,7 +16,7 @@
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import Favicon from './components/Favicon.svelte'
     import UrlRenderer from './components/UrlRenderer.svelte'
-    import AttachmentImage from './components/AttachmentImage.svelte'
+    // import AttachmentImage from './components/AttachmentImage.svelte'
     import Apps from './components/Apps.svelte'
     import { onMount, untrack, tick } from 'svelte'
     import data from './data.svelte.js'
@@ -116,6 +116,8 @@
     let showFixedNewTabButton = $state(false)
     let openSidebars = $state(new Set())
     let sidebarStateLoaded = $state(false)
+    
+
     
     let invisiblePins = $state({})
     let customLeftPinnedWidth = $state(null)
@@ -2999,6 +3001,7 @@
                                 🔇 &nbsp;
                             {/if}{tab.title || tab.url}</span>
                             <button class="close-btn" 
+                                    aria-label="Close tab"
                                     onmousedown={() => closeTab(tab, event, true)} 
                                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}
                                     onmouseenter={() => closeButtonHovered = true}
@@ -3015,7 +3018,8 @@
             <button class="inline-new-tab-button" 
                 class:hidden={showFixedNewTabButton}
                 onmousedown={openNewTab}
-                title="New Tab (⌘T)">
+                title="New Tab (⌘T)"
+                aria-label="New Tab">
                 <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
                 </svg>
@@ -3574,17 +3578,17 @@
     <!-- Window controls when NOT showing dev badge and NOT on Mac -->
     {#if !(!controlledFrameSupported && fallbackColor) && !isMacPlatform}
         <div class="window-controls-container">
-            <button class="window-control-btn close" onmousedown={closeWindow} title="Close">
+            <button class="window-control-btn close" onmousedown={closeWindow} title="Close" aria-label="Close">
                 <svg viewBox="0 0 12 12">
                     <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                 </svg>
             </button>
-            <button class="window-control-btn minimize" onmousedown={minimizeWindow} title="Minimize">
+            <button class="window-control-btn minimize" onmousedown={minimizeWindow} title="Minimize" aria-label="Minimize">
                 <svg viewBox="0 0 12 12">
                     <path d="M3 6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                 </svg>
             </button>
-            <button class="window-control-btn maximize" onmousedown={maximizeWindow} title={isMaximized ? "Restore" : "Maximize"}>
+            <button class="window-control-btn maximize" onmousedown={maximizeWindow} title={isMaximized ? "Restore" : "Maximize"} aria-label={isMaximized ? "Restore" : "Maximize"}>
                 {#if isMaximized}
                     <!-- Restore icon - two overlapping squares -->
                     <svg viewBox="0 0 12 12">
@@ -3597,13 +3601,13 @@
                         <rect x="2.5" y="2.5" width="7" height="7" stroke="currentColor" stroke-width="1.2" fill="none" rx="0.5"/>
                     </svg>
                 {/if}
-                <div class="window-positioning-menu">
-                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); maximizeLeft() }}>← Left Half</div>
-                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); maximizeRight() }}>Right Half →</div>
-                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); maximizeTop() }}>↑ Top Half</div>
-                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); maximizeBottom() }}>Bottom Half ↓</div>
-                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); centerGoldenRatio() }}>◈ Golden Center</div>
-                    <div class="menu-item" onmousedown={(e) => { e.stopPropagation(); bottomRightPane() }}>↘ Corner Pane</div>
+                <div class="window-positioning-menu" role="menu">
+                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeLeft() }}>← Left Half</div>
+                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeRight() }}>Right Half →</div>
+                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeTop() }}>↑ Top Half</div>
+                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeBottom() }}>Bottom Half ↓</div>
+                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); centerGoldenRatio() }}>◈ Golden Center</div>
+                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); bottomRightPane() }}>↘ Corner Pane</div>
                 </div>
             </button>
         </div>
@@ -3871,6 +3875,7 @@
             {/key}
         {/each}
 
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="resize-handle resize-handle-right" 
              class:active={isResizingLeft}
              role="separator"
@@ -3886,6 +3891,7 @@
     class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
     class:resizing-pinned-frames={isResizingPinnedFrames}
     style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px;">
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="resize-handle resize-handle-left" 
              class:active={isResizingRight}
              role="separator"
@@ -4033,6 +4039,7 @@
          class:no-transitions={isWindowResizing}
          class:resizing-pinned-frames={isResizingPinnedFrames}
          style="--sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --space-taken: {spaceTaken}px;">
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="resize-handle resize-handle-left" 
              class:active={isResizingSidebar}
              role="separator"

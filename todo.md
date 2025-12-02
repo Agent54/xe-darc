@@ -2378,3 +2378,7 @@ new tab width glitch sidebar
 stuck resource request
 
 glich width resource request card width
+
+type to find tab and quicksich ala cmd shift p in vscode
+
+permission search box

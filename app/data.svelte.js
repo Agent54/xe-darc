@@ -914,8 +914,17 @@ export default {
     },
 
     permissionRequest: (tabId, event) => {
-        const permission = permissions[event.permission]
+        let permission = permissions[event.permission]
         const origin = new URL(event.url).origin
+
+        if (!permission) {
+            console.warn(`Unknown permission type: ${event.permission}`)
+            permission = permissions[event.permission] = {
+                name: event.permission,
+                icon: '',
+                description: `${event.permission} permission`
+            }
+        }
 
         permission.origins ??= {}
         permission.origins[origin] ??= {}
