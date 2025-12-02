@@ -964,12 +964,14 @@ export default {
 
    
     clearUnseenResourceFlags: () => {
-        console.log('TODO: fix cleanup and improve state design:', { permissions })
         for (const resourceKey of Object.keys(permissions)) {
             for (const origin of Object.keys(permissions[resourceKey].origins || {})) {
-                if (permissions[resourceKey].origins[origin].requests?.at(-1)?.unseen) {
-                    permissions[resourceKey].origins[origin].requests.at(-1).unseen = false
-                }
+                const requests = permissions[resourceKey].origins[origin].requests || []
+                requests.forEach(request => {
+                    if (request.unseen) {
+                        request.unseen = false
+                    }
+                })
             }
         }
     },
