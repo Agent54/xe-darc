@@ -268,6 +268,10 @@
 		border-color: rgba(255, 255, 255, 0.16);
 	}
 
+	.sidebar :global(.resource-card.unseen:hover) {
+		border-left-color: rgba(59, 130, 246, 0.6);
+	}
+
 	.w-3 {
 		width: 12px;
 	}

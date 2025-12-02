@@ -565,8 +565,6 @@
 
     .resource-card.unseen {
         border-left: 2px solid rgba(59, 130, 246, 0.6);
-        padding-left: 8px;
-        margin-left: -2px;
     }
 
     .resource-header {
