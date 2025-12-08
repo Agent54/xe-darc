@@ -2414,3 +2414,9 @@ quick toggle between spaces similar to acitve tab
 pair programming ai
 
 youtube watch without recos or comments.
+
+
+persist activation history
+
+make inactive tabs more readable, optimize bright conditions contrast for readability
+

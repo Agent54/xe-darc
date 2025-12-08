@@ -733,6 +733,7 @@
     }
 
     async function activateTab (tab, index) {
+        // console.log('[DEBUG:ActivateTab]', tab.id, '| idx:', index, '| current:', data.spaceMeta?.activeTabId)
         // Mark window as active to prevent background styling glitches
         activateWindowFocus()
         
@@ -1600,6 +1601,7 @@
   
     let isWindowBackground = $state(false)
     let controlledFrameHasFocus = $state(false)
+    let lastFocusEventTime = 0
     
     function updateWindowFocusState() {
         // Consider the window active if either the main window has focus 
@@ -1607,17 +1609,24 @@
         const documentHasFocus = document.hasFocus()
         const shouldBeActive = documentHasFocus || controlledFrameHasFocus
         
-        isWindowBackground = !shouldBeActive
+        const newIsWindowBackground = !shouldBeActive
+        if (newIsWindowBackground !== isWindowBackground) {
+            // console.log('[DEBUG:WindowFocus]', isWindowBackground, '->', newIsWindowBackground, '| doc:', documentHasFocus, '| frame:', controlledFrameHasFocus)
+        }
+        isWindowBackground = newIsWindowBackground
     }
     
     function activateWindowFocus() {
         // Mark window as active to prevent background styling glitches
         // This is called on user interactions like tab activation and link hovers
+        // console.log('[DEBUG:WindowFocus] activateWindowFocus')
         controlledFrameHasFocus = true
         updateWindowFocusState()
     }
     
     function handleFrameFocus(focusedTabId) {
+        // console.log('[DEBUG:FrameFocus]', focusedTabId, '| active:', data.spaceMeta?.activeTabId)
+        lastFocusEventTime = Date.now()
         controlledFrameHasFocus = true
         updateWindowFocusState()
         
@@ -1625,12 +1634,22 @@
         if (focusedTabId) {
             // Set the active tab using the data store function
             if (focusedTabId !== data.spaceMeta.activeTabId) {
+                // console.log('[DEBUG:FrameFocus] activating:', focusedTabId)
                 data.activate(focusedTabId)
             }
         }
     }
     
     function handleFrameBlur() {
+        const timeSinceLastFocus = Date.now() - lastFocusEventTime
+        // console.log('[DEBUG:FrameBlur] timeSinceLastFocus:', timeSinceLastFocus, 'ms')
+        
+        // Skip blur if a focus event was fired in the last 100ms to prevent race conditions
+        if (timeSinceLastFocus < 100) {
+            // console.log('[DEBUG:FrameBlur] skipped')
+            return
+        }
+        
         controlledFrameHasFocus = false
         updateWindowFocusState()
     }

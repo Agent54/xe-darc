@@ -285,26 +285,7 @@
         if (spaceId) {
             tabsListScrolled[spaceId] = tabsList.scrollTop > 0
         }
-        console.log('[DEBUG:SCROLL] Tabs list vertical scroll', {
-            scrollTop: tabsList.scrollTop,
-            scrollHeight: tabsList.scrollHeight,
-            clientHeight: tabsList.clientHeight,
-            pointerEvents: window.getComputedStyle(tabsList).pointerEvents,
-            zIndex: window.getComputedStyle(tabsList).zIndex,
-            overflow: window.getComputedStyle(tabsList).overflow,
-            overflowY: window.getComputedStyle(tabsList).overflowY,
-            position: window.getComputedStyle(tabsList).position
-        })
-        
-        // Check if any tabs are being hovered during scroll
-        const mouseX = window.mouseX || 0
-        const mouseY = window.mouseY || 0
-        const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
-        console.log('[DEBUG:SCROLL] Element under cursor during scroll', {
-            element: elementUnderCursor?.className,
-            isTabItem: !!elementUnderCursor?.closest('.tab-item-container'),
-            pointerEvents: elementUnderCursor ? window.getComputedStyle(elementUnderCursor).pointerEvents : 'N/A'
-        })
+
         
         // Manually trigger hover when scrolling moves tabs under cursor
         if (scrollHoverTimeout) {

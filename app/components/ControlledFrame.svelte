@@ -1436,8 +1436,10 @@ document.addEventListener('input', function(event) {
             const message = event.message
             
             if (message === 'iwa:focus') {
+                // console.log('[DEBUG:ControlledFrame] iwa:focus received via consolemessage | tabId:', tab?.id || tabId)
                 onFrameFocus()
             } else if (message === 'iwa:blur') {
+                // console.log('[DEBUG:ControlledFrame] iwa:blur received via consolemessage | tabId:', tab?.id || tabId)
                 onFrameBlur()
             // } else if (message.startsWith('iwa:command-key-down:')) {
             //     // Track command key press from controlled frame
@@ -2211,6 +2213,7 @@ document.addEventListener('input', function(event) {
         role="tabpanel"
         tabindex="0"
         onmousedown={(event) => {
+            // console.log('[DEBUG:ControlledFrame] mousedown on frame wrapper | tabId:', tab?.id || tabId, '| button:', event.button)
             window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
                 detail: { tabId: tab?.id || tabId, button: event.button }
             }))

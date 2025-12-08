@@ -22,10 +22,12 @@ header {
     justify-content: flex-start;
     align-items: flex-start;
     opacity: 1;
+    transition: opacity 0s;
 }
 
 header.window-background {
     opacity: 0.6;
+    transition: opacity 0.15s ease-out 50ms;
 }
 
 header.focus-mode {
