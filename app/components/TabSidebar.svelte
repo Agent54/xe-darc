@@ -277,9 +277,14 @@
     
     let lastScrolledTabId = $state(null)
     let scrollHoverTimeout = null
+    let tabsListScrolled = $state({})
     
     function handleTabsListScroll(event) {
         const tabsList = event.target
+        const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
+        if (spaceId) {
+            tabsListScrolled[spaceId] = tabsList.scrollTop > 0
+        }
         console.log('[DEBUG:SCROLL] Tabs list vertical scroll', {
             scrollTop: tabsList.scrollTop,
             scrollHeight: tabsList.scrollHeight,
@@ -1164,7 +1169,9 @@
                                     </div>
                                 </div>
                                 
-                                <div class="tabs-list" onscroll={handleTabsListScroll}>
+                                <div class="tabs-list-container">
+                                    <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
+                                    <div class="tabs-list" onscroll={handleTabsListScroll}>
                                    {#each data.spaces[spaceId].tabs as tab (tab.id)}
                                         {#if tab.type === 'divider'}
                                             <div class="tab-divider">
@@ -1216,6 +1223,7 @@
                                         <span class="tab-group-count">10</span>
                                         <button class="tab-group-close" aria-label="Close tab group">×</button>
                                     </div><!-- -->
+                                </div>
                                 </div>
                             </div>
                         {/each}
@@ -1814,6 +1822,32 @@
         opacity: 1;
     }
     
+    /* Tabs list container with fade */
+    .tabs-list-container {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .tabs-list-fade-top {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 24px;
+        background: linear-gradient(to bottom, #000 0%, transparent 100%);
+        pointer-events: none;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 150ms ease;
+    }
+    
+    .tabs-list-fade-top.visible {
+        opacity: 1;
+    }
+    
     /* Regular Tabs */
     .tabs-list {
         display: flex;
@@ -1822,6 +1856,7 @@
         flex: 1;
         min-height: 0;
         overflow-y: auto;
+        padding-top: 16px;
         padding-bottom: 60px; /* Add space at bottom for closed tabs overlay */
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
