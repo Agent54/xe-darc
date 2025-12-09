@@ -1711,6 +1711,7 @@
         flex: 1;
         min-height: 0;
         border-radius: 10px;
+        width: calc(100% + 2px);
     }
     
     .tab-content-container::-webkit-scrollbar {
@@ -1734,6 +1735,7 @@
         height: 100%;
         overflow-y: hidden;
         padding-top: 0;
+        padding-right: 8px;
     }
     
 
@@ -1839,6 +1841,8 @@
         overflow-y: auto;
         padding-top: 8px;
         padding-bottom: 60px; /* Add space at bottom for closed tabs overlay */
+        padding-right: 8px;
+        margin-right: -8px; /* Offset scrollbar position */
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
     }
