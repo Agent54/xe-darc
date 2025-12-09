@@ -1770,7 +1770,7 @@
     }
     
     .pinned-tab :global(.favicon-wrapper) {
-        opacity: 0.5;
+        opacity: 0.6;
     }
     
     .pinned-tab:hover :global(.favicon-wrapper) {
@@ -1792,11 +1792,11 @@
     }
     
     .app-tab :global(.favicon-wrapper) {
-        opacity: 0.5;
+        opacity: 0.6;
     }
     
     .app-tab.active :global(.favicon-wrapper) {
-        opacity: 0.85;
+        opacity: 0.87;
     }
     
     .app-tab:hover :global(.favicon-wrapper) {
@@ -1911,7 +1911,7 @@
     }
     
     :global(.favicon-wrapper) {
-        opacity: 0.5;
+        opacity: 0.6;
     }
     
     :global(.favicon-wrapper svg) {
@@ -1920,7 +1920,7 @@
     }
     
     .tab-title {
-        color: hsl(0 0% 35% / 1);
+        color: #c3c3c3;
         font-size: 13px;
         font-weight: 400;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -1938,7 +1938,7 @@
 
     
     .tab-item-container.active .tab-title {
-        color: #c6c6c6;
+        color: #e5e5e5;
     }
     
     .tab-item-container:hover .tab-title {
@@ -1946,7 +1946,7 @@
     }
     
     .tab-item-container.active :global(.favicon-wrapper) {
-        opacity: 0.85;
+        opacity: 0.87;
     }
     
     .tab-item-container:hover :global(.favicon-wrapper) {

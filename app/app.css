@@ -368,7 +368,7 @@ ul::-webkit-scrollbar {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    opacity: 0.5;
+    opacity: 0.6;
 }
 
 .tab-container {
@@ -407,7 +407,7 @@ ul::-webkit-scrollbar {
     white-space: nowrap;
     text-overflow: ellipsis;
     text-decoration: none;
-    color: hsl(0 0% 35% / 1);
+    color: #c3c3c3;
     overflow: hidden;
     text-align: center;
     width: 100%;
@@ -418,10 +418,10 @@ ul::-webkit-scrollbar {
     position: relative;
 }
 .tab-container.active .tab {
-    color: #c6c6c6;
+    color: #e5e5e5;
 }
 .tab-container.active .favicon-wrapper {
-    opacity: 0.85;
+    opacity: 0.87;
 }
 
 .tab-container:hover .favicon-wrapper, .tab-container.hovered .favicon-wrapper, .tab-container.menu-open .favicon-wrapper {
