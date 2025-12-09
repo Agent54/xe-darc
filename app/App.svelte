@@ -4378,6 +4378,10 @@
         animation-delay: 1200ms;
     }
 
+    header.window-background .window-control-btn.maximize:hover .window-positioning-menu {
+        display: none;
+    }
+
     @keyframes menuDelayedShow {
         0% {
             opacity: 0;

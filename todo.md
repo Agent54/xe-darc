@@ -2426,3 +2426,5 @@ lightbox button in hovercards
 zen mode toolbar hovershow
 
 chrome dev tools theme
+
+toggling tab sidebar spacing jump

@@ -7,10 +7,8 @@
     let containerEl = null
     let currentSrc = null
     let observer = null
-    let shouldLoad = !lazy
+    let shouldLoad = $state(!lazy)
 
-    // we rely on this to show fadout screenshot while loading a tab from hibernated state, svelte will stop updating components when transition is running, so we need to manually update the DOM
-    
     function updateDOM(state, resolvedSrc = null) {
         if (!containerEl) return
         
@@ -18,7 +16,6 @@
         const errorEl = containerEl.querySelector('.attachment-error')
         const imageEl = containerEl.querySelector('.attachment-image')
         
-        // Hide all elements first
         if (loadingEl) loadingEl.style.display = 'none'
         if (errorEl) errorEl.style.display = 'none'
         if (imageEl) imageEl.style.display = 'none'
@@ -45,29 +42,33 @@
         
         try {
             const resolved = await data.getAttachmentUrl(srcToLoad)
-            // Check if this is still the current src (prevent race conditions)
             if (srcToLoad === currentSrc) {
                 updateDOM('loaded', resolved)
             }
         } catch (err) {
             console.warn('Failed to resolve attachment image:', err)
-            // Check if this is still the current src
             if (srcToLoad === currentSrc) {
                 updateDOM('error')
             }
         }
     }
     
-    function handleSrcChange() {
+    // Use $effect to react to src changes instead of polling interval
+    $effect(() => {
+        if (src !== currentSrc) {
+            currentSrc = src
+            if (shouldLoad) {
+                loadImage(src)
+            }
+        }
+    })
+    
+    onMount(() => {
+        // Initial load
         currentSrc = src
         if (shouldLoad) {
             loadImage(src)
         }
-    }
-    
-    onMount(() => {
-        // Initial load
-        handleSrcChange()
         
         // Setup intersection observer for lazy loading
         if (lazy && containerEl) {
@@ -81,29 +82,15 @@
                         }
                     })
                 },
-                {
-                    rootMargin: '50px'
-                }
+                { rootMargin: '50px' }
             )
-            
             observer.observe(containerEl)
         }
-        
-        // Watch for src changes using a simple interval check
-        // This works even during transitions when Svelte reactivity might be paused
-        let lastSrc = src
-        const checkInterval = setInterval(() => {
-            if (src !== lastSrc) {
-                lastSrc = src
-                handleSrcChange()
-            }
-        }, 100)
         
         return () => {
             if (observer) {
                 observer.disconnect()
             }
-            clearInterval(checkInterval)
         }
     })
 </script>

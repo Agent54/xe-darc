@@ -1,5 +1,4 @@
 <script>
-  // FIXME: serious performance degradation!
   import { onMount, tick } from 'svelte'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
@@ -17,10 +16,26 @@
     onSpaceSwitch = () => {}
   } = $props()
 
-  // Get all spaces and their tabs
+  // Pre-compute derived data once to avoid reactive re-renders in templates
   let spaceOrder = $derived(data.spaceMeta.spaceOrder || [])
   let activeSpaceId = $derived(data.spaceMeta.activeSpace)
+  let activeTabId = $derived(data.spaceMeta.activeTabId)
   let highlightedSpaceId = $state(data.spaceMeta.activeSpace)
+  
+  // Pre-compute spaces data with filtered tabs to avoid reactive lookups in template
+  let spacesData = $derived.by(() => {
+    const result = {}
+    for (const id of spaceOrder) {
+      const space = data.spaces[id]
+      if (space) {
+        result[id] = {
+          ...space,
+          unpinnedTabs: space.tabs?.filter(tab => !tab.pinned) || []
+        }
+      }
+    }
+    return result
+  })
   
   function switchSpace(id) {
     if (id && id !== activeSpaceId) {
@@ -245,8 +260,8 @@
   style="--left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --tab-sidebar-width: {tabSidebarWidth}px; --sidebar-width: {rightSidebarWidth}px; --space-taken: {spaceTaken}px;"
 >
   <div class="spaces-switcher" role="navigation" aria-label="Spaces">
-    {#each spaceOrder as id}
-      {@const space = data.spaces[id]}
+    {#each spaceOrder as id (id)}
+      {@const space = spacesData[id]}
       {#if space}
         <button 
           class="space-chip"
@@ -271,9 +286,9 @@
     bind:this={scrollContainer}
     onscroll={handleScroll}
   >
-    {#each spaceOrder as spaceId}
-      {@const space = data.spaces[spaceId]}
-      {@const tabs = space?.tabs?.filter(tab => !tab.pinned) || []}
+    {#each spaceOrder as spaceId (spaceId)}
+      {@const space = spacesData[spaceId]}
+      {@const tabs = space?.unpinnedTabs || []}
       <div class="space-page">
         {#if tabs.length === 0}
           <div class="empty-space">
@@ -297,7 +312,7 @@
             {#each tabs as tab, index (tab.id)}
               <div 
                 class="grid-frame"
-                class:active={tab.id === data.spaceMeta.activeTabId}
+                class:active={tab.id === activeTabId}
               >
                 <!-- Tab title and close button bar -->
                 <div class="tab-header">
@@ -583,6 +598,8 @@
       0 2px 8px rgba(0, 0, 0, 0.2);
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
+    contain: layout style paint;
+    will-change: transform;
   }
 
   .grid-frame::before {
@@ -595,15 +612,16 @@
     background: rgba(0, 0, 0, 0.65);
     pointer-events: none;
     z-index: 1;
-    transition: background 0.2s ease-out;
+    transition: opacity 0.2s ease-out;
+    will-change: opacity;
   }
 
   .grid-frame:hover::before {
-    background: rgba(0, 0, 0, 0.25);
+    opacity: 0.38;
   }
 
   .grid-frame.active::before {
-    background: rgba(0, 0, 0, 0);
+    opacity: 0;
   }
 
   /* Frame scaler styles commented out - no longer used since replacement is disabled
@@ -631,16 +649,16 @@
     border-radius: 0 0 8px 8px;
     overflow: hidden;
     position: relative;
-    transition: opacity 0.1s ease-out;
+    will-change: opacity;
   }
 
   .frame-screenshot.clickable {
     cursor: pointer;
-    transition: opacity 0.2s ease-out, background-color 0.2s ease-out;
+    transition: opacity 0.15s ease-out;
   }
 
   .frame-screenshot.clickable:hover {
-    opacity: 0.8;
+    opacity: 0.85;
   }
 
   .frame-screenshot.clickable:focus {

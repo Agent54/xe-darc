@@ -30,6 +30,14 @@ header.window-background {
     transition: opacity 0.15s ease-out 50ms;
 }
 
+header.window-background .hover-menu,
+header.window-background .hover-menu:hover,
+header.window-background .hover-menu-button:hover .hover-menu {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 header.focus-mode {
     background: transparent;
 }
