@@ -3911,8 +3911,8 @@
             onTabActivate={activateTab} 
             onViewModeChange={toggleViewMode} 
             onTabClose={closeTab} 
-            {leftPinnedWidth} 
-            {rightPinnedWidth} 
+            leftPinnedWidth={(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0} 
+            rightPinnedWidth={(rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0} 
             {rightSidebarWidth} 
             tabSidebarWidth={tabSidebarVisible ? (customTabSidebarWidth || 263) : 0} 
             {spaceTaken}
