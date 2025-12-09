@@ -2,14 +2,33 @@
     import UrlRenderer from './UrlRenderer.svelte'
     import AttachmentImage from './AttachmentImage.svelte'
     import Favicon from './Favicon.svelte'
+    import UrlBar from './UrlBar.svelte'
     import data from '../data.svelte.js'
     
-    let { tab, onMouseLeave, isClosedTab = false, showHistoryImmediately = false } = $props()
+    let { 
+        tab, 
+        onMouseLeave, 
+        isClosedTab = false, 
+        showHistoryImmediately = false,
+        showDevTools = false,
+        onGoBack = null,
+        onGoForward = null,
+        onReload = null,
+        onCloseTab = null,
+        onDevTools = null,
+        onUrlBarExpandedChange = null
+    } = $props()
     
     let hovercardHovered = $state(false)
     let showHistory = $state(showHistoryImmediately)
     let historyShowTimer = null
     let hoveredHistoryEntry = $state(null)
+    let urlBarExpanded = $state(false)
+    
+    function handleUrlBarExpandedChange(expanded) {
+        urlBarExpanded = expanded
+        if (onUrlBarExpandedChange) onUrlBarExpandedChange(expanded)
+    }
     
     // Get space for this tab to access activeTabsOrder
     let tabSpace = $derived(data.spaces[tab.spaceId])
@@ -57,9 +76,6 @@
         <div class="hovercard-header">
             <div class="hovercard-text">
                 <div class="hovercard-title">{tab.title || 'Untitled'}</div>
-                <div class="hovercard-url">
-                    <UrlRenderer url={tab.url} variant="compact" />
-                </div> 
             </div>
             {#if isClosedTab}
                 <svg class="hibernation-icon" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -71,6 +87,21 @@
                 </svg>
             {/if}
         </div>
+        
+        <UrlBar 
+            url={tab.url}
+            tabId={tab.id}
+            {isClosedTab}
+            {showDevTools}
+            {onGoBack}
+            {onGoForward}
+            {onReload}
+            {onCloseTab}
+            {onDevTools}
+            showSettingsButton={true}
+            variant="hovercard"
+            onExpandedChange={handleUrlBarExpandedChange}
+        />
     </div>
     {#if hoveredHistoryEntry}
         {#if hoveredHistoryEntry.screenshot}
@@ -132,7 +163,7 @@
         backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
-        overflow: visible;
+        overflow: visible !important;
         box-shadow: 
             0 20px 40px rgba(0, 0, 0, 0.4),
             0 8px 16px rgba(0, 0, 0, 0.2);
@@ -140,6 +171,7 @@
         max-width: 90vw;
         margin-top: 8px;
         margin-left: 8px;
+        clip-path: none;
     }
 
     .hovercard-info {
@@ -147,6 +179,8 @@
         font-family: 'Inter', sans-serif;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         overflow: visible;
+        position: relative;
+        z-index: 5;
     }
 
     .hovercard-info:last-child {
@@ -169,20 +203,12 @@
         font-size: 14px;
         font-weight: 600;
         color: rgba(255, 255, 255, 0.9);
-        margin-bottom: 6px;
+        margin-bottom: 4px;
+        margin-left: 3px;
         line-height: 1.4;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-    }
-
-    .hovercard-url {
-        font-size: 12px;
-        line-height: 1.3;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        opacity: 0.5;
     }
 
     .hovercard-screenshot {
@@ -192,6 +218,7 @@
         border-bottom-left-radius: 12px;
         border-bottom-right-radius: 12px;
         position: relative;
+        z-index: 1;
     }
     
     .hovercard-screenshot.has-history {

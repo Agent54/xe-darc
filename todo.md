@@ -2395,7 +2395,6 @@ ubiquity
 
 click current tab for activation history must be on click not mouedown for dnd support, close on click not mousedown for same reason
 
-
 always show pinned tabs/ no scrollinto view
 
 world time ,calculator, wheather etc usecases and kunkun
@@ -2420,3 +2419,6 @@ persist activation history
 
 make inactive tabs more readable, optimize bright conditions contrast for readability
 
+permission reqs sidebar open broken
+
+lightbox button in hovercards

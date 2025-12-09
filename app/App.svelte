@@ -98,11 +98,21 @@
     let hovercardResetTimer = null
     let closeButtonHovered = $state(false)
     let instantHovercardsMode = $state(false)
+    let hovercardUrlBarExpanded = $state(false)
     let instantModeResetTimer = null
     let headerPartOfMain = $state(false)
     let isScrolling = $state(false)
     let scrollTimeout = null
     let hovercardShowTime = null
+    
+    // Centralized function to close hovercard - prevents closing when URL bar is expanded
+    function closeHovercard() {
+        if (hovercardUrlBarExpanded) return
+        hoveredTab = null
+        isTrashItemHover = false
+        hovercardShowTime = null
+    }
+    
     let isTabListOverflowing = $state(false)
     let isTabListAtEnd = $state(false)
     let isTabListAtStart = $state(true)
@@ -1298,10 +1308,10 @@
             const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
             
             if (!elementUnderCursor?.closest('.tab-hovercard')) {
-                hoveredTab = null
-                isTrashItemHover = false
-                hovercardShowTime = null
-                stopHovercardPositionCheck()
+                closeHovercard()
+                if (!hovercardUrlBarExpanded) {
+                    stopHovercardPositionCheck()
+                }
             }
         }, 250)
     }
@@ -1412,9 +1422,10 @@
             
             if (!elementUnderCursor) {
                 // Cursor might be outside window
-                hoveredTab = null
-                isTrashItemHover = false
-                stopHovercardPositionCheck()
+                closeHovercard()
+                if (!hovercardUrlBarExpanded) {
+                    stopHovercardPositionCheck()
+                }
                 return
             }
             
@@ -1441,14 +1452,15 @@
             }
             
             if (!isStillHovering) {
-                hoveredTab = null
-                isTrashItemHover = false
-                stopHovercardPositionCheck()
-                
-                instantModeResetTimer = setTimeout(() => {
-                    instantHovercardsMode = false
-                    instantModeResetTimer = null
-                }, 1000)
+                closeHovercard()
+                if (!hovercardUrlBarExpanded) {
+                    stopHovercardPositionCheck()
+                    
+                    instantModeResetTimer = setTimeout(() => {
+                        instantHovercardsMode = false
+                        instantModeResetTimer = null
+                    }, 1000)
+                }
             }
         }, 50) // Reduced from 100ms to 50ms for more responsive checking
     }
@@ -3698,6 +3710,54 @@
             <TabHoverCard tab={hoveredTab} 
                           isClosedTab={false} 
                           showHistoryImmediately={closeButtonHovered}
+                          showDevTools={devModeEnabled}
+                          onGoBack={() => {
+                              if (!hoveredTab?.id) return
+                              if (data.spaceMeta.activeTabId !== hoveredTab.id) {
+                                  data.activate(hoveredTab.id)
+                              }
+                              setTimeout(() => {
+                                  const frame = data.frames[hoveredTab?.id]?.frame
+                                  frame?.back?.()
+                              }, 50)
+                          }}
+                          onGoForward={() => {
+                              if (!hoveredTab?.id) return
+                              if (data.spaceMeta.activeTabId !== hoveredTab.id) {
+                                  data.activate(hoveredTab.id)
+                              }
+                              setTimeout(() => {
+                                  const frame = data.frames[hoveredTab?.id]?.frame
+                                  frame?.forward?.()
+                              }, 50)
+                          }}
+                          onReload={() => {
+                              if (!hoveredTab?.id) return
+                              if (data.spaceMeta.activeTabId !== hoveredTab.id) {
+                                  data.activate(hoveredTab.id)
+                              }
+                              setTimeout(() => {
+                                  const frame = data.frames[hoveredTab?.id]?.frame
+                                  frame?.reload?.()
+                              }, 50)
+                          }}
+                          onCloseTab={() => {
+                              if (!hoveredTab?.id) return
+                              closeTab(hoveredTab)
+                              hovercardUrlBarExpanded = false
+                              hoveredTab = null
+                              isTrashItemHover = false
+                              hovercardShowTime = null
+                          }}
+                          onDevTools={() => {
+                              if (!hoveredTab?.id) return
+                              if (data.spaceMeta.activeTabId !== hoveredTab.id) {
+                                  data.activate(hoveredTab.id)
+                              }
+                          }}
+                          onUrlBarExpandedChange={(expanded) => {
+                              hovercardUrlBarExpanded = expanded
+                          }}
                           onMouseLeave={() => {
             setTimeout(() => {
                 const mouseX = window.mouseX || 0
@@ -3706,7 +3766,6 @@
                 
                 let shouldKeepOpen = false
                 
-                // Keep open if hovering over the hovercard container (includes screenshot and history)
                 if (elementUnderCursor?.closest('.tab-hovercard')) {
                     shouldKeepOpen = true
                 } else if (isTrashItemHover) {
@@ -3716,7 +3775,6 @@
                 } else {
                     const hoveredTabElement = elementUnderCursor?.closest('.tab-container')
                     if (hoveredTabElement) {
-                        // Find the tab by checking all tab arrays (leftPinned, regular, rightPinned)
                         const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => !tab.pinned), ...rightPinnedTabs]
                         const matchingTab = allTabs.find(tab => tabButtons[tab.id] === hoveredTabElement)
                         shouldKeepOpen = matchingTab?.id === hoveredTab?.id
@@ -3724,9 +3782,7 @@
                 }
                 
                 if (!shouldKeepOpen) {
-                    hoveredTab = null
-                    isTrashItemHover = false
-                    stopHovercardPositionCheck()
+                    closeHovercard()
                 }
             }, 100)
         }} />
