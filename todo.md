@@ -2428,3 +2428,9 @@ zen mode toolbar hovershow
 chrome dev tools theme
 
 toggling tab sidebar spacing jump
+
+password manager + adblocker
+
+forward, backward, toggle sidebar buttons, setting
+setting show current url in sidebar
+

@@ -287,12 +287,16 @@
     let lastScrolledTabId = $state(null)
     let scrollHoverTimeout = null
     let tabsListScrolled = $state({})
+    let tabsListScrolledBottom = $state({})
     
     function handleTabsListScroll(event) {
         const tabsList = event.target
         const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
         if (spaceId) {
             tabsListScrolled[spaceId] = tabsList.scrollTop > 0
+            // Check if not scrolled to bottom (can still scroll down)
+            const isAtBottom = tabsList.scrollHeight - tabsList.scrollTop <= tabsList.clientHeight + 1
+            tabsListScrolledBottom[spaceId] = !isAtBottom
         }
 
         
@@ -373,6 +377,21 @@
                 }
             }
         }, 50) // Small delay to ensure DOM is updated
+    })
+
+    // Initialize bottom scroll fade state when tabs lists render or change
+    $effect(() => {
+        data.spaceMeta.spaceOrder // dependency on spaces
+        setTimeout(() => {
+            const tabsLists = document.querySelectorAll('.tabs-list')
+            tabsLists.forEach(tabsList => {
+                const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
+                if (spaceId) {
+                    const isAtBottom = tabsList.scrollHeight - tabsList.scrollTop <= tabsList.clientHeight + 1
+                    tabsListScrolledBottom[spaceId] = !isAtBottom
+                }
+            })
+        }, 100)
     })
     
     // Track global mouse position and log pointer event state
@@ -1154,6 +1173,7 @@
                                         <button class="tab-group-close" aria-label="Close tab group">×</button>
                                     </div><!-- -->
                                 </div>
+                                    <div class="tabs-list-fade-bottom" class:visible={tabsListScrolledBottom[spaceId]}></div>
                                 </div>
                             </div>
                         {/each}
@@ -1818,6 +1838,23 @@
     }
     
     .tabs-list-fade-top.visible {
+        opacity: 1;
+    }
+    
+    .tabs-list-fade-bottom {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 16px;
+        background: linear-gradient(to top, #000 0%, transparent 100%);
+        pointer-events: none;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 150ms ease;
+    }
+    
+    .tabs-list-fade-bottom.visible {
         opacity: 1;
     }
     
