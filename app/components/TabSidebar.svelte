@@ -1817,7 +1817,7 @@
         top: 0;
         left: 0;
         right: 0;
-        height: 24px;
+        height: 16px;
         background: linear-gradient(to bottom, #000 0%, transparent 100%);
         pointer-events: none;
         z-index: 10;
@@ -1837,7 +1837,7 @@
         flex: 1;
         min-height: 0;
         overflow-y: auto;
-        padding-top: 16px;
+        padding-top: 8px;
         padding-bottom: 60px; /* Add space at bottom for closed tabs overlay */
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
