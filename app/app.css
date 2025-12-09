@@ -34,8 +34,12 @@ header.focus-mode {
     background: transparent;
 }
 
-header.focus-mode .header-drag-handle {
-    right: 47px !important;
+.zen-hover-trigger {
+    position: absolute;
+    top: 0;
+    height: 35px;
+    pointer-events: auto;
+    z-index: 2;
 }
 
 .header-drag-handle {

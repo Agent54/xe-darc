@@ -2422,3 +2422,7 @@ make inactive tabs more readable, optimize bright conditions contrast for readab
 permission reqs sidebar open broken
 
 lightbox button in hovercards
+
+zen mode toolbar hovershow
+
+chrome dev tools theme

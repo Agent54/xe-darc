@@ -3169,6 +3169,13 @@
     <!-- Right drag handle (width adjusts for right pinned tabs) -->
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {115 - rightPinnedTabsWidth}px; left: unset; {devModeEnabled ? 'right: 190px;' : 'right: 158px;'}"></div>
 
+    <!-- Zen mode hover trigger zone - covers area above toolbar buttons, no drag behavior -->
+    {#if focusModeEnabled}
+        <div class="zen-hover-trigger" 
+             style="right: 0; width: {devModeEnabled ? '178px' : '137px'};"
+             onmouseenter={() => { if (hasLeftToggle) { focusModeHovered = true; contentAreaScrimActive = true; } }}></div>
+    {/if}
+
     <div class="header-icon-button view-mode-icon hover-menu-button" 
         role="button"
         tabindex="0"

@@ -42,14 +42,19 @@
     })
     
     // Reset showHistory when tab changes to prevent delay carryover
+    let previousTabId = null
     $effect(() => {
         const tabId = tab.id
-        showHistory = showHistoryImmediately
-        hovercardHovered = false
-        if (historyShowTimer) {
-            clearTimeout(historyShowTimer)
-            historyShowTimer = null
+        // Only reset if tab actually changed to a different tab
+        if (previousTabId !== null && previousTabId !== tabId) {
+            showHistory = showHistoryImmediately
+            hovercardHovered = false
+            if (historyShowTimer) {
+                clearTimeout(historyShowTimer)
+                historyShowTimer = null
+            }
         }
+        previousTabId = tabId
     })
     
     $effect(() => {
@@ -338,6 +343,11 @@
     
     .history-item:hover {
         background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .history-item:last-child {
+        border-bottom-left-radius: 12px;
+        border-bottom-right-radius: 12px;
     }
     
     .history-icon-wrapper {
