@@ -447,7 +447,8 @@ ul::-webkit-scrollbar {
     list-style: none;
     transition: border-color 0.3s ease, width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease, flex-basis 0.2s ease;
     border-radius: 8px;
-    background-color: rgb(255 255 255 / 7%);
+    /* background-color: rgb(255 255 255 / 6%); */
+    background-color: #ffffff0f;
     min-width: 130px;
     max-width: 200px;
     flex: 0 1 200px; /* Don't grow, can shrink from 200px basis */

@@ -138,7 +138,7 @@
 		opacity: 0;
 	}
 
-	.sidebar-header:hover .sidebar-nav-buttons {
+	.sidebar:hover .sidebar-nav-buttons {
 		opacity: 1;
 	}
 
@@ -192,7 +192,7 @@
 		opacity: 0;
 	}
 
-	.sidebar-header:hover .close-button {
+	.sidebar:hover .close-button {
 		opacity: 1;
 	}
 
