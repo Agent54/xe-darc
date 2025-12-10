@@ -682,7 +682,7 @@
         if (newTabMenuHoverTimeout) {
             clearTimeout(newTabMenuHoverTimeout)
         }
-        const delay = instantHovercardsMode ? 0 : 800
+        const delay = 800
         newTabMenuHoverTimeout = setTimeout(() => {
             if (isInline && inlineNewTabButtonElement) {
                 const rect = inlineNewTabButtonElement.getBoundingClientRect()

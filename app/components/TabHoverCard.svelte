@@ -77,7 +77,7 @@
             title: 'API Reference',
             url: 'https://example.com/docs/api',
             timestamp: Date.now() - 1000 * 60 * 20,
-            isCurrent: true,
+            isCurrent: false,
             isLeaf: false
         },
         {
@@ -236,14 +236,10 @@
                 <div class="history-connector-line"></div>
                 {#each historyEntries as historyTab, index}
                 <button class="history-item"
-                        class:is-current={historyTab.isCurrent}
                         class:is-leaf={historyTab.isLeaf}
                         onmouseenter={() => hoveredHistoryEntry = historyTab}
                         onmouseleave={() => hoveredHistoryEntry = null}>
-                    <div class="history-icon-wrapper" class:current-highlight={historyTab.isCurrent} class:leaf-highlight={historyTab.isLeaf}>
-                        {#if !historyTab.isCurrent && !historyTab.isLeaf && historyTab.type !== 'opened' && historyTab.type !== 'closed'}
-                            <div class="connector-dot"></div>
-                        {/if}
+                    <div class="history-icon-wrapper" class:leaf-highlight={historyTab.isLeaf}>
                         {#if historyTab.type === 'opened'}
                             <div class="history-type-icon opened">
                                 <svg fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
@@ -423,10 +419,10 @@
     .history-connector-line {
         position: absolute;
         left: 19px;
-        top: 30px;
+        top: 0;
         bottom: 30px;
         width: 2px;
-        background: rgba(255, 255, 255, 0.15);
+        background: linear-gradient(to bottom, transparent 0%, rgba(255, 255, 255, 0.15) 8px);
     }
     
     .history-list::-webkit-scrollbar {
@@ -466,7 +462,6 @@
         border-bottom-right-radius: 12px;
     }
     
-    .history-item.is-current::before,
     .history-item.is-leaf::before {
         content: '';
         position: absolute;
@@ -483,44 +478,7 @@
         flex-shrink: 0;
     }
     
-    .connector-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.3);
-        border: 2px solid rgba(0, 0, 0, 0.95);
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 1;
-    }
-    
-    .history-item:hover .connector-dot {
-        background: rgba(255, 255, 255, 0.6);
-        box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
-    }
-    
-    .connector-dot.is-current {
-        background: rgb(34, 197, 94);
-        border-color: rgba(0, 0, 0, 0.95);
-        box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
-    }
-    
-    .connector-dot.is-leaf {
-        background: rgb(59, 130, 246);
-        border-color: rgba(0, 0, 0, 0.95);
-        box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
-    }
-    
-    .history-icon-wrapper.current-highlight {
-        background: rgba(34, 197, 94, 0.3);
-        border-radius: 50%;
-        padding: 2px;
-        margin: -2px;
-    }
-    
-    .history-icon-wrapper.leaf-highlight:not(.current-highlight) {
+    .history-icon-wrapper.leaf-highlight {
         background: rgba(59, 130, 246, 0.3);
         border-radius: 50%;
         padding: 2px;
@@ -579,7 +537,6 @@
         padding: 1px 5px;
         border-radius: 3px;
         flex-shrink: 0;
-        cursor: help;
     }
     
     .history-time:hover {
