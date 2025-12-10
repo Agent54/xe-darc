@@ -2437,3 +2437,8 @@ setting show current url in sidebar
 context menu: show tab, forward, backward, reload save , send page to, print, dev tools, copy url
 
 search tabs menu
+
+shortcut / ubiquity / raycast system
+
+replace scrreenshot with frame on hovering lightbox button in hovercard
+

@@ -1468,6 +1468,7 @@
         scrollbar-width: none;
         flex: 1;
         min-width: 0;
+        padding-right: 12px;
     }
     
     .spaces-list::-webkit-scrollbar {
@@ -1475,8 +1476,8 @@
     }
     
     .space-item {
-        width: 22px;
-        height: 22px;
+        width: 24px;
+        height: 24px;
         border-radius: 10px;
         background: transparent;
         display: flex;
@@ -1501,10 +1502,10 @@
     }
     
     .space-glyph {
-        font-size: 12px;
+        font-size: 13px;
         line-height: 1;
-        width: 12px;
-        height: 12px;
+        width: 13px;
+        height: 13px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1517,8 +1518,8 @@
     }
     
     .space-glyph-default {
-        width: 8px;
-        height: 8px;
+        width: 9px;
+        height: 9px;
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.7);
         display: flex;
