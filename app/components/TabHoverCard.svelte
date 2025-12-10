@@ -25,6 +25,43 @@
     let historyShowTimer = null
     let hoveredHistoryEntry = $state(null)
     let urlBarExpanded = $state(false)
+    let copiedEntryId = $state(null)
+    
+    function handleScrollFade(event) {
+        const el = event.target
+        const wrapper = el.parentElement
+        const fadeLeft = wrapper?.querySelector('.fade-left')
+        const fadeRight = wrapper?.querySelector('.fade-right')
+        
+        const isAtStart = el.scrollLeft <= 1
+        const isAtEnd = el.scrollWidth - el.scrollLeft <= el.clientWidth + 1
+        const hasOverflow = el.scrollWidth > el.clientWidth
+        
+        if (fadeLeft) fadeLeft.style.opacity = (hasOverflow && !isAtStart) ? '1' : '0'
+        if (fadeRight) fadeRight.style.opacity = (hasOverflow && !isAtEnd) ? '1' : '0'
+    }
+    
+    function initScrollFade(wrapper) {
+        if (!wrapper) return
+        const scrollEl = wrapper.querySelector('.hovercard-title, .history-title, .history-url')
+        const fadeLeft = wrapper.querySelector('.fade-left')
+        const fadeRight = wrapper.querySelector('.fade-right')
+        if (!scrollEl) return
+        
+        requestAnimationFrame(() => {
+            const hasOverflow = scrollEl.scrollWidth > scrollEl.clientWidth
+            if (fadeLeft) fadeLeft.style.opacity = '0'
+            if (fadeRight) fadeRight.style.opacity = hasOverflow ? '1' : '0'
+        })
+    }
+    
+    async function copyUrl(url, entryId) {
+        await navigator.clipboard.writeText(url)
+        copiedEntryId = entryId
+        setTimeout(() => {
+            if (copiedEntryId === entryId) copiedEntryId = null
+        }, 1000)
+    }
     
     function handleUrlBarExpandedChange(expanded) {
         urlBarExpanded = expanded
@@ -174,7 +211,11 @@
          onmouseleave={onMouseLeave}>
         <div class="hovercard-header">
             <div class="hovercard-text">
-                <div class="hovercard-title">{tab.title || 'Untitled'}</div>
+                <div class="hovercard-title-wrapper" use:initScrollFade>
+                    <div class="fade-left"></div>
+                    <div class="hovercard-title" onscroll={handleScrollFade}>{tab.title || 'Untitled'}</div>
+                    <div class="fade-right"></div>
+                </div>
             </div>
             {#if isClosedTab}
                 <svg class="hibernation-icon" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -235,10 +276,12 @@
             <div class="history-list">
                 <div class="history-connector-line"></div>
                 {#each historyEntries as historyTab, index}
-                <button class="history-item"
-                        class:is-leaf={historyTab.isLeaf}
-                        onmouseenter={() => hoveredHistoryEntry = historyTab}
-                        onmouseleave={() => hoveredHistoryEntry = null}>
+                <div class="history-item"
+                     class:is-leaf={historyTab.isLeaf}
+                     role="button"
+                     tabindex="0"
+                     onmouseenter={() => hoveredHistoryEntry = historyTab}
+                     onmouseleave={() => hoveredHistoryEntry = null}>
                     <div class="history-icon-wrapper" class:leaf-highlight={historyTab.isLeaf}>
                         {#if historyTab.type === 'opened'}
                             <div class="history-type-icon opened">
@@ -257,16 +300,44 @@
                         {/if}
                     </div>
                     <div class="history-text">
-                        <span class="history-title">
+                        <div class="history-title-row">
                             <span class="history-time" title={formatAbsoluteTime(historyTab.timestamp)}>{formatRelativeTime(historyTab.timestamp)}</span>
-                            {historyTab.title || 'Untitled'}
-                            {#if historyTab.source}
-                                <span class="history-source">({historyTab.source.label})</span>
-                            {/if}
-                        </span>
-                        <span class="history-url"><UrlRenderer url={historyTab.url} variant="compact" /></span>
+                            <div class="history-title-scroll-wrapper" use:initScrollFade>
+                                <div class="fade-left"></div>
+                                <div class="history-title" onscroll={handleScrollFade}>
+                                    {historyTab.title || 'Untitled'}
+                                    {#if historyTab.source}
+                                        <span class="history-source">({historyTab.source.label})</span>
+                                    {/if}
+                                </div>
+                                <div class="fade-right"></div>
+                            </div>
+                        </div>
+                        <div class="history-url-wrapper" use:initScrollFade>
+                            <div class="fade-left"></div>
+                            <div class="history-url" onscroll={handleScrollFade}><UrlRenderer url={historyTab.url} variant="compact" /></div>
+                            <div class="fade-right"></div>
+                        </div>
                     </div>
-                </button>
+                    <div class="history-actions" onclick={(e) => e.stopPropagation()}>
+                        <button class="history-action-btn" class:success={copiedEntryId === historyTab.id} onclick={(e) => { e.stopPropagation(); copyUrl(historyTab.url, historyTab.id) }} title="Copy URL">
+                            {#if copiedEntryId === historyTab.id}
+                                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                            {:else}
+                                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                                </svg>
+                            {/if}
+                        </button>
+                        <button class="history-action-btn delete" onclick={(e) => { e.stopPropagation(); /* TODO: delete history entry */ }} title="Delete from history">
+                            <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
             {/each}
             </div>
         </div>
@@ -316,16 +387,46 @@
         min-width: 0;
     }
 
+    .hovercard-title-wrapper {
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 4px;
+        margin-left: 3px;
+    }
+    
     .hovercard-title {
         font-size: 14px;
         font-weight: 600;
         color: rgba(255, 255, 255, 0.9);
-        margin-bottom: 4px;
-        margin-left: 3px;
         line-height: 1.4;
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    
+    .hovercard-title::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .hovercard-title-wrapper .fade-left,
+    .hovercard-title-wrapper .fade-right {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 24px;
+        pointer-events: none;
+        transition: opacity 150ms ease;
+        opacity: 0;
+    }
+    
+    .hovercard-title-wrapper .fade-left {
+        left: 0;
+        background: linear-gradient(to left, transparent, rgba(0, 0, 0, 0.95));
+    }
+    
+    .hovercard-title-wrapper .fade-right {
+        right: 0;
+        background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.95));
     }
 
     .hovercard-screenshot {
@@ -447,14 +548,16 @@
         background: transparent;
         border: none;
         cursor: pointer;
-        transition: background 100ms ease;
+        transition: background 100ms ease, opacity 150ms ease;
         text-align: left;
         font-family: 'Inter', sans-serif;
         position: relative;
+        opacity: 0.8;
     }
     
     .history-item:hover {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.08);
+        opacity: 1;
     }
     
     .history-item:last-child {
@@ -466,11 +569,15 @@
         content: '';
         position: absolute;
         left: 17px;
-        top: -8px;
+        top: -4px;
         width: 6px;
         height: calc(50% + 8px);
-        background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.95) 30%);
+        background: linear-gradient(to bottom, transparent 0%, rgb(0, 0, 0) 30%);
         z-index: 0;
+    }
+    
+    .history-item.is-leaf:hover::before {
+        background: linear-gradient(to bottom, transparent 0%, rgb(20, 20, 20) 30%);
     }
     
     .history-icon-wrapper {
@@ -478,12 +585,12 @@
         flex-shrink: 0;
     }
     
-    .history-icon-wrapper.leaf-highlight {
+    /* .history-icon-wrapper.leaf-highlight {
         background: rgba(59, 130, 246, 0.3);
         border-radius: 50%;
         padding: 2px;
         margin: -2px;
-    }
+    } */
     
     .history-type-icon {
         width: 16px;
@@ -519,15 +626,63 @@
         gap: 2px;
     }
     
-    .history-title {
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.8);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+    .history-title-row {
         display: flex;
         align-items: center;
         gap: 6px;
+    }
+    
+    .history-title-scroll-wrapper {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+    }
+    
+    .history-title-scroll-wrapper .fade-left {
+        width: 20px;
+        height: 100%;
+        flex-shrink: 0;
+        margin-right: -20px;
+        background: linear-gradient(to left, transparent, rgb(0, 0, 0));
+        pointer-events: none;
+        transition: opacity 150ms ease;
+        opacity: 0;
+        z-index: 1;
+    }
+    
+    .history-title {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        white-space: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .history-title::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .history-title-scroll-wrapper .fade-right {
+        width: 20px;
+        height: 100%;
+        flex-shrink: 0;
+        margin-left: -20px;
+        background: linear-gradient(to right, transparent, rgb(0, 0, 0));
+        pointer-events: none;
+        transition: opacity 150ms ease;
+        opacity: 0;
+        z-index: 1;
+    }
+    
+    .history-item:hover .history-title-scroll-wrapper .fade-left {
+        background: linear-gradient(to left, transparent, rgb(20, 20, 20));
+    }
+    
+    .history-item:hover .history-title-scroll-wrapper .fade-right {
+        background: linear-gradient(to right, transparent, rgb(20, 20, 20));
     }
     
     .history-time {
@@ -550,11 +705,112 @@
         font-style: italic;
     }
     
+    .history-url-wrapper {
+        display: flex;
+        align-items: center;
+    }
+    
+    .history-url-wrapper .fade-left {
+        width: 20px;
+        height: 100%;
+        flex-shrink: 0;
+        margin-right: -20px;
+        background: linear-gradient(to left, transparent, rgb(0, 0, 0));
+        pointer-events: none;
+        transition: opacity 150ms ease;
+        opacity: 0;
+        z-index: 1;
+    }
+    
     .history-url {
         font-size: 11px;
         color: rgba(255, 255, 255, 0.4);
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .history-url::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .history-url-wrapper .fade-right {
+        width: 20px;
+        height: 100%;
+        flex-shrink: 0;
+        margin-left: -20px;
+        background: linear-gradient(to right, transparent, rgb(0, 0, 0));
+        pointer-events: none;
+        transition: opacity 150ms ease;
+        opacity: 0;
+        z-index: 1;
+    }
+    
+    .history-item:hover .history-url-wrapper .fade-left {
+        background: linear-gradient(to left, transparent, rgb(20, 20, 20));
+    }
+    
+    .history-item:hover .history-url-wrapper .fade-right {
+        background: linear-gradient(to right, transparent, rgb(20, 20, 20));
+    }
+    
+    .history-actions {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        gap: 2px;
+        opacity: 0;
+        transition: opacity 100ms ease;
+        transition-delay: 400ms;
+        background: rgb(0, 0, 0);
+        padding-left: 4px;
+        border-radius: 4px;
+    }
+    
+    .history-item:hover .history-actions {
+        background: rgb(20, 20, 20);
+        opacity: 1;
+    }
+    
+    .history-item:not(:hover) .history-actions {
+        transition-delay: 0ms;
+    }
+    
+    .history-action-btn {
+        width: 22px;
+        height: 22px;
+        border: none;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.3);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: all 100ms ease;
+    }
+    
+    .history-action-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .history-action-btn.delete:hover {
+        background: rgba(248, 113, 113, 0.15);
+        color: rgba(248, 113, 113, 0.9);
+    }
+    
+    .history-action-btn svg {
+        width: 14px;
+        height: 14px;
+    }
+    
+    .history-action-btn.success {
+        color: #22c55e;
+        background: rgba(34, 197, 94, 0.1);
     }
 </style>

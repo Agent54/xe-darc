@@ -553,7 +553,7 @@ const resolveAttachmentUrl = async (attachmentUrl) => {
 const attachmentUrlCache = new Map()
 
 const getAttachmentUrl = async (attachmentUrl) => {
-    console.log('getAttachmentUrl', attachmentUrl)
+    // console.log('getAttachmentUrl', attachmentUrl)
     if (!attachmentUrl || !attachmentUrl.startsWith('attachment://')) {
         return attachmentUrl
     }
