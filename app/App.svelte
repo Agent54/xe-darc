@@ -97,6 +97,8 @@
     let hovercardRecentlyActive = $state(false)
     let hovercardResetTimer = null
     let closeButtonHovered = $state(false)
+    let closeButtonHoveredDelayed = $state(false)
+    let closeButtonHoverTimer = null
     let instantHovercardsMode = $state(false)
     let hovercardUrlBarExpanded = $state(false)
     let instantModeResetTimer = null
@@ -1327,6 +1329,14 @@
     })
 
     function handleTabMouseEnter(tab, event, positionHint = null) {
+        // Reset close button hover state when entering a new tab
+        closeButtonHovered = false
+        closeButtonHoveredDelayed = false
+        if (closeButtonHoverTimer) {
+            clearTimeout(closeButtonHoverTimer)
+            closeButtonHoverTimer = null
+        }
+        
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
         }
@@ -3254,8 +3264,25 @@
                                     aria-label="Close tab"
                                     onmousedown={() => closeTab(tab, event, true)} 
                                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}
-                                    onmouseenter={() => closeButtonHovered = true}
-                                    onmouseleave={() => closeButtonHovered = false}>
+                                    onmouseenter={() => {
+                                        closeButtonHovered = true
+                                        if (closeButtonHoverTimer) clearTimeout(closeButtonHoverTimer)
+                                        if (instantHovercardsMode) {
+                                            closeButtonHoverTimer = setTimeout(() => {
+                                                closeButtonHoveredDelayed = true
+                                            }, 300)
+                                        } else {
+                                            closeButtonHoveredDelayed = true
+                                        }
+                                    }}
+                                    onmouseleave={() => {
+                                        closeButtonHovered = false
+                                        closeButtonHoveredDelayed = false
+                                        if (closeButtonHoverTimer) {
+                                            clearTimeout(closeButtonHoverTimer)
+                                            closeButtonHoverTimer = null
+                                        }
+                                    }}>
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                         <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                                     </svg>
@@ -3948,7 +3975,8 @@
        
             <TabHoverCard tab={hoveredTab} 
                           isClosedTab={false} 
-                          showHistoryImmediately={closeButtonHovered}
+                          showHistoryImmediately={closeButtonHoveredDelayed}
+                          instantMode={instantHovercardsMode}
                           showDevTools={devModeEnabled}
                           onGoBack={() => {
                               if (!hoveredTab?.id) return

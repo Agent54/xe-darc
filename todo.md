@@ -2423,16 +2423,11 @@ permission reqs sidebar open broken
 
 lightbox button in hovercards
 
-zen mode toolbar hovershow
-
 chrome dev tools theme
 
 toggling tab sidebar spacing jump
 
 password manager + adblocker
-
-forward, backward, toggle sidebar buttons, setting
-setting show current url in sidebar
 
 context menu: show tab, forward, backward, reload save , send page to, print, dev tools, copy url
 
@@ -2442,3 +2437,6 @@ shortcut / ubiquity / raycast system
 
 replace scrreenshot with frame on hovering lightbox button in hovercard
 
+close all context menus when frame focus even recieved
+
+sidepin toggle does not fill button

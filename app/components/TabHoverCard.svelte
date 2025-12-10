@@ -10,6 +10,7 @@
         onMouseLeave, 
         isClosedTab = false, 
         showHistoryImmediately = false,
+        instantMode = false,
         showDevTools = false,
         onGoBack = null,
         onGoForward = null,
@@ -20,7 +21,7 @@
     } = $props()
     
     let hovercardHovered = $state(false)
-    let showHistory = $state(showHistoryImmediately)
+    let showHistory = $state(false)
     let historyShowTimer = null
     let hoveredHistoryEntry = $state(null)
     let urlBarExpanded = $state(false)
@@ -30,10 +31,99 @@
         if (onUrlBarExpandedChange) onUrlBarExpandedChange(expanded)
     }
     
-    // Get space for this tab to access activeTabsOrder
-    let tabSpace = $derived(data.spaces[tab.spaceId])
-    let historyEntries = $derived(tabSpace?.activeTabsOrder?.slice(1, 11).map(id => data.docs[id]).filter(t => t && t.id !== tab.id) || [])
+    function formatRelativeTime(timestamp) {
+        const now = Date.now()
+        const diff = now - timestamp
+        const seconds = Math.floor(diff / 1000)
+        const minutes = Math.floor(seconds / 60)
+        const hours = Math.floor(minutes / 60)
+        const days = Math.floor(hours / 24)
+        
+        if (seconds < 60) return 'just now'
+        if (minutes < 60) return `${minutes}m ago`
+        if (hours < 24) return `${hours}h ago`
+        if (days < 7) return `${days}d ago`
+        return new Date(timestamp).toLocaleDateString()
+    }
     
+    function formatAbsoluteTime(timestamp) {
+        return new Date(timestamp).toLocaleString()
+    }
+    
+    // Hardcoded debug history entries (history entries not yet implemented)
+    // Order: youngest to oldest (top to bottom), tab opened at the end
+    const debugHistoryEntries = [
+        {
+            id: 'nav5',
+            type: 'navigation',
+            title: 'Blog - Latest Updates',
+            url: 'https://example.com/blog',
+            timestamp: Date.now() - 1000 * 60 * 5,
+            isCurrent: false,
+            isLeaf: false
+        },
+        {
+            id: 'nav4',
+            type: 'navigation',
+            title: 'Advanced Topics - Performance',
+            url: 'https://example.com/docs/advanced/performance',
+            timestamp: Date.now() - 1000 * 60 * 10,
+            isCurrent: false,
+            isLeaf: true
+        },
+        {
+            id: 'nav3',
+            type: 'navigation',
+            title: 'API Reference',
+            url: 'https://example.com/docs/api',
+            timestamp: Date.now() - 1000 * 60 * 20,
+            isCurrent: true,
+            isLeaf: false
+        },
+        {
+            id: 'nav2',
+            type: 'navigation',
+            title: 'Documentation - Getting Started',
+            url: 'https://example.com/docs/getting-started',
+            timestamp: Date.now() - 1000 * 60 * 30,
+            isCurrent: false,
+            isLeaf: true
+        },
+        {
+            id: 'nav1',
+            type: 'navigation',
+            title: 'Welcome to Example',
+            url: 'https://example.com/',
+            timestamp: Date.now() - 1000 * 60 * 40,
+            isCurrent: false,
+            isLeaf: false
+        },
+        {
+            id: 'opened',
+            type: 'opened',
+            title: 'Tab opened',
+            url: tab.url,
+            timestamp: Date.now() - 1000 * 60 * 45,
+            source: { type: 'clipboard', label: 'from clipboard' },
+            isCurrent: false,
+            isLeaf: false
+        }
+    ]
+    
+    // Add closed entry for closed tabs
+    const closedTabEntry = isClosedTab ? [{
+        id: 'closed',
+        type: 'closed',
+        title: 'Tab closed',
+        url: tab.url,
+        timestamp: Date.now() - 1000 * 60 * 2,
+        isCurrent: false,
+        isLeaf: false
+    }] : []
+    
+    let historyEntries = $derived([...debugHistoryEntries, ...closedTabEntry])
+    
+    // Handle showHistoryImmediately (already has delay applied from parent)
     $effect(() => {
         if (showHistoryImmediately && !showHistory) {
             if (historyShowTimer) clearTimeout(historyShowTimer)
@@ -41,13 +131,12 @@
         }
     })
     
-    // Reset showHistory when tab changes to prevent delay carryover
+    // Reset showHistory when tab changes
     let previousTabId = null
     $effect(() => {
         const tabId = tab.id
-        // Only reset if tab actually changed to a different tab
         if (previousTabId !== null && previousTabId !== tabId) {
-            showHistory = showHistoryImmediately
+            showHistory = false
             hovercardHovered = false
             if (historyShowTimer) {
                 clearTimeout(historyShowTimer)
@@ -57,15 +146,20 @@
         previousTabId = tabId
     })
     
+    // Show history after delay when hovering the hovercard
     $effect(() => {
-        if (hovercardHovered && !showHistory) {
+        if (hovercardHovered && !showHistory && !showHistoryImmediately) {
+            const delay = 1500
             historyShowTimer = setTimeout(() => {
                 showHistory = true
-            }, 1000)
-        }
-        
-        return () => {
-            if (historyShowTimer) clearTimeout(historyShowTimer)
+            }, delay)
+            
+            return () => {
+                if (historyShowTimer) {
+                    clearTimeout(historyShowTimer)
+                    historyShowTimer = null
+                }
+            }
         }
     })
 </script>
@@ -108,21 +202,19 @@
             onExpandedChange={handleUrlBarExpandedChange}
         />
     </div>
-    {#if hoveredHistoryEntry}
-        {#if hoveredHistoryEntry.screenshot}
-            <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
-                {#key hoveredHistoryEntry.id}
-                    <AttachmentImage src={hoveredHistoryEntry.screenshot} alt="Page preview" />
-                {/key}
-                {#if hovercardHovered}
-                    <button class="expand-button" aria-label="Expand screenshot">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                        </svg>
-                    </button>
-                {/if}
-            </div>
-        {/if}
+    {#if hoveredHistoryEntry?.screenshot}
+        <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
+            {#key hoveredHistoryEntry.id}
+                <AttachmentImage src={hoveredHistoryEntry.screenshot} alt="Page preview" />
+            {/key}
+            {#if hovercardHovered}
+                <button class="expand-button" aria-label="Expand screenshot">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    </svg>
+                </button>
+            {/if}
+        </div>
     {:else if tab.screenshot}
         <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
             {#key tab.id}
@@ -144,14 +236,38 @@
                 <div class="history-connector-line"></div>
                 {#each historyEntries as historyTab, index}
                 <button class="history-item"
+                        class:is-current={historyTab.isCurrent}
+                        class:is-leaf={historyTab.isLeaf}
                         onmouseenter={() => hoveredHistoryEntry = historyTab}
                         onmouseleave={() => hoveredHistoryEntry = null}>
-                    <div class="history-icon-wrapper">
-                        <div class="connector-dot"></div>
-                        <Favicon tab={historyTab} showButton={false} />
+                    <div class="history-icon-wrapper" class:current-highlight={historyTab.isCurrent} class:leaf-highlight={historyTab.isLeaf}>
+                        {#if !historyTab.isCurrent && !historyTab.isLeaf && historyTab.type !== 'opened' && historyTab.type !== 'closed'}
+                            <div class="connector-dot"></div>
+                        {/if}
+                        {#if historyTab.type === 'opened'}
+                            <div class="history-type-icon opened">
+                                <svg fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6" />
+                                </svg>
+                            </div>
+                        {:else if historyTab.type === 'closed'}
+                            <div class="history-type-icon closed">
+                                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </div>
+                        {:else}
+                            <Favicon tab={historyTab} showButton={false} />
+                        {/if}
                     </div>
                     <div class="history-text">
-                        <span class="history-title">{historyTab.title || 'Untitled'}</span>
+                        <span class="history-title">
+                            <span class="history-time" title={formatAbsoluteTime(historyTab.timestamp)}>{formatRelativeTime(historyTab.timestamp)}</span>
+                            {historyTab.title || 'Untitled'}
+                            {#if historyTab.source}
+                                <span class="history-source">({historyTab.source.label})</span>
+                            {/if}
+                        </span>
                         <span class="history-url"><UrlRenderer url={historyTab.url} variant="compact" /></span>
                     </div>
                 </button>
@@ -350,6 +466,18 @@
         border-bottom-right-radius: 12px;
     }
     
+    .history-item.is-current::before,
+    .history-item.is-leaf::before {
+        content: '';
+        position: absolute;
+        left: 17px;
+        top: -8px;
+        width: 6px;
+        height: calc(50% + 8px);
+        background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.95) 30%);
+        z-index: 0;
+    }
+    
     .history-icon-wrapper {
         position: relative;
         flex-shrink: 0;
@@ -373,6 +501,58 @@
         box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
     }
     
+    .connector-dot.is-current {
+        background: rgb(34, 197, 94);
+        border-color: rgba(0, 0, 0, 0.95);
+        box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+    }
+    
+    .connector-dot.is-leaf {
+        background: rgb(59, 130, 246);
+        border-color: rgba(0, 0, 0, 0.95);
+        box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
+    }
+    
+    .history-icon-wrapper.current-highlight {
+        background: rgba(34, 197, 94, 0.3);
+        border-radius: 50%;
+        padding: 2px;
+        margin: -2px;
+    }
+    
+    .history-icon-wrapper.leaf-highlight:not(.current-highlight) {
+        background: rgba(59, 130, 246, 0.3);
+        border-radius: 50%;
+        padding: 2px;
+        margin: -2px;
+    }
+    
+    .history-type-icon {
+        width: 16px;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+    
+    .history-type-icon svg {
+        width: 14px;
+        height: 14px;
+    }
+    
+    .history-type-icon.opened {
+        background: rgba(74, 222, 128, 0.2);
+        color: rgba(74, 222, 128, 0.9);
+        border: 1px solid rgba(74, 222, 128, 0.3);
+    }
+    
+    .history-type-icon.closed {
+        background: rgba(248, 113, 113, 0.2);
+        color: rgba(248, 113, 113, 0.9);
+        border: 1px solid rgba(248, 113, 113, 0.3);
+    }
+    
     .history-text {
         flex: 1;
         min-width: 0;
@@ -387,6 +567,30 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .history-time {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.4);
+        background: rgba(255, 255, 255, 0.05);
+        padding: 1px 5px;
+        border-radius: 3px;
+        flex-shrink: 0;
+        cursor: help;
+    }
+    
+    .history-time:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .history-source {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.35);
+        font-style: italic;
     }
     
     .history-url {
