@@ -190,6 +190,8 @@
     let globalTabComplete = $state(true)
     let lightboxModeEnabled = $state(true)
     let tabsOpenRight = $state(true)
+    let showNavigationToolbar = $state(false)
+    let showSidebarUrl = $state(false)
     
     let menuForceClose = $state(false)
 
@@ -295,6 +297,20 @@
             if (savedTabsOpenRight !== null) {
                 tabsOpenRight = savedTabsOpenRight === 'true'
                 data.settings.tabsOpenRight = tabsOpenRight
+            }
+
+            // Load navigation toolbar setting
+            const savedShowNavigationToolbar = localStorage.getItem('showNavigationToolbar')
+            if (savedShowNavigationToolbar !== null) {
+                showNavigationToolbar = savedShowNavigationToolbar === 'true'
+                data.settings.showNavigationToolbar = showNavigationToolbar
+            }
+
+            // Load sidebar URL setting
+            const savedShowSidebarUrl = localStorage.getItem('showSidebarUrl')
+            if (savedShowSidebarUrl !== null) {
+                showSidebarUrl = savedShowSidebarUrl === 'true'
+                data.settings.showSidebarUrl = showSidebarUrl
             }
 
             // Load view mode settings
@@ -2127,6 +2143,18 @@
         data.settings.tabsOpenRight = tabsOpenRight
     }
 
+    function toggleShowNavigationToolbar() {
+        showNavigationToolbar = !showNavigationToolbar
+        localStorage.setItem('showNavigationToolbar', showNavigationToolbar.toString())
+        data.settings.showNavigationToolbar = showNavigationToolbar
+    }
+
+    function toggleShowSidebarUrl() {
+        showSidebarUrl = !showSidebarUrl
+        localStorage.setItem('showSidebarUrl', showSidebarUrl.toString())
+        data.settings.showSidebarUrl = showSidebarUrl
+    }
+
     function toggleGlobalTabComplete() {
         globalTabComplete = !globalTabComplete
         localStorage.setItem('globalTabComplete', globalTabComplete.toString())
@@ -3000,11 +3028,40 @@
     <!-- Main background drag handle -->
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 178px;' : 'right: 137px;'}"></div>
     
+    <!-- Navigation toolbar -->
+    {#if showNavigationToolbar}
+        <div class="navigation-toolbar" class:hidden={focusModeEnabled && !focusModeHovered}>
+            <button class="nav-toolbar-btn" title="Back" aria-label="Go back" onmousedown={goBack}>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                </svg>
+            </button>
+            <button class="nav-toolbar-btn" title="Forward" aria-label="Go forward" onmousedown={goForward}>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                </svg>
+            </button>
+            <button class="nav-toolbar-btn" 
+                    title={tabSidebarVisible ? "Hide sidebar" : "Show sidebar"} 
+                    aria-label={tabSidebarVisible ? "Hide sidebar" : "Show sidebar"}
+                    class:active={tabSidebarVisible}
+                    onmousedown={() => { tabSidebarVisible = !tabSidebarVisible }}>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <rect x="3" y="3" width="18" height="18" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v18" />
+                    {#if tabSidebarVisible}
+                        <rect x="3" y="3" width="6" height="18" rx="2" fill="currentColor" opacity="0.4" />
+                    {/if}
+                </svg>
+            </button>
+        </div>
+    {/if}
+    
     <!-- Left pinned tabs section (favicon only, fixed left of scrolling tabs) -->
     {#if leftPinnedTabs.length > 0}
         <div class="fixed-pinned-tabs fixed-pinned-tabs-left" 
              class:hidden={focusModeEnabled && !focusModeHovered}
-             style="left: 110px;">
+             style="left: {showNavigationToolbar ? 175 : 110}px;">
             {#each leftPinnedTabs as tabPinned, i (tabPinned.id)}
                 {@const tab = data.docs[tabPinned.id]}
                 {@const frameData = data.frames[tab.id]}
@@ -3066,7 +3123,7 @@
         </div>
     {/if}
      
-        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: {110 + leftPinnedTabsWidth}px; width: calc(100% - {devModeEnabled ? 413 + leftPinnedTabsWidth : 383 + leftPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: {(showNavigationToolbar ? 175 : 110) + leftPinnedTabsWidth}px; width: calc(100% - {devModeEnabled ? (showNavigationToolbar ? 478 : 413) + leftPinnedTabsWidth : (showNavigationToolbar ? 448 : 383) + leftPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list tabs" class:pinned-collapsed-left={invisiblePins.left} class:pinned-collapsed-right={invisiblePins.right} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
@@ -3164,7 +3221,7 @@
     </div>
 
     <!-- Left drag handle -->
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: 105px;"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {showNavigationToolbar ? 85 : 105}px;"></div>
 
     <!-- Right drag handle (width adjusts for right pinned tabs) -->
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {115 - rightPinnedTabsWidth}px; left: unset; {devModeEnabled ? 'right: 190px;' : 'right: 158px;'}"></div>
@@ -3498,6 +3555,36 @@
                 <span>Tabs Open Right</span>
                 {#if tabsOpenRight}<span class="checkmark">•</span>{/if}
             </div>
+
+            <div class="settings-menu-item menu-item" 
+                 class:active={showNavigationToolbar}
+                 role="button"
+                 tabindex="0"
+                 onmousedown={(e) => { e.stopPropagation(); toggleShowNavigationToolbar(); closeMenuImmediately() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleShowNavigationToolbar() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                    </svg>
+                </span>
+                <span>Navigation Toolbar</span>
+                {#if showNavigationToolbar}<span class="checkmark">•</span>{/if}
+            </div>
+
+            <div class="settings-menu-item menu-item" 
+                 class:active={showSidebarUrl}
+                 role="button"
+                 tabindex="0"
+                 onmousedown={(e) => { e.stopPropagation(); toggleShowSidebarUrl(); closeMenuImmediately() }}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleShowSidebarUrl() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                    </svg>
+                </span>
+                <span>URL in Sidebar</span>
+                {#if showSidebarUrl}<span class="checkmark">•</span>{/if}
+            </div>
             
             <div class="settings-menu-separator"></div>
 
@@ -3803,6 +3890,7 @@
            {isResizingTabSidebar} 
            onStartResizeTabSidebar={startResizeTabSidebar}
            {devModeEnabled}
+           showUrl={showSidebarUrl}
            onGoBack={goBack}
            onGoForward={goForward}
            onReload={reloadActiveTab}

@@ -60,6 +60,61 @@ header.focus-mode {
     z-index: 1;
 }
 
+.navigation-toolbar {
+    position: absolute;
+    left: 86px;
+    top: 9px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    z-index: 10;
+    -webkit-app-region: no-drag;
+    user-select: none;
+}
+
+.navigation-toolbar.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.nav-toolbar-btn {
+    width: 24px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: white;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+}
+
+.nav-toolbar-btn > svg {
+    width: 16px;
+    height: 16px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.nav-toolbar-btn:hover > svg {
+    opacity: 1;
+}
+
+.nav-toolbar-btn.active > svg {
+    opacity: 1;
+}
+
+.focus-mode .nav-toolbar-btn > svg {
+    opacity: 0.34;
+}
+
+header.focus-mode:hover .nav-toolbar-btn > svg {
+    opacity: 0.7;
+}
+
 .sidebar-right {
     position: fixed;
     top: 35px;

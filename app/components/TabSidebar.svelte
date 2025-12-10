@@ -11,7 +11,8 @@
         onGoBack = null,
         onGoForward = null,
         onReload = null,
-        onCloseTab = null
+        onCloseTab = null,
+        showUrl = true
     } = $props()
     import data from '../data.svelte.js'
     import Favicon from './Favicon.svelte'
@@ -946,20 +947,22 @@
         </div>
     </div>
 {/if}
-        <div class="sidebar-content">
-            <UrlBar 
-                url={data.docs[data.spaceMeta.activeTabId]?.url || ''}
-                tabId={data.spaceMeta.activeTabId}
-                expanded={urlBarExpanded}
-                showDevTools={devModeEnabled}
-                showSettingsButton={true}
-                onGoBack={handleBackClick}
-                onGoForward={handleForwardClick}
-                onReload={handleReloadClick}
-                onCloseTab={handleCloseTabClick}
-                onDevTools={handleDevToolsClick}
-                onExpandedChange={(v) => urlBarExpanded = v}
-            />
+        <div class="sidebar-content" class:no-url={!showUrl}>
+            {#if showUrl}
+                <UrlBar 
+                    url={data.docs[data.spaceMeta.activeTabId]?.url || ''}
+                    tabId={data.spaceMeta.activeTabId}
+                    expanded={urlBarExpanded}
+                    showDevTools={devModeEnabled}
+                    showSettingsButton={true}
+                    onGoBack={handleBackClick}
+                    onGoForward={handleForwardClick}
+                    onReload={handleReloadClick}
+                    onCloseTab={handleCloseTabClick}
+                    onDevTools={handleDevToolsClick}
+                    onExpandedChange={(v) => urlBarExpanded = v}
+                />
+            {/if}
             
             <div class="section global-pins-section">
                 <div class="pinned-tabs-grid">
@@ -1384,6 +1387,10 @@
         box-shadow: 0 0 16px 0 #000, -18px 0px 2px 1px #000;
         border: 1px solid hsl(0 0% 12% / 1);
         transition: border-radius 190ms ease, box-shadow 190ms ease, border 190ms ease;
+    }
+
+    .sidebar-content.no-url {
+        padding-top: 4px;
     }
 
     .sidebar-box.visible .sidebar-content {
