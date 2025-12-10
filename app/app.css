@@ -1509,6 +1509,218 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     color: rgba(255, 255, 255, 1);
 }
 
+/* New tab button wrapper for header menu */
+.inline-new-tab-button-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.inline-new-tab-button-wrapper.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.inline-new-tab-button-wrapper .inline-new-tab-button {
+    margin-top: 0;
+}
+
+/* Fixed new-tab-button wrapper */
+.new-tab-button-wrapper {
+    position: fixed;
+    top: 7px;
+    z-index: 100;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(20px);
+    transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+    -webkit-app-region: no-drag;
+}
+
+.new-tab-button-wrapper.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+}
+
+.new-tab-button-wrapper .new-tab-button.visible-inner {
+    position: static;
+    top: auto;
+    opacity: 0.7;
+    visibility: visible;
+    transform: none;
+    width: 25px;
+    height: 25px;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid transparent;
+}
+
+.new-tab-button-wrapper .new-tab-button.visible-inner:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(1.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* New tab header menu */
+.new-tab-header-menu {
+    position: fixed;
+    top: 38px;
+    left: auto;
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 0;
+    min-width: 200px;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 150ms ease, visibility 150ms ease;
+    backdrop-filter: blur(12px);
+    pointer-events: none;
+    box-sizing: border-box;
+}
+
+.new-tab-header-menu.visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.new-tab-header-menu.fixed-menu {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+
+.new-tab-header-menu-item {
+    padding: 6px 12px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.new-tab-header-menu-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.new-tab-header-menu-item:first-child:hover {
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+.new-tab-header-menu-item:last-child:hover {
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+.new-tab-header-menu-item.has-submenu {
+    padding-right: 26px;
+}
+
+.new-tab-header-menu-item .menu-item-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.new-tab-header-menu-item .chevron-icon {
+    position: absolute;
+    right: 8px;
+    width: 14px;
+    height: 14px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* New tab header submenu */
+.new-tab-header-submenu {
+    position: absolute;
+    left: 100%;
+    top: 0;
+    margin-left: 2px;
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 0;
+    min-width: 140px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 150ms ease, visibility 150ms ease;
+    backdrop-filter: blur(12px);
+    pointer-events: none;
+}
+
+.new-tab-header-menu-item.has-submenu:hover .new-tab-header-submenu {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.new-tab-header-submenu-item {
+    padding: 6px 12px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.new-tab-header-submenu-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.new-tab-header-submenu-item:first-child:hover {
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+.new-tab-header-submenu-item:last-child:hover {
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+.new-tab-header-submenu-item .partition-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.new-tab-header-submenu-item .partition-dot[data-variant="persist"] {
+    background: #4ade80;
+}
+
+.new-tab-header-submenu-item .partition-dot[data-variant="ephemeral"] {
+    background: #f59e0b;
+}
+
 /* Fixed pinned tabs section - positioned outside scroll area */
 .fixed-pinned-tabs {
     position: fixed;

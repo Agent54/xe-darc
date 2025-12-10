@@ -127,6 +127,13 @@
     let openSidebars = $state(new Set())
     let sidebarStateLoaded = $state(false)
     
+    let newTabMenuVisible = $state(false)
+    let newTabMenuHoverTimeout = null
+    let inlineNewTabMenuElement = $state(null)
+    let fixedNewTabMenuElement = $state(null)
+    let inlineNewTabButtonElement = $state(null)
+    let newTabMenuPosition = $state({ left: 0 })
+    
 
     
     let invisiblePins = $state({})
@@ -666,6 +673,82 @@
         const newTab = data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (newTab) {
             setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
+        }
+    }
+
+    function handleNewTabButtonMouseEnter(isInline = false) {
+        if (newTabMenuHoverTimeout) {
+            clearTimeout(newTabMenuHoverTimeout)
+        }
+        const delay = instantHovercardsMode ? 0 : 800
+        newTabMenuHoverTimeout = setTimeout(() => {
+            if (isInline && inlineNewTabButtonElement) {
+                const rect = inlineNewTabButtonElement.getBoundingClientRect()
+                newTabMenuPosition = { left: rect.left }
+            }
+            newTabMenuVisible = true
+        }, delay)
+    }
+    
+    function handleNewTabButtonMouseLeave() {
+        if (newTabMenuHoverTimeout) {
+            clearTimeout(newTabMenuHoverTimeout)
+            newTabMenuHoverTimeout = null
+        }
+        setTimeout(() => {
+            const inlineHovered = inlineNewTabMenuElement?.matches(':hover')
+            const fixedHovered = fixedNewTabMenuElement?.matches(':hover')
+            if (!inlineHovered && !fixedHovered) {
+                newTabMenuVisible = false
+            }
+        }, 100)
+    }
+    
+    function handleNewTabMenuMouseLeave() {
+        newTabMenuVisible = false
+    }
+
+    async function handleNewFromClipboard() {
+        newTabMenuVisible = false
+        try {
+            const text = (await navigator.clipboard.readText())?.trim()
+            if (!text) {
+                openNewTab()
+                return
+            }
+            let url = text
+            try {
+                if (!/^https?:\/\//i.test(url)) {
+                    new URL('https://' + url)
+                    url = 'https://' + url
+                } else {
+                    new URL(url)
+                }
+            } catch (e) {
+                url = 'about:newtab'
+            }
+            collapseAndRemovePlaceholders()
+            const tab = await data.newTab(data.spaceMeta.activeSpace, { url, shouldFocus: true })
+            if (tab) {
+                setTimeout(checkTabListOverflow, 50)
+            }
+        } catch (err) {
+            openNewTab()
+        }
+    }
+
+    async function handleNewTabInPartition(partition) {
+        newTabMenuVisible = false
+        collapseAndRemovePlaceholders()
+        const tab = await data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
+        if (tab) {
+            data.docs[tab.id].partition = partition
+            const space = data.spaces[data.spaceMeta.activeSpace]
+            const idx = space.tabs.findIndex(t => t.id === tab.id)
+            if (idx !== -1) {
+                space.tabs[idx].partition = partition
+            }
+            setTimeout(checkTabListOverflow, 50)
         }
     }
 
@@ -3182,15 +3265,47 @@
                 {/if}
             {/each}
 
-            <button class="inline-new-tab-button" 
+            <div class="inline-new-tab-button-wrapper"
                 class:hidden={showFixedNewTabButton}
-                onmousedown={openNewTab}
-                title="New Tab (⌘T)"
-                aria-label="New Tab">
-                <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
-                </svg>
-            </button>
+                onmouseenter={() => handleNewTabButtonMouseEnter(true)}
+                onmouseleave={handleNewTabButtonMouseLeave}
+                role="group"
+                bind:this={inlineNewTabButtonElement}>
+                <button class="inline-new-tab-button" 
+                    onmousedown={openNewTab}
+                    title="New Tab (⌘T)"
+                    aria-label="New Tab">
+                    <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+                    </svg>
+                </button>
+                <div class="new-tab-header-menu" 
+                     class:visible={newTabMenuVisible}
+                     style="left: {newTabMenuPosition.left}px;"
+                     bind:this={inlineNewTabMenuElement}
+                     onmouseleave={handleNewTabMenuMouseLeave}
+                     role="menu"
+                     tabindex="-1"
+                     aria-label="New tab options">
+                    <span class="new-tab-header-menu-item" onmouseup={handleNewFromClipboard} role="menuitem" tabindex="0">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
+                        <span>New from clipboard</span>
+                    </span>
+                    <div class="new-tab-header-menu-item has-submenu" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
+                        <span>New tab in container…</span>
+                        <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
+                        <div class="new-tab-header-submenu" role="menu">
+                            {#each partitions as partition}
+                                <span class="new-tab-header-submenu-item" onmouseup={() => handleNewTabInPartition(partition)} role="menuitem" tabindex="0">
+                                    <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
+                                    <span>{partition}</span>
+                                </span>
+                            {/each}
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Right pinned tabs inline (shown next to new tab button when it's visible) -->
             {#if rightPinnedTabs.length > 0 && !showFixedNewTabButton}
@@ -3336,17 +3451,47 @@
         </div>
     </div>
 
-    <div class="new-tab-button" 
-         role="button"
-         tabindex="0"
-         onmousedown={openNewTab}
-         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
-         title="New Tab (⌘T)"
+    <div class="new-tab-button-wrapper" 
          style="right: {devModeEnabled ? 174 : 133}px;"
-         class:visible={showFixedNewTabButton && (!focusModeEnabled || focusModeHovered)}>
-        <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-             <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
-         </svg>
+         class:visible={showFixedNewTabButton && (!focusModeEnabled || focusModeHovered)}
+         onmouseenter={() => handleNewTabButtonMouseEnter(false)}
+         onmouseleave={handleNewTabButtonMouseLeave}
+         role="group">
+        <div class="new-tab-button visible-inner" 
+             role="button"
+             tabindex="0"
+             onmousedown={openNewTab}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
+             title="New Tab (⌘T)">
+            <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                 <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+             </svg>
+        </div>
+        <div class="new-tab-header-menu fixed-menu" 
+             class:visible={newTabMenuVisible}
+             bind:this={fixedNewTabMenuElement}
+             onmouseleave={handleNewTabMenuMouseLeave}
+             role="menu"
+             tabindex="-1"
+             aria-label="New tab options">
+            <span class="new-tab-header-menu-item" onmouseup={handleNewFromClipboard} role="menuitem" tabindex="0">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
+                <span>New from clipboard</span>
+            </span>
+            <div class="new-tab-header-menu-item has-submenu" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
+                <span>New tab in container…</span>
+                <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
+                <div class="new-tab-header-submenu" role="menu">
+                    {#each partitions as partition}
+                        <span class="new-tab-header-submenu-item" onmouseup={() => handleNewTabInPartition(partition)} role="menuitem" tabindex="0">
+                            <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
+                            <span>{partition}</span>
+                        </span>
+                    {/each}
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- {#if closed.length > 0}
