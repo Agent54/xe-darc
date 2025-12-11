@@ -5,6 +5,7 @@
     import SSLErrorPage from './SSLErrorPage.svelte'
     import NetworkErrorPage from './NetworkErrorPage.svelte'
     import NewTab from './NewTab.svelte'
+    import TabHistory from './TabHistory.svelte'
     import { origin } from '../lib/utils.js'
     import { generateDiff, throttle } from '../lib/utils.js'
     import select from '../inject/select-patch.js?raw'
@@ -158,6 +159,11 @@
     // Check if the current URL is about:newtab
     function isNewTabUrl(url) {
         return url?.startsWith('about:newtab') || url?.startsWith('about:blank')
+    }
+    
+    // Check if the current URL is about:tabhistory
+    function isTabHistoryUrl(url) {
+        return url?.startsWith('about:tabhistory')
     }
 
     function handlePermissionRequest(tabId, event) {
@@ -2207,6 +2213,7 @@ document.addEventListener('input', function(event) {
         class:certificate-error={!!currentCertificateError}
         class:network-error={!!currentNetworkError}
         class:new-tab-page={isNewTabUrl(tab?.url)}
+        class:tab-history-page={isTabHistoryUrl(tab?.url)}
         id="tab_{tab?.id || tabId}"
         class="frame {className}"
 
@@ -2240,6 +2247,11 @@ document.addEventListener('input', function(event) {
                 onReload={() => reloadTab(tab)}
             />
 
+        {:else if isTabHistoryUrl(tab?.url)}
+            <TabHistory
+                {tab}
+                isActive={tab?.id === data.spaceMeta.activeTabId}
+            />
         {:else if isNewTabUrl(tab?.url)}
             <NewTab
                 {tab}
@@ -2342,6 +2354,9 @@ loading="eager"
         display: none;
     }
     :global(.new-tab-page > .frame-instance) {
+        display: none;
+    }
+    :global(.tab-history-page > .frame-instance) {
         display: none;
     }
 

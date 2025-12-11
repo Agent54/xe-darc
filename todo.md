@@ -2440,3 +2440,7 @@ replace scrreenshot with frame on hovering lightbox button in hovercard
 close all context menus when frame focus even recieved
 
 sidepin toggle does not fill button
+
+ubiquity/web and system shells/ pipes and taking back computing
+
+sidebars as overlay and hover unification left and right
