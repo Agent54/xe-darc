@@ -128,6 +128,7 @@
     let showFixedNewTabButton = $state(false)
     let openSidebars = $state(new Set())
     let sidebarStateLoaded = $state(false)
+    let tabHistoryTabId = $state(null)
     
     let newTabMenuVisible = $state(false)
     let newTabMenuHoverTimeout = null
@@ -4017,11 +4018,23 @@
                               hovercardShowTime = null
                           }}
                           onDevTools={() => {
-                              if (!hoveredTab?.id) return
-                              if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                  data.activate(hoveredTab.id)
-                              }
-                          }}
+                               if (!hoveredTab?.id) return
+                               if (data.spaceMeta.activeTabId !== hoveredTab.id) {
+                                   data.activate(hoveredTab.id)
+                               }
+                           }}
+                          onOpenTabHistory={(tabId) => {
+                               if (!tabId) return
+                               // Open a new tab with the tab history page
+                               data.newTab(data.spaceMeta.activeSpace, { 
+                                   url: `about:tabhistory#${tabId}`,
+                                   shouldFocus: true 
+                               })
+                               // Close the hovercard
+                               hoveredTab = null
+                               isTrashItemHover = false
+                               hovercardShowTime = null
+                           }}
                           onUrlBarExpandedChange={(expanded) => {
                               hovercardUrlBarExpanded = expanded
                           }}

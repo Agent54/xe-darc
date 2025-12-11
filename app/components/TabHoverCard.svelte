@@ -20,10 +20,29 @@
         onUrlBarExpandedChange = null
     } = $props()
     
+    async function openTabHistory() {
+        const historyTab = await data.newTab(data.spaceMeta.activeSpace, {
+            url: `about:tabhistory#${tab.id}`,
+            title: `History - ${tab.title || 'Untitled'}`,
+            pinned: 'right'
+        })
+        if (historyTab) {
+            data.activate(historyTab.id)
+        }
+    }
+    
     let hovercardHovered = $state(false)
     let showHistory = $state(false)
     let historyShowTimer = null
     let hoveredHistoryEntry = $state(null)
+    let hoveredEntryIndex = $state(null)
+    
+    // Check if an entry is in the direct lineage (predecessor) of the hovered entry
+    function isInLineage(entryIndex) {
+        if (hoveredEntryIndex === null) return false
+        // All entries after the hovered one (higher index = older = predecessor)
+        return entryIndex > hoveredEntryIndex
+    }
     let urlBarExpanded = $state(false)
     let copiedEntryId = $state(null)
     
@@ -272,16 +291,22 @@
     {/if}
     {#if showHistory && historyEntries.length > 0}
         <div class="history-section">
-            <div class="history-section-title">Tab History</div>
+            <button class="history-section-title" onclick={openTabHistory}>
+                Tab History
+                <svg class="expand-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+            </button>
             <div class="history-list">
                 <div class="history-connector-line"></div>
                 {#each historyEntries as historyTab, index}
                 <div class="history-item"
                      class:is-leaf={historyTab.isLeaf}
+                     class:in-lineage={isInLineage(index)}
                      role="button"
                      tabindex="0"
-                     onmouseenter={() => hoveredHistoryEntry = historyTab}
-                     onmouseleave={() => hoveredHistoryEntry = null}>
+                     onmouseenter={() => { hoveredHistoryEntry = historyTab; hoveredEntryIndex = index }}
+                     onmouseleave={() => { hoveredHistoryEntry = null; hoveredEntryIndex = null }}>
                     <div class="history-icon-wrapper" class:leaf-highlight={historyTab.isLeaf}>
                         {#if historyTab.type === 'opened'}
                             <div class="history-type-icon opened">
@@ -507,6 +532,30 @@
         letter-spacing: 0.5px;
         color: rgba(255, 255, 255, 0.5);
         font-family: 'Inter', sans-serif;
+        background: none;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        text-align: left;
+        transition: color 100ms ease;
+    }
+    
+    .history-section-title:hover {
+        color: rgba(255, 255, 255, 0.8);
+    }
+    
+    .history-section-title .expand-icon {
+        width: 10px;
+        height: 10px;
+        opacity: 0;
+        transition: opacity 100ms ease;
+    }
+    
+    .history-section-title:hover .expand-icon {
+        opacity: 1;
     }
     
     .history-list {
@@ -552,12 +601,21 @@
         text-align: left;
         font-family: 'Inter', sans-serif;
         position: relative;
-        opacity: 0.8;
+    }
+    
+    .history-item .history-icon-wrapper,
+    .history-item .history-text {
+        opacity: 0.75;
+        transition: opacity 100ms ease;
+    }
+    
+    .history-item:hover .history-icon-wrapper,
+    .history-item:hover .history-text {
+        opacity: 1;
     }
     
     .history-item:hover {
         background: rgba(255, 255, 255, 0.08);
-        opacity: 1;
     }
     
     .history-item:last-child {
@@ -572,12 +630,13 @@
         top: -4px;
         width: 6px;
         height: calc(50% + 8px);
-        background: linear-gradient(to bottom, transparent 0%, rgb(0, 0, 0) 30%);
+        background: linear-gradient(to bottom, transparent 0%, #010101 30%);
         z-index: 0;
+        transition: background 100ms ease;
     }
     
     .history-item.is-leaf:hover::before {
-        background: linear-gradient(to bottom, transparent 0%, rgb(20, 20, 20) 30%);
+        background: linear-gradient(to bottom, transparent 0%, #151515 30%);
     }
     
     .history-icon-wrapper {
@@ -644,9 +703,9 @@
         height: 100%;
         flex-shrink: 0;
         margin-right: -20px;
-        background: linear-gradient(to left, transparent, rgb(0, 0, 0));
+        background: linear-gradient(to left, transparent, #010101);
         pointer-events: none;
-        transition: opacity 150ms ease;
+        transition: opacity 150ms ease, background 100ms ease;
         opacity: 0;
         z-index: 1;
     }
@@ -670,19 +729,19 @@
         height: 100%;
         flex-shrink: 0;
         margin-left: -20px;
-        background: linear-gradient(to right, transparent, rgb(0, 0, 0));
+        background: linear-gradient(to right, transparent, #010101);
         pointer-events: none;
-        transition: opacity 150ms ease;
+        transition: opacity 150ms ease, background 100ms ease;
         opacity: 0;
         z-index: 1;
     }
     
     .history-item:hover .history-title-scroll-wrapper .fade-left {
-        background: linear-gradient(to left, transparent, rgb(20, 20, 20));
+        background: linear-gradient(to left, transparent, #151515);
     }
     
     .history-item:hover .history-title-scroll-wrapper .fade-right {
-        background: linear-gradient(to right, transparent, rgb(20, 20, 20));
+        background: linear-gradient(to right, transparent, #151515);
     }
     
     .history-time {
@@ -715,9 +774,9 @@
         height: 100%;
         flex-shrink: 0;
         margin-right: -20px;
-        background: linear-gradient(to left, transparent, rgb(0, 0, 0));
+        background: linear-gradient(to left, transparent, #010101);
         pointer-events: none;
-        transition: opacity 150ms ease;
+        transition: opacity 150ms ease, background 100ms ease;
         opacity: 0;
         z-index: 1;
     }
@@ -741,19 +800,19 @@
         height: 100%;
         flex-shrink: 0;
         margin-left: -20px;
-        background: linear-gradient(to right, transparent, rgb(0, 0, 0));
+        background: linear-gradient(to right, transparent, #010101);
         pointer-events: none;
-        transition: opacity 150ms ease;
+        transition: opacity 150ms ease, background 100ms ease;
         opacity: 0;
         z-index: 1;
     }
     
     .history-item:hover .history-url-wrapper .fade-left {
-        background: linear-gradient(to left, transparent, rgb(20, 20, 20));
+        background: linear-gradient(to left, transparent, #151515);
     }
     
     .history-item:hover .history-url-wrapper .fade-right {
-        background: linear-gradient(to right, transparent, rgb(20, 20, 20));
+        background: linear-gradient(to right, transparent, #151515);
     }
     
     .history-actions {
@@ -764,15 +823,15 @@
         display: flex;
         gap: 2px;
         opacity: 0;
-        transition: opacity 100ms ease;
+        transition: opacity 100ms ease, background 100ms ease;
         transition-delay: 400ms;
-        background: rgb(0, 0, 0);
+        background: #010101;
         padding-left: 4px;
         border-radius: 4px;
     }
     
     .history-item:hover .history-actions {
-        background: rgb(20, 20, 20);
+        background: #151515;
         opacity: 1;
     }
     
