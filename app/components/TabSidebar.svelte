@@ -73,6 +73,10 @@
     let isManualScroll = false
     let previousSpaceIndex = -1
     // let scrollActiveSpaceTimeout = null
+    
+    // Spaces list horizontal scroll fade state
+    let spacesScrolledLeft = $state(false)
+    let spacesScrolledRight = $state(false)
 
     // TODO: active tab on tab title and track active tabs per space, show active tab in each space
 
@@ -112,6 +116,29 @@
             }
         }
     }
+
+    function updateSpacesScrollFade() {
+        if (!spacesListRef) return
+        const el = spacesListRef
+        const scrollLeft = el.scrollLeft
+        const scrollWidth = el.scrollWidth
+        const clientWidth = el.clientWidth
+        
+        spacesScrolledLeft = scrollLeft > 2
+        spacesScrolledRight = scrollLeft + clientWidth < scrollWidth - 2
+    }
+    
+    function handleSpacesScroll() {
+        updateSpacesScrollFade()
+    }
+    
+    // Initialize spaces scroll fade state when spacesListRef is available or spaces change
+    $effect(() => {
+        if (spacesListRef) {
+            data.spaceMeta.spaceOrder // dependency to re-check when spaces change
+            setTimeout(updateSpacesScrollFade, 0)
+        }
+    })
 
     function handleSpaceClick(event, spaceId) {
         // Right-click (button 2) - show context menu
@@ -1000,24 +1027,28 @@
 
             <div class="section">
                 <div class="spaces-container">
-                    <div class="spaces-list" bind:this={spacesListRef}>
-                        {#each data.spaceMeta.spaceOrder as spaceId}
-                            <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
-                                <button class="space-item" 
-                                        class:active={data.spaceMeta.activeSpace === spaceId}
-                                        class:scrolled={currentScrolledSpace === spaceId}
-                                        data-space-id={spaceId}
-                                        onmousedown={(e) => handleSpaceClick(e, spaceId)}
-                                        oncontextmenu={(e) => e.preventDefault()}
-                                        aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
-                                {#if data.spaces[spaceId]?.glyph}
-                                    <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
-                                {:else}
-                                    <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>
-                                {/if}
-                                    </button>
-                            </Tooltip>
-                        {/each}
+                    <div class="spaces-list-wrapper">
+                        <div class="spaces-list-fade-left" class:visible={spacesScrolledLeft}></div>
+                        <div class="spaces-list" bind:this={spacesListRef} onscroll={handleSpacesScroll}>
+                            {#each data.spaceMeta.spaceOrder as spaceId}
+                                <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
+                                    <button class="space-item" 
+                                            class:active={data.spaceMeta.activeSpace === spaceId}
+                                            class:scrolled={currentScrolledSpace === spaceId}
+                                            data-space-id={spaceId}
+                                            onmousedown={(e) => handleSpaceClick(e, spaceId)}
+                                            oncontextmenu={(e) => e.preventDefault()}
+                                            aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
+                                    {#if data.spaces[spaceId]?.glyph}
+                                        <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
+                                    {:else}
+                                        <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>
+                                    {/if}
+                                        </button>
+                                </Tooltip>
+                            {/each}
+                        </div>
+                        <div class="spaces-list-fade-right" class:visible={spacesScrolledRight}></div>
                     </div>
                     <div class="new-space-menu">
                         <button class="new-space-button" 
@@ -1486,6 +1517,46 @@
         justify-content: space-between;
         padding: 4px;
         flex-shrink: 0;
+    }
+    
+    .spaces-list-wrapper {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .spaces-list-fade-left {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 12px;
+        background: linear-gradient(to right, #000 0%, transparent 100%);
+        pointer-events: none;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 150ms ease;
+    }
+    
+    .spaces-list-fade-left.visible {
+        opacity: 1;
+    }
+    
+    .spaces-list-fade-right {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 12px;
+        background: linear-gradient(to left, #000 0%, transparent 100%);
+        pointer-events: none;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 150ms ease;
+    }
+    
+    .spaces-list-fade-right.visible {
+        opacity: 1;
     }
     
     .spaces-list {
