@@ -48,13 +48,23 @@
     
     function handleScrollFade(event) {
         const el = event.target
-        const wrapper = el.parentElement
+        // el could be the wrapper itself or an inner element
+        const wrapper = el.classList.contains('history-url-wrapper') || el.classList.contains('history-title-scroll-wrapper') 
+            ? el 
+            : el.parentElement
         const fadeLeft = wrapper?.querySelector('.fade-left')
         const fadeRight = wrapper?.querySelector('.fade-right')
         
-        const isAtStart = el.scrollLeft <= 1
-        const isAtEnd = el.scrollWidth - el.scrollLeft <= el.clientWidth + 1
-        const hasOverflow = el.scrollWidth > el.clientWidth
+        // For wrappers with inner content, check the content element for width
+        const contentEl = wrapper?.querySelector('.url-renderer') || wrapper?.querySelector('.history-title') || el
+        const scrollContainer = wrapper?.classList.contains('history-url-wrapper') || wrapper?.classList.contains('history-title-scroll-wrapper')
+            ? wrapper
+            : el
+        const contentWidth = contentEl.scrollWidth
+        
+        const isAtStart = scrollContainer.scrollLeft <= 1
+        const isAtEnd = contentWidth - scrollContainer.scrollLeft <= scrollContainer.clientWidth + 1
+        const hasOverflow = contentWidth > scrollContainer.clientWidth
         
         if (fadeLeft) fadeLeft.style.opacity = (hasOverflow && !isAtStart) ? '1' : '0'
         if (fadeRight) fadeRight.style.opacity = (hasOverflow && !isAtEnd) ? '1' : '0'
@@ -62,16 +72,33 @@
     
     function initScrollFade(wrapper) {
         if (!wrapper) return
-        const scrollEl = wrapper.querySelector('.hovercard-title, .history-title, .history-url')
         const fadeLeft = wrapper.querySelector('.fade-left')
         const fadeRight = wrapper.querySelector('.fade-right')
-        if (!scrollEl) return
         
-        requestAnimationFrame(() => {
-            const hasOverflow = scrollEl.scrollWidth > scrollEl.clientWidth
+        // Determine scroll container and content element
+        const isUrlWrapper = wrapper.classList.contains('history-url-wrapper')
+        const isTitleScrollWrapper = wrapper.classList.contains('history-title-scroll-wrapper')
+        const scrollContainer = (isUrlWrapper || isTitleScrollWrapper) ? wrapper : wrapper.querySelector('.hovercard-title, .history-title')
+        const contentEl = wrapper.querySelector('.url-renderer') || wrapper.querySelector('.history-title') || wrapper.querySelector('.hovercard-title')
+        
+        if (!scrollContainer || !contentEl) return
+        
+        function checkOverflow() {
+            const contentWidth = contentEl.scrollWidth
+            const containerWidth = scrollContainer.clientWidth
+            const hasOverflow = contentWidth > containerWidth
             if (fadeLeft) fadeLeft.style.opacity = '0'
             if (fadeRight) fadeRight.style.opacity = hasOverflow ? '1' : '0'
+        }
+        
+        // Use ResizeObserver to detect when content actually renders
+        const observer = new ResizeObserver(() => {
+            checkOverflow()
         })
+        observer.observe(contentEl)
+        
+        // Also check immediately after a frame
+        requestAnimationFrame(checkOverflow)
     }
     
     async function copyUrl(url, entryId) {
@@ -338,9 +365,9 @@
                                 <div class="fade-right"></div>
                             </div>
                         </div>
-                        <div class="history-url-wrapper" use:initScrollFade>
+                        <div class="history-url-wrapper" use:initScrollFade onscroll={handleScrollFade}>
                             <div class="fade-left"></div>
-                            <div class="history-url" onscroll={handleScrollFade}><UrlRenderer url={historyTab.url} variant="compact" /></div>
+                            <div class="history-url"><UrlRenderer url={historyTab.url} variant="compact" /></div>
                             <div class="fade-right"></div>
                         </div>
                     </div>
@@ -627,16 +654,16 @@
         content: '';
         position: absolute;
         left: 17px;
-        top: -4px;
+        top: -11px;
         width: 6px;
         height: calc(50% + 8px);
-        background: linear-gradient(to bottom, transparent 0%, #010101 30%);
+        background: linear-gradient(to bottom, transparent 0%, #010101 50%);
         z-index: 0;
-        transition: background 100ms ease;
+        /* transition: background 100ms ease; */
     }
     
     .history-item.is-leaf:hover::before {
-        background: linear-gradient(to bottom, transparent 0%, #151515 30%);
+        background: linear-gradient(to bottom, transparent 0%, #151515 50%);
     }
     
     .history-icon-wrapper {
@@ -692,17 +719,20 @@
     }
     
     .history-title-scroll-wrapper {
+        position: relative;
         flex: 1;
         min-width: 0;
         display: flex;
         align-items: center;
+        overflow: hidden;
     }
     
     .history-title-scroll-wrapper .fade-left {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
         width: 20px;
-        height: 100%;
-        flex-shrink: 0;
-        margin-right: -20px;
         background: linear-gradient(to left, transparent, #010101);
         pointer-events: none;
         transition: opacity 150ms ease, background 100ms ease;
@@ -725,10 +755,11 @@
     }
     
     .history-title-scroll-wrapper .fade-right {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
         width: 20px;
-        height: 100%;
-        flex-shrink: 0;
-        margin-left: -20px;
         background: linear-gradient(to right, transparent, #010101);
         pointer-events: none;
         transition: opacity 150ms ease, background 100ms ease;
@@ -765,14 +796,23 @@
     }
     
     .history-url-wrapper {
+        position: relative;
         display: flex;
         align-items: center;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    
+    .history-url-wrapper::-webkit-scrollbar {
+        display: none;
     }
     
     .history-url-wrapper .fade-left {
-        width: 20px;
-        height: 100%;
+        position: sticky;
+        left: 0;
         flex-shrink: 0;
+        align-self: stretch;
+        width: 20px;
         margin-right: -20px;
         background: linear-gradient(to left, transparent, #010101);
         pointer-events: none;
@@ -785,20 +825,14 @@
         font-size: 11px;
         color: rgba(255, 255, 255, 0.4);
         white-space: nowrap;
-        overflow-x: auto;
-        scrollbar-width: none;
-        flex: 1;
-        min-width: 0;
-    }
-    
-    .history-url::-webkit-scrollbar {
-        display: none;
     }
     
     .history-url-wrapper .fade-right {
-        width: 20px;
-        height: 100%;
+        position: sticky;
+        right: 0;
         flex-shrink: 0;
+        align-self: stretch;
+        width: 20px;
         margin-left: -20px;
         background: linear-gradient(to right, transparent, #010101);
         pointer-events: none;
