@@ -2446,3 +2446,5 @@ ubiquity/web and system shells/ pipes and taking back computing
 sidebars as overlay and hover unification left and right
 
 disabling scrolinto view on scrolling frames
+
+find tabs playing audio etc.
