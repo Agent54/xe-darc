@@ -109,6 +109,7 @@
     
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
+        // return // DEBUG: uncomment to disable hovercard hiding for testing
         if (hovercardUrlBarExpanded) return
         hoveredTab = null
         isTrashItemHover = false
