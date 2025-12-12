@@ -140,6 +140,8 @@
         }
     })
 
+    let isSwitchingSpaces = false
+
     function handleSpaceClick(event, spaceId) {
         // Right-click (button 2) - show context menu
         if (event.button === 2) {
@@ -161,11 +163,37 @@
         
         // Left-click (button 0) - switch space
         if (event.button === 0) {
+            // Set flag to prevent scroll-triggered tab activation during space switch
+            isSwitchingSpaces = true
+            
             data.spaceMeta.activeSpace = spaceId
+            
+            // Restore the active tab for this space from its activeTabsOrder
+            const targetSpace = data.spaces[spaceId]
+            if (targetSpace?.activeTabsOrder?.length > 0) {
+                // Find the first valid (non-closed, non-pinned) tab from the order
+                for (const tabId of targetSpace.activeTabsOrder) {
+                    const tab = data.docs[tabId]
+                    if (tab && !tab.archive && !tab.pinned) {
+                        data.activate(tabId)
+                        break
+                    }
+                }
+            } else if (targetSpace?.tabs?.length > 0) {
+                // Fallback: activate the first tab in the space
+                const firstNonPinned = targetSpace.tabs.find(t => !t.pinned)
+                if (firstNonPinned) {
+                    data.activate(firstNonPinned.id)
+                }
+            }
+            
             previousSpaceIndex = data.spaceMeta.spaceOrder.indexOf(spaceId)
             isManualScroll = true
             scrollToCurrentSpace('smooth')
-            setTimeout(() => { isManualScroll = false }, 300)
+            setTimeout(() => { 
+                isManualScroll = false 
+                isSwitchingSpaces = false
+            }, 500)
         }
     }
 
@@ -191,6 +219,9 @@
 
     function handleTabScroll(event) {
         if (!tabListRef) return
+        
+        // Skip scroll handling during space switching to prevent unwanted tab activation
+        if (isSwitchingSpaces) return
         
         console.log('[DEBUG:SCROLL] Tab list scroll event', {
             scrollLeft: tabListRef.scrollLeft,
