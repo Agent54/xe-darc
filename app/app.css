@@ -1164,6 +1164,9 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     animation: hovercard-fade-in 0.2s ease-out forwards;
     -webkit-app-region: no-drag;
     user-select: none;
+    max-height: calc(100vh - var(--hovercard-top, 0px) - 20px);
+    display: flex;
+    flex-direction: column;
 }
 
 .tab-hovercard.trash-item {

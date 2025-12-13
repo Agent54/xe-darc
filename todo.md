@@ -2448,3 +2448,7 @@ sidebars as overlay and hover unification left and right
 disabling scrolinto view on scrolling frames
 
 find tabs playing audio etc.
+
+space list new space button brightness, active space history
+
+hovermenus feel glitchy

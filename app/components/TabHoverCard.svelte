@@ -17,8 +17,24 @@
         onReload = null,
         onCloseTab = null,
         onDevTools = null,
-        onUrlBarExpandedChange = null
+        onUrlBarExpandedChange = null,
+        onHistoryVisibilityChange = null,
+        availableHeight = null
     } = $props()
+    
+    const HEADER_HEIGHT = 100
+    const SCREENSHOT_HEIGHT = 180
+    const HISTORY_TITLE_HEIGHT = 30
+    const MIN_HISTORY_HEIGHT = 100
+    
+    let historyMaxHeight = $derived(() => {
+        const maxFromVh = window.innerHeight * 0.5
+        if (!availableHeight) return `${maxFromVh}px`
+        const contentHeight = HEADER_HEIGHT + (tab?.screenshot ? SCREENSHOT_HEIGHT : 0) + HISTORY_TITLE_HEIGHT
+        const remaining = availableHeight - contentHeight
+        const height = Math.min(Math.max(remaining, MIN_HISTORY_HEIGHT), maxFromVh)
+        return `${height}px`
+    })
     
     async function openTabHistory() {
         const historyTab = await data.newTab(data.spaceMeta.activeSpace, {
@@ -245,6 +261,13 @@
             }
         }
     })
+    
+    // Notify parent when history visibility changes
+    $effect(() => {
+        if (onHistoryVisibilityChange) {
+            onHistoryVisibilityChange(showHistory)
+        }
+    })
 </script>
 
 <div class="hovercard-content"
@@ -324,7 +347,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                 </svg>
             </button>
-            <div class="history-list">
+            <div class="history-list" style="max-height: {historyMaxHeight()};">
                 <div class="history-connector-line"></div>
                 {#each historyEntries as historyTab, index}
                 <div class="history-item"
@@ -371,6 +394,8 @@
                             <div class="fade-right"></div>
                         </div>
                     </div>
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div class="history-actions" onclick={(e) => e.stopPropagation()}>
                         <button class="history-action-btn" class:success={copiedEntryId === historyTab.id} onclick={(e) => { e.stopPropagation(); copyUrl(historyTab.url, historyTab.id) }} title="Copy URL">
                             {#if copiedEntryId === historyTab.id}
@@ -383,7 +408,7 @@
                                 </svg>
                             {/if}
                         </button>
-                        <button class="history-action-btn delete" onclick={(e) => { e.stopPropagation(); /* TODO: delete history entry */ }} title="Delete from history">
+                        <button class="history-action-btn delete" onclick={(e) => { e.stopPropagation(); /* TODO: delete history entry */ }} title="Delete from history" aria-label="Delete from history">
                             <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                             </svg>
@@ -403,7 +428,9 @@
         backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
-        overflow: visible !important;
+        /* overflow-x: hidden; */
+        /* overflow-x: hidden;
+        overflow-y: visible; */
         box-shadow: 
             0 20px 40px rgba(0, 0, 0, 0.4),
             0 8px 16px rgba(0, 0, 0, 0.2);
@@ -412,6 +439,9 @@
         margin-top: 8px;
         margin-left: 8px;
         clip-path: none;
+        display: flex;
+        flex-direction: column;
+        max-height: 100%;
     }
 
     .hovercard-info {
@@ -421,6 +451,7 @@
         overflow: visible;
         position: relative;
         z-index: 5;
+        flex-shrink: 0;
     }
 
     .hovercard-info:last-child {
@@ -489,6 +520,7 @@
         border-bottom-right-radius: 12px;
         position: relative;
         z-index: 1;
+        flex-shrink: 0;
     }
     
     .hovercard-screenshot.has-history {
@@ -549,6 +581,12 @@
     
     .history-section {
         border-top: 1px solid rgba(255, 255, 255, 0.05);
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow-x: visible;
+        overflow-y: hidden;
     }
     
     .history-section-title {
@@ -586,7 +624,8 @@
     }
     
     .history-list {
-        max-height: 50vh;
+        flex: 1;
+        min-height: 100px;
         overflow-y: auto;
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;

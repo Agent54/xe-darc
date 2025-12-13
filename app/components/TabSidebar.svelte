@@ -572,8 +572,8 @@
                             }
                             
                             const hovercardHeight = newTab.screenshot ? 180 + 80 : 80
-                            if (y + hovercardHeight > window.innerHeight - 10) {
-                                y = window.innerHeight - hovercardHeight - 10
+                            if (y + hovercardHeight > window.innerHeight - 20) {
+                                y = window.innerHeight - hovercardHeight - 20
                             }
                             
                             hovercardPosition = { x, y }
@@ -661,10 +661,10 @@
                 x = 10
             }
             
-            // Check if hovercard would go off bottom
-            const hovercardHeight = tab.screenshot ? 180 + 80 : 80 // screenshot height + info padding + margins
-            if (y + hovercardHeight > window.innerHeight - 10) {
-                y = window.innerHeight - hovercardHeight - 10
+            // Check if hovercard would go off bottom (base card height only, history list scrolls if needed)
+            const hovercardHeight = tab.screenshot ? 180 + 80 : 80
+            if (y + hovercardHeight > window.innerHeight - 20) {
+                y = window.innerHeight - hovercardHeight - 20
             }
             
             hovercardPosition = { x, y }
@@ -1326,13 +1326,14 @@
 {#if hoveredTab}
     {#key hoveredTab.id}
         <div class="tab-hovercard-sidebar" 
-         style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
+         style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px; --hovercard-top: {hovercardPosition.y}px;">
         
             <TabHoverCard tab={hoveredTab} 
                         isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === hoveredTab.id)} 
                         showHistoryImmediately={closeButtonHoveredDelayed}
                         instantMode={instantHovercardsMode}
                         showDevTools={devModeEnabled}
+                        availableHeight={window.innerHeight - hovercardPosition.y - 20}
                         onDevTools={handleDevToolsClick}
                         onGoBack={() => {
                             if (!hoveredTab?.id) return
@@ -1374,6 +1375,16 @@
                         }}
                         onUrlBarExpandedChange={(expanded) => {
                             hovercardUrlBarExpanded = expanded
+                        }}
+                        onHistoryVisibilityChange={(visible) => {
+                            if (visible) {
+                                const historyHeight = 200
+                                const neededBottom = hovercardPosition.y + (hoveredTab?.screenshot ? 180 + 80 : 80) + historyHeight
+                                if (neededBottom > window.innerHeight - 20) {
+                                    const adjustment = neededBottom - (window.innerHeight - 20)
+                                    hovercardPosition = { ...hovercardPosition, y: Math.max(20, hovercardPosition.y - adjustment) }
+                                }
+                            }
                         }}
                         onMouseLeave={() => {
                 setTimeout(() => {
@@ -1609,7 +1620,7 @@
     .space-item {
         width: 24px;
         height: 24px;
-        border-radius: 10px;
+        border-radius: 100%;
         background: transparent;
         display: flex;
         align-items: center;
@@ -1649,8 +1660,8 @@
     }
     
     .space-glyph-default {
-        width: 9px;
-        height: 9px;
+        width: 11px;
+        height: 11px;
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.7);
         display: flex;
@@ -2927,6 +2938,9 @@
         animation: hovercard-sidebar-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
         user-select: none;
+        max-height: calc(100vh - var(--hovercard-top, 0px) - 20px);
+        display: flex;
+        flex-direction: column;
     }
     
     @keyframes hovercard-sidebar-fade-in {
