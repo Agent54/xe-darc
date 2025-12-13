@@ -1373,9 +1373,16 @@
                 x = window.innerWidth - halfWidth - 10
             }
             
+            // Check bottom boundary (base card height only, history list scrolls if needed)
+            let y = rect.bottom
+            const hovercardHeight = tab.screenshot ? 180 + 80 : 80
+            if (y + hovercardHeight > window.innerHeight - 20) {
+                y = window.innerHeight - hovercardHeight - 20
+            }
+            
             hovercardPosition = {
                 x: x,
-                y: rect.bottom
+                y: y
             }
             
             isTrashItemHover = false
@@ -3973,13 +3980,14 @@
   {#key hoveredTab.id}
     <div class="tab-hovercard" 
          class:trash-item={isTrashItemHover}
-         style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
+         style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px; --hovercard-top: {hovercardPosition.y}px;">
        
             <TabHoverCard tab={hoveredTab} 
                           isClosedTab={false} 
                           showHistoryImmediately={closeButtonHoveredDelayed}
                           instantMode={instantHovercardsMode}
                           showDevTools={devModeEnabled}
+                          availableHeight={window.innerHeight - hovercardPosition.y - 20}
                           onGoBack={() => {
                               if (!hoveredTab?.id) return
                               if (data.spaceMeta.activeTabId !== hoveredTab.id) {
@@ -4037,9 +4045,19 @@
                                hovercardShowTime = null
                            }}
                           onUrlBarExpandedChange={(expanded) => {
-                              hovercardUrlBarExpanded = expanded
-                          }}
-                          onMouseLeave={() => {
+                               hovercardUrlBarExpanded = expanded
+                           }}
+                           onHistoryVisibilityChange={(visible) => {
+                               if (visible) {
+                                   const historyHeight = 200
+                                   const neededBottom = hovercardPosition.y + (hoveredTab?.screenshot ? 180 + 80 : 80) + historyHeight
+                                   if (neededBottom > window.innerHeight - 20) {
+                                       const adjustment = neededBottom - (window.innerHeight - 20)
+                                       hovercardPosition = { ...hovercardPosition, y: Math.max(20, hovercardPosition.y - adjustment) }
+                                   }
+                               }
+                           }}
+                           onMouseLeave={() => {
             setTimeout(() => {
                 const mouseX = window.mouseX || 0
                 const mouseY = window.mouseY || 0
