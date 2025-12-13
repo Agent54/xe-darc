@@ -3218,7 +3218,7 @@
         </div>
     {/if}
      
-        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: {(showNavigationToolbar ? 175 : 110) + leftPinnedTabsWidth}px; width: calc(100% - {devModeEnabled ? (showNavigationToolbar ? 478 : 413) + leftPinnedTabsWidth : (showNavigationToolbar ? 448 : 383) + leftPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: {(showNavigationToolbar ? 175 : 110) + leftPinnedTabsWidth}px; width: calc(100% - {devModeEnabled ? (showNavigationToolbar ? 478 : 413) + leftPinnedTabsWidth + rightPinnedTabsWidth : (showNavigationToolbar ? 448 : 383) + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list tabs" class:pinned-collapsed-left={invisiblePins.left} class:pinned-collapsed-right={invisiblePins.right} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
@@ -3356,7 +3356,7 @@
         
         <!-- Right pinned tabs section (fixed position, shown when new tab button is hidden/fixed) -->
         {#if rightPinnedTabs.length > 0 && showFixedNewTabButton}
-            <div class="fixed-pinned-tabs fixed-pinned-tabs-right" style="right: {-18 - (rightPinnedTabs.length * 20)}px;">
+            <div class="fixed-pinned-tabs fixed-pinned-tabs-right" style="right: {-18 - (rightPinnedTabs.length * 30)}px;">
                 {#each rightPinnedTabs as rightPinned, i (rightPinned.id)}
                     {@render rightPinnedTabItem(rightPinned, i)}
                 {/each}
