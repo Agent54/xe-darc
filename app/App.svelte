@@ -1171,12 +1171,24 @@
     function pinTabLeft(tab) {
         if (!data.spaceMeta.activeSpace || !tab) return
 
+        const wasActive = data.spaceMeta.activeTabId === tab.id
         data.pin({ tabId: tab.id, pinned: 'left' })
+        
+        // If pinning the active tab, activate previous tab to trigger scroll
+        if (wasActive) {
+            data.previous()
+        }
         hideContextMenu()
     }
 
     function pinTabRight(tab) {
+        const wasActive = data.spaceMeta.activeTabId === tab.id
         data.pin({ tabId: tab.id, pinned: 'right' })
+        
+        // If pinning the active tab, activate previous tab to trigger scroll
+        if (wasActive) {
+            data.previous()
+        }
         hideContextMenu()
     }
 
@@ -4211,7 +4223,7 @@
             {spaceTaken}
             spaces={data.spaces}
             activeSpaceId={data.spaceMeta.activeSpace}
-            onSpaceSwitch={(spaceId) => { data.spaceMeta.activeSpace = spaceId }} />
+            onSpaceSwitch={(spaceId) => { data.activateSpace(spaceId) }} />
     {/if} 
         
     {#if data.ui.viewMode === 'canvas'}
