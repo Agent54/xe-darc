@@ -1153,8 +1153,8 @@
                                 
                                 <div class="new-tab-row">
                                     <div class="new-tab-button" 
-                                            onmousedown={() => {
-                                                const newTab = data.newTab(spaceId)
+                                            onmousedown={async () => {
+                                                const newTab = await data.newTab(spaceId)
                                                 if (newTab) {
                                                     data.spaceMeta.activeSpace = spaceId
                                                     data.activate(newTab.id)
