@@ -116,6 +116,7 @@ if (remote) {
 
 const spaceMeta = $state({
     activeSpace: localStorage.getItem('activeSpaceId') || null,
+    activeSpacesOrder: [], // Track order of active spaces for previous space switching
     spaceOrder: [],
     closedTabs: [],
     activeTabId: localStorage.getItem('activeTabId') || null, // FIXME: use _local/ persistent active tab array
@@ -287,6 +288,18 @@ const refresh = throttle(async function (spaceId) {
     spaceMeta.closedTabs = closedTabs.sort((a, b) => b.modified - a.modified)
     spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
     
+    if (initialLoad) {
+        if (spaceMeta.activeSpace && spaceMeta.activeSpacesOrder.length === 0) {
+            spaceMeta.activeSpacesOrder = [spaceMeta.activeSpace]
+        }
+        if (spaceMeta.activeTabId && spaces[spaceMeta.activeSpace]) {
+            spaces[spaceMeta.activeSpace].activeTabsOrder ??= []
+            if (spaces[spaceMeta.activeSpace].activeTabsOrder.length === 0) {
+                spaces[spaceMeta.activeSpace].activeTabsOrder = [spaceMeta.activeTabId]
+            }
+        }
+    }
+    
     initialLoad = false
     // console.timeEnd('updt')
 }, 200)
@@ -375,6 +388,31 @@ function activate(tabId) {
         return tabDoc || tabId // TODO: deprecate returning tab
     }
     
+    return null
+}
+
+function activateSpace(spaceId) {
+    if (!spaces[spaceId]) {
+        console.warn('activateSpace: space does not exist:', spaceId)
+        return false
+    }
+    
+    // Update activeSpacesOrder - move this space to front (like activeTabsOrder)
+    spaceMeta.activeSpacesOrder = spaceMeta.activeSpacesOrder[0] === spaceId 
+        ? spaceMeta.activeSpacesOrder 
+        : [spaceId, ...spaceMeta.activeSpacesOrder.filter(id => id !== spaceId)]
+    
+    spaceMeta.activeSpace = spaceId
+    localStorage.setItem('activeSpaceId', spaceId)
+    
+    return true
+}
+
+function getPreviousActiveSpace() {
+    // Return the second space in activeSpacesOrder (the previous one)
+    if (spaceMeta.activeSpacesOrder.length > 1) {
+        return spaceMeta.activeSpacesOrder[1]
+    }
     return null
 }
 
@@ -587,6 +625,8 @@ export default {
     ui,
 
     activate,
+    activateSpace,
+    getPreviousActiveSpace,
     loadSampleData,
 
     restoreClosedTab: (tabId) => {
@@ -1148,7 +1188,7 @@ export default {
                 return false
             }
             
-            spaceMeta.activeSpace = newActiveSpace
+            activateSpace(newActiveSpace)
             
             // Set the first tab of the new space as active
             const newSpace = spaces[newActiveSpace]
@@ -1179,7 +1219,7 @@ export default {
                 return false
             }
             
-            spaceMeta.activeSpace = newActiveSpace
+            activateSpace(newActiveSpace)
             
             // Set the first tab of the new space as active
             const newSpace = spaces[newActiveSpace]

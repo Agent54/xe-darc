@@ -2452,3 +2452,35 @@ find tabs playing audio etc.
 space list new space button brightness, active space history
 
 hovermenus feel glitchy
+
+gh alpha release builds
+
+sidepin toggle scroll bug
+
+right click new tab buttons
+
+click hovercard titles
+
+move to jj sync instead of compose watch?
+
+ui link open conversation and current change id
+
+hovercard delay expand url and lighbox button
+
+sidepin button toggle button not full button
+
+sidepin background glitch
+
+add history toggle button to top of hovercards. move lightbox toggle to top, add tooltips, add hibernation tooltip
+
+make nav toolbar bigger, add tooltips
+
+fix hovercard diagonal mousemove close glitch
+
+close button > open toggle tab groups
+
+tab groups multi hovercards
+
+add activation history tabs back to activation history?
+
+allow hibernation of untoggled sidepins

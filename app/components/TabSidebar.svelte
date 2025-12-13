@@ -163,10 +163,20 @@
         
         // Left-click (button 0) - switch space
         if (event.button === 0) {
+            // If clicking the currently active space, switch to previous active space
+            if (data.spaceMeta.activeSpace === spaceId) {
+                const previousSpace = data.getPreviousActiveSpace()
+                if (previousSpace && data.spaces[previousSpace]) {
+                    spaceId = previousSpace
+                } else {
+                    return
+                }
+            }
+            
             // Set flag to prevent scroll-triggered tab activation during space switch
             isSwitchingSpaces = true
             
-            data.spaceMeta.activeSpace = spaceId
+            data.activateSpace(spaceId)
             
             // Restore the active tab for this space from its activeTabsOrder
             const targetSpace = data.spaces[spaceId]
@@ -199,7 +209,7 @@
 
     function activateTab(tabId, spaceId) {
         // If clicking on the currently active tab, switch to previous tab
-        data.spaceMeta.activeSpace = spaceId
+        data.activateSpace(spaceId)
         const tab = data.docs[tabId]
         
         // For unpinned tabs, use the original behavior
@@ -556,7 +566,7 @@
                     if (tabId && tabId !== hoveredTab.id && instantHovercardsMode) {
                         const newTab = data.docs[tabId] || data.spaceMeta.closedTabs.find(t => t.id === tabId)
                         if (newTab) {
-                            console.log('[DEBUG:HOVER] Switching to new tab during position check', tabId)
+                            // console.log('[DEBUG:HOVER] Switching to new tab during position check', tabId)
                             // Update to new tab immediately
                             const rect = hoveredTabElement.getBoundingClientRect()
                             const hovercardWidth = 320
@@ -607,16 +617,16 @@
     }
     
     function handleTabMouseEnter(tab, event) {
-        console.log('[DEBUG:HOVER] Tab mouse enter', {
-            tabId: tab.id,
-            tabTitle: tab.title,
-            targetElement: event.target.className,
-            pointerEvents: window.getComputedStyle(event.target).pointerEvents,
-            zIndex: window.getComputedStyle(event.target).zIndex,
-            mouseX: event.clientX,
-            mouseY: event.clientY,
-            instantMode: instantHovercardsMode
-        })
+        // console.log('[DEBUG:HOVER] Tab mouse enter', {
+        //     tabId: tab.id,
+        //     tabTitle: tab.title,
+        //     targetElement: event.target.className,
+        //     pointerEvents: window.getComputedStyle(event.target).pointerEvents,
+        //     zIndex: window.getComputedStyle(event.target).zIndex,
+        //     mouseX: event.clientX,
+        //     mouseY: event.clientY,
+        //     instantMode: instantHovercardsMode
+        // })
         
         // Reset close button hover state when entering a new tab
         closeButtonHovered = false
@@ -633,7 +643,7 @@
         const delay = instantHovercardsMode ? 0 : 800
         
         hoverTimeout = setTimeout(() => {
-            console.log('[DEBUG:HOVER] Showing hovercard for tab', tab.id)
+            // console.log('[DEBUG:HOVER] Showing hovercard for tab', tab.id)
             instantHovercardsMode = true
             
             if (instantModeResetTimer) {
@@ -681,12 +691,12 @@
     }
 
     function handleTabMouseLeave(event) {
-        console.log('[DEBUG:HOVER] Tab mouse leave', {
-            targetElement: event?.target?.className,
-            currentHoveredTab: hoveredTab?.id,
-            mouseX: window.mouseX,
-            mouseY: window.mouseY
-        })
+        // console.log('[DEBUG:HOVER] Tab mouse leave', {
+        //     targetElement: event?.target?.className,
+        //     currentHoveredTab: hoveredTab?.id,
+        //     mouseX: window.mouseX,
+        //     mouseY: window.mouseY
+        // })
         
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
@@ -702,18 +712,18 @@
             const mouseY = window.mouseY || 0
             const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
             
-            console.log('[DEBUG:HOVER] Checking if still hovering', {
-                elementUnderCursor: elementUnderCursor?.className,
-                isOverInfo: !!elementUnderCursor?.closest('.hovercard-info'),
-                isOverHovercard: !!elementUnderCursor?.closest('.tab-hovercard-sidebar')
-            })
+            // console.log('[DEBUG:HOVER] Checking if still hovering', {
+            //     elementUnderCursor: elementUnderCursor?.className,
+            //     isOverInfo: !!elementUnderCursor?.closest('.hovercard-info'),
+            //     isOverHovercard: !!elementUnderCursor?.closest('.tab-hovercard-sidebar')
+            // })
             
             // Check if still over info or hovercard
             const isOverInfo = elementUnderCursor?.closest('.hovercard-info')
             const isOverHovercard = elementUnderCursor?.closest('.tab-hovercard-sidebar')
             
             if (!isOverInfo && !isOverHovercard) {
-                console.log('[DEBUG:HOVER] Clearing hovered tab')
+                // console.log('[DEBUG:HOVER] Clearing hovered tab')
                 closeHovercard()
                 if (!hovercardUrlBarExpanded) {
                     stopHovercardPositionCheck()
@@ -759,11 +769,11 @@
             if (!text) {
                 const tab = await data.newTab(spaceId, { shouldFocus: true })
                 if (tab) {
-                    data.spaceMeta.activeSpace = spaceId
+                    data.activateSpace(spaceId)
                     data.activate(tab.id)
                 }
                 return
-            }
+                }
 
             let url = text
             try {
@@ -781,13 +791,13 @@
 
             const tab = await data.newTab(spaceId, { url, shouldFocus: true })
             if (tab) {
-                data.spaceMeta.activeSpace = spaceId
+                data.activateSpace(spaceId)
                 data.activate(tab.id)
             }
         } catch (err) {
             const tab = await data.newTab(spaceId, { shouldFocus: true })
             if (tab) {
-                data.spaceMeta.activeSpace = spaceId
+                data.activateSpace(spaceId)
                 data.activate(tab.id)
             }
         }
@@ -803,7 +813,7 @@
             if (idx !== -1) {
                 space.tabs[idx].partition = partition
             }
-            data.spaceMeta.activeSpace = spaceId
+            data.activateSpace(spaceId)
             data.activate(tab.id)
         }
     }
@@ -1156,7 +1166,7 @@
                                             onmousedown={async () => {
                                                 const newTab = await data.newTab(spaceId)
                                                 if (newTab) {
-                                                    data.spaceMeta.activeSpace = spaceId
+                                                    data.activateSpace(spaceId)
                                                     data.activate(newTab.id)
                                                 }
                                             }}
@@ -1628,7 +1638,7 @@
         cursor: pointer;
         transition: all 150ms ease;
         border: 1px solid transparent;
-        opacity: 0.35;
+        opacity: 0.27;
         padding: 0;
         margin: 0;
     }
@@ -1691,7 +1701,7 @@
     }
     
     .spaces-container:hover .new-space-button {
-        opacity: 0.6;
+        opacity: 1;
         visibility: visible;
     }
     
@@ -1700,9 +1710,15 @@
         opacity: 1;
     }
     
+    .new-space-button:hover .plus-icon {
+        color: rgba(255, 255, 255, 0.9);
+    }
+    
     .plus-icon {
         font-size: 16px;
         line-height: 1;
+        width: 14px;
+        height: 14px;
         color: rgba(255, 255, 255, 0.3);
     }    
     .new-space-menu-dropdown {
@@ -1852,7 +1868,7 @@
         background: rgba(255, 255, 255, 0.15);
     }
 
-    .space-item.scrolled:after {
+    .space-item.scrolled:not(.active):after {
         border: 1px solid rgb(138 138 138);
         display: block;
         content: ' ';
@@ -2018,7 +2034,7 @@
         min-height: 0;
         overflow-y: auto;
         padding-top: 8px;
-        padding-bottom: 60px; /* Add space at bottom for closed tabs overlay */
+        padding-bottom: 230px; /* Add space at bottom for closed tabs overlay and making space for new thinking */
         padding-right: 8px;
         margin-right: -8px; /* Offset scrollbar position */
         scrollbar-width: thin;
