@@ -2487,3 +2487,26 @@ allow hibernation of untoggled sidepins
 
 quickly see active tabs and resource usage etc.
 
+dev release: rest client for all tabs, themed dev tools, design focused dev tool plugin with agent support ala cursor, sidebar for privacy, security, community annotations, data ownership etc. with ratings, automations, etc., kilp/vscode edit mode for any site?
+
+file, download, screenshot manager
+
+reoadmap / lanes / status page integration and publishing
+
+support filing feature request from the local mod prompt
+
+smart bug reporting and feature request, qos and metrics and alpha tester program, playtesting weeklies
+
+favicons code and devtools, favicon server
+
+zoom out visual feedback
+
+lazy loading/ speedup of grid view
+
+google selection one click
+
+see space open in other window, button to switch to other window
+
+hide new tab pages without history from clsed tabs
+
+context menu tab sidebar

@@ -52,6 +52,13 @@
     let instantModeResetTimer = null
     let hovercardUrlBarExpanded = $state(false)
     
+    // Tab group expansion state
+    let tabGroupExpanded = $state(true)
+    
+    function handleTabGroupToggle() {
+        tabGroupExpanded = !tabGroupExpanded
+    }
+    
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
         if (hovercardUrlBarExpanded) return
@@ -1255,24 +1262,33 @@
                                         {/if}
                                     {/each}
                                     
-                                    <!-- TODO: -->
-                                     <div class="tab-group" title="April - 10 tabs">
-                                        <div class="tab-group-main">
-                                            <div class="tab-group-favicons">
-                                                <div class="tab-group-favicon">
-                                                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>
+                                    <!-- Tab Group -->
+                                    <div class="tab-group-wrapper" class:expanded={tabGroupExpanded}>
+                                        <div class="tab-group" class:expanded={tabGroupExpanded} title="April - 10 tabs">
+                                            <div class="tab-group-main">
+                                                <div class="tab-group-favicons">
+                                                    <div class="tab-group-favicon">
+                                                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>
+                                                    </div>
+                                                    <div class="tab-group-favicon">
+                                                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                                                    </div>
+                                                    <div class="tab-group-favicon fade">
+                                                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.354-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.015-4.49-4.491S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117v-6.038H8.148zm7.704 0h-.002c-2.476 0-4.49 2.015-4.49 4.491s2.014 4.49 4.49 4.49c2.476 0 4.49-2.014 4.49-4.49s-2.014-4.491-4.49-4.491zm0 7.509c-1.665 0-3.019-1.355-3.019-3.019s1.354-3.019 3.019-3.019 3.019 1.355 3.019 3.019-1.354 3.019-3.019 3.019z"/></svg>
+                                                    </div>
                                                 </div>
-                                                <div class="tab-group-favicon">
-                                                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                                                </div>
-                                                <div class="tab-group-favicon fade">
-                                                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.354-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.015-4.49-4.491S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117v-6.038H8.148zm7.704 0h-.002c-2.476 0-4.49 2.015-4.49 4.491s2.014 4.49 4.49 4.49c2.476 0 4.49-2.014 4.49-4.49s-2.014-4.491-4.49-4.491zm0 7.509c-1.665 0-3.019-1.355-3.019-3.019s1.354-3.019 3.019-3.019 3.019 1.355 3.019 3.019-1.354 3.019-3.019 3.019z"/></svg>
-                                                </div>
+                                                <span class="tab-group-title">April</span>
                                             </div>
-                                            <span class="tab-group-title">April</span>
+                                            <span class="tab-group-count">10</span>
+                                            <button class="tab-group-toggle" aria-label="Expand/collapse tab group" onclick={handleTabGroupToggle}>
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                                </svg>
+                                            </button>
                                         </div>
-                                        <span class="tab-group-count">10</span>
-                                        <button class="tab-group-close" aria-label="Close tab group">×</button>
+                                        <div class="tab-group-content">
+                                            <div class="tab-group-empty-message">No tabs in this group</div>
+                                        </div>
                                     </div><!-- -->
                                 </div>
                                     <div class="tabs-list-fade-bottom" class:visible={tabsListScrolledBottom[spaceId]}></div>
@@ -2472,14 +2488,43 @@
     }
 
     /* Tab Group */
+    .tab-group-wrapper {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        border-radius: 10px;
+        background: transparent;
+        border: 1px solid transparent;
+        transition: min-height 150ms ease, overflow 150ms ease, margin 150ms ease, max-width 150ms ease;
+        overflow: visible;
+        flex-shrink: 0;
+        margin: -1px;
+        width: calc(100% + 2px);
+    }
+    
+    .tab-group-wrapper:hover {
+        background: transparent;
+        border: 1px solid transparent;
+    }
+    
+    .tab-group-wrapper.expanded {
+        background: transparent;
+        border: 1px solid hsl(0deg 0% 100% / 12%);
+        min-height: 200px;
+        overflow: hidden;
+        margin-left: 0;
+        margin-top: 0;
+        margin-right: -2px;
+        max-width: calc(100% + 0px);
+    }
+    
     .tab-group {
         display: flex;
         align-items: center;
         gap: 4px;
         border-radius: 10px;
-        /* background: rgb(255 255 255 / 7%); */
-         background: #ffffff0f;
-        transition: all 150ms ease;
+        background: #ffffff0f;
+        transition: background-color 150ms ease, border-radius 150ms ease, margin 150ms ease, width 150ms ease;
         border: 1px solid hsl(0deg 0% 100% / 2%);
         height: 36px;
         flex-shrink: 0;
@@ -2495,6 +2540,41 @@
     .tab-group:hover {
         background-color: rgb(255 255 255 / 9%);
         border: 1px solid hsl(0deg 0% 100% / 3%);
+    }
+    
+    .tab-group.expanded {
+        border-radius: 10px 10px 0 0;
+        border: 1px solid transparent;
+        background: #ffffff0f;
+        margin-left: -1px;
+        margin-top: -1px;
+        width: calc(100% + 1px);
+        max-width: unset;
+    }
+    
+    .tab-group.expanded:hover {
+        border: 1px solid transparent;
+        background-color: rgb(255 255 255 / 9%);
+    }
+    
+    .tab-group-content {
+        display: none;
+        flex-direction: column;
+        padding: 8px;
+        gap: 4px;
+        flex: 1;
+    }
+    
+    .tab-group-wrapper.expanded .tab-group-content {
+        display: flex;
+    }
+    
+    .tab-group-empty-message {
+        color: rgba(255, 255, 255, 0.3);
+        font-size: 12px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        text-align: center;
+        padding: 20px;
     }
     
     .tab-group-main {
@@ -2543,7 +2623,7 @@
     }
     
     .tab-group-title {
-        color: hsl(0 0% 35% / 1);
+        color: #c3c3c3;
         font-size: 13px;
         font-weight: 600;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -2576,12 +2656,11 @@
         transition: opacity 150ms ease;
     }
     
-    .tab-group-close {
+    .tab-group-toggle {
         background: none;
         border: none;
         color: rgba(255, 255, 255, 0.3);
         cursor: pointer;
-        font-size: 18px;
         padding: 0 4px;
         display: flex;
         align-items: center;
@@ -2593,30 +2672,42 @@
         margin-right: 8px;
         flex-shrink: 0;
         overflow: hidden;
-        line-height: 1;
         position: absolute;
         right: 0;
-        transition: opacity 150ms ease;
-        /* margin-top: -1px; */
+        transition: opacity 150ms ease, transform 150ms ease;
     }
 
-    .tab-group-close:hover {
+    .tab-group-toggle svg {
+        width: 14px;
+        height: 14px;
+        transition: transform 150ms ease;
+    }
+
+    .tab-group-toggle:hover {
         color: rgba(255, 255, 255, 0.9);
     }
     
-    .tab-group:hover .tab-group-count {
+    .tab-group-toggle svg {
+        transform: rotate(-90deg);
+    }
+    
+    .tab-group.expanded .tab-group-toggle svg {
+        transform: rotate(0deg);
+    }
+    
+    .tab-group-wrapper:hover .tab-group-count {
         opacity: 0;
     }
     
-    .tab-group:hover .tab-group-close {
+    .tab-group-wrapper:hover .tab-group-toggle {
         opacity: 1;
     }
     
-    .tab-group:hover .tab-group-title {
+    .tab-group-wrapper:hover .tab-group-title {
         color: #fff;
     }
     
-    .tab-group:hover .tab-group-favicon {
+    .tab-group-wrapper:hover .tab-group-favicon {
         color: rgba(255, 255, 255, 0.6);
     }
     
