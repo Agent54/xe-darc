@@ -133,6 +133,7 @@
     
     let newTabMenuVisible = $state(false)
     let newTabMenuHoverTimeout = null
+    let newTabMenuLeaveTimeout = null
     let inlineNewTabMenuElement = $state(null)
     let fixedNewTabMenuElement = $state(null)
     let inlineNewTabButtonElement = $state(null)
@@ -681,6 +682,11 @@
     }
 
     function handleNewTabButtonMouseEnter(isInline = false) {
+        // Cancel any pending close when mouse enters button
+        if (newTabMenuLeaveTimeout) {
+            clearTimeout(newTabMenuLeaveTimeout)
+            newTabMenuLeaveTimeout = null
+        }
         if (newTabMenuHoverTimeout) {
             clearTimeout(newTabMenuHoverTimeout)
         }
@@ -699,17 +705,36 @@
             clearTimeout(newTabMenuHoverTimeout)
             newTabMenuHoverTimeout = null
         }
-        setTimeout(() => {
-            const inlineHovered = inlineNewTabMenuElement?.matches(':hover')
-            const fixedHovered = fixedNewTabMenuElement?.matches(':hover')
-            if (!inlineHovered && !fixedHovered) {
-                newTabMenuVisible = false
-            }
-        }, 100)
+        scheduleNewTabMenuClose()
+    }
+    
+    function handleNewTabMenuMouseEnter() {
+        // Cancel any pending close when mouse enters menu or button
+        if (newTabMenuLeaveTimeout) {
+            clearTimeout(newTabMenuLeaveTimeout)
+            newTabMenuLeaveTimeout = null
+        }
     }
     
     function handleNewTabMenuMouseLeave() {
-        newTabMenuVisible = false
+        scheduleNewTabMenuClose()
+    }
+    
+    function scheduleNewTabMenuClose() {
+        // Small delay to allow correcting mouse overshoot (same pattern as toolbar hover menus)
+        if (newTabMenuLeaveTimeout) {
+            clearTimeout(newTabMenuLeaveTimeout)
+        }
+        newTabMenuLeaveTimeout = setTimeout(() => {
+            const inlineButtonHovered = inlineNewTabButtonElement?.matches(':hover')
+            const fixedButtonHovered = document.querySelector('.new-tab-button-wrapper')?.matches(':hover')
+            const inlineMenuHovered = inlineNewTabMenuElement?.matches(':hover')
+            const fixedMenuHovered = fixedNewTabMenuElement?.matches(':hover')
+            if (!inlineButtonHovered && !fixedButtonHovered && !inlineMenuHovered && !fixedMenuHovered) {
+                newTabMenuVisible = false
+            }
+            newTabMenuLeaveTimeout = null
+        }, 150)
     }
 
     async function handleNewFromClipboard() {
@@ -3331,6 +3356,7 @@
                      class:visible={newTabMenuVisible}
                      style="left: {newTabMenuPosition.left}px;"
                      bind:this={inlineNewTabMenuElement}
+                     onmouseenter={handleNewTabMenuMouseEnter}
                      onmouseleave={handleNewTabMenuMouseLeave}
                      role="menu"
                      tabindex="-1"
@@ -3518,6 +3544,7 @@
         <div class="new-tab-header-menu fixed-menu" 
              class:visible={newTabMenuVisible}
              bind:this={fixedNewTabMenuElement}
+             onmouseenter={handleNewTabMenuMouseEnter}
              onmouseleave={handleNewTabMenuMouseLeave}
              role="menu"
              tabindex="-1"

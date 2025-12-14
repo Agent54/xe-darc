@@ -2484,3 +2484,5 @@ tab groups multi hovercards
 add activation history tabs back to activation history?
 
 allow hibernation of untoggled sidepins
+
+quickly see active tabs and resource usage etc.
