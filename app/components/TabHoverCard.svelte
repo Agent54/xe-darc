@@ -49,7 +49,9 @@
     
     let hovercardHovered = $state(false)
     let showHistory = $state(false)
+    let showDelayedElements = $state(false)
     let historyShowTimer = null
+    let delayedElementsTimer = null
     let hoveredHistoryEntry = $state(null)
     let hoveredEntryIndex = $state(null)
     
@@ -236,10 +238,15 @@
         const tabId = tab.id
         if (previousTabId !== null && previousTabId !== tabId) {
             showHistory = false
+            showDelayedElements = false
             hovercardHovered = false
             if (historyShowTimer) {
                 clearTimeout(historyShowTimer)
                 historyShowTimer = null
+            }
+            if (delayedElementsTimer) {
+                clearTimeout(delayedElementsTimer)
+                delayedElementsTimer = null
             }
         }
         previousTabId = tabId
@@ -259,6 +266,25 @@
                     historyShowTimer = null
                 }
             }
+        }
+    })
+    
+    // Show delayed elements (expand button, full URL) after delay
+    $effect(() => {
+        if (hovercardHovered && !showDelayedElements) {
+            const delay = 300
+            delayedElementsTimer = setTimeout(() => {
+                showDelayedElements = true
+            }, delay)
+            
+            return () => {
+                if (delayedElementsTimer) {
+                    clearTimeout(delayedElementsTimer)
+                    delayedElementsTimer = null
+                }
+            }
+        } else if (!hovercardHovered && showDelayedElements) {
+            showDelayedElements = false
         }
     })
     
@@ -310,6 +336,7 @@
             showSettingsButton={true}
             variant="hovercard"
             onExpandedChange={handleUrlBarExpandedChange}
+            enableHoverExpand={showDelayedElements}
         />
     </div>
     {#if hoveredHistoryEntry?.screenshot}
@@ -317,7 +344,7 @@
             {#key hoveredHistoryEntry.id}
                 <AttachmentImage src={hoveredHistoryEntry.screenshot} alt="Page preview" />
             {/key}
-            {#if hovercardHovered}
+            {#if showDelayedElements}
                 <button class="expand-button" aria-label="Expand screenshot">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
@@ -330,7 +357,7 @@
             {#key tab.id}
                 <AttachmentImage src={tab.screenshot} alt="Page preview" />
             {/key}
-            {#if hovercardHovered}
+            {#if showDelayedElements}
                 <button class="expand-button" aria-label="Expand screenshot">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />

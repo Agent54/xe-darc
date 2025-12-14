@@ -17,7 +17,8 @@
         onDevTools = null,
         onSettings = null,
         onExpandedChange = null,
-        variant = 'default'
+        variant = 'default',
+        enableHoverExpand = true
     } = $props()
     
     let urlBarExpanded = $state(expanded)
@@ -37,7 +38,9 @@
     
     function handleMouseEnter() {
         isHovered = true
-        calculateMaxWidth()
+        if (enableHoverExpand) {
+            calculateMaxWidth()
+        }
     }
     
     function handleMouseLeave() {
@@ -169,7 +172,7 @@
     }
 </script>
 
-<div class="url-bar-section" class:hovercard={variant === 'hovercard'}
+<div class="url-bar-section" class:hovercard={variant === 'hovercard'} class:hover-expand-enabled={enableHoverExpand}
      role="group"
      onmouseenter={handleMouseEnter}
      onmouseleave={handleMouseLeave}>
@@ -323,7 +326,7 @@
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     }
     
-    .url-bar-section:hover .url-bar-container:not(.expanded) {
+    .url-bar-section.hover-expand-enabled:hover .url-bar-container:not(.expanded) {
         width: min(600px, 90vw);
         background: rgba(0, 0, 0, 0.98);
         backdrop-filter: blur(20px);
@@ -333,7 +336,7 @@
         transition-delay: 200ms;
     }
     
-    .url-bar-section.hovercard:hover .url-bar-container:not(.expanded) {
+    .url-bar-section.hovercard.hover-expand-enabled:hover .url-bar-container:not(.expanded) {
         background: rgba(0, 0, 0, 0.95);
         backdrop-filter: blur(20px);
         border: 1px solid hsl(0deg 0% 100% / 10%);
@@ -369,12 +372,12 @@
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     }
     
-    .url-bar-wrapper:hover .url-bar-controls {
+    .url-bar-section.hover-expand-enabled .url-bar-wrapper:hover .url-bar-controls {
         opacity: 1;
         visibility: visible;
     }
     
-    .url-bar-section:not(.hovercard):hover .url-bar-controls {
+    .url-bar-section.hover-expand-enabled:not(.hovercard):hover .url-bar-controls {
         opacity: 1;
         visibility: visible;
         transition-delay: 200ms;
