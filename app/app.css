@@ -655,16 +655,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
         0 12px 32px rgba(0, 0, 0, 0.6),
         0 4px 12px rgba(0, 0, 0, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    transform: translateY(-8px) scale(0.96);
     overflow: hidden;
-}
-
-.dev-menu-icon:hover .dev-menu {
-    transform: translateY(0) scale(1);
-}
-
-.dev-menu:hover {
-    transform: translateY(0) scale(1) !important;
 }
 
 .dev-menu-header {
@@ -752,18 +743,9 @@ header.focus-mode:hover  .focus-mode-icon > svg {
         0 12px 32px rgba(0, 0, 0, 0.6),
         0 4px 12px rgba(0, 0, 0, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    transform: translateY(-8px) scale(0.96);
 
     z-index: 10000;
     overflow: hidden;
-}
-
-.settings-menu-icon:hover .settings-menu {
-    transform: translateY(0) scale(1);
-}
-
-.settings-menu:hover {
-    transform: translateY(0) scale(1) !important;
 }
 
 .menu-header {
@@ -950,18 +932,9 @@ header.focus-mode:hover  .focus-mode-icon > svg {
         0 12px 32px rgba(0, 0, 0, 0.6),
         0 4px 12px rgba(0, 0, 0, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    transform: translateY(-8px) scale(0.96);
 
     z-index: 10000;
     overflow: hidden;
-}
-
-.view-mode-icon:hover .view-mode-menu {
-    transform: translateY(0) scale(1);
-}
-
-.view-mode-menu:hover {
-    transform: translateY(0) scale(1) !important;
 }
 
 /* .view-mode-menu-header {
@@ -1588,7 +1561,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     z-index: 10000;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 150ms ease, visibility 150ms ease;
+    transition: opacity 250ms ease, visibility 250ms ease;
     backdrop-filter: blur(12px);
     pointer-events: none;
     box-sizing: border-box;
@@ -1600,10 +1573,22 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     pointer-events: auto;
 }
 
+/* Fixed menu is the one next to toolbar (not the one in tab scroller) */
 .new-tab-header-menu.fixed-menu {
     left: auto;
     right: 0;
     transform: none;
+    top: 22px;
+}
+
+/* Bridge gap between button and menu to prevent hover loss */
+.new-tab-header-menu::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: 0;
+    right: 0;
+    height: 10px;
 }
 
 .new-tab-header-menu-item {
@@ -2651,7 +2636,7 @@ header.window-controls-overlay + .content-area-scrim {
     opacity: 0;
     visibility: hidden;
     pointer-events: auto;
-    transition: opacity 0.15s ease 0.3s, visibility 0.15s ease 0.3s, transform 0.15s ease 0.3s;
+    transition: opacity 0.25s ease 0.3s, visibility 0.25s ease 0.3s;
 }
 
 .hover-menu.menu-force-close,
@@ -2661,25 +2646,25 @@ header.window-controls-overlay + .content-area-scrim {
     opacity: 0 !important;
     visibility: hidden !important;
     pointer-events: none !important;
-    transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease !important;
+    transition: opacity 0.3s ease, visibility 0.3s ease !important;
 }
 
 .hover-menu:hover {
     opacity: 1 !important;
     visibility: visible !important;
     pointer-events: auto !important;
-    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease !important;
+    transition: opacity 0.25s ease, visibility 0.25s ease !important;
 }
 
 .hover-menu-button:hover .hover-menu {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
 header:hover .hover-menu {
-    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease !important;
+    transition: opacity 0.25s ease, visibility 0.25s ease !important;
 }
 
 :global(.hover-menu-button > svg) {
