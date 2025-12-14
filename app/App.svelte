@@ -161,6 +161,7 @@
 
     let focusModeEnabled = $state(false)
     let focusModeHovered = $state(false)
+    let focusModeHideTimeout = null
     let showAppsOverlay = $state(false)
     let contentAreaScrimActive = $state(false)
     let hasLeftToggle = $state(false)
@@ -2207,6 +2208,31 @@
         // Don't reset hasLeftToggle - keep it true so hover reveal can work again
     }
     
+    function scheduleHideContentAreaScrim() {
+        cancelFocusModeHide()
+        focusModeHideTimeout = setTimeout(() => {
+            hideContentAreaScrim()
+            focusModeHideTimeout = null
+        }, 300)
+    }
+    
+    function cancelFocusModeHide() {
+        if (focusModeHideTimeout) {
+            clearTimeout(focusModeHideTimeout)
+            focusModeHideTimeout = null
+        }
+    }
+    
+    function scheduleFocusModeHide() {
+        cancelFocusModeHide()
+        focusModeHideTimeout = setTimeout(() => {
+            if (!contentAreaScrimActive) {
+                focusModeHovered = false
+            }
+            focusModeHideTimeout = null
+        }, 300)
+    }
+    
     function toggleDarkMode() {
         darkMode = !darkMode
         document.documentElement.classList.toggle('dark-mode', darkMode)
@@ -3172,7 +3198,7 @@
     }}
 />
 
-<header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) focusModeHovered = true }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) focusModeHovered = false }}>
+<header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) { cancelFocusModeHide(); focusModeHovered = true } }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) scheduleFocusModeHide() }}>
     <!-- Main background drag handle -->
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 178px;' : 'right: 137px;'}"></div>
     
@@ -3429,7 +3455,7 @@
     {#if focusModeEnabled}
         <div class="zen-hover-trigger" 
              style="right: 0; width: {devModeEnabled ? '178px' : '137px'};"
-             onmouseenter={() => { if (hasLeftToggle) { focusModeHovered = true; contentAreaScrimActive = true; } }}></div>
+             onmouseenter={() => { if (hasLeftToggle) { cancelFocusModeHide(); focusModeHovered = true; contentAreaScrimActive = true; } }}></div>
     {/if}
 
     <div class="header-icon-button view-mode-icon hover-menu-button" 
@@ -3623,7 +3649,7 @@
         tabindex="0"
         onmousedown={toggleFocusMode}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFocusMode() } }}
-        onmouseenter={() => { if (focusModeEnabled && hasLeftToggle) { focusModeHovered = true; contentAreaScrimActive = true; } }}
+        onmouseenter={() => { if (focusModeEnabled && hasLeftToggle) { cancelFocusModeHide(); focusModeHovered = true; contentAreaScrimActive = true; } }}
         title="Toggle Focus Mode">
         {#if focusModeEnabled}
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -4016,7 +4042,7 @@
     <div class="content-area-scrim"
          role="button"
          tabindex="0"
-         onmouseenter={hideContentAreaScrim}
+         onmouseenter={scheduleHideContentAreaScrim}
          onmousedown={hideContentAreaScrim}
          onkeydown={(e) => { if (e.key === 'Escape') hideContentAreaScrim() }}
          oncontextmenu={hideContentAreaScrim}></div>
