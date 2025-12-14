@@ -463,12 +463,13 @@ ul::-webkit-scrollbar {
     border: 1px solid hsl(0deg 0% 100% / 3%);
 }
 .tab-container.active {
-    background-color: rgb(255 255 255 / 14%);
-    border: 1px solid hsl(0deg 0% 100% / 4%);
+    background-color: rgb(255 255 255 / 17%);
+    border: 1px solid hsl(0deg 0% 100% / 5.5%);
 }
 .tab-container.active:hover, .tab-container.active.hovered, .tab-container.active.menu-open {
-    background-color: rgb(255 255 255 / 17%);
-    border: 1px solid hsl(0deg 0% 100% / 5%);
+    background-color: rgb(255 255 255 / 19%);
+    border: 1px solid hsl(0deg 0% 100% / 8%);
+
 }
 .tab-container .tab {
     user-select: none;
@@ -1145,6 +1146,22 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 .tab-hovercard.trash-item {
     transform: translateY(-50%);
     animation: hovercard-fade-in 0.2s ease-out forwards;
+}
+
+.tab-hovercard.nav-button-hovercard {
+    transform: none;
+    animation: hovercard-fade-in-left 0.2s ease-out forwards;
+}
+
+@keyframes hovercard-fade-in-left {
+    from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 @keyframes hovercard-fade-in {

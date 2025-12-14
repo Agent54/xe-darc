@@ -108,6 +108,28 @@
     let scrollTimeout = null
     let hovercardShowTime = null
     
+    // Nav button hovercard state
+    let navButtonHovered = $state(false)
+    let navButtonHoverTimeout = null
+    let navButtonHovercardPosition = $state({ x: 0, y: 0 })
+    
+    function handleNavButtonMouseEnter(e) {
+        if (navButtonHoverTimeout) clearTimeout(navButtonHoverTimeout)
+        navButtonHoverTimeout = setTimeout(() => {
+            const rect = e.target.closest('.nav-toolbar-btn').getBoundingClientRect()
+            navButtonHovercardPosition = { x: 0, y: rect.bottom }
+            navButtonHovered = true
+        }, 500)
+    }
+    
+    function handleNavButtonMouseLeave() {
+        if (navButtonHoverTimeout) {
+            clearTimeout(navButtonHoverTimeout)
+            navButtonHoverTimeout = null
+        }
+        navButtonHovered = false
+    }
+    
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
         // return // DEBUG: uncomment to disable hovercard hiding for testing
@@ -2961,12 +2983,12 @@
     <!-- Navigation toolbar -->
     {#if showNavigationToolbar}
         <div class="navigation-toolbar" class:hidden={focusModeEnabled && !focusModeHovered}>
-            <button class="nav-toolbar-btn" title="Back" aria-label="Go back" onmousedown={goBack}>
+            <button class="nav-toolbar-btn" title="Back" aria-label="Go back" onmousedown={goBack} onmouseenter={handleNavButtonMouseEnter} onmouseleave={handleNavButtonMouseLeave}>
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
                 </svg>
             </button>
-            <button class="nav-toolbar-btn" title="Forward" aria-label="Go forward" onmousedown={goForward}>
+            <button class="nav-toolbar-btn" title="Forward" aria-label="Go forward" onmousedown={goForward} onmouseenter={handleNavButtonMouseEnter} onmouseleave={handleNavButtonMouseLeave}>
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                 </svg>
@@ -3926,6 +3948,31 @@
                 }
             }, 100)
         }} />
+    </div>
+  {/key}
+{/if}
+
+{#if navButtonHovered && data.spaceMeta.activeTabId && data.docs[data.spaceMeta.activeTabId]}
+  {@const activeTab = data.docs[data.spaceMeta.activeTabId]}
+  {#key activeTab.id}
+    <div class="tab-hovercard nav-button-hovercard" 
+         role="tooltip"
+         style="left: {navButtonHovercardPosition.x}px; top: {navButtonHovercardPosition.y}px; --hovercard-top: {navButtonHovercardPosition.y}px;"
+         onmouseleave={handleNavButtonMouseLeave}>
+        <TabHoverCard tab={activeTab} 
+                      isClosedTab={false} 
+                      showHistoryImmediately={true}
+                      instantMode={true}
+                      showDevTools={devModeEnabled}
+                      availableHeight={window.innerHeight - navButtonHovercardPosition.y - 20}
+                      onGoBack={goBack}
+                      onGoForward={goForward}
+                      onReload={reloadActiveTab}
+                      onCloseTab={() => {
+                          closeTab(activeTab)
+                          navButtonHovered = false
+                      }}
+                      onMouseLeave={handleNavButtonMouseLeave} />
     </div>
   {/key}
 {/if}
