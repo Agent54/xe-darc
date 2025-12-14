@@ -1748,7 +1748,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     min-height: 18px;
 }
 
-/* Pinned tab toggle button - overlays the entire tab */
+/* Pinned tab toggle button - overlays the entire pinned tab container */
 .pinned-toggle-btn {
     position: absolute;
     left: 0;
