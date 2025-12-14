@@ -39,6 +39,17 @@
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
     
+    // Multi-space expansion state
+    let multiSpaceMode = $state(false)
+    let isClosingMultiSpace = $state(false)
+    let rubberBandOffset = $state(0)
+    let isRubberBanding = $state(false)
+    let baseWidth = 263 // Default sidebar width
+    let spaceWidth = $state(null) // Width of each space lane in multi-space mode
+    let isResizingLanes = false
+    let resizeStartX = 0
+    let resizeStartWidth = 0
+    
     // Tab context menu state
     let tabContextMenu = $state({ visible: false, x: 0, y: 0, tab: null, index: null })
     let tabContextMenuOpenTime = 0
@@ -99,8 +110,8 @@
     }
     
     function handleMouseLeave() {
-        // Don't hide sidebar when URL bar is expanded
-        if (!urlBarExpanded) {
+        // Don't hide sidebar when URL bar is expanded or in multi-space mode
+        if (!urlBarExpanded && !multiSpaceMode) {
             // Always set isHovered to false for resize handle logic
             isHovered = false
         }
@@ -143,6 +154,287 @@
     function handleSpacesScroll() {
         updateSpacesScrollFade()
     }
+    
+    // Rubber band scroll handling for tab content
+    let rubberBandAnimationFrame = null
+    let lastScrollLeft = 0
+    let scrollVelocity = 0
+    let accumulatedDeltaX = 0
+    let accumulatedCloseDeltaX = 0
+    let closeRubberBandOffset = $state(0)
+    let isCloseRubberBanding = $state(false)
+    let isVerticalScrolling = false
+    let verticalScrollTimeout = null
+    
+    function handleTabContentWheel(event) {
+        if (!tabListRef) return
+        
+        const scrollLeft = tabListRef.scrollLeft
+        const maxScroll = tabListRef.scrollWidth - tabListRef.clientWidth
+        
+        // Very stiff spring (0.08 resistance) 
+        const resistance = 0.08
+        const threshold = 20 // Rubber band distance after activation
+        const maxStretch = 35
+        const activationThreshold = 50 // Minimum accumulated deltaX before spring activates
+        
+        // Detect vertical scrolling and disable spring
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX) * 2) {
+            isVerticalScrolling = true
+            accumulatedDeltaX = 0
+            if (verticalScrollTimeout) clearTimeout(verticalScrollTimeout)
+            verticalScrollTimeout = setTimeout(() => {
+                isVerticalScrolling = false
+            }, 150)
+            return
+        }
+        
+        // If currently vertical scrolling, ignore horizontal component
+        if (isVerticalScrolling) return
+        
+        // Block all scroll during closing animation
+        if (isClosingMultiSpace) {
+            event.preventDefault()
+            return
+        }
+        
+        // In multi-space mode, add rubber band effect for closing at right edge
+        if (multiSpaceMode) {
+            const multiScrollLeft = tabListRef.scrollLeft
+            const multiMaxScroll = tabListRef.scrollWidth - tabListRef.clientWidth
+            // Only activate at right edge if there's scrollable content and we're at the very end
+            const hasScrollableContent = multiMaxScroll > 5
+            const atRightEdge = hasScrollableContent 
+                ? multiScrollLeft >= multiMaxScroll - 2
+                : true // If no scrollable content, we're always at the edge
+            
+            // Scrolling right at right edge - rubber band for closing
+            if (atRightEdge && event.deltaX > 0) {
+                // Accumulate before activating
+                accumulatedCloseDeltaX += Math.abs(event.deltaX)
+                if (accumulatedCloseDeltaX < activationThreshold) {
+                    return
+                }
+                
+                event.preventDefault()
+                
+                // Accumulate close rubber band offset with same resistance
+                closeRubberBandOffset = Math.min(closeRubberBandOffset + event.deltaX * resistance, maxStretch)
+                isCloseRubberBanding = true
+                
+                // If pulled far enough, close multi-space mode
+                if (closeRubberBandOffset > threshold) {
+                    exitMultiSpaceMode()
+                }
+                
+                // Schedule snap back
+                scheduleCloseSnapBack()
+            } else if (atRightEdge && event.deltaX < 0 && closeRubberBandOffset > 0) {
+                // Scrolling back left while rubber banding - reduce offset
+                closeRubberBandOffset = Math.max(0, closeRubberBandOffset + event.deltaX * 0.3)
+                if (closeRubberBandOffset <= 0) {
+                    closeRubberBandOffset = 0
+                    isCloseRubberBanding = false
+                    accumulatedCloseDeltaX = 0
+                }
+            } else {
+                // Reset when not at edge
+                accumulatedCloseDeltaX = 0
+            }
+            return
+        }
+        
+        // Check if scrolling past the left edge (toward revealing more spaces)
+        if (scrollLeft <= 0 && event.deltaX < 0) {
+            // Accumulate horizontal scroll before activating spring
+            accumulatedDeltaX += Math.abs(event.deltaX)
+            
+            // Only activate spring after threshold is met
+            if (accumulatedDeltaX < activationThreshold) {
+                return
+            }
+            
+            event.preventDefault()
+            
+            // Accumulate rubber band offset with resistance
+            rubberBandOffset = Math.min(rubberBandOffset - event.deltaX * resistance, maxStretch)
+            isRubberBanding = true
+            
+            // If pulled far enough, trigger multi-space mode (full screen)
+            if (rubberBandOffset > threshold && !multiSpaceMode) {
+                multiSpaceMode = true
+                rubberBandOffset = 0
+                isRubberBanding = false
+                accumulatedDeltaX = 0
+                // Initialize spaceWidth to match current sidebar width
+                if (spaceWidth === null) {
+                    spaceWidth = customTabSidebarWidth || baseWidth
+                }
+                return
+            }
+        } else if (scrollLeft <= 0 && event.deltaX > 0 && rubberBandOffset > 0) {
+            // Scrolling back right while rubber banding - reduce offset
+            rubberBandOffset = Math.max(0, rubberBandOffset - event.deltaX * 0.3)
+            if (rubberBandOffset <= 0) {
+                rubberBandOffset = 0
+                isRubberBanding = false
+                accumulatedDeltaX = 0
+            }
+        } else {
+            // Reset accumulation when not at edge
+            accumulatedDeltaX = 0
+        }
+        
+        // Schedule snap back in case scrollend doesn't fire
+        if (isRubberBanding) {
+            scheduleSnapBack()
+        }
+    }
+    
+    function handleTabContentTouchStart(event) {
+        lastScrollLeft = tabListRef?.scrollLeft || 0
+    }
+    
+    function handleTabContentTouchMove(event) {
+        if (!tabListRef) return
+        
+        const touch = event.touches[0]
+        const scrollLeft = tabListRef.scrollLeft
+        
+        // Similar rubber band logic for touch
+        if (scrollLeft <= 0 && isRubberBanding) {
+            event.preventDefault()
+        }
+    }
+    
+    function snapBackRubberBand() {
+        if (rubberBandOffset === 0) {
+            isRubberBanding = false
+            accumulatedDeltaX = 0
+            return
+        }
+        
+        // Very fast snap-back (0.4 decay = very stiff spring)
+        rubberBandOffset = rubberBandOffset * 0.4
+        if (Math.abs(rubberBandOffset) < 0.3) {
+            rubberBandOffset = 0
+            isRubberBanding = false
+            accumulatedDeltaX = 0
+        } else {
+            rubberBandAnimationFrame = requestAnimationFrame(snapBackRubberBand)
+        }
+    }
+    
+    let rubberBandSnapTimeout = null
+    let expansionSnapTimeout = null
+    
+    function scheduleSnapBack() {
+        if (rubberBandSnapTimeout) clearTimeout(rubberBandSnapTimeout)
+        rubberBandSnapTimeout = setTimeout(() => {
+            if (isRubberBanding && rubberBandOffset !== 0) {
+                snapBackRubberBand()
+            }
+        }, 80)
+    }
+    
+    let closeRubberBandSnapTimeout = null
+    
+    function scheduleCloseSnapBack() {
+        if (closeRubberBandSnapTimeout) clearTimeout(closeRubberBandSnapTimeout)
+        closeRubberBandSnapTimeout = setTimeout(() => {
+            if (isCloseRubberBanding && closeRubberBandOffset !== 0) {
+                snapBackCloseRubberBand()
+            }
+        }, 80)
+    }
+    
+    function snapBackCloseRubberBand() {
+        if (closeRubberBandOffset === 0) {
+            isCloseRubberBanding = false
+            accumulatedCloseDeltaX = 0
+            return
+        }
+        
+        // Very fast snap-back (0.4 decay = very stiff spring)
+        closeRubberBandOffset = closeRubberBandOffset * 0.4
+        if (Math.abs(closeRubberBandOffset) < 0.3) {
+            closeRubberBandOffset = 0
+            isCloseRubberBanding = false
+            accumulatedCloseDeltaX = 0
+        } else {
+            requestAnimationFrame(snapBackCloseRubberBand)
+        }
+    }
+    
+    function handleTabContentScrollEnd() {
+        if (isRubberBanding && rubberBandOffset !== 0) {
+            snapBackRubberBand()
+        }
+        if (isCloseRubberBanding && closeRubberBandOffset !== 0) {
+            snapBackCloseRubberBand()
+        }
+    }
+    
+
+    
+    function exitMultiSpaceMode() {
+        // Store active space before any changes
+        const activeSpace = data.spaceMeta.activeSpace
+        
+        // Start closing animation
+        isClosingMultiSpace = true
+        closeRubberBandOffset = 0
+        accumulatedCloseDeltaX = 0
+        isCloseRubberBanding = false
+        
+        // After transition completes, fully reset state and scroll to active space
+        setTimeout(() => {
+            multiSpaceMode = false
+            isClosingMultiSpace = false
+            rubberBandOffset = 0
+            accumulatedDeltaX = 0
+            // Reset hover state so sidebar collapses properly
+            isHovered = false
+            
+            // Wait for DOM to update, then scroll to active space
+            setTimeout(() => {
+                if (tabListRef && activeSpace) {
+                    const targetElement = tabListRef.querySelector(`[data-space-id="${activeSpace}"]`)
+                    if (targetElement) {
+                        targetElement.scrollIntoView({ behavior: 'instant', inline: 'start' })
+                    }
+                }
+            }, 50)
+        }, 300) // Match the transition duration
+    }
+    
+    // Lane divider resize handling
+    function handleLaneDividerMouseDown(event) {
+        event.preventDefault()
+        event.stopPropagation()
+        isResizingLanes = true
+        resizeStartX = event.clientX
+        resizeStartWidth = spaceWidth || customTabSidebarWidth || baseWidth
+        
+        document.addEventListener('mousemove', handleLaneDividerMouseMove)
+        document.addEventListener('mouseup', handleLaneDividerMouseUp)
+    }
+    
+    function handleLaneDividerMouseMove(event) {
+        if (!isResizingLanes) return
+        
+        const deltaX = event.clientX - resizeStartX
+        const newWidth = Math.max(200, Math.min(500, resizeStartWidth + deltaX))
+        spaceWidth = newWidth
+    }
+    
+    function handleLaneDividerMouseUp() {
+        isResizingLanes = false
+        document.removeEventListener('mousemove', handleLaneDividerMouseMove)
+        document.removeEventListener('mouseup', handleLaneDividerMouseUp)
+    }
+    
+
     
     // Initialize spaces scroll fade state when spacesListRef is available or spaces change
     $effect(() => {
@@ -830,51 +1122,51 @@
         }
     }
 
-    function handleUrlSubmit() {
-        if (!urlInputValue.trim() || !data.spaceMeta.activeTabId) {
-            urlBarExpanded = false
-            return
-        }
+    // function handleUrlSubmit() {
+    //     if (!urlInputValue.trim() || !data.spaceMeta.activeTabId) {
+    //         urlBarExpanded = false
+    //         return
+    //     }
         
-        try {
-            let url = new URL(urlInputValue)
-            data.navigate(data.spaceMeta.activeTabId, url.href)
-        } catch {
-            // Not a valid URL, treat as search
-            const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
-            let searchUrl
+    //     try {
+    //         let url = new URL(urlInputValue)
+    //         data.navigate(data.spaceMeta.activeTabId, url.href)
+    //     } catch {
+    //         // Not a valid URL, treat as search
+    //         const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
+    //         let searchUrl
             
-            switch (defaultSearchEngine) {
-                case 'kagi':
-                    searchUrl = new URL('https://kagi.com/search')
-                    break
-                case 'custom':
-                    const customUrl = localStorage.getItem('customSearchUrl')
-                    if (customUrl) {
-                        try {
-                            searchUrl = new URL(customUrl + encodeURIComponent(urlInputValue))
-                            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
-                            urlBarExpanded = false
-                            return
-                        } catch {
-                            // Fallback to Google if custom URL is invalid
-                            searchUrl = new URL('https://www.google.com/search')
-                        }
-                    } else {
-                        searchUrl = new URL('https://www.google.com/search')
-                    }
-                    break
-                default: // google
-                    searchUrl = new URL('https://www.google.com/search')
-                    break
-            }
+    //         switch (defaultSearchEngine) {
+    //             case 'kagi':
+    //                 searchUrl = new URL('https://kagi.com/search')
+    //                 break
+    //             case 'custom':
+    //                 const customUrl = localStorage.getItem('customSearchUrl')
+    //                 if (customUrl) {
+    //                     try {
+    //                         searchUrl = new URL(customUrl + encodeURIComponent(urlInputValue))
+    //                         data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
+    //                         urlBarExpanded = false
+    //                         return
+    //                     } catch {
+    //                         // Fallback to Google if custom URL is invalid
+    //                         searchUrl = new URL('https://www.google.com/search')
+    //                     }
+    //                 } else {
+    //                     searchUrl = new URL('https://www.google.com/search')
+    //                 }
+    //                 break
+    //             default: // google
+    //                 searchUrl = new URL('https://www.google.com/search')
+    //                 break
+    //         }
             
-            searchUrl.searchParams.set('q', urlInputValue)
-            data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
-        }
+    //         searchUrl.searchParams.set('q', urlInputValue)
+    //         data.navigate(data.spaceMeta.activeTabId, searchUrl.href)
+    //     }
         
-        urlBarExpanded = false
-    }
+    //     urlBarExpanded = false
+    // }
 
     // Navigation button handlers
     function handleBackClick() {
@@ -1037,9 +1329,10 @@
      class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
+     class:multi-space-mode={multiSpaceMode}
      onmouseenter={handleMouseEnter} 
      onmouseleave={handleMouseLeave}
-     style="width: {customTabSidebarWidth || 263}px;"
+     style="width: {multiSpaceMode ? (isClosingMultiSpace ? (customTabSidebarWidth || 263) + 'px' : `calc(100vw - ${closeRubberBandOffset}px)`) : ((customTabSidebarWidth || 263) + rubberBandOffset) + 'px'};"
      role="complementary"
      aria-label="Tab Sidebar">
     <div class="sidebar">
@@ -1064,6 +1357,15 @@
     </div>
 {/if}
         <div class="sidebar-content" class:no-url={!showUrl}>
+            {#if multiSpaceMode}
+                <button class="close-multi-space-button" 
+                        onmousedown={exitMultiSpaceMode}
+                        aria-label="Close expanded view">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                    </svg>
+                </button>
+            {/if}
             {#if showUrl}
                 <UrlBar 
                     url={data.docs[data.spaceMeta.activeTabId]?.url || ''}
@@ -1153,21 +1455,36 @@
             </div>
 
             <div class="section flex-1">
-
                 <div class="tab-content-container" 
+                     class:multi-space={multiSpaceMode}
+                     class:rubber-banding={isRubberBanding}
+                     class:closing={isClosingMultiSpace}
                      bind:this={tabListRef}
                      onscroll={handleTabScroll}
+                     onwheel={handleTabContentWheel}
+                     onscrollend={handleTabContentScrollEnd}
                      ondblclick={handleBackgroundDoubleClick}
                      role="region"
                      aria-label="Tab content area - double-click to create new tab"
+                     style=""
                     >
-                    <div class="tab-content-track">
-                        {#each data.spaceMeta.spaceOrder as spaceId (spaceId)}
-                            <div class="space-content" data-space-id={spaceId}>
+                    <div class="tab-content-track" class:multi-space={multiSpaceMode}>
+                        {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
+                            {#if multiSpaceMode && index > 0}
+                                <div class="lane-divider" 
+                                     onmousedown={handleLaneDividerMouseDown}
+                                     role="separator"></div>
+                            {/if}
+                            <div class="space-content" 
+                                 class:multi-space={multiSpaceMode}
+                                 data-space-id={spaceId}
+                                 style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}>
                                 <div class="space-title-container">
-                                    <div class="space-title" class:active={data.spaceMeta.activeSpace === spaceId}>
+                                    <button class="space-title" 
+                                            class:active={data.spaceMeta.activeSpace === spaceId}
+                                            onmousedown={(e) => handleSpaceClick(e, spaceId)}>
                                         {data.spaces[spaceId].name}
-                                    </div>
+                                    </button>
                                     <div class="space-menu">
                                         <button class="space-menu-button" 
                                                 onmousedown={(e) => { e.stopPropagation(); handleMenuToggle(spaceId); }}
@@ -1840,6 +2157,15 @@
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
         text-align: left;
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+    }
+    
+    .space-title:hover {
+        color: rgba(255, 255, 255, 0.85);
     }
     
     .space-title.active {
@@ -1942,6 +2268,25 @@
         min-height: 0;
         border-radius: 10px;
         width: calc(100% + 2px);
+        transition: transform 0.1s ease-out;
+    }
+    
+    .tab-content-container.rubber-banding {
+        transition: none;
+    }
+    
+    .tab-content-container.multi-space {
+        scroll-snap-type: none;
+        overflow-x: auto;
+    }
+    
+    .tab-content-container.multi-space.closing {
+        scroll-snap-type: x mandatory;
+    }
+    
+    .tab-content-container.closing {
+        pointer-events: none;
+        overflow: hidden;
     }
     
     .tab-content-container::-webkit-scrollbar {
@@ -1966,10 +2311,120 @@
         overflow-y: hidden;
         padding-top: 0;
         padding-right: 8px;
+        position: relative;
     }
     
-
+    .tab-content-track.multi-space {
+        gap: 12px;
+    }
     
+    /* Multi-space mode for sidebar-box */
+    .sidebar-box.multi-space-mode {
+        transition: width 300ms cubic-bezier(.78,-0.01,.34,1.04);
+        z-index: 1001;
+    }
+    
+    .sidebar-box.multi-space-mode .sidebar-content {
+        overflow-x: auto;
+    }
+    
+    .sidebar-box.multi-space-mode .closed-tabs-section {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: auto;
+        max-width: 320px;
+    }
+    
+    .sidebar-box.multi-space-mode .spaces-container {
+        justify-content: flex-start;
+    }
+    
+    .sidebar-box.multi-space-mode .spaces-list-wrapper {
+        flex: none;
+    }
+    
+    /* Close button for multi-space mode */
+    .close-multi-space-button {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.35);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 150ms ease;
+        z-index: 100;
+    }
+    
+    .close-multi-space-button:hover {
+        color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .close-multi-space-button:active {
+        color: rgba(255, 255, 255, 0.85);
+    }
+    
+    .close-multi-space-button svg {
+        width: 18px;
+        height: 18px;
+    }
+    
+    /* Space content in multi-space mode - fixed width */
+    .space-content.multi-space {
+        flex: none;
+        position: relative;
+    }
+    
+    /* Gradient divider between lanes - draggable for resizing */
+    .lane-divider {
+        width: 12px;
+        flex-shrink: 0;
+        margin-top: 60px;
+        margin-bottom: 60px;
+        cursor: ew-resize;
+        position: relative;
+        background: transparent;
+    }
+    
+    .lane-divider::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        transform: translateX(-50%);
+        background: linear-gradient(to bottom, 
+            transparent 0%, 
+            rgba(255, 255, 255, 0.08) 8%,
+            rgba(255, 255, 255, 0.15) 20%, 
+            rgba(255, 255, 255, 0.15) 80%, 
+            rgba(255, 255, 255, 0.08) 92%,
+            transparent 100%
+        );
+        transition: background 150ms ease;
+    }
+    
+    .lane-divider:hover::before {
+        width: 3px;
+        background: linear-gradient(to bottom, 
+            transparent 0%, 
+            rgba(255, 255, 255, 0.15) 8%,
+            rgba(255, 255, 255, 0.3) 20%, 
+            rgba(255, 255, 255, 0.3) 80%, 
+            rgba(255, 255, 255, 0.15) 92%,
+            transparent 100%
+        );
+    }
+
     .app-tab {
         width: 36px;
         height: 36px;
