@@ -2519,3 +2519,5 @@ warp like terminal with standalone and vscode support out of box, nushell/ysh
 recent items drawer: screnshots, clipboard, downloads, opened tabs etc.
 
 replace close tab for vscode and similar to close tab inside app not the tab of the app?!
+
+fix preview pos from iframe (eg link in amp sidebar)

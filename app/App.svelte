@@ -2918,23 +2918,23 @@
                 {:else if tab.muted}
                     <span class="pinned-audio-indicator">🔇</span>
                 {/if}
-                <button class="pinned-toggle-btn" 
-                        aria-label={invisiblePins.right ? "Expand pinned tabs" : "Collapse pinned tabs"}
-                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); togglePinnedFrames('right') } }} 
-                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('right') } }}>
-                    {#if invisiblePins.right}
-                        <!-- Closed: point right (toward where panel would appear) -->
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
-                        </svg>
-                    {:else}
-                        <!-- Open: point down -->
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
-                        </svg>
-                    {/if}
-                </button>
             </div>
+            <button class="pinned-toggle-btn" 
+                    aria-label={invisiblePins.right ? "Expand pinned tabs" : "Collapse pinned tabs"}
+                    onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); togglePinnedFrames('right') } }} 
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('right') } }}>
+                {#if invisiblePins.right}
+                    <!-- Closed: point right (toward where panel would appear) -->
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                    </svg>
+                {:else}
+                    <!-- Open: point down -->
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                    </svg>
+                {/if}
+            </button>
         </li>
     {/if}
 {/snippet}
@@ -3030,23 +3030,23 @@
                             {:else if tab.muted}
                                 <span class="pinned-audio-indicator">🔇</span>
                             {/if}
-                            <button class="pinned-toggle-btn" 
-                                    aria-label={invisiblePins.left ? "Expand pinned tabs" : "Collapse pinned tabs"}
-                                    onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); togglePinnedFrames('left') } }} 
-                                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('left') } }}>
-                                {#if invisiblePins.left}
-                                    <!-- Closed: point left (toward where panel would appear) -->
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
-                                    </svg>
-                                {:else}
-                                    <!-- Open: point down -->
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
-                                    </svg>
-                                {/if}
-                            </button>
                         </div>
+                        <button class="pinned-toggle-btn" 
+                                aria-label={invisiblePins.left ? "Expand pinned tabs" : "Collapse pinned tabs"}
+                                onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); togglePinnedFrames('left') } }} 
+                                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('left') } }}>
+                            {#if invisiblePins.left}
+                                <!-- Closed: point left (toward where panel would appear) -->
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                                </svg>
+                            {:else}
+                                <!-- Open: point down -->
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                                </svg>
+                            {/if}
+                        </button>
                     </li>
                 {/if}
             {/each}
