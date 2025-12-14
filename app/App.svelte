@@ -122,11 +122,32 @@
         }, 500)
     }
     
+    let navButtonLeaveTimeout = null
+    
     function handleNavButtonMouseLeave() {
         if (navButtonHoverTimeout) {
             clearTimeout(navButtonHoverTimeout)
             navButtonHoverTimeout = null
         }
+        if (navButtonLeaveTimeout) clearTimeout(navButtonLeaveTimeout)
+        navButtonLeaveTimeout = setTimeout(() => {
+            const mouseX = window.mouseX || 0
+            const mouseY = window.mouseY || 0
+            const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
+            if (!elementUnderCursor?.closest('.nav-button-hovercard') && !elementUnderCursor?.closest('.nav-toolbar-btn')) {
+                navButtonHovered = false
+            }
+        }, 100)
+    }
+    
+    function handleNavHovercardMouseEnter() {
+        if (navButtonLeaveTimeout) {
+            clearTimeout(navButtonLeaveTimeout)
+            navButtonLeaveTimeout = null
+        }
+    }
+    
+    function handleNavHovercardMouseLeave() {
         navButtonHovered = false
     }
     
@@ -3958,7 +3979,8 @@
     <div class="tab-hovercard nav-button-hovercard" 
          role="tooltip"
          style="left: {navButtonHovercardPosition.x}px; top: {navButtonHovercardPosition.y}px; --hovercard-top: {navButtonHovercardPosition.y}px;"
-         onmouseleave={handleNavButtonMouseLeave}>
+         onmouseenter={handleNavHovercardMouseEnter}
+         onmouseleave={handleNavHovercardMouseLeave}>
         <TabHoverCard tab={activeTab} 
                       isClosedTab={false} 
                       showHistoryImmediately={true}
@@ -3971,8 +3993,7 @@
                       onCloseTab={() => {
                           closeTab(activeTab)
                           navButtonHovered = false
-                      }}
-                      onMouseLeave={handleNavButtonMouseLeave} />
+                      }} />
     </div>
   {/key}
 {/if}
