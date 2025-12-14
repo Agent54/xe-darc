@@ -587,12 +587,17 @@
         // const hasCertError = !!currentCertErr
         
         // Update title and capture screenshot after page loads (only if successful)
-        // if (wasLoading) {
-            // setTimeout(async () => {
         updateTabMeta(tab)
-        captureTabScreenshot(tab)
-            // }, 0)
-        // }
+        
+        // Queue screenshot capture during idle time to avoid blocking UI
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(() => {
+                captureTabScreenshot(tab)
+            }, { timeout: 5000 })
+        } else {
+            // Fallback for browsers without requestIdleCallback
+            setTimeout(() => captureTabScreenshot(tab), 1000)
+        }
     }
 
     function handleNewWindow(tab, e) {

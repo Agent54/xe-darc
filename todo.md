@@ -2510,3 +2510,7 @@ see space open in other window, button to switch to other window
 hide new tab pages without history from clsed tabs
 
 context menu tab sidebar
+
+horizontal /vertical splits and default width smaller than 100% to supoort scrolling feeling.
+
+recent items drawer: screnshots, clipboard, downloads, opened tabs etc.

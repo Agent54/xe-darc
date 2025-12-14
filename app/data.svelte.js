@@ -587,22 +587,31 @@ const resolveAttachmentUrl = async (attachmentUrl) => {
     return null
 }
 
-// Cache for resolved attachment URLs
+// Cache for resolved attachment URLs - keyed by attachmentUrl + digest for invalidation
 const attachmentUrlCache = new Map()
 
-const getAttachmentUrl = async (attachmentUrl) => {
-    // console.log('getAttachmentUrl', attachmentUrl)
+const getAttachmentUrl = async (attachmentUrl, digest) => {
     if (!attachmentUrl || !attachmentUrl.startsWith('attachment://')) {
         return attachmentUrl
     }
     
-    if (attachmentUrlCache.has(attachmentUrl)) {
-        return attachmentUrlCache.get(attachmentUrl)
+    // Use digest in cache key to invalidate when attachment changes
+    const cacheKey = digest ? `${attachmentUrl}:${digest}` : attachmentUrl
+    
+    if (attachmentUrlCache.has(cacheKey)) {
+        return attachmentUrlCache.get(cacheKey)
     }
     
     const resolvedUrl = await resolveAttachmentUrl(attachmentUrl)
     if (resolvedUrl) {
-        attachmentUrlCache.set(attachmentUrl, resolvedUrl)
+        // Revoke old blob URLs for this attachment to prevent memory leaks
+        for (const [key, url] of attachmentUrlCache.entries()) {
+            if (key.startsWith(attachmentUrl + ':') && key !== cacheKey) {
+                URL.revokeObjectURL(url)
+                attachmentUrlCache.delete(key)
+            }
+        }
+        attachmentUrlCache.set(cacheKey, resolvedUrl)
     }
     
     return resolvedUrl
@@ -1233,5 +1242,52 @@ export default {
         } else {
             return false
         }
+    },
+
+    captureScreenshot: async (tabId) => {
+        const frame = frames[tabId]?.frame
+        if (!frame) {
+            console.log('Frame not found for tab:', tabId)
+            return null
+        }
+
+        if (typeof frame.captureVisibleRegion !== 'function') {
+            console.log('captureVisibleRegion not available for tab:', tabId)
+            return null
+        }
+
+        try {
+            const screenshot = await frame.captureVisibleRegion({
+                format: 'png',
+                quality: 80
+            })
+
+            if (screenshot) {
+                const tab = docs[tabId]
+                if (tab) {
+                    // Convert data URL to blob and store as attachment
+                    const response = await fetch(screenshot)
+                    const blob = await response.blob()
+                    
+                    await db.put({
+                        ...tab,
+                        _attachments: {
+                            ...(tab._attachments || {}),
+                            screenshot: {
+                                content_type: blob.type || 'image/png',
+                                data: blob
+                            }
+                        },
+                        screenshot: `attachment://${tabId}/screenshot`
+                    })
+                    
+                    return screenshot
+                }
+            }
+        } catch (err) {
+            console.log('Error capturing screenshot:', err)
+        }
+        
+        return null
     }
 }

@@ -342,7 +342,7 @@
     {#if hoveredHistoryEntry?.screenshot}
         <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
             {#key hoveredHistoryEntry.id}
-                <AttachmentImage src={hoveredHistoryEntry.screenshot} alt="Page preview" />
+                <AttachmentImage src={hoveredHistoryEntry.screenshot} digest={hoveredHistoryEntry._attachments?.screenshot?.digest} alt="Page preview" />
             {/key}
             {#if showDelayedElements}
                 <button class="expand-button" aria-label="Expand screenshot">
@@ -355,7 +355,7 @@
     {:else if tab.screenshot}
         <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
             {#key tab.id}
-                <AttachmentImage src={tab.screenshot} alt="Page preview" />
+                <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Page preview" />
             {/key}
             {#if showDelayedElements}
                 <button class="expand-button" aria-label="Expand screenshot">

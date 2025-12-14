@@ -520,7 +520,7 @@
             }}
         >
             {#if tab.screenshot}
-                <AttachmentImage src={tab.screenshot} alt="Hibernated tab preview" class="hibernated-screenshot" lazy={true} />
+                <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Hibernated tab preview" class="hibernated-screenshot" lazy={true} />
             {:else}
                 <div class="hibernated-placeholder">
                     <div class="hibernated-icon">💤</div>
