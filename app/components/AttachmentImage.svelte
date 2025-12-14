@@ -2,10 +2,11 @@
     import data from '../data.svelte.js'
     import { onMount } from 'svelte'
     
-    let { src, alt = '', class: className = '', lazy = false, ...props } = $props()
+    let { src, digest = null, alt = '', class: className = '', lazy = false, ...props } = $props()
     
     let containerEl = null
     let currentSrc = null
+    let currentDigest = null
     let observer = null
     let shouldLoad = $state(!lazy)
 
@@ -41,7 +42,7 @@
         updateDOM('loading')
         
         try {
-            const resolved = await data.getAttachmentUrl(srcToLoad)
+            const resolved = await data.getAttachmentUrl(srcToLoad, digest)
             if (srcToLoad === currentSrc) {
                 updateDOM('loaded', resolved)
             }
@@ -53,10 +54,11 @@
         }
     }
     
-    // Use $effect to react to src changes instead of polling interval
+    // Use $effect to react to src or digest changes instead of polling interval
     $effect(() => {
-        if (src !== currentSrc) {
+        if (src !== currentSrc || digest !== currentDigest) {
             currentSrc = src
+            currentDigest = digest
             if (shouldLoad) {
                 loadImage(src)
             }

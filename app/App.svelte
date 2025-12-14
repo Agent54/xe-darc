@@ -12,6 +12,7 @@
     import GridView from './components/GridView.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
     import TabHoverCard from './components/TabHoverCard.svelte'
+    import TabContextMenu from './components/TabContextMenu.svelte'
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import Favicon from './components/Favicon.svelte'
@@ -2938,251 +2939,6 @@
     {/if}
 {/snippet}
 
-{#snippet tabContextMenu(menu, onHide)}
-    <div class="context-menu-scrim" 
-         role="button"
-         tabindex="0"
-         onmousedowncapture={onHide}
-         onmouseup={() => {
-             if (Date.now() - contextMenuOpenTime > 500) {
-                 onHide()
-             }
-         }}
-         oncontextmenu={(e) => { e.preventDefault(); onHide(); }}></div>
-    
-    <div class="context-menu" 
-         role="menu"
-         tabindex="0"
-         style="left: {menu.x}px; top: {menu.y}px;"
-         onclick={(e) => e.stopPropagation()}
-         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
-         oncontextmenu={(e) => e.preventDefault()}>
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => reloadTab(menu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reloadTab(menu.tab) } }}>
-            <span class="context-menu-icon">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-            </span>
-            <span>Reload</span>
-        </div>
-        
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => toggleCertificateMonitor(menu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCertificateMonitor(menu.tab) } }}>
-            <span class="context-menu-icon">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-                </svg>
-            </span>
-            <span>Certificate Info</span>
-        </div>
-        
-        {#if menu.tab.pinned}
-            <div class="context-menu-item" 
-                 role="menuitem"
-                 tabindex="0"
-                 onmouseup={() => unpinTab(menu.tab)}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); unpinTab(menu.tab) } }}>
-                <span class="context-menu-icon">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
-                    </svg>
-                </span>
-                <span>Unpin Tab</span>
-            </div>
-        {:else}
-            <div class="context-menu-item-row">
-                <div class="context-menu-item context-menu-item-left" 
-                     role="menuitem"
-                     tabindex="0"
-                     onmouseup={() => pinTabLeft(menu.tab)}
-                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pinTabLeft(menu.tab) } }}>
-                    <span class="context-menu-icon">
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
-                        </svg>
-                    </span>
-                    <span>Pin Left</span>
-                </div>
-                <div class="context-menu-item context-menu-item-right" 
-                     role="menuitem"
-                     tabindex="0"
-                     onmouseup={() => pinTabRight(menu.tab)}
-                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pinTabRight(menu.tab) } }}>
-                    <span class="context-menu-icon">
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
-                        </svg>
-                    </span>
-                    <span>Pin Right</span>
-                </div>
-            </div>
-        {/if}
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => toggleMuteTab(menu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(menu.tab) } }}>
-            <span class="context-menu-icon">
-                {#if menu.tab.muted}
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.59-.79-1.59-1.76V9.51c0-.97.71-1.76 1.59-1.76h2.24Z" />
-                    </svg>
-                {:else}
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.59-.79-1.59-1.76V9.51c0-.97.71-1.76 1.59-1.76h2.24Z" />
-                    </svg>
-                {/if}
-            </span>
-            <span>{menu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
-        </div>
-
-        <!-- TODO: -->
-        <div class="context-menu-item" 
-                role="menuitem"
-                tabindex="0"
-                onmouseup={() => toggleMuteTab(menu.tab)}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(menu.tab) } }}>
-            <span class="context-menu-icon">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-            </span>
-            <span>Load at startup</span>
-        </div>
-
-        {#if data.frames[menu.tab.id]?.frame && data.spaceMeta.activeTabId !== menu.tab.id}
-            <div class="context-menu-item" 
-                role="menuitem"
-                tabindex="0"
-                onmouseup={() => { data.hibernate(menu.tab.id); onHide(); }}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.hibernate(menu.tab.id); onHide(); } }}>
-                <span class="context-menu-icon">
-                    <!-- {#if menu.tab.hibernated}
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-                        </svg>
-                    {:else} -->
-                    
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
-                    </svg>  
-                </span>
-                <span>Hibernate</span>
-            </div>
-        {/if}
-
-        <div class="context-menu-item" 
-            role="menuitem"
-            tabindex="0"
-            onmouseup={() => {  data.hibernateOthers(menu.tab.id); onHide(); }}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault();  data.hibernateOthers(menu.tab.id); onHide(); } }}>
-            <span class="context-menu-icon">
-                <!-- {#if menu.tab.hibernated}
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-                    </svg>
-                {:else} -->
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
-                    </svg>
-                <!-- {/if} -->
-            </span>
-            <span>Hibernate others</span>
-        </div>
-
-        <div class="context-menu-item has-submenu" 
-             role="menuitem"
-             tabindex="0">
-            <span class="context-menu-icon">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-                </svg>
-            </span>
-            <span>Container: {menu.tab?.partition || 'default'}</span>
-            <span class="submenu-arrow">
-                <svg class="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                </svg>
-            </span>
-            <div class="context-submenu">
-                {#each partitions as partition}
-                    <div class="context-submenu-item" 
-                         class:active={menu.tab?.partition === partition}
-                         role="menuitem"
-                         tabindex="0"
-                         onmouseup={() => selectPartition(partition, menu.tab)}
-                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPartition(partition, menu.tab) } }}>
-                        <span class="partition-icon">
-                            {#if partition.startsWith('persist')}
-                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-                                </svg>
-                            {:else}
-                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5 10 3.75 16.25 13.5h-12.5Z" />
-                                </svg>
-                            {/if}
-                        </span>
-                        <span>{partition}</span>
-                        {#if menu.tab?.partition === partition}
-                            <span class="checkmark">•</span>
-                        {/if}
-                    </div>
-                {/each}
-            </div>
-        </div>
-
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => copyTabUrl(menu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyTabUrl(menu.tab) } }}>
-            <span class="context-menu-icon">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 7.5V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.057 1.123-.08M15.75 18H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08M15.75 18.75v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5A3.375 3.375 0 0 0 6.375 7.5H5.25m11.9-3.664A2.251 2.251 0 0 0 15 2.25h-1.5a2.251 2.251 0 0 0-2.15 1.586m5.8 0c.065.21.1.433.1.664v.75h-6V4.5c0-.231.035-.454.1-.664M6.75 7.5H4.875c-.621 0-1.125.504-1.125 1.125v9.75c0 .621.504 1.125 1.125 1.125h.75m2.25 0H9a2.25 2.25 0 0 0 2.25-2.25v-.75" />
-                </svg>
-            </span>
-            <span>Copy URL</span>
-        </div>
-
-        <div class="context-menu-item" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => {}}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
-            <span class="context-menu-icon">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-                </svg>
-            </span>
-            <span>Take Screenshot</span>
-        </div>
-
-        <div class="context-menu-separator"></div>
-
-        <div class="context-menu-item danger" 
-             role="menuitem"
-             tabindex="0"
-             onmouseup={() => closeTabFromMenu(menu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTabFromMenu(menu.tab) } }}>
-            <span class="context-menu-icon">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-            </span>
-            <span>Close Tab</span>
-        </div>
-    </div>
-{/snippet}
-
 <svelte:window
     onkeydowncapture={handleKeyDown}
     onclick={hideContextMenu}
@@ -4048,9 +3804,18 @@
          oncontextmenu={hideContentAreaScrim}></div>
 {/if}
 
-{#if contextMenu.visible && contextMenu.tab}
-    {@render tabContextMenu(contextMenu, hideContextMenu)}
-{/if}
+<TabContextMenu 
+    menu={contextMenu} 
+    onHide={hideContextMenu} 
+    {partitions}
+    {contextMenuOpenTime}
+    onToggleCertificateMonitor={(tab) => {
+        if (!certificateMonitorForTab) {
+            certificateMonitorForTab = tab
+        } else {
+            certificateMonitorForTab = null
+        }
+    }} />
 
 {#if hoveredTab}
   {#key hoveredTab.id}

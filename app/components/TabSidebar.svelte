@@ -20,6 +20,7 @@
     import UrlRenderer from './UrlRenderer.svelte'
     import UrlBar from './UrlBar.svelte'
     import TabHoverCard from './TabHoverCard.svelte'
+    import TabContextMenu from './TabContextMenu.svelte'
     import { untrack } from 'svelte'
     
     let isHovered = $state(false)
@@ -37,6 +38,10 @@
     let urlInput = $state(null)
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
+    
+    // Tab context menu state
+    let tabContextMenu = $state({ visible: false, x: 0, y: 0, tab: null, index: null })
+    let tabContextMenuOpenTime = 0
     
     // Hover card state
     let hoveredTab = $state(null)
@@ -896,6 +901,32 @@
         }
     }
 
+    function handleTabContextMenu(event, tab, index) {
+        event.preventDefault()
+        event.stopPropagation()
+        
+        console.log('[DEBUG:TabContextMenu] Right-click on tab', tab.id, tab.title)
+        
+        if (tabContextMenu.visible) {
+            hideTabContextMenu()
+            return
+        }
+        
+        tabContextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            tab: tab,
+            index: index
+        }
+        tabContextMenuOpenTime = Date.now()
+        console.log('[DEBUG:TabContextMenu] Menu opened at', event.clientX, event.clientY)
+    }
+    
+    function hideTabContextMenu() {
+        tabContextMenu = { visible: false, x: 0, y: 0, tab: null, index: null }
+    }
+
     async function handleCopyUrlClick() {
         const activeTab = data.docs[data.spaceMeta.activeTabId]
         if (activeTab?.url) {
@@ -1000,10 +1031,10 @@
 
 </script>
 
-<svelte:window onclick={handleClickOutside} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
+<svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 <div class="sidebar-box" 
-     class:hovered={isHovered || hoveredTab || urlBarExpanded}
+     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
      onmouseenter={handleMouseEnter} 
@@ -1213,7 +1244,7 @@
                                 <div class="tabs-list-container">
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list" onscroll={handleTabsListScroll}>
-                                   {#each data.spaces[spaceId].tabs as tab (tab.id)}
+                                   {#each data.spaces[spaceId].tabs as tab, i (tab.id)}
                                         {#if tab.type === 'divider'}
                                             <div class="tab-divider">
                                                 {#if tab.title}
@@ -1227,8 +1258,9 @@
                                             <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} data-tab-id={tab.id}
                                                  role="listitem"
                                                  onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                                                 onmouseleave={handleTabMouseLeave}>
-                                                <button class="tab-item-main" onmousedown={() => activateTab(tab.id, spaceId)}>
+                                                 onmouseleave={handleTabMouseLeave}
+                                                 oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
+                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) activateTab(tab.id, spaceId) }}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{tab.title}</span>
                                                 </button>
@@ -1431,6 +1463,12 @@
     </div>
     {/key}
 {/if}
+
+<TabContextMenu 
+    menu={tabContextMenu} 
+    onHide={hideTabContextMenu} 
+    {partitions}
+    contextMenuOpenTime={tabContextMenuOpenTime} />
 
 <style>
     .sidebar-box {
@@ -2050,7 +2088,7 @@
         min-height: 0;
         overflow-y: auto;
         padding-top: 8px;
-        padding-bottom: 230px; /* Add space at bottom for closed tabs overlay and making space for new thinking */
+        padding-bottom: 50vh; /* Add space at bottom for closed tabs overlay and making space for new thinking */
         padding-right: 8px;
         margin-right: -8px; /* Offset scrollbar position */
         scrollbar-width: thin;

@@ -346,7 +346,7 @@
                   aria-label="Activate {tab.title || 'Untitled'}"
                 >
                   {#if tab.screenshot}
-                    <AttachmentImage src={tab.screenshot} alt="Tab preview" />
+                    <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" />
                   {:else}
                     <div class="no-screenshot">
                       <div class="favicon-container">
