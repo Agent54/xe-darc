@@ -2533,7 +2533,7 @@
         border-radius: 10px;
         background: transparent;
         border: 1px solid transparent;
-        transition: min-height 150ms ease, overflow 150ms ease, margin 150ms ease, max-width 150ms ease;
+
         overflow: visible;
         flex-shrink: 0;
         margin: -1px;
@@ -2562,7 +2562,7 @@
         gap: 4px;
         border-radius: 10px;
         background: #ffffff0f;
-        transition: background-color 150ms ease, border-radius 150ms ease, margin 150ms ease, width 150ms ease;
+        transition: background-color 150ms ease;
         border: 1px solid hsl(0deg 0% 100% / 2%);
         height: 36px;
         flex-shrink: 0;

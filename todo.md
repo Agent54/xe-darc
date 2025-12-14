@@ -2513,4 +2513,9 @@ context menu tab sidebar
 
 horizontal /vertical splits and default width smaller than 100% to supoort scrolling feeling.
 
+
+warp like terminal with standalone and vscode support out of box, nushell/ysh
+
 recent items drawer: screnshots, clipboard, downloads, opened tabs etc.
+
+replace close tab for vscode and similar to close tab inside app not the tab of the app?!
