@@ -736,6 +736,15 @@
             newTabMenuLeaveTimeout = null
         }, 150)
     }
+    
+    function handleNewTabButtonContextMenu(e, isInline = false) {
+        e.preventDefault()
+        if (isInline && inlineNewTabButtonElement) {
+            const rect = inlineNewTabButtonElement.getBoundingClientRect()
+            newTabMenuPosition = { left: rect.left + rect.width / 2 }
+        }
+        newTabMenuVisible = true
+    }
 
     async function handleNewFromClipboard() {
         newTabMenuVisible = false
@@ -3345,7 +3354,8 @@
                 role="group"
                 bind:this={inlineNewTabButtonElement}>
                 <button class="inline-new-tab-button" 
-                    onmousedown={openNewTab}
+                    onmousedown={(e) => { if (e.button === 0) openNewTab() }}
+                    oncontextmenu={(e) => handleNewTabButtonContextMenu(e, true)}
                     title="New Tab (⌘T)"
                     aria-label="New Tab">
                     <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -3534,7 +3544,8 @@
         <div class="new-tab-button visible-inner" 
              role="button"
              tabindex="0"
-             onmousedown={openNewTab}
+             onmousedown={(e) => { if (e.button === 0) openNewTab() }}
+             oncontextmenu={(e) => handleNewTabButtonContextMenu(e, false)}
              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNewTab() } }}
              title="New Tab (⌘T)">
             <svg class="new-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
