@@ -2523,3 +2523,12 @@ replace close tab for vscode and similar to close tab inside app not the tab of 
 fix preview pos from iframe (eg link in amp sidebar)
 
 tangled
+
+tab tree UI
+
+unify history and screenshots
+
+right hoversidebar. only show permission req and screenshot preview etc. until click if only hovermode
+move sidebar space to top, auto add divider on pull down
+
+clickbait title fix extension
