@@ -2532,3 +2532,7 @@ right hoversidebar. only show permission req and screenshot preview etc. until c
 move sidebar space to top, auto add divider on pull down
 
 clickbait title fix extension
+
+magic previews with custom previwers for youtube, wikipeida etc.
+
+summaries/ start prompt here

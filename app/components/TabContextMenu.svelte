@@ -309,6 +309,7 @@
              class:disabled={!data.frames[menu.tab.id]?.frame}
              role="menuitem"
              tabindex={!data.frames[menu.tab.id]?.frame ? -1 : 0}
+             title={!data.frames[menu.tab.id]?.frame ? 'Tab hibernated' : null}
              onmouseup={() => data.frames[menu.tab.id]?.frame && takeScreenshot(menu.tab)}
              onkeydown={(e) => { if (data.frames[menu.tab.id]?.frame && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); takeScreenshot(menu.tab) } }}>
             <span class="context-menu-icon">
@@ -395,7 +396,6 @@
 
     .context-menu-item.disabled {
         opacity: 0.4;
-        cursor: not-allowed;
     }
 
     .context-menu-item:first-child:not(.context-menu-item-left):not(.context-menu-item-right) {
