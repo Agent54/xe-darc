@@ -369,8 +369,9 @@
   .grid-view {
     position: fixed;
     top: 35px;
-    left: calc(var(--left-pinned-width, 0px) + var(--tab-sidebar-width, 0px));
-    width: calc(100% - var(--space-taken, 0px) - 2px);
+    left: 0;
+    right: 0;
+    width: 100%;
     height: calc(100vh - 35px);
     background: rgba(0, 0, 0, 0.95);
     backdrop-filter: blur(8px);
