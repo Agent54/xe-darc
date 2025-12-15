@@ -1199,10 +1199,35 @@ export default {
             
             activateSpace(newActiveSpace)
             
-            // Set the first tab of the new space as active
+            // Restore the active tab for this space from its activeTabsOrder
             const newSpace = spaces[newActiveSpace]
-            if (newSpace?.tabs?.length > 0) {
-                activate(newSpace.tabs[0].id)
+            if (newSpace?.activeTabsOrder?.length > 0) {
+                // Find the first valid (non-closed, non-pinned) tab from the order
+                let activated = false
+                for (const tabId of newSpace.activeTabsOrder) {
+                    const tab = docs[tabId]
+                    if (tab && !tab.archive && !tab.pinned) {
+                        activate(tabId)
+                        activated = true
+                        break
+                    }
+                }
+                if (!activated && newSpace?.tabs?.length > 0) {
+                    const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+                    if (firstNonPinned) {
+                        activate(firstNonPinned.id)
+                    } else {
+                        spaceMeta.activeTabId = null
+                    }
+                }
+            } else if (newSpace?.tabs?.length > 0) {
+                // Fallback: activate the first non-pinned tab in the space
+                const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+                if (firstNonPinned) {
+                    activate(firstNonPinned.id)
+                } else {
+                    spaceMeta.activeTabId = null
+                }
             } else {
                 spaceMeta.activeTabId = null
             }
@@ -1230,10 +1255,35 @@ export default {
             
             activateSpace(newActiveSpace)
             
-            // Set the first tab of the new space as active
+            // Restore the active tab for this space from its activeTabsOrder
             const newSpace = spaces[newActiveSpace]
-            if (newSpace?.tabs?.length > 0) {
-                activate(newSpace.tabs[0].id)
+            if (newSpace?.activeTabsOrder?.length > 0) {
+                // Find the first valid (non-closed, non-pinned) tab from the order
+                let activated = false
+                for (const tabId of newSpace.activeTabsOrder) {
+                    const tab = docs[tabId]
+                    if (tab && !tab.archive && !tab.pinned) {
+                        activate(tabId)
+                        activated = true
+                        break
+                    }
+                }
+                if (!activated && newSpace?.tabs?.length > 0) {
+                    const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+                    if (firstNonPinned) {
+                        activate(firstNonPinned.id)
+                    } else {
+                        spaceMeta.activeTabId = null
+                    }
+                }
+            } else if (newSpace?.tabs?.length > 0) {
+                // Fallback: activate the first non-pinned tab in the space
+                const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+                if (firstNonPinned) {
+                    activate(firstNonPinned.id)
+                } else {
+                    spaceMeta.activeTabId = null
+                }
             } else {
                 spaceMeta.activeTabId = null
             }
