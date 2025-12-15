@@ -75,6 +75,15 @@
         tabGroupExpanded = !tabGroupExpanded
     }
     
+    // Tabs list vertical rubberband scroll state (per space for visual state, global for accumulation)
+    let tabsListVerticalRubberBand = $state({}) // { [spaceId]: offset }
+    let tabsListVerticalAccumulated = 0 // global accumulated deltaY - resets on horizontal scroll
+    let tabsListSpacerVisible = $state({}) // { [spaceId]: boolean }
+    let tabsListSpacerHeight = $state({}) // { [spaceId]: number } - current spacer height (0-250)
+    let tabsListSeparatorAdded = $state({}) // { [spaceId]: boolean } - tracks if separator was added
+    let tabsListScrollStartPosition = 0 // global scrollTop when gesture started
+    let tabsListScrollGestureTimeout = null // global timeout id
+    
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
         if (hovercardUrlBarExpanded) return
@@ -174,9 +183,9 @@
         
         // Very stiff spring (0.08 resistance) 
         const resistance = 0.08
-        const threshold = 20 // Rubber band distance after activation
-        const maxStretch = 35
-        const activationThreshold = 50 // Minimum accumulated deltaX before spring activates
+        const threshold = 35 // Rubber band distance after activation
+        const maxStretch = 50
+        const activationThreshold = 120 // Minimum accumulated deltaX before spring activates
         
         // Detect vertical scrolling and disable spring
         if (Math.abs(event.deltaY) > Math.abs(event.deltaX) * 2) {
@@ -191,6 +200,9 @@
         
         // If currently vertical scrolling, ignore horizontal component
         if (isVerticalScrolling) return
+        
+        // Reset vertical tabs list accumulation on horizontal scroll
+        tabsListVerticalAccumulated = 0
         
         // Block all scroll during closing animation
         if (isClosingMultiSpace) {
@@ -434,6 +446,185 @@
         document.removeEventListener('mouseup', handleLaneDividerMouseUp)
     }
     
+    // Tabs list vertical rubberband scroll handling
+    let tabsListSnapTimeouts = {}
+    
+    function handleTabsListWheel(event, spaceId) {
+        const tabsList = event.currentTarget
+        if (!tabsList) return
+        
+        const scrollTop = tabsList.scrollTop
+        
+        // Only handle vertical scroll down when at top
+        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
+        
+        const resistance = 0.05
+        const threshold = 18
+        const maxStretch = 25
+        const activationThreshold = 400
+        
+        // DEBUG: completely disable rubberband to test
+        // return
+        const maxSpacerHeight = 250
+        const maxStartPositionForActivation = 500
+        
+        // Track scroll gesture start position
+        if (tabsListScrollStartPosition === 0) {
+            tabsListScrollStartPosition = scrollTop
+        }
+        // Reset start position after gesture ends (no scroll events for 150ms)
+        if (tabsListScrollGestureTimeout) clearTimeout(tabsListScrollGestureTimeout)
+        tabsListScrollGestureTimeout = setTimeout(() => {
+            tabsListScrollStartPosition = 0
+            tabsListVerticalAccumulated = 0
+        }, 150)
+        
+        // If spacer is visible and growing, continue growing it (no rubberband, just grow)
+        if (tabsListSpacerVisible[spaceId]) {
+            // Ensure rubberband is disabled during expansion
+            if (tabsListVerticalRubberBand[spaceId]) {
+                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
+            }
+            
+            const currentHeight = tabsListSpacerHeight[spaceId] || 0
+            if (currentHeight < maxSpacerHeight && scrollTop <= 5 && event.deltaY < 0) {
+                event.preventDefault()
+                const growAmount = Math.abs(event.deltaY) * 0.5
+                tabsListSpacerHeight = {
+                    ...tabsListSpacerHeight,
+                    [spaceId]: Math.min(currentHeight + growAmount, maxSpacerHeight)
+                }
+            }
+            return
+        }
+        
+        // Only activate when nearly at top (within 20px)
+        if (scrollTop > 20) {
+            tabsListVerticalAccumulated = 0
+            return
+        }
+        
+        console.log('tabsListScrollStartPosition', tabsListScrollStartPosition)
+        console.log('distanceScrolled', Math.abs(tabsListScrollStartPosition - scrollTop))
+        // Don't activate rubberband if scroll started more than 500px from top
+        if (tabsListScrollStartPosition > maxStartPositionForActivation) {
+            return
+        }
+        
+       
+        // Don't activate if scrolled more than 400px during this gesture
+        const distanceScrolled = Math.abs(tabsListScrollStartPosition - scrollTop)
+        if (distanceScrolled > 400) {
+            tabsListVerticalAccumulated = 0
+            return
+        }
+        
+        // Check if scrolling up while at top (deltaY < 0 = scroll up gesture = pulling content down)
+        if (scrollTop <= 5 && event.deltaY < 0) {
+            // Accumulate vertical scroll before activating spring
+            tabsListVerticalAccumulated += Math.abs(event.deltaY)
+            
+            console.log('[SPACER] accumulated:', tabsListVerticalAccumulated, 'threshold:', activationThreshold)
+            
+            // Only activate spring after threshold is met
+            if (tabsListVerticalAccumulated < activationThreshold) {
+                return
+            }
+            
+            event.preventDefault()
+            
+            const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
+            tabsListVerticalRubberBand = {
+                ...tabsListVerticalRubberBand,
+                [spaceId]: Math.min(currentOffset - event.deltaY * resistance, maxStretch)
+            }
+            
+            // If pulled far enough, break rubberband and start spacer
+            if ((tabsListVerticalRubberBand[spaceId] || 0) > threshold && !tabsListSpacerVisible[spaceId]) {
+                // Add separator at top if not already one
+                ensureSeparatorAtTop(spaceId)
+                
+                // Reset rubberband immediately and start spacer with initial height
+                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
+                tabsListVerticalAccumulated = 0
+                tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: true }
+                tabsListSpacerHeight = { ...tabsListSpacerHeight, [spaceId]: 20 }
+                return
+            }
+            
+            scheduleTabsListSnapBack(spaceId)
+        } else if (scrollTop <= 0 && event.deltaY > 0 && (tabsListVerticalRubberBand[spaceId] || 0) > 0) {
+            // Scrolling down while rubber banding - reduce offset
+            const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
+            tabsListVerticalRubberBand = {
+                ...tabsListVerticalRubberBand,
+                [spaceId]: Math.max(0, currentOffset - event.deltaY * 0.15)
+            }
+            if ((tabsListVerticalRubberBand[spaceId] || 0) <= 0) {
+                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
+                tabsListVerticalAccumulated = 0
+            }
+        } else {
+            // Reset when not at edge
+            tabsListVerticalAccumulated = 0
+        }
+    }
+    
+    function ensureSeparatorAtTop(spaceId) {
+        const space = data.spaces[spaceId]
+        if (!space?.tabs?.length) return
+        
+        // Check if first tab is already a divider
+        const firstTab = space.tabs[0]
+        if (firstTab?.type === 'divider') {
+            // Already has a separator at top, just mark that we've ensured it
+            tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: false }
+            return
+        }
+        
+        // Add in-memory separator at beginning (we don't persist this)
+        tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: true }
+    }
+    
+    function scheduleTabsListSnapBack(spaceId) {
+        if (tabsListSnapTimeouts[spaceId]) clearTimeout(tabsListSnapTimeouts[spaceId])
+        tabsListSnapTimeouts[spaceId] = setTimeout(() => {
+            snapBackTabsListRubberBand(spaceId)
+        }, 30)
+    }
+    
+    function snapBackTabsListRubberBand(spaceId) {
+        const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
+        if (currentOffset === 0) {
+            tabsListVerticalAccumulated = 0
+            return
+        }
+        
+        const newOffset = currentOffset * 0.85
+        if (Math.abs(newOffset) < 0.5) {
+            tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
+            tabsListVerticalAccumulated = 0
+        } else {
+            tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: newOffset }
+            requestAnimationFrame(() => snapBackTabsListRubberBand(spaceId))
+        }
+    }
+    
+    function handleTabsListScrollForSpacer(event, spaceId) {
+        const tabsList = event.currentTarget
+        if (!tabsList) return
+        
+        if (!tabsListSpacerVisible[spaceId]) return
+        
+        const spacerHeight = tabsListSpacerHeight[spaceId] || 0
+        const scrollTop = tabsList.scrollTop
+        
+        // Remove spacer once it's fully scrolled out of view
+        if (scrollTop > spacerHeight + 30) {
+            tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: false }
+            tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: false }
+        }
+    }
 
     
     // Initialize spaces scroll fade state when spacesListRef is available or spaces change
@@ -530,6 +721,7 @@
     }
 
     let currentScrolledSpace = $state(null)
+    let hoveredSpaceInMultiMode = $state(null)
 
     function handleTabScroll(event) {
         if (!tabListRef) return
@@ -921,6 +1113,10 @@
     }
     
     function handleTabMouseEnter(tab, event) {
+        // Disable hovercards while spacer is visible (scrolling to add space)
+        const anySpacerVisible = Object.values(tabsListSpacerVisible).some(v => v)
+        if (anySpacerVisible) return
+        
         // console.log('[DEBUG:HOVER] Tab mouse enter', {
         //     tabId: tab.id,
         //     tabTitle: tab.title,
@@ -1415,7 +1611,7 @@
                                 <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
                                     <button class="space-item" 
                                             class:active={data.spaceMeta.activeSpace === spaceId}
-                                            class:scrolled={currentScrolledSpace === spaceId}
+                                            class:scrolled={multiSpaceMode ? hoveredSpaceInMultiMode === spaceId : currentScrolledSpace === spaceId}
                                             data-space-id={spaceId}
                                             onmousedown={(e) => handleSpaceClick(e, spaceId)}
                                             oncontextmenu={(e) => e.preventDefault()}
@@ -1478,7 +1674,9 @@
                             <div class="space-content" 
                                  class:multi-space={multiSpaceMode}
                                  data-space-id={spaceId}
-                                 style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}>
+                                 style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}
+                                 onmouseenter={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = spaceId }}
+                                 onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}>
                                 <div class="space-title-container">
                                     <button class="space-title" 
                                             class:active={data.spaceMeta.activeSpace === spaceId}
@@ -1560,7 +1758,21 @@
                                 
                                 <div class="tabs-list-container">
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
-                                    <div class="tabs-list" onscroll={handleTabsListScroll}>
+                                    <div class="tabs-list" 
+                                         onscroll={(e) => { handleTabsListScroll(e); handleTabsListScrollForSpacer(e, spaceId); }}
+                                         onwheel={(e) => handleTabsListWheel(e, spaceId)}
+                                         style="transform: translateY({tabsListVerticalRubberBand[spaceId] || 0}px) translateZ(0)">
+                                        
+                                        {#if tabsListSpacerVisible[spaceId]}
+                                            <div class="tabs-list-spacer" style="height: {tabsListSpacerHeight[spaceId] || 0}px"></div>
+                                        {/if}
+                                        
+                                        {#if tabsListSeparatorAdded[spaceId]}
+                                            <div class="tab-divider">
+                                                <div class="tab-divider-line-only"></div>
+                                            </div>
+                                        {/if}
+                                        
                                    {#each data.spaces[spaceId].tabs as tab, i (tab.id)}
                                         {#if tab.type === 'divider'}
                                             <div class="tab-divider">
@@ -1803,7 +2015,9 @@
 
         pointer-events: auto;
         overflow: visible;
-        transform: translateX(calc(-100% + 8px));
+        transform: translateX(calc(-100% + 8px)) translateZ(0);
+        will-change: transform;
+        contain: layout style paint;
     }
 
     .sidebar-box.visible {
@@ -1813,7 +2027,7 @@
 
     .sidebar-box:hover, .sidebar-box.hovered, .sidebar-box.resizing, .sidebar-box.visible {
         transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04);
-        transform: translateX(0px);
+        transform: translateX(0px) translateZ(0);
     }
     
     .sidebar-box.resizing {
@@ -1833,6 +2047,8 @@
         user-select: none;
         overflow: visible;
         border-radius: 8px;
+        transform: translateZ(0);
+        backface-visibility: hidden;
     }
     
     .sidebar-box.visible .sidebar {
@@ -2269,6 +2485,9 @@
         border-radius: 10px;
         width: calc(100% + 2px);
         transition: transform 0.1s ease-out;
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        contain: layout style;
     }
     
     .tab-content-container.rubber-banding {
@@ -2498,6 +2717,8 @@
         min-height: 0;
         display: flex;
         flex-direction: column;
+        transform: translateZ(0);
+        contain: layout style;
     }
     
     .tabs-list-fade-top {
@@ -2543,11 +2764,13 @@
         min-height: 0;
         overflow-y: auto;
         padding-top: 8px;
-        padding-bottom: 50vh; /* Add space at bottom for closed tabs overlay and making space for new thinking */
+        padding-bottom: calc(50vh + 300px); /* Add space at bottom for closed tabs overlay, spacer scroll-out, and making space for new thinking */
         padding-right: 8px;
         margin-right: -8px; /* Offset scrollbar position */
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        will-change: transform;
+        backface-visibility: hidden;
     }
     
     .tabs-list::-webkit-scrollbar {
@@ -2565,6 +2788,14 @@
 
     .tabs-list::-webkit-scrollbar-thumb:hover {
         background: rgba(255, 255, 255, 0.3);
+    }
+    
+    .tabs-list-spacer {
+        flex-shrink: 0;
+        width: 100%;
+        pointer-events: none;
+        will-change: height;
+        contain: layout style;
     }
     
     .tab-item-container {
