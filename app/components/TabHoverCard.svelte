@@ -368,12 +368,17 @@
     {/if}
     {#if showHistory && historyEntries.length > 0}
         <div class="history-section">
-            <button class="history-section-title" onclick={openTabHistory}>
-                Tab History
-                <svg class="expand-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                </svg>
-            </button>
+            <div class="history-section-header">
+                <button class="history-section-title" onclick={openTabHistory}>
+                    Tab History
+                    <svg class="expand-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                    </svg>
+                </button>
+                <button class="clear-all-btn" onclick={() => { /* TODO: clear all history */ }} title="Clear all history">
+                    Clear all
+                </button>
+            </div>
             <div class="history-list" style="max-height: {historyMaxHeight()};">
                 <div class="history-connector-line"></div>
                 {#each historyEntries as historyTab, index}
@@ -616,8 +621,15 @@
         overflow-y: hidden;
     }
     
-    .history-section-title {
+    .history-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         padding: 8px 12px 4px 12px;
+    }
+    
+    .history-section-title {
+        padding: 0;
         font-size: 10px;
         font-weight: 600;
         text-transform: uppercase;
@@ -630,7 +642,6 @@
         display: flex;
         align-items: center;
         gap: 6px;
-        width: 100%;
         text-align: left;
         transition: color 100ms ease;
     }
@@ -648,6 +659,29 @@
     
     .history-section-title:hover .expand-icon {
         opacity: 1;
+    }
+    
+    .clear-all-btn {
+        font-size: 10px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.35);
+        font-family: 'Inter', sans-serif;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 4px;
+        transition: all 100ms ease;
+        opacity: 0;
+    }
+    
+    .history-section:hover .clear-all-btn {
+        opacity: 1;
+    }
+    
+    .clear-all-btn:hover {
+        color: rgba(248, 113, 113, 0.9);
+        background: rgba(248, 113, 113, 0.15);
     }
     
     .history-list {

@@ -1182,116 +1182,135 @@ export default {
     },
 
     previousSpace: () => {
-        if (spaceMeta.spaceOrder.length <= 1) {
+        let newActiveSpace = null
+        
+        // First try activation history (activeSpacesOrder)
+        if (spaceMeta.activeSpacesOrder?.length > 1) {
+            // Find next valid space in history after current
+            for (let i = 1; i < spaceMeta.activeSpacesOrder.length; i++) {
+                const spaceId = spaceMeta.activeSpacesOrder[i]
+                if (spaces[spaceId]) {
+                    newActiveSpace = spaceId
+                    break
+                }
+            }
+        }
+        
+        // Fall back to spatial order if no history
+        if (!newActiveSpace) {
+            if (spaceMeta.spaceOrder.length <= 1) {
+                return false
+            }
+            const currentIndex = spaceMeta.spaceOrder.indexOf(spaceMeta.activeSpace)
+            if (currentIndex > 0) {
+                const targetSpace = spaceMeta.spaceOrder[currentIndex - 1]
+                if (spaces[targetSpace]) {
+                    newActiveSpace = targetSpace
+                }
+            }
+        }
+        
+        if (!newActiveSpace) {
             return false
         }
         
-        const currentIndex = spaceMeta.spaceOrder.indexOf(spaceMeta.activeSpace)
+        activateSpace(newActiveSpace)
         
-        if (currentIndex > 0) {
-            const newActiveSpace = spaceMeta.spaceOrder[currentIndex - 1]
-            
-            // Validate the space exists
-            if (!spaces[newActiveSpace]) {
-                console.warn('🔄 [DATA] previousSpace: target space does not exist:', newActiveSpace)
-                return false
+        // Restore the active tab for this space from its activeTabsOrder
+        const newSpace = spaces[newActiveSpace]
+        if (newSpace?.activeTabsOrder?.length > 0) {
+            // Find the first valid (non-closed, non-pinned) tab from the order
+            let activated = false
+            for (const tabId of newSpace.activeTabsOrder) {
+                const tab = docs[tabId]
+                if (tab && !tab.archive && !tab.pinned) {
+                    activate(tabId)
+                    activated = true
+                    break
+                }
             }
-            
-            activateSpace(newActiveSpace)
-            
-            // Restore the active tab for this space from its activeTabsOrder
-            const newSpace = spaces[newActiveSpace]
-            if (newSpace?.activeTabsOrder?.length > 0) {
-                // Find the first valid (non-closed, non-pinned) tab from the order
-                let activated = false
-                for (const tabId of newSpace.activeTabsOrder) {
-                    const tab = docs[tabId]
-                    if (tab && !tab.archive && !tab.pinned) {
-                        activate(tabId)
-                        activated = true
-                        break
-                    }
-                }
-                if (!activated && newSpace?.tabs?.length > 0) {
-                    const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
-                    if (firstNonPinned) {
-                        activate(firstNonPinned.id)
-                    } else {
-                        spaceMeta.activeTabId = null
-                    }
-                }
-            } else if (newSpace?.tabs?.length > 0) {
-                // Fallback: activate the first non-pinned tab in the space
+            if (!activated && newSpace?.tabs?.length > 0) {
                 const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
                 if (firstNonPinned) {
                     activate(firstNonPinned.id)
                 } else {
                     spaceMeta.activeTabId = null
                 }
+            }
+        } else if (newSpace?.tabs?.length > 0) {
+            // Fallback: activate the first non-pinned tab in the space
+            const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+            if (firstNonPinned) {
+                activate(firstNonPinned.id)
             } else {
                 spaceMeta.activeTabId = null
             }
-            
-            return true
         } else {
-            return false
+            spaceMeta.activeTabId = null
         }
+        
+        return true
     },
 
     nextSpace: () => {
+        let newActiveSpace = null
+        
+        // First try activation history - go forward means checking if we went back before
+        // For forward navigation, we'd need a separate forward history stack
+        // For now, fall back to spatial order for "next"
+        
+        // Use spatial order for next
         if (spaceMeta.spaceOrder.length <= 1) {
             return false
         }
-        
         const currentIndex = spaceMeta.spaceOrder.indexOf(spaceMeta.activeSpace)
-        
         if (currentIndex < spaceMeta.spaceOrder.length - 1) {
-            const newActiveSpace = spaceMeta.spaceOrder[currentIndex + 1]
-            
-            // Validate the space exists
-            if (!spaces[newActiveSpace]) {
-                return false
+            const targetSpace = spaceMeta.spaceOrder[currentIndex + 1]
+            if (spaces[targetSpace]) {
+                newActiveSpace = targetSpace
             }
-            
-            activateSpace(newActiveSpace)
-            
-            // Restore the active tab for this space from its activeTabsOrder
-            const newSpace = spaces[newActiveSpace]
-            if (newSpace?.activeTabsOrder?.length > 0) {
-                // Find the first valid (non-closed, non-pinned) tab from the order
-                let activated = false
-                for (const tabId of newSpace.activeTabsOrder) {
-                    const tab = docs[tabId]
-                    if (tab && !tab.archive && !tab.pinned) {
-                        activate(tabId)
-                        activated = true
-                        break
-                    }
+        }
+        
+        if (!newActiveSpace) {
+            return false
+        }
+        
+        activateSpace(newActiveSpace)
+        
+        // Restore the active tab for this space from its activeTabsOrder
+        const newSpace = spaces[newActiveSpace]
+        if (newSpace?.activeTabsOrder?.length > 0) {
+            // Find the first valid (non-closed, non-pinned) tab from the order
+            let activated = false
+            for (const tabId of newSpace.activeTabsOrder) {
+                const tab = docs[tabId]
+                if (tab && !tab.archive && !tab.pinned) {
+                    activate(tabId)
+                    activated = true
+                    break
                 }
-                if (!activated && newSpace?.tabs?.length > 0) {
-                    const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
-                    if (firstNonPinned) {
-                        activate(firstNonPinned.id)
-                    } else {
-                        spaceMeta.activeTabId = null
-                    }
-                }
-            } else if (newSpace?.tabs?.length > 0) {
-                // Fallback: activate the first non-pinned tab in the space
+            }
+            if (!activated && newSpace?.tabs?.length > 0) {
                 const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
                 if (firstNonPinned) {
                     activate(firstNonPinned.id)
                 } else {
                     spaceMeta.activeTabId = null
                 }
+            }
+        } else if (newSpace?.tabs?.length > 0) {
+            // Fallback: activate the first non-pinned tab in the space
+            const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+            if (firstNonPinned) {
+                activate(firstNonPinned.id)
             } else {
                 spaceMeta.activeTabId = null
             }
-            
-            return true
         } else {
-            return false
+            spaceMeta.activeTabId = null
         }
+        
+        return true
     },
 
     captureScreenshot: async (tabId) => {

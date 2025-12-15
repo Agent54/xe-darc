@@ -3208,13 +3208,13 @@
     .closed-tabs-section {
         position: absolute;
         bottom: 8px;
-        left: 8px;
+        left: 9px;
         right: 8px;
         z-index: 10;
         pointer-events: auto;
         display: flex;
         flex-direction: column;
-        width: calc(100% - 16px);
+        width: calc(100% - 20px);
         flex-shrink: 0;
     }
 
