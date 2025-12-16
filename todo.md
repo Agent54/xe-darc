@@ -2536,3 +2536,8 @@ clickbait title fix extension
 magic previews with custom previwers for youtube, wikipeida etc.
 
 summaries/ start prompt here
+
+convert to tab group, convert to tab in last used tab group context menu
+
+reloading hibernated tab needs to unhibernate instead, do not activate the tab, add an unhibernate functino
+
