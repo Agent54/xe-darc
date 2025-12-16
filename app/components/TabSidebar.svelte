@@ -52,6 +52,8 @@
     
     // Tab context menu state
     let tabContextMenu = $state({ visible: false, x: 0, y: 0, tab: null, index: null })
+
+    // svelte-ignore non_reactive_update
     let tabContextMenuOpenTime = 0
     
     // Hover card state
@@ -489,7 +491,7 @@
             const currentHeight = tabsListSpacerHeight[spaceId] || 0
             if (currentHeight < maxSpacerHeight && scrollTop <= 5 && event.deltaY < 0) {
                 event.preventDefault()
-                const growAmount = Math.abs(event.deltaY) * 0.5
+                const growAmount = Math.abs(event.deltaY)
                 tabsListSpacerHeight = {
                     ...tabsListSpacerHeight,
                     [spaceId]: Math.min(currentHeight + growAmount, maxSpacerHeight)
@@ -1667,6 +1669,7 @@
                     <div class="tab-content-track" class:multi-space={multiSpaceMode}>
                         {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
                             {#if multiSpaceMode && index > 0}
+                                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                                 <div class="lane-divider" 
                                      onmousedown={handleLaneDividerMouseDown}
                                      role="separator"></div>
@@ -1676,7 +1679,9 @@
                                  data-space-id={spaceId}
                                  style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}
                                  onmouseenter={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = spaceId }}
-                                 onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}>
+                                 onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
+                                 role="group"
+                                 aria-label="Space tabs">
                                 <div class="space-title-container">
                                     <button class="space-title" 
                                             class:active={data.spaceMeta.activeSpace === spaceId}
@@ -1996,6 +2001,15 @@
 <TabContextMenu 
     menu={tabContextMenu} 
     onHide={hideTabContextMenu} 
+    onReload={(tab) => {
+        if (!tab?.id) return
+        const frame = data.frames[tab.id]?.frame
+        if (frame) {
+            frame.reload?.()
+        } else {
+            tab.url = tab.url
+        }
+    }}
     {partitions}
     contextMenuOpenTime={tabContextMenuOpenTime} />
 

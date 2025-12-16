@@ -4,17 +4,22 @@
     let {
         menu = { visible: false, x: 0, y: 0, tab: null, index: null },
         onHide = () => {},
+        onReload = null,
         partitions = ['persist:1', 'persist:2', 'persist:3', 'ephemeral:1', 'ephemeral:2', 'ephemeral:3'],
         contextMenuOpenTime = 0,
         onToggleCertificateMonitor = null
     } = $props()
     
     function reloadTab(tab) {
-        const frame = data.frames[tab.id]?.frame
-        if (frame && typeof frame.reload === 'function') {
-            frame.reload()
-        } else if (frame) {
-            frame.src = tab.url
+        if (onReload) {
+            onReload(tab)
+        } else {
+            const frame = data.frames[tab.id]?.frame
+            if (frame && typeof frame.reload === 'function') {
+                frame.reload()
+            } else if (frame) {
+                frame.src = tab.url
+            }
         }
         onHide()
     }

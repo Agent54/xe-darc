@@ -3850,6 +3850,15 @@
 <TabContextMenu 
     menu={contextMenu} 
     onHide={hideContextMenu} 
+    onReload={(tab) => {
+        if (!tab?.id) return
+        const frame = data.frames[tab.id]?.frame
+        if (frame) {
+            frame.reload?.()
+        } else {
+            tab.url = tab.url
+        }
+    }}
     {partitions}
     {contextMenuOpenTime}
     onToggleCertificateMonitor={(tab) => {
