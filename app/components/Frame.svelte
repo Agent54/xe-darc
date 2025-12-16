@@ -24,6 +24,15 @@
 
     const tab = $derived(data.docs[tabId])
 
+    // Immediately unhibernate unhidden pinned frames on initial load
+    // This runs once on component mount - no effect needed
+    {
+        const initialTab = data.docs[tabId]
+        if (initialTab?.pinned && !initialTab?.hidden) {
+            data.unhibernate(tabId)
+        }
+    }
+
     // see https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/controlled_frame/controlled_frame_permissions_unittest.cc;l=53 for supported permissions 
 
     // not solved yet: notifications, screen capture
