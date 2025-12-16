@@ -2777,6 +2777,7 @@
         flex: 1;
         min-height: 0;
         overflow-y: auto;
+        overscroll-behavior-y: contain; /* Prevent vertical scroll chaining to background views */
         padding-top: 8px;
         padding-bottom: calc(50vh + 300px); /* Add space at bottom for closed tabs overlay, spacer scroll-out, and making space for new thinking */
         padding-right: 8px;
