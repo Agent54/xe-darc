@@ -1896,6 +1896,7 @@ document.addEventListener('input', function(event) {
             const mytab = untrack(() => tab)
 
             data.frames[tabId].frame = controlledFrame
+            data.frames[tabId].pendingLoad = false
             addNode = true
 
             controlledFrame.classList.add('frame-instance')

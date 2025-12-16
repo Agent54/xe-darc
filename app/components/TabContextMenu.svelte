@@ -11,13 +11,18 @@
     } = $props()
     
     function reloadTab(tab) {
+        const frame = data.frames[tab.id]?.frame
+        if (!frame) {
+            data.unhibernate(tab.id)
+            onHide()
+            return
+        }
         if (onReload) {
             onReload(tab)
         } else {
-            const frame = data.frames[tab.id]?.frame
-            if (frame && typeof frame.reload === 'function') {
+            if (typeof frame.reload === 'function') {
                 frame.reload()
-            } else if (frame) {
+            } else {
                 frame.src = tab.url
             }
         }
@@ -227,19 +232,34 @@
             <span>Load at startup</span>
         </div>
 
-        {#if data.frames[menu.tab.id]?.frame && data.spaceMeta.activeTabId !== menu.tab.id}
-            <div class="context-menu-item" 
-                 role="menuitem"
-                 tabindex="0"
-                 onmouseup={() => { data.hibernate(menu.tab.id); onHide(); }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.hibernate(menu.tab.id); onHide(); } }}>
-                <span class="context-menu-icon">
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
-                    </svg>
-                </span>
-                <span>Hibernate</span>
-            </div>
+        {#if data.spaceMeta.activeTabId !== menu.tab.id}
+            {#if data.frames[menu.tab.id]?.frame}
+                <div class="context-menu-item" 
+                     role="menuitem"
+                     tabindex="0"
+                     onmouseup={() => { data.hibernate(menu.tab.id); onHide(); }}
+                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.hibernate(menu.tab.id); onHide(); } }}>
+                    <span class="context-menu-icon">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+                        </svg>
+                    </span>
+                    <span>Hibernate</span>
+                </div>
+            {:else}
+                <div class="context-menu-item" 
+                     role="menuitem"
+                     tabindex="0"
+                     onmouseup={() => { data.unhibernate(menu.tab.id); onHide(); }}
+                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.unhibernate(menu.tab.id); onHide(); } }}>
+                    <span class="context-menu-icon">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+                        </svg>
+                    </span>
+                    <span>Unhibernate</span>
+                </div>
+            {/if}
         {/if}
 
         <div class="context-menu-item" 
