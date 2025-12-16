@@ -509,7 +509,7 @@
 </script>
 
 <div bind:this={frameWrapper} id="tab_{tab.id}" class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
-    {#if (!data.frames[tab.id]?.frame || !data.frames[tab.id]?.initialLoad) && !tab.pinned}
+    {#if (!data.frames[tab.id]?.frame || !data.frames[tab.id]?.initialLoad) && !data.frames[tab.id]?.pendingLoad}
         <div 
             transition:fade={{duration: 200, delay: 0}}
             class="frame hibernated-frame"
@@ -531,7 +531,7 @@
         </div>
     {/if}
 
-    {#if data.frames[tab.id]?.frame || tab.pinned || data.spaceMeta.activeTabId === tab.id}
+    {#if data.frames[tab.id]?.frame || data.frames[tab.id]?.pendingLoad || data.spaceMeta.activeTabId === tab.id}
         {#if controlledFrameSupported}
             <ControlledFrame
                 {style}

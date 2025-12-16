@@ -553,6 +553,14 @@ function hibernate (tabId) {
     frames[tabId].hibernated = Date.now()
 }
 
+function unhibernate (tabId) {
+    if (!frames[tabId]) {
+        frames[tabId] = {}
+    }
+    frames[tabId].hibernated = null
+    frames[tabId].pendingLoad = true
+}
+
 // Helper function to resolve attachment URLs to blob URLs
 const resolveAttachmentUrl = async (attachmentUrl) => {
     if (!attachmentUrl || !attachmentUrl.startsWith('attachment://')) {
@@ -724,6 +732,7 @@ export default {
     },
 
     hibernate,
+    unhibernate,
 
     previous: () => {
         const activeSpace = spaces[spaceMeta.activeSpace]
