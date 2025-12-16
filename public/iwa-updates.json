@@ -3,10 +3,11 @@
     {
       "version": "1.0.46",
       "src": "https://github.com/Agent54/xe-darc/releases/download/latest/darc.swbn",
-      "channels": ["default"]
+      "channels": ["alpha"]
     }
   ],
   "channels": {
+    "alpha": { "name": "Alpha" },
     "default": { "name": "Stable" }
   }
 }

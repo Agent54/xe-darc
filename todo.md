@@ -2559,3 +2559,15 @@ alt tab
 hovercards stuck
 
 name dark dev channel etc. darc only for release
+
+overflowing url in url bar max and overflowing history entries shadow fade
+
+release notes
+
+beos, macos window manager UIs
+
+visited links, links opened in other tabs
+
+allow once option in menu
+
+nitification and user/sync menus

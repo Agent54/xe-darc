@@ -176,7 +176,7 @@
     let isCloseRubberBanding = $state(false)
     let isVerticalScrolling = false
     let verticalScrollTimeout = null
-    let isHorizontalScrolling = false
+    let isHorizontalScrolling = $state(false)
     let horizontalScrollTimeout = null
     
     function handleTabContentWheel(event) {
@@ -245,8 +245,8 @@
                 closeRubberBandOffset = Math.min(closeRubberBandOffset + event.deltaX * resistance, maxStretch)
                 isCloseRubberBanding = true
                 
-                // If pulled far enough, close multi-space mode
-                if (closeRubberBandOffset > threshold) {
+                // If pulled far enough, close multi-space mode (higher threshold than opening)
+                if (closeRubberBandOffset > 45) {
                     exitMultiSpaceMode()
                 }
                 
@@ -464,11 +464,7 @@
         const tabsList = event.currentTarget
         if (!tabsList) return
         
-        // Disable vertical scrolling while horizontally scrolling the spaces list
-        if (isHorizontalScrolling) {
-            event.preventDefault()
-            return
-        }
+
         
         const scrollTop = tabsList.scrollTop
         
@@ -485,8 +481,8 @@
         const maxSpacerHeight = 250
         const maxStartPositionForActivation = 500
         
-        // Track scroll gesture start position
-        if (tabsListScrollStartPosition === 0) {
+        // Track scroll gesture start position - only capture if not yet set and we're not already at top
+        if (tabsListScrollStartPosition === 0 && scrollTop > 5) {
             tabsListScrollStartPosition = scrollTop
         }
         // Reset start position after gesture ends (no scroll events for 150ms)
@@ -1672,6 +1668,7 @@
                      class:multi-space={multiSpaceMode}
                      class:rubber-banding={isRubberBanding}
                      class:closing={isClosingMultiSpace}
+                     class:horizontal-scrolling={isHorizontalScrolling}
                      bind:this={tabListRef}
                      onscroll={handleTabScroll}
                      onwheel={handleTabContentWheel}
@@ -2658,26 +2655,23 @@
         transform: translateX(-50%);
         background: linear-gradient(to bottom, 
             transparent 0%, 
-            rgba(255, 255, 255, 0.08) 8%,
-            rgba(255, 255, 255, 0.15) 20%, 
-            rgba(255, 255, 255, 0.15) 80%, 
-            rgba(255, 255, 255, 0.08) 92%,
-            transparent 100%
-        );
-        transition: background 150ms ease;
-    }
-    
-    .lane-divider:hover::before {
-        width: 3px;
-        background: linear-gradient(to bottom, 
-            transparent 0%, 
             rgba(255, 255, 255, 0.15) 8%,
             rgba(255, 255, 255, 0.3) 20%, 
             rgba(255, 255, 255, 0.3) 80%, 
             rgba(255, 255, 255, 0.15) 92%,
             transparent 100%
         );
-        transition-delay: 300ms;
+        opacity: 0.4;
+        transition: opacity 200ms ease 400ms;
+    }
+    
+    .lane-divider:hover::before {
+        width: 1px;
+        opacity: 1;
+    }
+    
+    .lane-divider:not(:hover)::before {
+        transition-delay: 0ms;
     }
 
     .app-tab {
@@ -2808,6 +2802,10 @@
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
         will-change: transform;
         backface-visibility: hidden;
+    }
+    
+    .tab-content-container.horizontal-scrolling .tabs-list {
+        overflow-y: hidden;
     }
     
     .tabs-list::-webkit-scrollbar {
