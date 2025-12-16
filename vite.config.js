@@ -175,10 +175,10 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5194,
     strictPort: true,
-    https: {
+    https: fs.existsSync('./certs/device.key') ? {
       key: fs.readFileSync('./certs/device.key'),
       cert: fs.readFileSync('./certs/localhost.crt'),
-    },
+    } : undefined,
     cors: { 
       origin: '*' // /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/ 
     },

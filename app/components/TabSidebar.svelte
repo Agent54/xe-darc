@@ -176,6 +176,8 @@
     let isCloseRubberBanding = $state(false)
     let isVerticalScrolling = false
     let verticalScrollTimeout = null
+    let isHorizontalScrolling = false
+    let horizontalScrollTimeout = null
     
     function handleTabContentWheel(event) {
         if (!tabListRef) return
@@ -202,6 +204,13 @@
         
         // If currently vertical scrolling, ignore horizontal component
         if (isVerticalScrolling) return
+        
+        // Mark as horizontal scrolling to disable vertical scrolling in tabs list
+        isHorizontalScrolling = true
+        if (horizontalScrollTimeout) clearTimeout(horizontalScrollTimeout)
+        horizontalScrollTimeout = setTimeout(() => {
+            isHorizontalScrolling = false
+        }, 150)
         
         // Reset vertical tabs list accumulation on horizontal scroll
         tabsListVerticalAccumulated = 0
@@ -454,6 +463,12 @@
     function handleTabsListWheel(event, spaceId) {
         const tabsList = event.currentTarget
         if (!tabsList) return
+        
+        // Disable vertical scrolling while horizontally scrolling the spaces list
+        if (isHorizontalScrolling) {
+            event.preventDefault()
+            return
+        }
         
         const scrollTop = tabsList.scrollTop
         
@@ -2031,12 +2046,17 @@
         overflow: visible;
         transform: translateX(calc(-100% + 8px)) translateZ(0);
         will-change: transform;
-        contain: layout style paint;
+        contain: layout style;
     }
 
     .sidebar-box.visible {
         padding-right: 9px;
         padding-left: 9px;
+    }
+    
+    /* Constrain URL bar width to prevent stretching in fullscreen mode */
+    .sidebar-box :global(.url-bar-section) {
+        max-width: min(600px, 90vw);
     }
 
     .sidebar-box:hover, .sidebar-box.hovered, .sidebar-box.resizing, .sidebar-box.visible {
@@ -2218,6 +2238,7 @@
         gap: 6px;
         overflow-x: auto;
         overflow-y: hidden;
+        overscroll-behavior-x: contain; /* Prevent horizontal scroll chaining to background views */
         scrollbar-width: none;
         flex: 1;
         min-width: 0;
@@ -2656,6 +2677,7 @@
             rgba(255, 255, 255, 0.15) 92%,
             transparent 100%
         );
+        transition-delay: 300ms;
     }
 
     .app-tab {
