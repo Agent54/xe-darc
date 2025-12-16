@@ -2541,3 +2541,21 @@ convert to tab group, convert to tab in last used tab group context menu
 
 reloading hibernated tab needs to unhibernate instead, do not activate the tab, add an unhibernate functino
 
+pnpm cache not working
+
+horizontal scroll in frames broken
+
+screenshot zoom in on space bar
+
+disable zoom when grid view open
+
+space menus not scrimmed
+
+compose connection manager ala raleway
+
+show tab groups/ show tabs in tabgroup in header modes
+alt tab
+
+hovercards stuck
+
+name dark dev channel etc. darc only for release

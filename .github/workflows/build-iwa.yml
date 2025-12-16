@@ -1,0 +1,77 @@
+name: Build and Release IWA
+
+on:
+  push:
+    branches: [int]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Write signing key
+        run: |
+          mkdir -p certs
+          echo "${{ secrets.IWA_SIGNING_KEY }}" > certs/iwa_signing_key.pem
+
+      - name: Build app
+        run: pnpm build
+
+      - name: Build signed bundle
+        run: node build-swbn.js
+
+      - name: Get version from manifest
+        id: version
+        run: |
+          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('./public/.well-known/manifest.webmanifest', 'utf8')).version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update iwa-updates.json for release
+        run: |
+          cat > iwa-updates.json << EOF
+          {
+            "versions": [
+              {
+                "version": "${{ steps.version.outputs.version }}",
+                "src": "https://github.com/${{ github.repository }}/releases/download/latest/darc.swbn",
+                "channels": ["default"]
+              }
+            ],
+            "channels": {
+              "default": { "name": "Stable" }
+            }
+          }
+          EOF
+
+      - name: Delete existing latest release
+        run: gh release delete latest --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create latest release
+        run: |
+          gh release create latest \
+            --title "Latest Build (v${{ steps.version.outputs.version }})" \
+            --notes "Automated IWA build from commit ${{ github.sha }}" \
+            --prerelease \
+            darc.swbn \
+            iwa-updates.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
