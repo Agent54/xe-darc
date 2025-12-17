@@ -2935,7 +2935,7 @@
     
     /* Active tab in inactive space - bold text + opaque favicon, subtle border */
     .tab-item-container.space-active-tab {
-        border: 1px solid hsl(0deg 0% 100% / 6.5%);
+        border: 1px solid hsl(0deg 0% 100% / 5.5%);
     }
     
     .tab-item-container.space-active-tab .tab-title {
