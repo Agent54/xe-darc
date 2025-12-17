@@ -506,6 +506,12 @@
         instantlyCleanupGlobalPreview()
         data.frames[tab.id].loading = true
 
+        // Clear favicon immediately on navigation start to prevent stale favicons
+        // This ensures the globe icon shows while loading instead of old favicon
+        if (event?.url && event.url !== tab.url) {
+            tab.favicon = null
+        }
+
         // console.log('handleLoadStart', event.url)
         // TODO: try cancelling even prevent
         // Check if this is an off-origin navigation
@@ -555,7 +561,15 @@
         
         // console.log(`handleLoadStop called for`, {tab, e, currentNetworkErr})
 
-        tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
+        // Get actual URL from frame if available (more reliable than tab.url during navigation)
+        const frameUrl = data.frames[tab.id]?.frame?.src || tab.url
+        
+        // Don't set favicon for about: URLs - let Favicon.svelte handle it
+        if (!frameUrl?.startsWith('about:')) {
+            tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${frameUrl}&size=64`
+        } else {
+            tab.favicon = null
+        }
 
         // Only clear errors if the load was successful (was still loading when this was called)
         if (wasLoading) {
@@ -696,12 +710,13 @@
 
         let url = frame.src || tab.url
 
-        // Don't update meta from controlled frame for about: URLs
+        // For about: URLs, clear favicon but preserve existing title
         if (url.startsWith('about:')) {
+            data.updateTab(tab.id, { favicon: null, url })
             return
         }
 
-        let favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tab.url}&size=64`
+        let favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64`
 
         try {
             let title = null
@@ -1477,7 +1492,7 @@ document.addEventListener('input', function(event) {
                         tabId: tabId,
                         sourceFrame: `tab_${tabId}`
                     }
-                }))
+                })) 
             } else if (message.startsWith('iwa:new-tab:')) {
                 // Extract tab ID from message - handle colons in tab ID
                 const tabId = message.substring('iwa:new-tab:'.length)
