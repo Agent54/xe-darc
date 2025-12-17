@@ -28,6 +28,9 @@
     let urlBarContainer = $state(null)
     let maxExpandedWidth = $state(null)
     let isHovered = $state(false)
+    let urlButtonEl = $state(null)
+    let showLeftFade = $state(false)
+    let showRightFade = $state(true)
     
     function calculateMaxWidth() {
         if (urlBarContainer && variant === 'hovercard') {
@@ -48,6 +51,22 @@
             isHovered = false
             maxExpandedWidth = null
         }
+    }
+    
+    function handleUrlScroll(e) {
+        const el = e.target
+        const isAtStart = el.scrollLeft <= 1
+        const isAtEnd = el.scrollWidth - el.scrollLeft <= el.clientWidth + 1
+        const hasOverflow = el.scrollWidth > el.clientWidth
+        showLeftFade = hasOverflow && !isAtStart
+        showRightFade = hasOverflow && !isAtEnd
+    }
+    
+    function initUrlFade(el) {
+        if (!el) return
+        const hasOverflow = el.scrollWidth > el.clientWidth
+        showLeftFade = false
+        showRightFade = hasOverflow
     }
     
     $effect(() => {
@@ -192,7 +211,13 @@
                        onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUrlSubmit(); } else if (e.key === 'Escape') { e.preventDefault(); setExpanded(false); } }} 
                        onblur={() => { setExpanded(false) }} />
             {:else}
-                <button class="url-bar-url" onmousedown={() => { if (!urlBarExpanded) { setExpanded(true); } }}>
+                <button class="url-bar-url" 
+                        class:fade-left={showLeftFade}
+                        class:fade-right={showRightFade}
+                        bind:this={urlButtonEl}
+                        use:initUrlFade
+                        onscroll={handleUrlScroll}
+                        onmousedown={() => { if (!urlBarExpanded) { setExpanded(true); } }}>
                     <UrlRenderer url={url} variant="compact" />
                 </button>
             {/if}
@@ -427,12 +452,30 @@
         transition: color 150ms ease;
         scrollbar-width: none;
         -ms-overflow-style: none;
-        -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
-        mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
     }
     
     .url-bar-url::-webkit-scrollbar {
         display: none;
+    }
+    
+    .url-bar-url {
+        -webkit-mask-image: none;
+        mask-image: none;
+    }
+    
+    .url-bar-url.fade-right {
+        -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
+        mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
+    }
+    
+    .url-bar-url.fade-left {
+        -webkit-mask-image: linear-gradient(to left, black calc(100% - 20px), transparent 100%);
+        mask-image: linear-gradient(to left, black calc(100% - 20px), transparent 100%);
+    }
+    
+    .url-bar-url.fade-left.fade-right {
+        -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20px, black calc(100% - 20px), transparent 100%);
+        mask-image: linear-gradient(to right, transparent 0%, black 20px, black calc(100% - 20px), transparent 100%);
     }
     
     .url-bar-url :global(.url-renderer) {

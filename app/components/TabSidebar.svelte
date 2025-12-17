@@ -684,6 +684,11 @@
             // Set flag to prevent scroll-triggered tab activation during space switch
             isSwitchingSpaces = true
             
+            // Close multi-space mode when switching spaces
+            if (multiSpaceMode) {
+                exitMultiSpaceMode()
+            }
+            
             data.activateSpace(spaceId)
             
             // Restore the active tab for this space from its activeTabsOrder
@@ -716,6 +721,11 @@
     }
 
     function activateTab(tabId, spaceId) {
+        // Close multi-space mode when switching tabs
+        if (multiSpaceMode) {
+            exitMultiSpaceMode()
+        }
+        
         // If clicking on the currently active tab, switch to previous tab
         data.activateSpace(spaceId)
         const tab = data.docs[tabId]
@@ -894,7 +904,7 @@
             if (tabContainer && instantHovercardsMode) {
                 const tabId = tabContainer.getAttribute('data-tab-id')
                 if (tabId && tabId !== lastScrolledTabId && tabId !== hoveredTab?.id) {
-                    console.log('[DEBUG:SCROLL] Triggering hover for tab under cursor after scroll', tabId)
+                    // console.log('[DEBUG:SCROLL] Triggering hover for tab under cursor after scroll', tabId)
                     const tab = data.docs[tabId]
                     if (tab) {
                         // Create a synthetic event for handleTabMouseEnter
