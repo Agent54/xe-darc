@@ -184,12 +184,18 @@
     
     /* Sidebar favicon opacity states - only target favicons inside sidebar elements */
     :global(.sidebar .favicon-wrapper) {
-        opacity: 0.6;
+        opacity: 0.8;
+    }
+    
+    /* Hibernated tabs should have more transparent favicons */
+    :global(.sidebar .hibernated .favicon-wrapper) {
+        opacity: 0.3;
     }
     
     :global(.sidebar .pinned-tab:hover .favicon-wrapper),
     :global(.sidebar .app-tab:hover .favicon-wrapper), 
     :global(.sidebar .tab-item:hover .favicon-wrapper),
+    :global(.sidebar .tab-item-container:hover .favicon-wrapper),
     :global(.sidebar .closed-tab-item:hover .favicon-wrapper) {
         opacity: 1;
     }

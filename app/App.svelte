@@ -2913,6 +2913,7 @@
             bind:this={tabButtons[tab.id]}
             class="tab-container pinned-tab-container" 
             class:active={tab.id === data.spaceMeta.activeTabId} 
+            class:hibernated={!frameData?.frame}
             class:hovered={tab.id === hoveredTab?.id}
             class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
             class:collapsed={invisiblePins.right}
@@ -3025,6 +3026,7 @@
                         bind:this={tabButtons[tab.id]}
                         class="tab-container pinned-tab-container" 
                         class:active={tab.id === data.spaceMeta.activeTabId} 
+                        class:hibernated={!frameData?.frame}
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         class:collapsed={invisiblePins.left}
@@ -3093,6 +3095,7 @@
                         bind:this={tabButtons[tab.id]}
                         class="tab-container" 
                         class:active={tab.id === data.spaceMeta.activeTabId} 
+                        class:hibernated={!frameData?.frame}
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         role="tab"
