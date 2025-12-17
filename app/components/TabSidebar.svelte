@@ -69,6 +69,7 @@
     let instantHovercardsMode = $state(false)
     let instantModeResetTimer = null
     let hovercardUrlBarExpanded = $state(false)
+    let menuCloseTimeout = null
     
     // Tab group expansion state
     let tabGroupExpanded = $state(true)
@@ -118,6 +119,11 @@
     
     function handleMouseEnter() {
         isHovered = true
+        // Cancel pending menu close if re-entering
+        if (menuCloseTimeout) {
+            clearTimeout(menuCloseTimeout)
+            menuCloseTimeout = null
+        }
     }
     
     function handleMouseLeave() {
@@ -130,6 +136,14 @@
         // Close context menu when leaving sidebar
         if (spaceContextMenuId !== null) {
             spaceContextMenuId = null
+        }
+        // Close dropdown menus when sidebar actually hides (after 340ms delay)
+        if (newSpaceMenuOpen || openMenuId !== null) {
+            if (menuCloseTimeout) clearTimeout(menuCloseTimeout)
+            menuCloseTimeout = setTimeout(() => {
+                newSpaceMenuOpen = false
+                openMenuId = null
+            }, 340)
         }
     }
     
@@ -1659,6 +1673,10 @@
                                 <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
                             </svg>
                         </button>
+                        {#if newSpaceMenuOpen}
+                            <!-- svelte-ignore a11y_no_static_element_interactions -->
+                            <div class="menu-scrim" onmousedown={() => newSpaceMenuOpen = false}></div>
+                        {/if}
                         <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
                             <button class="new-space-menu-item"
                                     onmouseup={() => handleNewSpaceMenuAction('new-space')}
@@ -1715,6 +1733,10 @@
                                         <button class="space-menu-button" 
                                                 onmousedown={(e) => { e.stopPropagation(); handleMenuToggle(spaceId); }}
                                                 aria-label="Space options">⋯</button>
+                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                        {#if openMenuId === spaceId}
+                                            <div class="menu-scrim" onmousedown={() => openMenuId = null}></div>
+                                        {/if}
                                         <div class="space-menu-dropdown" class:open={openMenuId === spaceId}>
                                             <button class="space-menu-item" 
                                                     onmouseup={() => handleMenuItemClick('rename', spaceId)}
@@ -3709,6 +3731,16 @@
     .space-context-menu {
         position: relative;
     } */
+
+    .menu-scrim {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 9999;
+        pointer-events: auto;
+    }
 
     .space-context-menu-overlay {
         position: fixed;
