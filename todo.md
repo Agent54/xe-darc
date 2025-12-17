@@ -2612,3 +2612,6 @@ cmd long click open lightbox, short click in new bg tab
 hovercard styles history title row
 
 unreliable tab activation on spaces switch and reaload, restart
+
+move lightbox option in per origin permission to navigate to new domain or a new tab
+

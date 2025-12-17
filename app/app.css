@@ -553,6 +553,11 @@ ul::-webkit-scrollbar {
     margin-right: -3px;
     flex-shrink: 0;
     overflow: hidden;
+    width: 0px!important;
+}
+
+.tab-container:hover .close-btn {
+    width: 18px!important;
 }
 
 .close-btn:hover {

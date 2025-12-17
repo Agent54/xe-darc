@@ -318,7 +318,7 @@
         // Don't show hover previews when a lightbox is active or tab is loading
         const hasActiveLightbox = data.previews[tab._id]?.lightbox
         
-        console.log('Link preview effect:', { hoveredLink: !!hoveredLink, commandKeyPressed, hasActiveLightbox, tabLoading: tab?.loading })
+        // console.log('Link preview effect:', { hoveredLink: !!hoveredLink, commandKeyPressed, hasActiveLightbox, tabLoading: tab?.loading })
         
         if (hoveredLink && commandKeyPressed && !hasActiveLightbox && !tab?.loading) {
             // Cancel any pending hide delay because we have (or are about to have) a hovered link again

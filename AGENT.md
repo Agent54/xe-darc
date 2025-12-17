@@ -106,3 +106,8 @@ The project supports multiple deployment targets:
 
 ## Controlled Frame API
 The project implements the Controlled Frame specification (https://wicg.github.io/controlled-frame) for advanced iframe control and security.
+
+## UI/UX Guidelines
+
+### Button Styling
+- **Never use red/warning colors** for close, delete, or clear buttons unless explicitly instructed. These are normal operations and should use neutral colors (white/gray).

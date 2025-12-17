@@ -653,6 +653,7 @@
         height: 10px;
         opacity: 0;
         transition: opacity 100ms ease;
+        margin-top: -2px;
     }
     
     .history-section-title:hover .expand-icon {
@@ -678,8 +679,8 @@
     }
     
     .clear-all-btn:hover {
-        color: rgba(248, 113, 113, 0.9);
-        background: rgba(248, 113, 113, 0.15);
+        color: rgba(255, 255, 255, 0.7);
+        background: rgba(255, 255, 255, 0.1);
     }
     
     .history-list {
