@@ -2086,6 +2086,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     transition: width 0.3s ease;
     border-radius: 8px;
     box-shadow: 0px 0px 9px 4px #00000040;
+    background: black;
     overflow: visible;
     /* border: 1px solid #111111; */
 }

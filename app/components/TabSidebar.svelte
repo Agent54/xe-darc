@@ -531,8 +531,8 @@
             return
         }
         
-        console.log('tabsListScrollStartPosition', tabsListScrollStartPosition)
-        console.log('distanceScrolled', Math.abs(tabsListScrollStartPosition - scrollTop))
+        // console.log('tabsListScrollStartPosition', tabsListScrollStartPosition)
+        // console.log('distanceScrolled', Math.abs(tabsListScrollStartPosition - scrollTop))
         // Don't activate rubberband if scroll started more than 500px from top
         if (tabsListScrollStartPosition > maxStartPositionForActivation) {
             return
@@ -551,7 +551,7 @@
             // Accumulate vertical scroll before activating spring
             tabsListVerticalAccumulated += Math.abs(event.deltaY)
             
-            console.log('[SPACER] accumulated:', tabsListVerticalAccumulated, 'threshold:', activationThreshold)
+            // console.log('[SPACER] accumulated:', tabsListVerticalAccumulated, 'threshold:', activationThreshold)
             
             // Only activate spring after threshold is met
             if (tabsListVerticalAccumulated < activationThreshold) {
@@ -766,15 +766,15 @@
         // Skip scroll handling during space switching to prevent unwanted tab activation
         if (isSwitchingSpaces) return
         
-        console.log('[DEBUG:SCROLL] Tab list scroll event', {
-            scrollLeft: tabListRef.scrollLeft,
-            scrollTop: event.target.scrollTop,
-            clientWidth: tabListRef.clientWidth,
-            isHorizontalScroll: event.target === tabListRef,
-            target: event.target.className,
-            pointerEvents: window.getComputedStyle(event.target).pointerEvents,
-            zIndex: window.getComputedStyle(event.target).zIndex
-        })
+        // console.log('[DEBUG:SCROLL] Tab list scroll event', {
+        //     scrollLeft: tabListRef.scrollLeft,
+        //     scrollTop: event.target.scrollTop,
+        //     clientWidth: tabListRef.clientWidth,
+        //     isHorizontalScroll: event.target === tabListRef,
+        //     target: event.target.className,
+        //     pointerEvents: window.getComputedStyle(event.target).pointerEvents,
+        //     zIndex: window.getComputedStyle(event.target).zIndex
+        // })
         
         const scrollLeft = tabListRef.scrollLeft
         const containerWidth = tabListRef.clientWidth
