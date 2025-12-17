@@ -1811,7 +1811,7 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} data-tab-id={tab.id}
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} data-tab-id={tab.id}
                                                  role="listitem"
                                                  onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                  onmouseleave={handleTabMouseLeave}
@@ -2917,6 +2917,7 @@
     
     .tab-item-container.active .tab-title {
         color: #e5e5e5;
+        text-shadow: 0 0 0.3px currentColor;
     }
     
     .tab-item-container:hover .tab-title {
@@ -2929,6 +2930,20 @@
     
     .tab-item-container:hover :global(.favicon-wrapper) {
         opacity: 1;
+    }
+    
+    /* Active tab in inactive space - bold text + opaque favicon, subtle border */
+    .tab-item-container.space-active-tab {
+        border: 1px solid hsl(0deg 0% 100% / 6.5%);
+    }
+    
+    .tab-item-container.space-active-tab .tab-title {
+        color: #e5e5e5;
+        text-shadow: 0 0 0.3px currentColor;
+    }
+    
+    .tab-item-container.space-active-tab :global(.favicon-wrapper) {
+        opacity: 0.87;
     }
     
     .tab-close {

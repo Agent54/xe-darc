@@ -464,7 +464,7 @@ ul::-webkit-scrollbar {
 }
 .tab-container.active {
     background-color: rgb(255 255 255 / 17%);
-    border: 1px solid hsl(0deg 0% 100% / 5.5%);
+    border: 1px solid hsl(0deg 0% 100% / 6.5%);
 }
 .tab-container.active:hover, .tab-container.active.hovered, .tab-container.active.menu-open {
     background-color: rgb(255 255 255 / 19%);
@@ -488,6 +488,7 @@ ul::-webkit-scrollbar {
 }
 .tab-container.active .tab {
     color: #e5e5e5;
+    text-shadow: 0 0 0.3px currentColor;
 }
 .tab-container.active .favicon-wrapper {
     opacity: 0.87;
