@@ -1317,8 +1317,10 @@
                             return
                         }
                         
-                        if (entry.isIntersecting && tab) {
-                            console.log('intersection observer activating tab:', tab.id)
+                        const frameData = data.frames[tabId]
+                        const isForceHibernated = frameData?.forceHibernated === true
+                        console.log('observer check', tabId, 'forceHibernated:', isForceHibernated, 'frameData:', frameData, 'raw:', $state.snapshot(data.frames)[tabId])
+                        if (entry.isIntersecting && tab && !isForceHibernated) {
                             tabChangeFromScroll = true
                             if (tabChangeFromScrollTimer) {
                                 clearTimeout(tabChangeFromScrollTimer)
@@ -2846,7 +2848,7 @@
     let leftPinnedTabs = $derived(tabs.filter(tab => (tab.pinned === true || tab.pinned === 'left')))
     let rightPinnedTabs = $derived(tabs.filter(tab => tab.pinned === 'right'))
     let unpinnedTabs = $derived(tabs.filter(tab => !tab.pinned))
-
+    
     // Calculate space taken by different UI elements
     let leftPinnedWidth = $derived.by(() => {
         if (customLeftPinnedWidth !== null) {

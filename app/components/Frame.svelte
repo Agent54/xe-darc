@@ -33,6 +33,13 @@
         }
     }
 
+    // Clear forceHibernated when tab is no longer active
+    $effect(() => {
+        if (data.spaceMeta.activeTabId !== tabId && data.frames[tabId]?.forceHibernated) {
+            data.frames[tabId].forceHibernated = false
+        }
+    })
+
     // see https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/controlled_frame/controlled_frame_permissions_unittest.cc;l=53 for supported permissions 
 
     // not solved yet: notifications, screen capture
@@ -64,6 +71,9 @@
     // Delay timer for hiding the global hover preview (prevents flicker while moving cursor)
     let hidePreviewDelayTimeout = null
     
+    // Instant-hide state for lightboxes (prevents slow close and reactivity loops)
+    const closedLightboxes = $state({})
+    
     // Window dimensions for calculating preview aspect ratio
     let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1200)
     let windowHeight = $state(typeof window !== 'undefined' ? window.innerHeight : 800)
@@ -82,6 +92,13 @@
         if (event.key === 'Meta' || event.key === 'Control') {
             commandKeyPressed = false
         }
+    }
+    
+    // Close lightbox with instant hide (prevents reactivity loops and slow closing)
+    function closeLightbox(spaceId, lightboxId) {
+        if (!lightboxId) return
+        closedLightboxes[lightboxId] = true
+        data.closeTab(spaceId, lightboxId)
     }
 
     // Function to create off-origin tab (lightbox or normal tab based on command key)
@@ -443,8 +460,10 @@
     let frameWrapper = $state(null)
 
     $effect(() => {
-        data.frames[tab.id] ??= { frame: iframeFrame, wrapper: frameWrapper }
-        if (frameWrapper) {
+        // Don't create new object here - let data layer handle initialization
+        // Just set wrapper if frames object exists
+        if (data.frames[tab.id] && frameWrapper) {
+            data.frames[tab.id].wrapper = frameWrapper
             observer?.observe(frameWrapper)
         }
     
@@ -542,6 +561,7 @@
             tabindex="0"
             onmousedown={() => {
                 onFrameFocus()
+                data.unhibernate(tab.id)
             }}
         >
             {#if tab.screenshot}
@@ -556,7 +576,7 @@
         </div>
     {/if}
 
-    {#if data.frames[tab.id]?.frame || data.frames[tab.id]?.pendingLoad || data.spaceMeta.activeTabId === tab.id}
+    {#if data.frames[tab.id]?.frame || data.frames[tab.id]?.pendingLoad || (data.spaceMeta.activeTabId === tab.id && !data.frames[tab.id]?.forceHibernated)}
         {#if controlledFrameSupported}
             <ControlledFrame
                 {style}
@@ -843,7 +863,7 @@
             {/key}
         {/if}
 
-        {#if data.previews[tab._id] && data.docs[data.previews[tab._id]?.lightbox]}
+        {#if data.previews[tab._id] && data.docs[data.previews[tab._id]?.lightbox] && !closedLightboxes[data.previews[tab._id]?.lightbox]}
             {@const lightboxChild = data.docs[data.previews[tab._id].lightbox]}
             <div 
                 class="lightbox-backdrop"
@@ -851,22 +871,19 @@
                 aria-modal="true"
                 tabindex="-1"
                 in:fade={{duration: 100}}
-                out:fade={{duration: 80}}
-                onclick={(e) => {
-                    // Only close if clicking the backdrop, not the content
+                onmousedown={(e) => {
                     if (e.target === e.currentTarget) {
-                        data.closeTab(tab.spaceId, lightboxChild?._id)
+                        closeLightbox(tab.spaceId, lightboxChild?._id)
                     }
                 }}
                 onkeydown={(e) => {
                     if (e.key === 'Escape') {
-                        data.closeTab(tab.spaceId, lightboxChild?._id)
+                        closeLightbox(tab.spaceId, lightboxChild?._id)
                     }
                 }}
             >
                 <div class="lightbox-container" 
-                    in:scale={{duration: 100}}
-                    out:scale={{duration: 80}}>
+                    in:scale={{duration: 100}}>
                     <div class="lightbox-header">
                         <div class="lightbox-title">
                             <img 
@@ -931,9 +948,7 @@
                                 <button 
                                     class="lightbox-close"
                                     aria-label="Close lightbox"
-                                    onclick={() => {
-                                        data.closeTab(tab.spaceId, lightboxChild?.id)
-                                    }}
+                                    onmousedown={() => closeLightbox(tab.spaceId, lightboxChild?._id)}
                                 >
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <line x1="18" y1="6" x2="6" y2="18"></line>

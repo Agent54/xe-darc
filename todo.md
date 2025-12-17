@@ -2609,9 +2609,24 @@ lightbox broken
 
 cmd long click open lightbox, short click in new bg tab
 
-hovercard styles history title row
-
 unreliable tab activation on spaces switch and reaload, restart
 
 move lightbox option in per origin permission to navigate to new domain or a new tab
 
+not possible to unhibernate tabs from not active space in background, integrate with frame preview in hovercard
+
+do not show lightboxes in closed tabs but in tab histroy
+
+load all closed tabs not just current space
+
+antializing setup from lanes
+
+grid view style fixes, prevent scroll, title, transition
+
+active tab cycle broken when clicking sidepin and back to active tab
+
+make black rounded background for sidepins
+
+reload scroll to first tab bug
+
+hibernation symbol and loader

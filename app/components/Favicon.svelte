@@ -192,6 +192,11 @@
         opacity: 0.3;
     }
     
+    /* Hibernated active tabs from inactive spaces should have reduced transparency */
+    :global(.sidebar .tab-item-container.hibernated.space-active-tab .favicon-wrapper) {
+        opacity: 0.45;
+    }
+    
     :global(.sidebar .pinned-tab:hover .favicon-wrapper),
     :global(.sidebar .app-tab:hover .favicon-wrapper), 
     :global(.sidebar .tab-item:hover .favicon-wrapper),

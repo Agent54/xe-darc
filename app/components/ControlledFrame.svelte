@@ -1884,8 +1884,10 @@ document.addEventListener('input', function(event) {
         let controlledFrame = data.frames[tab?.id]?.frame
 
         // If transitioning from newtab to real URL, create frame if needed
-
-        data.frames[tabId] ??= {}
+        const framesObj = untrack(() => data.frames[tabId])
+        if (!framesObj) {
+            data.frames[tabId] = {}
+        }
         data.frames[tabId].wrapper = frameWrapper
 
         let addNode = false
@@ -1906,7 +1908,8 @@ document.addEventListener('input', function(event) {
             controlledFrame.onaudiostatechanged = throttle(e => handleAudioStateChanged(mytab, e), 500, {leading: false})
             
             // fired when navigation (including reloads and traversals) starts, for every navigable of the embedded document, but not same document navigation.
-            controlledFrame.onloadstart = throttle( e => handleLoadStart(mytab, e), 500, {leading: false})
+            // IMPORTANT: leading: true is required to block off-origin navigation before it completes
+            controlledFrame.onloadstart = throttle( e => handleLoadStart(mytab, e), 500, {leading: true})
             
             // fired when navigation has been completed.
             // controlledFrame.onloadcommit =  throttle(e => handleLoadCommit(mytab, e), 500, {leading: false})

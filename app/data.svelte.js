@@ -45,6 +45,7 @@ const spaces = $state({
 const activity = $state({})
 const resources = $state({})
 const frames = $state({})
+let lastForceHibernateTime = 0
 const previews = $state({})
 const settings = $state({})
 const ui = $state({ viewMode: 'default' })
@@ -490,6 +491,10 @@ function closeTab (spaceId, tabId) {
 }
 
 const destroy = $effect.root(() => {
+    // $effect(() => {
+    //     console.log('--------',$state.snapshot(frames['darc:tab_a1f1673e-2811-40cb-a5f1-1c719723e244']).forceHibernated)
+    // })
+    
     $effect(() => {
         if (!spaceMeta.activeSpace && Object.keys(spaces).length > 0) {
             // Set the first space as active
@@ -543,21 +548,32 @@ function loadSampleData () {
     })
 }
 
-function hibernate (tabId) {
+function hibernate (tabId, force = false) {
     // remove background frames from dom node parking
     const frame = frames[tabId]
     if (frame.frame) {
         frame.frame.remove()
     }
     frames[tabId].frame = null
+    frames[tabId].pendingLoad = false
     frames[tabId].hibernated = Date.now()
+    if (force) {
+        frames[tabId].forceHibernated = true
+        lastForceHibernateTime = Date.now()
+        console.log('hibernate set forceHibernated, keys:', Object.keys(frames[tabId]))
+    }
 }
 
 function unhibernate (tabId) {
+    // Guard against immediate unhibernation after force-hibernate (event propagation)
+    if (Date.now() - lastForceHibernateTime < 100) {
+        return
+    }
     if (!frames[tabId]) {
         frames[tabId] = {}
     }
     frames[tabId].hibernated = null
+    frames[tabId].forceHibernated = false
     frames[tabId].pendingLoad = true
 }
 
