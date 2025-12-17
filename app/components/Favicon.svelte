@@ -10,6 +10,9 @@
         
         if (!tab?.url) return null
         
+        // Skip security checks for about: URLs - they don't have origins
+        if (tab.url.startsWith('about:')) return null
+        
         try {
             const origin = new URL(tab.url).origin
             const originData = data.origins[origin]
@@ -27,34 +30,50 @@
         }
     })
     
-    function getFaviconContent() {
-        // Security indicator takes precedence
+    const faviconContent = $derived.by(() => {
+        const url = tab?.url
+        const favicon = tab?.favicon
+        
+        // New tab icon - check URL FIRST before anything else
+        // This ensures about: pages always show correct icon regardless of any other state
+        if (url?.startsWith?.('about:newtab') || url?.startsWith?.('about:blank')) {
+            return { type: 'newTab' }
+        }
+        
+        // Security indicator takes precedence for non-about: URLs
         if (securityStatus()?.hasError) {
             return { type: 'security', component: SecurityIndicator }
         }
-        
-        // New tab icon
-        if (tab?.url?.startsWith?.('about:newtab') || tab?.url?.startsWith?.('about:blank')) {
-            return { type: 'newTab' }
-        }
 
         // Custom favicon - check if it's SVG markup or URL
-        if (tab?.favicon) {
-            if (tab.favicon.startsWith('<svg') || tab.favicon.includes('viewBox')) {
-                return { type: 'svg', markup: tab.favicon }
-            } else if (tab.favicon.startsWith('http') || tab.favicon.startsWith('data:')) {
-                return { type: 'image', src: tab.favicon }
+        // But skip if favicon URL doesn't match current URL's domain (stale favicon)
+        if (favicon) {
+            // Skip stale favicons from different domains
+            if (favicon.startsWith('http') && url) {
+                try {
+                    const faviconUrlParam = new URL(favicon).searchParams.get('url')
+                    if (faviconUrlParam) {
+                        const faviconDomain = new URL(faviconUrlParam).hostname
+                        const currentDomain = new URL(url).hostname
+                        if (faviconDomain !== currentDomain) {
+                            return { type: 'globe' }
+                        }
+                    }
+                } catch {}
+            }
+            
+            if (favicon.startsWith('<svg') || favicon.includes('viewBox')) {
+                return { type: 'svg', markup: favicon }
+            } else if (favicon.startsWith('http') || favicon.startsWith('data:')) {
+                return { type: 'image', src: favicon }
             } else {
-                // Assume it's SVG markup if it's not a URL
-                return { type: 'svg', markup: tab.favicon }
+                return { type: 'svg', markup: favicon }
             }
         }
         
         // Default globe icon
         return { type: 'globe' }
-    }
-    
-    const faviconContent = $derived(getFaviconContent())
+    })
 </script>
 
 {#snippet newTabIcon()}
