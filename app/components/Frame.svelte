@@ -68,8 +68,21 @@
     let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1200)
     let windowHeight = $state(typeof window !== 'undefined' ? window.innerHeight : 800)
     
-    // Command key state from controlled frames
+    // Command key state - tracked both from controlled frames and window-level events
     let commandKeyPressed = $state(false)
+    
+    // Track command key at window level so it works even when focus is outside controlled frame
+    function handleWindowKeyDown(event) {
+        if (event.metaKey || event.ctrlKey) {
+            commandKeyPressed = true
+        }
+    }
+    
+    function handleWindowKeyUp(event) {
+        if (event.key === 'Meta' || event.key === 'Control') {
+            commandKeyPressed = false
+        }
+    }
 
     // Function to create off-origin tab (lightbox or normal tab based on command key)
     // FIXME: move to proper place
@@ -300,13 +313,14 @@
     })
 
     // Show global hover preview when regular link preview has been visible for a while
+    // Link previews are only shown when the command key is held down
     $effect(() => {
         // Don't show hover previews when a lightbox is active or tab is loading
         const hasActiveLightbox = data.previews[tab._id]?.lightbox
         
-        console.log('Link preview effect:', { hoveredLink: !!hoveredLink, showLinkPreviews: data.spaceMeta.config.showLinkPreviews, hasActiveLightbox, tabLoading: tab?.loading })
+        console.log('Link preview effect:', { hoveredLink: !!hoveredLink, commandKeyPressed, hasActiveLightbox, tabLoading: tab?.loading })
         
-        if (hoveredLink && data.spaceMeta.config.showLinkPreviews && !hasActiveLightbox && !tab?.loading) {
+        if (hoveredLink && commandKeyPressed && !hasActiveLightbox && !tab?.loading) {
             // Cancel any pending hide delay because we have (or are about to have) a hovered link again
             if (hidePreviewDelayTimeout) {
                 clearTimeout(hidePreviewDelayTimeout)
@@ -367,7 +381,7 @@
             } else {
                 setTimeout(() => {
                     globalHoverPreviewShown = true
-                }, 1000) // 1000ms delay for page loading
+                }, 300) // 300ms delay for page loading
             }
             
             // Set timeout to hide global preview after 21 seconds (unless pinned)
@@ -385,8 +399,8 @@
         if (globalHoverPreviewPinned) {
             createPreview()
         } else {
-            // Set timeout to create preview node after 700ms
-            globalHoverPreviewTimeout = setTimeout(createPreview, 700)
+            // Set timeout to create preview node after 200ms
+            globalHoverPreviewTimeout = setTimeout(createPreview, 200)
         }
     }
 
@@ -516,6 +530,8 @@
         return out
     }
 </script>
+
+<svelte:window onkeydown={handleWindowKeyDown} onkeyup={handleWindowKeyUp} />
 
 <div bind:this={frameWrapper} id="tab_{tab.id}" class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
     {#if (!data.frames[tab.id]?.frame || !data.frames[tab.id]?.initialLoad) && !data.frames[tab.id]?.pendingLoad}

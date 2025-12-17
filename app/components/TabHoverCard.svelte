@@ -299,11 +299,9 @@
 <div class="hovercard-content"
      role="tooltip"
      onmouseenter={() => hovercardHovered = true}
-     onmouseleave={() => hovercardHovered = false}>
+     onmouseleave={() => { hovercardHovered = false; onMouseLeave?.() }}>
     <div class="hovercard-info"
-         role="region"
-         onmouseenter={() => {}}
-         onmouseleave={onMouseLeave}>
+         role="region">
         <div class="hovercard-header">
             <div class="hovercard-text">
                 <div class="hovercard-title-wrapper" use:initScrollFade>
