@@ -2608,3 +2608,7 @@ off domain back navigation broken
 lightbox broken
 
 cmd long click open lightbox, short click in new bg tab
+
+hovercard styles history title row
+
+unreliable tab activation on spaces switch and reaload, restart

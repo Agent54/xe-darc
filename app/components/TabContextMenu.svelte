@@ -20,11 +20,7 @@
         if (onReload) {
             onReload(tab)
         } else {
-            if (typeof frame.reload === 'function') {
-                frame.reload()
-            } else {
-                frame.src = tab.url
-            }
+            data.reloadTab(tab.id)
         }
         onHide()
     }

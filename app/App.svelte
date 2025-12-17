@@ -1180,13 +1180,7 @@
     }
 
     function reloadTab (tab) {
-        const frame = data.frames[tab.id]?.frame
-        if (frame && typeof frame.reload === 'function') {
-            frame.reload()
-        } else if (frame) {
-            // Fallback: navigate to same URL
-            frame.src = tab.url
-        }
+        data.reloadTab(tab.id)
         hideContextMenu()
     }
 
@@ -3825,12 +3819,7 @@
     onHide={hideContextMenu} 
     onReload={(tab) => {
         if (!tab?.id) return
-        const frame = data.frames[tab.id]?.frame
-        if (frame) {
-            frame.reload?.()
-        } else {
-            tab.url = tab.url
-        }
+        data.reloadTab(tab.id)
     }}
     {partitions}
     {contextMenuOpenTime}
@@ -3880,8 +3869,7 @@
                                   data.activate(hoveredTab.id)
                               }
                               setTimeout(() => {
-                                  const frame = data.frames[hoveredTab?.id]?.frame
-                                  frame?.reload?.()
+                                  data.reloadTab(hoveredTab?.id)
                               }, 50)
                           }}
                           onCloseTab={() => {

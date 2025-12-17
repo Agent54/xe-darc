@@ -2,7 +2,7 @@ import PouchDB from 'pouchdb-browser'
 import findPlugin from 'pouchdb-find'
 import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
-import { throttle } from './lib/utils.js'
+import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
@@ -1056,14 +1056,67 @@ export default {
         }
     },
 
+    clearTabErrors: (tabId) => {
+        const tab = docs[tabId]
+        if (!tab?.url) return
+        const originValue = origin(tab.url)
+        if (origins[originValue]) {
+            origins[originValue].certificateError = null
+            origins[originValue].networkError = null
+        }
+    },
+
+    reloadTab: (tabId) => {
+        const tab = docs[tabId]
+        const frame = frames[tabId]?.frame
+        if (!tab || !frame) return
+        
+        // Clear errors before reload
+        const originValue = origin(tab.url)
+        if (origins[originValue]) {
+            origins[originValue].certificateError = null
+            origins[originValue].networkError = null
+        }
+        
+        // Set loading state
+        if (frames[tabId]) {
+            frames[tabId].loading = true
+        }
+        
+        // Reload the frame
+        if (typeof frame.reload === 'function') {
+            frame.reload()
+        } else {
+            frame.src = tab.url
+        }
+        
+        console.log(`🔄 Reload initiated for tab ${tabId}`)
+    },
+
     reloadCurrentTab: () => {
         const currentTabId = spaceMeta.activeTabId
         if (currentTabId && frames[currentTabId]?.frame) {
+            // Clear errors before reload
+            const tab = docs[currentTabId]
+            if (tab?.url) {
+                const originValue = origin(tab.url)
+                if (origins[originValue]) {
+                    origins[originValue].certificateError = null
+                    origins[originValue].networkError = null
+                }
+            }
+            
+            // Set loading state
+            if (frames[currentTabId]) {
+                frames[currentTabId].loading = true
+            }
+            
             frames[currentTabId].frame.reload()
+            
             // Clear needsReload flags after reload
             for (const resourceKey of Object.keys(permissions)) {
-                for (const origin of Object.keys(permissions[resourceKey].origins || {})) {
-                    const requests = permissions[resourceKey].origins[origin].requests || []
+                for (const originKey of Object.keys(permissions[resourceKey].origins || {})) {
+                    const requests = permissions[resourceKey].origins[originKey].requests || []
                     requests.forEach(request => {
                         if (request.needsReload) {
                             request.needsReload = false
