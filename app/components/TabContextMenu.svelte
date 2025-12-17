@@ -10,6 +10,25 @@
         onToggleCertificateMonitor = null
     } = $props()
     
+    let menuElement = $state(null)
+    let adjustedY = $state(0)
+    
+    $effect(() => {
+        if (menu.visible) {
+            adjustedY = menu.y
+            if (menuElement) {
+                requestAnimationFrame(() => {
+                    const menuHeight = menuElement.offsetHeight
+                    const viewportHeight = window.innerHeight
+                    const margin = 8
+                    if (menu.y + menuHeight + margin > viewportHeight) {
+                        adjustedY = Math.max(margin, viewportHeight - menuHeight - margin)
+                    }
+                })
+            }
+        }
+    })
+    
     function reloadTab(tab) {
         const frame = data.frames[tab.id]?.frame
         if (!frame) {
@@ -122,9 +141,10 @@
          oncontextmenu={(e) => { e.preventDefault(); onHide(); }}></div>
     
     <div class="context-menu" 
+         bind:this={menuElement}
          role="menu"
          tabindex="0"
-         style="left: {menu.x}px; top: {menu.y}px;"
+         style="left: {menu.x}px; top: {adjustedY}px;"
          onclick={(e) => e.stopPropagation()}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
          oncontextmenu={(e) => e.preventDefault()}>
