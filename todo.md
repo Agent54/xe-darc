@@ -2571,3 +2571,38 @@ visited links, links opened in other tabs
 allow once option in menu
 
 nitification and user/sync menus
+
+active tab in other space style
+
+visited link style fix!
+
+favicon mixup bug. eg new tab page
+
+open tabsidebar too easy!!!
+
+stuck link previews
+
+long click or cmd hover link previews instead of hover?!
+
+tab close butotn only on hover, show style for hibernated tabs
+
+error pages dont reset
+error pages flash underlying error pages
+
+activation history not persistent
+
+space under tablist too short on large monitor and short list
+
+hibernate active tab
+
+global pins, space pins, tabgroup pins
+
+
+url complete etc.
+
+
+injections failing bug
+
+off domain back navigation broken
+
+lightbox broken
