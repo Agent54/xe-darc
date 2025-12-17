@@ -201,9 +201,9 @@
         
         // Very stiff spring (0.08 resistance) 
         const resistance = 0.08
-        const threshold = 35 // Rubber band distance after activation
+        const threshold = 47 // Rubber band distance after activation (increased from 35 to prevent accidental triggers)
         const maxStretch = 50
-        const activationThreshold = 120 // Minimum accumulated deltaX before spring activates
+        const activationThreshold = 180 // Minimum accumulated deltaX before spring activates (increased from 120)
         
         // Detect vertical scrolling and disable spring
         if (Math.abs(event.deltaY) > Math.abs(event.deltaX) * 2) {
@@ -260,7 +260,7 @@
                 isCloseRubberBanding = true
                 
                 // If pulled far enough, close multi-space mode (higher threshold than opening)
-                if (closeRubberBandOffset > 45) {
+                if (closeRubberBandOffset > 48) {
                     exitMultiSpaceMode()
                 }
                 
