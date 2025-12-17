@@ -56,9 +56,8 @@
             return null
         }
         const originValue = origin(tab.url)
-        const origins = data.origins[originValue]
-        const certError = origins?.certificateError || null
-        // console.log(`🔒 [DEBUG] Tab ${tab.id} (${tab.url}) - Origin: ${originValue}, Origins obj:`, origins, 'CertError:', certError)
+        const certError = data.origins[originValue]?.certificateError ?? null
+        // console.log(`🔒 [DEBUG] Tab ${tab.id} (${tab.url}) - Origin: ${originValue}, CertError:`, certError)
         return certError
     })
 
@@ -67,9 +66,8 @@
             return null
         }
         const originValue = origin(tab.url)
-        const origins = data.origins[originValue]
-        const netError = origins?.networkError || null
-        // console.log(`🌐 [DEBUG] Tab ${tab.id} (${tab.url}) - Origin: ${originValue}, Origins obj:`, origins, 'NetError:', netError)
+        const netError = data.origins[originValue]?.networkError ?? null
+        // console.log(`🌐 [DEBUG] Tab ${tab.id} (${tab.url}) - Origin: ${originValue}, NetError:`, netError)
         return netError
     })
 
@@ -330,35 +328,23 @@
     function clearNetworkError(tab) {
         const originValue = origin(tab.url)
         if (data.origins[originValue]?.networkError) {
-            delete data.origins[originValue].networkError
+            data.origins[originValue].networkError = null
             console.log(`🌐 Network error cleared for ${tab.url}`)
         }
     }
 
-    // Reload the current tab
-    function reloadTab(tab) {
-        const frameData = data.frames[tab.id]
-        const frame = frameData?.frame
-        if (frame) {
-            console.log(`🔄 User initiated reload for tab ${tab.id}`)
-            clearNetworkError(tab)
-            
-            // Set loading state
-            frameData.loading = true
-            
-            // Reload the frame
-            if (frame.reload) {
-                frame.reload()
-            } else {
-                // Fallback: reload by setting src again
-                const currentUrl = tab.url
-                frame.src = currentUrl
-            }
-            
-            console.log(`🔄 Reload initiated for tab ${tab.id} - URL: ${tab.url}`)
-        } else {
-            console.error(`❌ Cannot reload tab ${tab.id} - frame not found`)
+    // Clear certificate error from origin
+    function clearCertificateError(tab) {
+        const originValue = origin(tab.url)
+        if (data.origins[originValue]?.certificateError) {
+            data.origins[originValue].certificateError = null
+            console.log(`🔒 Certificate error cleared for ${tab.url}`)
         }
+    }
+
+    // Reload the current tab - delegates to centralized data.reloadTab
+    function reloadTab(tab) {
+        data.reloadTab(tab.id)
     }
 
     function handleEvent(eventName, tab, event) {
@@ -581,8 +567,8 @@
             
             // Clear certificate error if we successfully navigated to a different URL
             if (currentCertErr && tab.url !== currentCertErr.url) {
-                delete data.origins[originValue]?.certificateError
-                console.log(`🔒 Certificate error cleared - successfully navigated to ${tab.url}`)
+                clearCertificateError(tab)
+                console.log(`🔒 Certificate error cleared - successfully navigated from ${currentCertErr?.url} to ${tab.url}`)
             }
             
             // console.log(`✅ Page loaded successfully: ${tab.url}`)
@@ -2257,6 +2243,7 @@ document.addEventListener('input', function(event) {
             <SSLErrorPage
                 {tab}
                 certificateError={currentCertificateError}
+                onReload={() => reloadTab(tab)}
             />
 
         {:else if currentNetworkError}

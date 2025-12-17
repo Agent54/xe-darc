@@ -1966,8 +1966,7 @@
                                 data.activate(hoveredTab.id)
                             }
                             setTimeout(() => {
-                                const frame = data.frames[hoveredTab?.id]?.frame
-                                frame?.reload?.()
+                                data.reloadTab(hoveredTab?.id)
                             }, 50)
                         }}
                         onCloseTab={() => {
@@ -2015,12 +2014,7 @@
     onHide={hideTabContextMenu} 
     onReload={(tab) => {
         if (!tab?.id) return
-        const frame = data.frames[tab.id]?.frame
-        if (frame) {
-            frame.reload?.()
-        } else {
-            tab.url = tab.url
-        }
+        data.reloadTab(tab.id)
     }}
     {partitions}
     contextMenuOpenTime={tabContextMenuOpenTime} />
