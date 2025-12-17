@@ -213,7 +213,7 @@
     let dataSaver = $state(false)
     let batterySaver = $state(false)
     let secondScreenActive = $state(false)
-    let statusLightsEnabled = $state(false)
+    let statusLightsEnabled = $state(true)
     let certificateMonitorForTab = $state(null)
     let devModeEnabled = $state(false)
     let isMaximized = $state(false)
@@ -327,12 +327,6 @@
             if (savedDevMode !== null) {
                 devModeEnabled = savedDevMode === 'true'
                 data.settings.devModeEnabled = devModeEnabled
-                
-                const savedShowLinkPreviews = localStorage.getItem('showLinkPreviews')
-                if (savedShowLinkPreviews !== null) {
-                    data.spaceMeta.config.showLinkPreviews = savedShowLinkPreviews === 'true'
-                    data.settings.showLinkPreviews = data.spaceMeta.config.showLinkPreviews
-                }
             }
 
             // Load global tab complete setting
@@ -2343,12 +2337,6 @@
         data.settings.devModeEnabled = devModeEnabled
     }
 
-    function toggleLinkPreviews() {
-        data.spaceMeta.config.showLinkPreviews = !data.spaceMeta.config.showLinkPreviews
-        localStorage.setItem('showLinkPreviews', data.spaceMeta.config.showLinkPreviews.toString())
-        data.settings.showLinkPreviews = data.spaceMeta.config.showLinkPreviews
-    }
-
     function toggleLightboxMode() {
         lightboxModeEnabled = !lightboxModeEnabled
         localStorage.setItem('lightboxModeEnabled', lightboxModeEnabled.toString())
@@ -3535,7 +3523,7 @@
                 {#if dataSaver}<span class="checkmark">•</span>{/if}
             </div> -->
           
-            <div class="settings-menu-item menu-item" 
+            <!-- <div class="settings-menu-item menu-item" 
                 class:active={statusLightsEnabled}
                 role="button"
                 tabindex="0"
@@ -3550,7 +3538,7 @@
                 </span>
                 <span>Status Lights</span>
                 {#if statusLightsEnabled}<span class="checkmark">•</span>{/if}
-            </div>
+            </div> -->
 
             <div class="settings-menu-item menu-item" 
                 class:active={devModeEnabled}
@@ -3565,21 +3553,6 @@
                 </span>
                 <span>Dev Mode</span>
                 {#if devModeEnabled}<span class="checkmark">•</span>{/if}
-            </div>
-            
-            <div class="settings-menu-item menu-item" 
-                 class:active={data.spaceMeta.config.showLinkPreviews}
-                 role="button"
-                 tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleLinkPreviews(); closeMenuImmediately() }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleLinkPreviews() } }}>
-                <span class="settings-menu-icon-item menu-icon-item">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                    </svg>
-                </span>
-                <span>Link Previews</span>
-                {#if data.spaceMeta.config.showLinkPreviews}<span class="checkmark">•</span>{/if}
             </div>
 
             <div class="settings-menu-item menu-item" 
@@ -3597,7 +3570,7 @@
                 {#if lightboxModeEnabled}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="settings-menu-item menu-item" 
+            <!-- <div class="settings-menu-item menu-item" 
                  class:active={tabsOpenRight}
                  role="button"
                  tabindex="0"
@@ -3610,7 +3583,7 @@
                 </span>
                 <span>Tabs Open Right</span>
                 {#if tabsOpenRight}<span class="checkmark">•</span>{/if}
-            </div>
+            </div> -->
 
             <div class="settings-menu-item menu-item" 
                  class:active={showNavigationToolbar}

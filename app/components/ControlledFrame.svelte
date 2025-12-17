@@ -45,7 +45,7 @@
     // let usedUrl = $state('')
     
     // Track command key state
-    // let isCommandKeyDown = $state(false)
+    let isCommandKeyDown = $state(false)
 
     // OAuth popup state
     let oauthPopup = $state(null) // { url, width, height, parentTab, event }
@@ -1452,22 +1452,20 @@ document.addEventListener('input', function(event) {
             } else if (message === 'iwa:blur') {
                 // console.log('[DEBUG:ControlledFrame] iwa:blur received via consolemessage | tabId:', tab?.id || tabId)
                 onFrameBlur()
-            // } else if (message.startsWith('iwa:command-key-down:')) {
-            //     // Track command key press from controlled frame
-            //     const tabId = message.substring('iwa:command-key-down:'.length)
-            //     if (tabId === mytab.id) {
-            //         isCommandKeyDown = true
-            //         commandKeyPressed = true
-            //         console.log(`📌 Command key pressed in tab ${tabId}`)
-            //     }
-            // } else if (message.startsWith('iwa:command-key-up:')) {
-            //     // Track command key release from controlled frame
-            //     const tabId = message.substring('iwa:command-key-up:'.length)
-            //     if (tabId === mytab.id) {
-            //         isCommandKeyDown = false
-            //         commandKeyPressed = false
-            //         console.log(`📌 Command key released in tab ${tabId}`)
-            //     }
+            } else if (message.startsWith('iwa:command-key-down:')) {
+                // Track command key press from controlled frame
+                const tabId = message.substring('iwa:command-key-down:'.length)
+                if (tabId === mytab.id) {
+                    isCommandKeyDown = true
+                    commandKeyPressed = true
+                }
+            } else if (message.startsWith('iwa:command-key-up:')) {
+                // Track command key release from controlled frame
+                const tabId = message.substring('iwa:command-key-up:'.length)
+                if (tabId === mytab.id) {
+                    isCommandKeyDown = false
+                    commandKeyPressed = false
+                }
             } else if (message.startsWith('iwa:close-tab:')) {
                 // Extract tab ID from message - handle colons in tab ID
                 const tabId = message.substring('iwa:close-tab:'.length)
