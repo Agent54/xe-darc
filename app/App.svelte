@@ -1305,7 +1305,7 @@
     let observer = $state(null)
     let scrollContainer = null
     onMount(() => {
-        console.log('scrollContainer', scrollContainer)
+        // console.log('scrollContainer', scrollContainer)
         observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 const tabId = entry.target.id.replace('tab_', '')
@@ -1316,10 +1316,9 @@
                         if (tabChangeFromScroll) {
                             return
                         }
-                        
-                        const frameData = data.frames[tabId]
-                        const isForceHibernated = frameData?.forceHibernated === true
-                        console.log('observer check', tabId, 'forceHibernated:', isForceHibernated, 'frameData:', frameData, 'raw:', $state.snapshot(data.frames)[tabId])
+            
+                        const isForceHibernated = data.frames[tabId]?.forceHibernated === true
+
                         if (entry.isIntersecting && tab && !isForceHibernated) {
                             tabChangeFromScroll = true
                             if (tabChangeFromScrollTimer) {

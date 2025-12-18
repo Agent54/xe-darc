@@ -560,16 +560,17 @@ function hibernate (tabId, force = false) {
     if (force) {
         frames[tabId].forceHibernated = true
         lastForceHibernateTime = Date.now()
-        console.log('hibernate set forceHibernated, keys:', Object.keys(frames[tabId]))
+        // console.log('hibernate set forceHibernated:', frames[tabId].forceHibernated)
     }
 }
 
 function unhibernate (tabId) {
     // Guard against immediate unhibernation after force-hibernate (event propagation)
+    // console.log('### unhibernate', tabId)
     if (Date.now() - lastForceHibernateTime < 100) {
         return
     }
-    if (!frames[tabId]) {
+    if (!$state.snapshot(frames[tabId])) {
         frames[tabId] = {}
     }
     frames[tabId].hibernated = null
@@ -903,7 +904,10 @@ export default {
             docs[tab._id] = tab
         }
 
-        frames[tab.id] ??= {}
+        if (!$state.snapshot(frames[tab.id])) {
+            frames[tab.id] = {}
+        }
+       
         frames[tab.id].initialLoad = true
 
         if (shouldFocus && !preview && !lightbox) {
