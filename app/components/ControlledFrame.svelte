@@ -1979,7 +1979,7 @@ document.addEventListener('input', function(event) {
     onDestroy(async () => {
         await tick()
         // console.log('------------------', $state.snapshot(data.frames[tab.id].forceHibernated))
-        if (tab?.id && !detached && !data.frames[tab.id].forceHibernated) {
+        if (tab?.id && !detached && !data.frames[tab.id]?.forceHibernated) {
             delete data.frames[tab.id]
         }
         

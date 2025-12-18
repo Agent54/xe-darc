@@ -121,6 +121,7 @@ const spaceMeta = $state({
     spaceOrder: [],
     closedTabs: [],
     activeTabId: localStorage.getItem('activeTabId') || null, // FIXME: use _local/ persistent active tab array
+    lastActiveNonPinnedTabId: null, // Track last non-pinned tab when a pinned tab is active
     globalPins: [],
     config: {
         leftPinnedTabWidth: 400,
@@ -369,6 +370,19 @@ live: true,
 
 function activate(tabId) {   
     // console.log('activate tab id ..', {tabId})
+
+    const newTab = docs[tabId]
+    const currentTab = docs[spaceMeta.activeTabId]
+    
+    // Track last non-pinned tab when switching to a pinned tab
+    if (newTab?.pinned) {
+        if (currentTab && !currentTab.pinned) {
+            spaceMeta.lastActiveNonPinnedTabId = spaceMeta.activeTabId
+        }
+    } else {
+        // Switching to a non-pinned tab, clear the tracker
+        spaceMeta.lastActiveNonPinnedTabId = null
+    }
 
     spaceMeta.activeTabId = tabId
 
