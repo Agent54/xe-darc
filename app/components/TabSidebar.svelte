@@ -1841,7 +1841,7 @@
                                                  oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
                                                 <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) activateTab(tab.id, spaceId) }}>
                                                     <Favicon {tab} showButton={false} />
-                                                    <span class="tab-title">{tab.title}</span>
+                                                    <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                                 </button>
                                                 
                                                 <button class="tab-close" aria-label="Close tab" 
@@ -1935,7 +1935,7 @@
                                     onmouseleave={handleTabMouseLeave}>
                                 <Favicon {tab} showButton={false} />
                                 <div class="tab-text">
-                                    <span class="tab-title">{tab.title}</span>
+                                    <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                     <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
                                 </div>
                             </button>

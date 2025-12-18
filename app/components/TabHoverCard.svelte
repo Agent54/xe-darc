@@ -306,7 +306,7 @@
             <div class="hovercard-text">
                 <div class="hovercard-title-wrapper" use:initScrollFade>
                     <div class="fade-left"></div>
-                    <div class="hovercard-title" onscroll={handleScrollFade}>{tab.title || 'Untitled'}</div>
+                    <div class="hovercard-title" onscroll={handleScrollFade}>{data.docs[tab.id]?.title || tab.title || 'Untitled'}</div>
                     <div class="fade-right"></div>
                 </div>
             </div>
@@ -322,7 +322,7 @@
         </div>
         
         <UrlBar 
-            url={tab.url}
+            url={data.docs[tab.id]?.url || tab.url}
             tabId={tab.id}
             {isClosedTab}
             {showDevTools}
