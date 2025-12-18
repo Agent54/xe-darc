@@ -1867,7 +1867,6 @@ document.addEventListener('input', function(event) {
     }
 
     // user initiated clear data options clearData(options, types)
-
     let attached = false
     let frameWrapper = $state(null)
     let retry = $state(0)
@@ -1884,8 +1883,9 @@ document.addEventListener('input', function(event) {
         let controlledFrame = data.frames[tab?.id]?.frame
 
         // If transitioning from newtab to real URL, create frame if needed
-        const framesObj = untrack(() => data.frames[tabId])
+        const framesObj = untrack(() => $state.snapshot(data.frames[tabId]))
         if (!framesObj) {
+            // console.log('resetting frame!!!!!')
             data.frames[tabId] = {}
         }
         data.frames[tabId].wrapper = frameWrapper
@@ -1976,8 +1976,10 @@ document.addEventListener('input', function(event) {
     })
 
     let detached = false
-    onDestroy(() => {
-        if (tab?.id && !detached) {
+    onDestroy(async () => {
+        await tick()
+        // console.log('------------------', $state.snapshot(data.frames[tab.id].forceHibernated))
+        if (tab?.id && !detached && !data.frames[tab.id].forceHibernated) {
             delete data.frames[tab.id]
         }
         

@@ -2630,3 +2630,13 @@ make black rounded background for sidepins
 reload scroll to first tab bug
 
 hibernation symbol and loader
+
+hide/cancel context menu when clicking.
+
+mullti computer sync setup
+
+in vscode browser
+
+ui shelves eg. variations on a button shown on top of base ui without being able to destroy the foundation. eg xr mode worlds
+
+last unpinned tab active state as spaces active style
