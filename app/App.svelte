@@ -972,17 +972,21 @@
 
     let tabButtons = $state({})
 
+    // Track if initial scroll to active tab has been performed
+    let initialScrollPerformed = $state(false)
+    
     // Effect to handle scrolling to active tab when it changes or when sidebars are toggled
     $effect(() => {
         // Watch for changes to active tab and sidebar state
         const sidebarCount = openSidebars.size // just for triggering effect
-        const activeFrameWrapper = data.frames[data.spaceMeta.activeTabId]?.wrapper
+        const activeTabId = data.spaceMeta.activeTabId
+        const activeFrameWrapper = data.frames[activeTabId]?.wrapper
 
         if (!activeFrameWrapper) {
             return
         }
         
-        // console.log('scroll effect triggered for tab:', data.spaceMeta.activeTabId, 'tabChangeFromScroll:', {tabChangeFromScroll})
+        // console.log('scroll effect triggered for tab:', activeTabId, 'tabChangeFromScroll:', {tabChangeFromScroll}, 'initialScrollPerformed:', initialScrollPerformed)
 
         // Don't scroll if tab change was caused by scrolling
         // if (tabChangeFromScroll) {
@@ -993,28 +997,34 @@
         // tabChangeFromScroll = true
         
         // Only scroll frame into view if tab change was NOT caused by scrolling
-        if (!tabChangeFromScroll) {
-            // setTimeout(() => {
-                if (activeFrameWrapper) {
-                    // console.log('calling scrollIntoView for tab:', data.spaceMeta.activeTabId)
-                    activeFrameWrapper.scrollIntoView({ 
-                        behavior:  'instant' // isWindowResizing ? 'auto' : 'smooth' 
-                    })
-                } else {
-                    console.warn('Frame wrapper not available for tab:', data.spaceMeta.activeTabId)
-                }
-            // }, 0)
+        // Also scroll on initial load when wrapper first becomes available
+        if (!tabChangeFromScroll || !initialScrollPerformed) {
+            // Temporarily set tabChangeFromScroll to prevent IntersectionObserver from changing active tab
+            if (!initialScrollPerformed) {
+                tabChangeFromScroll = true
+            }
+            
+            // console.log('calling scrollIntoView for tab:', activeTabId)
+            activeFrameWrapper.scrollIntoView({ 
+                behavior: 'instant'
+            })
+            
+            // Mark initial scroll as done and reset flag after a delay
+            if (!initialScrollPerformed) {
+                initialScrollPerformed = true
+                setTimeout(() => {
+                    tabChangeFromScroll = false
+                }, 500)
+            }
         }
         
-        // setTimeout(() => {
-            if (tabButtons[data.spaceMeta.activeTabId]) {
-                tabButtons[data.spaceMeta.activeTabId].scrollIntoView({
-                    behavior: isWindowResizing ? 'auto' : 'smooth',
-                    inline: 'nearest',
-                    block: 'nearest'
-                })
-            }
-        // }, 0)
+        if (tabButtons[activeTabId]) {
+            tabButtons[activeTabId].scrollIntoView({
+                behavior: isWindowResizing ? 'auto' : 'smooth',
+                inline: 'nearest',
+                block: 'nearest'
+            })
+        }
         
         // Reset flag after scroll animation completes (longer delay for smooth scrolling)
         // setTimeout(() => {

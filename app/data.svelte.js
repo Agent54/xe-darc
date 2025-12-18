@@ -324,7 +324,16 @@ function removedActiveTabId (previousActiveTabId) {
         return true
     })
     console.log('setting active tab id b', { current : spaceMeta.activeTabId, next : spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1], previousIndex, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
-    spaceMeta.activeTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]
+    
+    const nextTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]
+    const nextTab = docs[nextTabId]
+    
+    // Clear last active non-pinned tab if switching to a non-pinned tab
+    if (nextTab && !nextTab.pinned) {
+        spaceMeta.lastActiveNonPinnedTabId = null
+    }
+    
+    spaceMeta.activeTabId = nextTabId
 }
 
 let lastLocalSeq = null
@@ -804,6 +813,9 @@ export default {
             // No non-pinned previous tab found
             return false
         }
+        
+        // Clear last active non-pinned tab since we're switching to a non-pinned tab
+        spaceMeta.lastActiveNonPinnedTabId = null
         
         // Set the previous tab as active
         spaceMeta.activeTabId = previousTab.id
