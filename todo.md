@@ -2640,3 +2640,38 @@ in vscode browser
 ui shelves eg. variations on a button shown on top of base ui without being able to destroy the foundation. eg xr mode worlds
 
 last unpinned tab active state as spaces active style
+
+option to limit frame width and resize frames per tab group for more playbit/ leflet feel
+
+cmd click in bg in lighbox mode does not work
+
+back nav on lightbox should close
+
+visual jj trigger on switch branch to call other vscode calls
+
+new tab button in spaces list
+
+three finger up swipe for spaces. (bettertocuhtoool?)
+
+space keyboard controls
+
+space suggestions on typing in omnibox control
+
+login with link in clipboard feature
+
+launcher os level ?
+spaces menu?
+
+group history by tab, group and space!!!
+
+shift show browser , long shift show ubiquity
+
+pie menu
+
+move nav toolbar to top of sidebar?
+
+animations?
+
+iframe window focus bug
+
+cmd open tab messes with cmd hover for link previews

@@ -47,13 +47,10 @@ document.addEventListener('keydown', function(event) {
 
 // Global mouse event listeners for controlled frame
 document.addEventListener('mousedown', function(event) {
-    // console.log('🖱️ [CONTROLLED-FRAME] mousedown detected in tab ${tabId}', {
-    //     button: event.button,
-    //     target: event.target?.tagName,
-    //     clientX: event.clientX,
-    //     clientY: event.clientY
-    // });
-    console.log(`iwa:mousedown:${tabId}:${event.button}`);
+    // Track modifier key state with mousedown for link clicks
+    // This ensures we capture cmd+click before navigation starts
+    const hasModifier = event.metaKey || event.ctrlKey;
+    console.log(`iwa:mousedown:${tabId}:${event.button}:${hasModifier ? 'mod' : ''}`);
 }, { capture: true, passive: true });
 
 document.addEventListener('mouseup', function(event) {
