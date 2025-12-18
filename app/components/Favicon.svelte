@@ -4,17 +4,25 @@
     
     let { tab, security = null, showButton = true, size = 'normal' } = $props()
     
+    // Use reactive doc data for url/favicon, falling back to prop
+    const reactiveTab = $derived({
+        ...tab,
+        url: data.docs[tab?.id]?.url ?? tab?.url,
+        favicon: data.docs[tab?.id]?.favicon ?? tab?.favicon,
+        title: data.docs[tab?.id]?.title ?? tab?.title
+    })
+    
     // Derive security status if not provided
     const securityStatus = $derived(() => {
         if (security !== null) return security
         
-        if (!tab?.url) return null
+        if (!reactiveTab?.url) return null
         
         // Skip security checks for about: URLs - they don't have origins
-        if (tab.url.startsWith('about:')) return null
+        if (reactiveTab.url.startsWith('about:')) return null
         
         try {
-            const origin = new URL(tab.url).origin
+            const origin = new URL(reactiveTab.url).origin
             const originData = data.origins[origin]
             
             return {
@@ -22,7 +30,7 @@
                          originData?.hasSecurityWarning || 
                          originData?.mixedContent || 
                          originData?.securityState === 'mixed' || 
-                         (originData?.securityState === 'insecure' && tab.url?.startsWith('https:')),
+                         (originData?.securityState === 'insecure' && reactiveTab.url?.startsWith('https:')),
                 originData
             }
         } catch (error) {
@@ -31,8 +39,8 @@
     })
     
     const faviconContent = $derived.by(() => {
-        const url = tab?.url
-        const favicon = tab?.favicon
+        const url = reactiveTab?.url
+        const favicon = reactiveTab?.favicon
         
         // New tab icon - check URL FIRST before anything else
         // This ensures about: pages always show correct icon regardless of any other state
@@ -95,7 +103,7 @@
     <span 
         class="favicon-display" 
         class:small={size === 'small'}
-        title={tab?.title || tab?.url || ''}
+        title={reactiveTab?.title || reactiveTab?.url || ''}
         aria-label="Tab favicon and security status">
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
