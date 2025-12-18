@@ -1262,6 +1262,23 @@ export default {
         return false
     },
 
+    isPermissionGranted: (permissionType, origin) => {
+        const permissionObj = permissions[permissionType]
+        if (!permissionObj?.origins?.[origin]) {
+            return false
+        }
+        const permission = permissionObj.origins[origin].permission
+        return permission === 'always' || permission === 'ephemeral'
+    },
+
+    isPermissionMocked: (permissionType, origin) => {
+        const permissionObj = permissions[permissionType]
+        if (!permissionObj?.origins?.[origin]?.requests?.length) {
+            return false
+        }
+        const latestRequest = permissionObj.origins[origin].requests.at(-1)
+        return latestRequest?.status === 'mocked'
+    },
 
     closeTab,
 

@@ -50,6 +50,11 @@
     // OAuth popup state
     let oauthPopup = $state(null) // { url, width, height, parentTab, event }
 
+    // Track recently blocked off-origin URLs to prevent duplicate tab creation
+    // Both onBeforeRequest and handleLoadStart may fire for the same navigation
+    const recentlyBlockedUrls = new Map() // url -> timestamp
+    const BLOCK_DEDUP_TIMEOUT = 2000 // 2 seconds
+
     // Derived values for error checking from origins store
     let currentCertificateError = $derived.by(() => {
         if (!tab?.url) {
@@ -71,6 +76,37 @@
         return netError
     })
 
+    // Permission-based navigation helpers
+    // Determines if opening a new tab should use lightbox mode
+    // Returns false (open in new tab) if:
+    //   - Command key is pressed (override)
+    //   - Origin has 'open-tab' permission granted
+    // Returns true (use lightbox) if:
+    //   - Permission is denied, mocked, or not requested (default behavior)
+    function shouldUseLightboxForNewTab(originUrl, forceNewTab = false) {
+        if (forceNewTab) return false
+        const tabOrigin = origin(originUrl)
+        if (data.isPermissionGranted('open-tab', tabOrigin)) {
+            return false
+        }
+        return true
+    }
+
+    // Determines if off-origin navigation should use lightbox mode
+    // Returns false (navigate directly) if:
+    //   - Command key is pressed (override - opens in new tab)
+    //   - Origin has 'navigate-off-origin' permission granted
+    // Returns true (use lightbox) if:
+    //   - Permission is denied, mocked, or not requested (default behavior)
+    function shouldUseLightboxForOffOrigin(originUrl, forceNewTab = false) {
+        if (forceNewTab) return false
+        const tabOrigin = origin(originUrl)
+        if (data.isPermissionGranted('navigate-off-origin', tabOrigin)) {
+            return false
+        }
+        return true
+    }
+
     // LED indicator functions - directly set timestamps in data store
     function showNetworkAccess() {
         data.ledIndicators.networkAccess = Date.now()
@@ -86,6 +122,28 @@
 
     function hideMockedActivation() {
         data.ledIndicators.mockedActivation = 0
+    }
+
+    // Check if a URL was recently blocked (for deduplication)
+    function wasRecentlyBlocked(url) {
+        const timestamp = recentlyBlockedUrls.get(url)
+        if (!timestamp) return false
+        if (Date.now() - timestamp > BLOCK_DEDUP_TIMEOUT) {
+            recentlyBlockedUrls.delete(url)
+            return false
+        }
+        return true
+    }
+
+    // Mark a URL as recently blocked
+    function markAsBlocked(url) {
+        recentlyBlockedUrls.set(url, Date.now())
+        // Clean up old entries
+        for (const [blockedUrl, timestamp] of recentlyBlockedUrls) {
+            if (Date.now() - timestamp > BLOCK_DEDUP_TIMEOUT) {
+                recentlyBlockedUrls.delete(blockedUrl)
+            }
+        }
     }
 
     // Check if user mods are applicable to current tab
@@ -498,9 +556,8 @@
             tab.favicon = null
         }
 
-        // console.log('handleLoadStart', event.url)
-        // TODO: try cancelling even prevent
-        // Check if this is an off-origin navigation
+        // Fallback off-origin blocking in loadstart (main blocking is in onBeforeRequest)
+        // This catches edge cases where the request handler didn't fire
         if (event?.url && tab.url) {
             const currentOrigin = origin(tab.url)
             const targetOrigin = origin(event.url)
@@ -509,20 +566,36 @@
             if (event.isTopLevel && currentOrigin !== 'about' && currentOrigin !== 'unknown' && 
                 targetOrigin !== currentOrigin && targetOrigin !== 'about') {
                 
-                console.log(`🚫 Off-origin navigation detected: ${currentOrigin} → ${targetOrigin}  ${event.url}`)
+                // Check if already blocked by onBeforeRequest (deduplication)
+                if (wasRecentlyBlocked(event.url)) {
+                    console.log(`🔄 [loadstart fallback] Already blocked by onBeforeRequest: ${event.url}`)
+                    const frame = data.frames[tab.id]?.frame
+                    if (frame?.stop) {
+                        frame.stop()
+                    }
+                    return
+                }
+                
+                console.log(`🚫 [loadstart fallback] Off-origin navigation slipped through: ${currentOrigin} → ${targetOrigin} (${event.url})`)
+                markAsBlocked(event.url)
 
                 const frame = data.frames[tab.id]?.frame
                 if (frame?.stop) {
                     frame.stop()
                 }
                 
-                // FIXME: createOffOriginLightbox(event.url, currentOrigin, targetOrigin) // isCommandKeyDown
+                // Create new tab/lightbox for off-origin navigation
+                // Command+click always opens in new tab (not lightbox), in background
+                // Otherwise check if origin has 'navigate-off-origin' permission
+                const useLightbox = shouldUseLightboxForOffOrigin(tab.url, isCommandKeyDown)
+                const shouldFocus = !isCommandKeyDown
+                
                 data.newTab(data.spaceMeta.activeSpace, {
                     url: event.url,
                     title: '',
                     opener: tab.id,
-                    lightbox: data.settings.lightboxModeEnabled,
-                    shouldFocus: true   // e.windowOpenDisposition !== "new_background_tab"
+                    lightbox: useLightbox,
+                    shouldFocus
                 })     
                 
                 // Don't set loading state since we're blocking navigation
@@ -601,7 +674,11 @@
     }
 
     function handleNewWindow(tab, e) {
-        console.log('New window request:', e)
+        // Check for modifier keys in the event
+        // windowOpenDisposition can be: "new_foreground_tab", "new_background_tab", "new_popup", "new_window"
+        // Cmd+click typically sets this to "new_background_tab"
+        const hasModifierKey = isCommandKeyDown || e.windowOpenDisposition === 'new_background_tab'
+        console.log('New window request:', e, 'isCommandKeyDown:', isCommandKeyDown, 'hasModifierKey:', hasModifierKey)
         
         // Check if this looks like an OAuth popup based on URL patterns or window features
         const isOAuthPopup = e.targetUrl && (
@@ -633,12 +710,27 @@
         if (isOAuthPopup) {
             handleOAuthPopup(tab, e)
         } else {
+            const currentOrigin = origin(tab.url)
+            
+            // Command+click always opens in new tab (not lightbox), in background
+            // hasModifierKey is set above based on isCommandKeyDown or windowOpenDisposition
+            const forceNewTab = hasModifierKey
+            
+            // Check if origin has permission to open tabs
+            const hasOpenTabPermission = data.isPermissionGranted('open-tab', currentOrigin)
+            
+            // Use lightbox if: not command+click AND (permission not granted or permission is mocked)
+            const useLightbox = !forceNewTab && !hasOpenTabPermission
+            
+            // Command+click opens in background, otherwise use window disposition
+            const shouldFocus = forceNewTab ? false : e.windowOpenDisposition !== "new_background_tab"
+            
             data.newTab(data.spaceMeta.activeSpace, {
                 url: e.targetUrl,
                 title: e.title,
                 opener: tab.id,
-                lightbox: data.settings.lightboxModeEnabled,
-                shouldFocus: e.windowOpenDisposition !== "new_background_tab"
+                lightbox: useLightbox,
+                shouldFocus
             })         
         }
     }
@@ -1100,37 +1192,56 @@ document.addEventListener('input', function(event) {
 
         // Log all request events with full details
         frame.request.onBeforeRequest.addListener((details) => {
-            // console.log('onBeforeRequest', details)
             const url = new URL(details.url || details.request.url)
-            // console.group(`🌐 onBeforeRequest: ${details.method}`, url)
-            // console.log('📋 Request Details:', {
-            //     requestId: details.requestId,
-            //     url: details.url,
-            //     method: details.method,
-            //     type: details.type,
-            //     frameId: details.frameId,
-            //     parentFrameId: details.parentFrameId,
-            //     timeStamp: details.timeStamp,
-            //     documentId: details.documentId,
-            //     documentLifecycle: details.documentLifecycle,
-            //     frameType: details.frameType,
-            //     initiator: details.initiator,
-            //     requestBody: details.requestBody
-            // })
-            // console.groupEnd()
-
-            // TODO: fix this
-            // if (url.hostname === 'code.xe') {
-            //     return {
-            //         redirectUrl: 'https://google.com',
-            //         responseHeaders: [
-            //             {
-            //                 name: 'Content-Type',
-            //                 value: 'text/html'
-            //             }
-            //         ]
-            //     }
-            // }
+            const requestType = details.type || details.request?.type
+            
+            // Block off-origin main_frame navigations BEFORE they start (more reliable than frame.stop())
+            if (requestType === 'main_frame') {
+                const currentTabUrl = tab?.url
+                if (currentTabUrl) {
+                    const currentOrigin = origin(currentTabUrl)
+                    const targetOrigin = origin(url.href)
+                    
+                    // Skip origin check for about: pages and same-origin navigation
+                    if (currentOrigin !== 'about' && currentOrigin !== 'unknown' && 
+                        targetOrigin !== currentOrigin && targetOrigin !== 'about') {
+                        
+                        // Deduplicate: check if this URL was already blocked recently
+                        if (wasRecentlyBlocked(url.href)) {
+                            console.log(`🔄 [onBeforeRequest] Already blocked recently, skipping: ${url.href}`)
+                            if (details.preventDefault) {
+                                details.preventDefault()
+                            }
+                            return { cancel: true }
+                        }
+                        
+                        console.log(`🚫 [onBeforeRequest] Blocking off-origin navigation: ${currentOrigin} → ${targetOrigin} (${url.href})`)
+                        markAsBlocked(url.href)
+                        
+                        // Cancel the request before it starts
+                        if (details.preventDefault) {
+                            details.preventDefault()
+                        }
+                        
+                        // Create new tab/lightbox for off-origin navigation
+                        // Command+click always opens in new tab (not lightbox), in background
+                        // Otherwise check if origin has 'navigate-off-origin' permission
+                        const useLightbox = shouldUseLightboxForOffOrigin(currentTabUrl, isCommandKeyDown)
+                        const shouldFocus = !isCommandKeyDown
+                        
+                        data.newTab(data.spaceMeta.activeSpace, {
+                            url: url.href,
+                            title: '',
+                            opener: tab.id,
+                            lightbox: useLightbox,
+                            shouldFocus
+                        })
+                        
+                        showBlockedRequest()
+                        return { cancel: true }
+                    }
+                }
+            }
 
             const block = url.hostname.indexOf("google-analytics.com") != -1 
                 || url.hostname.indexOf("googletagmanager.com") != -1
@@ -1154,11 +1265,11 @@ document.addEventListener('input', function(event) {
                 || url.pathname.indexOf('/track') != -1 && (details.request.method == 'POST' || details.request.method == 'PUT')
 
             if (block) {
-                // console.log('blocking', url.hostname, {details})
-                details.preventDefault()
+                if (details.preventDefault) {
+                    details.preventDefault()
+                }
                 // Show red LED for blocked requests
                 showBlockedRequest()
-                // block && console.log('blocking', url)
                 return { cancel: true }
             } else {
                 // Show green LED for allowed network access
@@ -1779,13 +1890,21 @@ document.addEventListener('input', function(event) {
                 }
             } else if (message.startsWith('iwa:mousedown:')) {
                 // Handle mousedown from controlled frame - handle colons in tab ID
+                // Format: iwa:mousedown:${tabId}:${button}:${mod}
                 const parts = message.substring('iwa:mousedown:'.length).split(':')
+                const hasModifier = parts.pop() === 'mod'  // Last part is 'mod' or empty
                 const button = parts.length > 1 ? parseInt(parts.pop()) : undefined
-                const tabId = parts.join(':')
+                const msgTabId = parts.join(':')
+                
+                // Track modifier state for this tab's click
+                if (msgTabId === mytab.id && hasModifier) {
+                    isCommandKeyDown = true
+                    commandKeyPressed = true
+                }
                 
                 // Dispatch mousedown event to parent app
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', {
-                    detail: { tabId: tabId, button: button }
+                    detail: { tabId: msgTabId, button: button, hasModifier }
                 }))
             } else if (message.startsWith('iwa:mouseup:')) {
                 // Handle mouseup from controlled frame - handle colons in tab ID
