@@ -494,6 +494,23 @@ ul::-webkit-scrollbar {
     opacity: 0.87;
 }
 
+/* Previous active tab when a pinned tab is active - similar to active tabs in inactive spaces */
+.tab-container.previous-active-tab {
+    background-color: rgb(255 255 255 / 8%);
+    border: 1px solid hsl(0deg 0% 100% / 5.5%);
+}
+.tab-container.previous-active-tab .tab {
+    color: #e5e5e5;
+    text-shadow: 0 0 0.3px currentColor;
+}
+.tab-container.previous-active-tab .favicon-wrapper {
+    opacity: 0.87;
+}
+.tab-container.previous-active-tab:hover, .tab-container.previous-active-tab.hovered {
+    background-color: rgb(255 255 255 / 12%);
+    border: 1px solid hsl(0deg 0% 100% / 7%);
+}
+
 .tab-container:hover .favicon-wrapper, .tab-container.hovered .favicon-wrapper, .tab-container.menu-open .favicon-wrapper {
     opacity: 1;
 }
