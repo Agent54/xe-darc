@@ -1845,7 +1845,7 @@
     }
     
     function handleFrameFocus(focusedTabId) {
-        // console.log('[DEBUG:FrameFocus]', focusedTabId, '| active:', data.spaceMeta?.activeTabId)
+        console.log('####### 📍 [TAB-FOCUS] handleFrameFocus called | focusedTabId:', focusedTabId, '| currentActive:', data.spaceMeta?.activeTabId)
         lastFocusEventTime = Date.now()
         controlledFrameHasFocus = true
         updateWindowFocusState()
@@ -1854,7 +1854,7 @@
         if (focusedTabId) {
             // Set the active tab using the data store function
             if (focusedTabId !== data.spaceMeta.activeTabId) {
-                // console.log('[DEBUG:FrameFocus] activating:', focusedTabId)
+                console.log('####### 📍 [TAB-FOCUS] Activating tab:', focusedTabId)
                 data.activate(focusedTabId)
             }
         }
@@ -1862,11 +1862,11 @@
     
     function handleFrameBlur() {
         const timeSinceLastFocus = Date.now() - lastFocusEventTime
-        // console.log('[DEBUG:FrameBlur] timeSinceLastFocus:', timeSinceLastFocus, 'ms')
+        console.log('####### 📍 [TAB-BLUR] handleFrameBlur called | timeSinceLastFocus:', timeSinceLastFocus, 'ms')
         
         // Skip blur if a focus event was fired in the last 100ms to prevent race conditions
         if (timeSinceLastFocus < 100) {
-            // console.log('[DEBUG:FrameBlur] skipped')
+            console.log('####### 📍 [TAB-BLUR] Skipped due to recent focus event')
             return
         }
         

@@ -1133,7 +1133,7 @@ document.addEventListener('input', function(event) {
             frame.src = untrack(() => tab.url)
         } else {
             frame.addContentScripts([...systemInjections, ...userInjections]).then((res) => {
-            console.log('✅ Injections added successfully', res)
+            console.log('####### 💉 [INJECT] Successful script injection | tabId:', tab?.id || tabId, '| res:', res)
 
             frame.src  = untrack(() => tab.url)
             
@@ -1559,10 +1559,10 @@ document.addEventListener('input', function(event) {
             const message = event.message
             
             if (message === 'iwa:focus') {
-                // console.log('[DEBUG:ControlledFrame] iwa:focus received via consolemessage | tabId:', tab?.id || tabId)
+                console.log('####### 🎯 [FOCUS-RECV] Received iwa:focus from inside frame | tabId:', tab?.id || tabId)
                 onFrameFocus()
             } else if (message === 'iwa:blur') {
-                // console.log('[DEBUG:ControlledFrame] iwa:blur received via consolemessage | tabId:', tab?.id || tabId)
+                console.log('####### 😴 [BLUR-RECV] Received iwa:blur from inside frame | tabId:', tab?.id || tabId)
                 onFrameBlur()
             } else if (message.startsWith('iwa:command-key-down:')) {
                 // Track command key press from controlled frame

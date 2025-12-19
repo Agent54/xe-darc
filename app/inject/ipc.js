@@ -1,6 +1,12 @@
-window.addEventListener('focus', () => { console.log('iwa:focus') }, false);
+window.addEventListener('focus', () => { 
+    console.log('####### 🎯 [FOCUS] Frame window received focus event | tabId:', tabId);
+    console.log('iwa:focus');
+}, false);
 
-window.addEventListener('blur', () => { console.log('iwa:blur') }, false);
+window.addEventListener('blur', () => { 
+    console.log('####### 😴 [BLUR] Frame window received blur event | tabId:', tabId);
+    console.log('iwa:blur');
+}, false);
 
 document.addEventListener('keyup', function(event) {
     // Track command key state
