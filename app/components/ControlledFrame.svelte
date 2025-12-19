@@ -576,7 +576,7 @@
                     return
                 }
                 
-                console.log(`🚫 [loadstart fallback] Off-origin navigation slipped through: ${currentOrigin} → ${targetOrigin} (${event.url})`)
+                console.log(`🚫 [loadstart fallback] Off-origin navigation: ${currentOrigin} → ${targetOrigin} (${event.url}), isCommandKeyDown: ${isCommandKeyDown}`)
                 markAsBlocked(event.url)
 
                 const frame = data.frames[tab.id]?.frame
@@ -1215,7 +1215,7 @@ document.addEventListener('input', function(event) {
                             return { cancel: true }
                         }
                         
-                        console.log(`🚫 [onBeforeRequest] Blocking off-origin navigation: ${currentOrigin} → ${targetOrigin} (${url.href})`)
+                        console.log(`🚫 [onBeforeRequest] Blocking off-origin navigation: ${currentOrigin} → ${targetOrigin} (${url.href}), isCommandKeyDown: ${isCommandKeyDown}`)
                         markAsBlocked(url.href)
                         
                         // Cancel the request before it starts
@@ -1908,11 +1908,20 @@ document.addEventListener('input', function(event) {
                 }))
             } else if (message.startsWith('iwa:mouseup:')) {
                 // Handle mouseup from controlled frame - handle colons in tab ID
-                const tabId = message.substring('iwa:mouseup:'.length)
+                const msgTabId = message.substring('iwa:mouseup:'.length)
+                
+                // Reset modifier key state after mouseup (click complete)
+                // Use a short delay to ensure navigation events have been processed
+                if (msgTabId === mytab.id) {
+                    setTimeout(() => {
+                        isCommandKeyDown = false
+                        commandKeyPressed = false
+                    }, 100)
+                }
                 
                 // Dispatch mouseup event to parent app
                 window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', {
-                    detail: { tabId }
+                    detail: { tabId: msgTabId }
                 }))
             } else if (message.startsWith('iwa:contextmenu-forced-native:')) {
                 console.log(`🛡️ [CONTEXT MENU] Website preventDefault blocked - forcing native context menu in tab ${mytab.id}`)
