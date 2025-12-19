@@ -1560,10 +1560,10 @@ document.addEventListener('input', function(event) {
             
             if (message === 'iwa:focus') {
                 console.log('####### 🎯 [FOCUS-RECV] Received iwa:focus from inside frame | tabId:', tab?.id || tabId)
-                onFrameFocus()
+                onFrameFocus(tab?.id || tabId)
             } else if (message === 'iwa:blur') {
                 console.log('####### 😴 [BLUR-RECV] Received iwa:blur from inside frame | tabId:', tab?.id || tabId)
-                onFrameBlur()
+                onFrameBlur(tab?.id || tabId)
             } else if (message.startsWith('iwa:command-key-down:')) {
                 // Track command key press from controlled frame
                 const tabId = message.substring('iwa:command-key-down:'.length)

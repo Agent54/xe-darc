@@ -2677,3 +2677,30 @@ iframe window focus bug
 cmd open tab messes with cmd hover for link previews
 
 unhibernate bug frame parenting
+
+style regression icons tab context menu and scrolling to top sidebar
+
+frame scrol into view activation bug
+ 
+clicking unhibernate activtion delay, style hibernation placehoder
+
+min width for all panes decrease. panes in min width will expand on activation!!
+
+floating frames/ hud and horizontal tiling!, glue to elemnts in underlying dom
+
+resizing window wil apsect resize panes above certain width
+
+scroll right and left edge in view respectively when activating frames with lim widths in small screenview
+
+darc folder with explorer features and zo computer docker like appeal
+
+swiping up and reight or left should switch spaces activation history and close 
+
+
+double click empty space below tabs should open new tab
+
+hibernate styles
+
+broken new tab and lightbox tab bug after while of using...
+
+pouch conflict issue
