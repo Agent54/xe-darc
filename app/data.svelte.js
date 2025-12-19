@@ -401,7 +401,10 @@ function activate(tabId) {
 
     activeSpace.activeTabsOrder ??= []
     
-    activeSpace.activeTabsOrder = activeSpace.activeTabsOrder[0] === tabId ? activeSpace.activeTabsOrder : [tabId, ...activeSpace.activeTabsOrder]
+    // Add tab to front, removing any existing duplicates to keep history clean
+    if (activeSpace.activeTabsOrder[0] !== tabId) {
+        activeSpace.activeTabsOrder = [tabId, ...activeSpace.activeTabsOrder.filter(id => id !== tabId)]
+    }
 
     if (frames[tabId]) {
         frames[tabId].active = Date.now()
