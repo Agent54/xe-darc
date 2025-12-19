@@ -605,10 +605,22 @@
     function handleFrameMouseDown(event) {
         // console.log('Mouse button pressed:', event.detail.button)
         isMouseDown = event.detail.button
+        
+        // Track mouse activity for focus management
+        lastMouseActivityTime = Date.now()
+        // Mouse activity in controlled frame means it should be considered focused
+        if (pendingBlurTimeout) {
+            clearTimeout(pendingBlurTimeout)
+            pendingBlurTimeout = null
+        }
+        controlledFrameHasFocus = true
+        updateWindowFocusState()
     }
 
     function handleFrameMouseUp(event) {
         isMouseDown = null
+        // Also track mouseup as activity
+        lastMouseActivityTime = Date.now()
     }
 
     // Zoom threshold tracking
@@ -1822,6 +1834,10 @@
     let isWindowBackground = $state(false)
     let controlledFrameHasFocus = $state(false)
     let lastFocusEventTime = 0
+    let lastMouseActivityTime = 0
+    let lastTabActivationTime = 0
+    let lastActivatedTabId = null
+    let pendingBlurTimeout = null
     
     function updateWindowFocusState() {
         // Consider the window active if either the main window has focus 
@@ -1831,7 +1847,7 @@
         
         const newIsWindowBackground = !shouldBeActive
         if (newIsWindowBackground !== isWindowBackground) {
-            // console.log('[DEBUG:WindowFocus]', isWindowBackground, '->', newIsWindowBackground, '| doc:', documentHasFocus, '| frame:', controlledFrameHasFocus)
+            console.log('####### 🪟 [WINDOW-STATE] isWindowBackground:', isWindowBackground, '->', newIsWindowBackground, '| doc:', documentHasFocus, '| frame:', controlledFrameHasFocus)
         }
         isWindowBackground = newIsWindowBackground
     }
@@ -1840,12 +1856,25 @@
         // Mark window as active to prevent background styling glitches
         // This is called on user interactions like tab activation and link hovers
         // console.log('[DEBUG:WindowFocus] activateWindowFocus')
+        if (pendingBlurTimeout) {
+            clearTimeout(pendingBlurTimeout)
+            pendingBlurTimeout = null
+        }
         controlledFrameHasFocus = true
         updateWindowFocusState()
     }
     
     function handleFrameFocus(focusedTabId) {
-        console.log('####### 📍 [TAB-FOCUS] handleFrameFocus called | focusedTabId:', focusedTabId, '| currentActive:', data.spaceMeta?.activeTabId)
+        const timeSinceLastActivation = Date.now() - lastTabActivationTime
+        console.log('####### 📍 [TAB-FOCUS] handleFrameFocus called | focusedTabId:', focusedTabId, '| currentActive:', data.spaceMeta?.activeTabId, '| timeSinceLastActivation:', timeSinceLastActivation, 'ms')
+        
+        // Cancel any pending blur - focus came back
+        if (pendingBlurTimeout) {
+            clearTimeout(pendingBlurTimeout)
+            pendingBlurTimeout = null
+            console.log('####### 📍 [TAB-FOCUS] Cancelled pending blur timeout')
+        }
+        
         lastFocusEventTime = Date.now()
         controlledFrameHasFocus = true
         updateWindowFocusState()
@@ -1854,15 +1883,25 @@
         if (focusedTabId) {
             // Set the active tab using the data store function
             if (focusedTabId !== data.spaceMeta.activeTabId) {
+                // Debounce rapid tab switches - if we just activated a DIFFERENT tab, 
+                // ignore this focus event to prevent racing focus events from flipping tabs
+                if (timeSinceLastActivation < 200 && lastActivatedTabId && lastActivatedTabId !== focusedTabId) {
+                    console.log('####### 📍 [TAB-FOCUS] Skipped - debouncing rapid tab switch (recently activated:', lastActivatedTabId, ')')
+                    return
+                }
+                
                 console.log('####### 📍 [TAB-FOCUS] Activating tab:', focusedTabId)
+                lastTabActivationTime = Date.now()
+                lastActivatedTabId = focusedTabId
                 data.activate(focusedTabId)
             }
         }
     }
     
-    function handleFrameBlur() {
+    function handleFrameBlur(blurredTabId) {
         const timeSinceLastFocus = Date.now() - lastFocusEventTime
-        console.log('####### 📍 [TAB-BLUR] handleFrameBlur called | timeSinceLastFocus:', timeSinceLastFocus, 'ms')
+        const timeSinceMouseActivity = Date.now() - lastMouseActivityTime
+        console.log('####### 📍 [TAB-BLUR] handleFrameBlur called | blurredTabId:', blurredTabId, '| activeTabId:', data.spaceMeta?.activeTabId, '| timeSinceLastFocus:', timeSinceLastFocus, 'ms | timeSinceMouseActivity:', timeSinceMouseActivity, 'ms')
         
         // Skip blur if a focus event was fired in the last 100ms to prevent race conditions
         if (timeSinceLastFocus < 100) {
@@ -1870,8 +1909,41 @@
             return
         }
         
-        controlledFrameHasFocus = false
-        updateWindowFocusState()
+        // Skip blur if there was recent mouse activity (user is actively using the frame)
+        // Use a generous 3 second window - if user clicked recently, they're still using it
+        if (timeSinceMouseActivity < 3000) {
+            console.log('####### 📍 [TAB-BLUR] Skipped due to recent mouse activity')
+            return
+        }
+        
+        // Only process blur from the currently active tab
+        // Ignore blur events from non-active tabs (e.g., when switching between tabs)
+        if (blurredTabId && blurredTabId !== data.spaceMeta?.activeTabId) {
+            console.log('####### 📍 [TAB-BLUR] Skipped - blur from non-active tab')
+            return
+        }
+        
+        // Debounce blur: wait a short time to see if focus comes back
+        // This handles internal iframe focus changes (sub-iframes, element focus, etc.)
+        if (pendingBlurTimeout) {
+            clearTimeout(pendingBlurTimeout)
+        }
+        
+        console.log('####### 📍 [TAB-BLUR] Scheduling blur with 150ms debounce')
+        pendingBlurTimeout = setTimeout(() => {
+            // Double-check mouse activity hasn't happened during the debounce
+            const currentTimeSinceMouseActivity = Date.now() - lastMouseActivityTime
+            if (currentTimeSinceMouseActivity < 3000) {
+                console.log('####### 📍 [TAB-BLUR] Cancelled - mouse activity during debounce')
+                pendingBlurTimeout = null
+                return
+            }
+            
+            console.log('####### 📍 [TAB-BLUR] Executing debounced blur')
+            pendingBlurTimeout = null
+            controlledFrameHasFocus = false
+            updateWindowFocusState()
+        }, 150)
     }
 
     function selectPartition(partition, tab) {
@@ -4105,7 +4177,7 @@
                             </div>
                         {/key}
                         
-                        <Frame tabId={tab.id} {controlledFrameSupported} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame tabId={tab.id} {controlledFrameSupported} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={() => handleFrameBlur(tab.id)} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/key}
         {/each} -->
@@ -4121,7 +4193,7 @@
                             </div>
                         {/key}
                         
-                        <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={() => handleFrameBlur(tab.id)} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/if}
             {/key}
@@ -4155,7 +4227,7 @@
                             </div>
                         {/key}
                         
-                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={() => handleFrameBlur(tab.id)} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/if}
             {/key}
@@ -4196,7 +4268,7 @@
                             </div>
                         {/key}
                         
-                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={handleFrameBlur} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={() => handleFrameBlur(tab.id)} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/if}
             {/key}

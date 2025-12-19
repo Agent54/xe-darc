@@ -4,8 +4,20 @@ window.addEventListener('focus', () => {
 }, false);
 
 window.addEventListener('blur', () => { 
-    console.log('####### 😴 [BLUR] Frame window received blur event | tabId:', tabId);
-    console.log('iwa:blur');
+    // Check if focus moved to a child iframe - if so, don't report blur
+    // Focus is still within this controlled frame's document tree
+    setTimeout(() => {
+        const activeEl = document.activeElement;
+        const focusInChildFrame = activeEl && (activeEl.tagName === 'IFRAME' || activeEl.tagName === 'WEBVIEW');
+        console.log('####### 😴 [BLUR] Frame window received blur event | tabId:', tabId, '| activeElement:', activeEl?.tagName, '| focusInChildFrame:', focusInChildFrame);
+        
+        if (focusInChildFrame) {
+            console.log('####### 😴 [BLUR] Suppressed - focus moved to child iframe');
+            return;
+        }
+        
+        console.log('iwa:blur');
+    }, 0);
 }, false);
 
 document.addEventListener('keyup', function(event) {
