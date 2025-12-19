@@ -2675,3 +2675,5 @@ animations?
 iframe window focus bug
 
 cmd open tab messes with cmd hover for link previews
+
+unhibernate bug frame parenting
