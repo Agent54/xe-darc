@@ -602,6 +602,12 @@
         openNewTab()
     }
 
+    // Track mouse state and focus for controlled frames (declared early to avoid TDZ issues)
+    let isMouseDown = null // null or button number (0, 1, 2, etc.)
+    let lastMouseActivityTime = 0
+    let pendingBlurTimeout = null
+    let controlledFrameHasFocus = false
+
     function handleFrameMouseDown(event) {
         // console.log('Mouse button pressed:', event.detail.button)
         isMouseDown = event.detail.button
@@ -614,7 +620,10 @@
             pendingBlurTimeout = null
         }
         controlledFrameHasFocus = true
-        updateWindowFocusState()
+        // updateWindowFocusState is defined later but hoisted
+        if (typeof updateWindowFocusState === 'function') {
+            updateWindowFocusState()
+        }
     }
 
     function handleFrameMouseUp(event) {
@@ -1693,7 +1702,7 @@
     }
 
     // Track mouse position and state globally
-    let isMouseDown = null // null or button number (0, 1, 2, etc.)
+    // (isMouseDown is declared earlier near handleFrameMouseDown)
     
     function handleGlobalMouseMove(event) {
         window.mouseX = event.clientX
@@ -1832,12 +1841,10 @@
 
   
     let isWindowBackground = $state(false)
-    let controlledFrameHasFocus = $state(false)
+    // controlledFrameHasFocus, lastMouseActivityTime, pendingBlurTimeout declared earlier near handleFrameMouseDown
     let lastFocusEventTime = 0
-    let lastMouseActivityTime = 0
     let lastTabActivationTime = 0
     let lastActivatedTabId = null
-    let pendingBlurTimeout = null
     
     function updateWindowFocusState() {
         // Consider the window active if either the main window has focus 
@@ -1891,9 +1898,38 @@
                 }
                 
                 console.log('####### 📍 [TAB-FOCUS] Activating tab:', focusedTabId)
+                
+                // Blur the old tab's iframe to ensure it fires focus again when clicked
+                const oldTabId = data.spaceMeta.activeTabId
+                if (oldTabId) {
+                    blurControlledFrame(oldTabId)
+                }
+                
                 lastTabActivationTime = Date.now()
                 lastActivatedTabId = focusedTabId
                 data.activate(focusedTabId)
+            }
+        }
+    }
+    
+    // Force blur on a controlled frame's document to reset focus state
+    function blurControlledFrame(tabId) {
+        const frameData = data.frames[tabId]
+        if (frameData?.frame) {
+            try {
+                // Execute script to blur the active element inside the frame
+                frameData.frame.executeScript({
+                    code: `
+                        if (document.activeElement && document.activeElement !== document.body) {
+                            document.activeElement.blur();
+                        }
+                        window.blur();
+                    `
+                }).catch(err => {
+                    // Ignore errors - frame might not be ready
+                })
+            } catch (e) {
+                // Ignore errors
             }
         }
     }
@@ -1906,13 +1942,6 @@
         // Skip blur if a focus event was fired in the last 100ms to prevent race conditions
         if (timeSinceLastFocus < 100) {
             console.log('####### 📍 [TAB-BLUR] Skipped due to recent focus event')
-            return
-        }
-        
-        // Skip blur if there was recent mouse activity (user is actively using the frame)
-        // Use a generous 3 second window - if user clicked recently, they're still using it
-        if (timeSinceMouseActivity < 3000) {
-            console.log('####### 📍 [TAB-BLUR] Skipped due to recent mouse activity')
             return
         }
         
@@ -1933,7 +1962,7 @@
         pendingBlurTimeout = setTimeout(() => {
             // Double-check mouse activity hasn't happened during the debounce
             const currentTimeSinceMouseActivity = Date.now() - lastMouseActivityTime
-            if (currentTimeSinceMouseActivity < 3000) {
+            if (currentTimeSinceMouseActivity < 600) {
                 console.log('####### 📍 [TAB-BLUR] Cancelled - mouse activity during debounce')
                 pendingBlurTimeout = null
                 return
