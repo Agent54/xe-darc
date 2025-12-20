@@ -2704,3 +2704,11 @@ hibernate styles
 broken new tab and lightbox tab bug after while of using...
 
 pouch conflict issue
+
+task manager
+
+show the sidebars on hover when moving right, show current hovering sidebar!!!!!
+
+hoverstate of left sidebar stuck when moving mouse outside window
+
+scrollinto view broken activation
