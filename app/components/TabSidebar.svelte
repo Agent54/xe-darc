@@ -1901,6 +1901,16 @@
                                             <div class="tab-group-empty-message">No tabs in this group</div>
                                         </div>
                                     </div><!-- -->
+                                    
+                                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                    <!-- Bottom spacer for scrolling and double-click to create new tab -->
+                                    <div class="tabs-list-bottom-spacer" ondblclick={async () => {
+                                        const newTab = await data.newTab(spaceId)
+                                        if (newTab) {
+                                            data.activateSpace(spaceId)
+                                            data.activate(newTab.id)
+                                        }
+                                    }}></div>
                                 </div>
                                     <div class="tabs-list-fade-bottom" class:visible={tabsListScrolledBottom[spaceId]}></div>
                                 </div>
@@ -2822,7 +2832,7 @@
         overflow-y: auto;
         overscroll-behavior-y: contain; /* Prevent vertical scroll chaining to background views */
         padding-top: 8px;
-        padding-bottom: calc(50vh + 300px); /* Add space at bottom for closed tabs overlay, spacer scroll-out, and making space for new thinking */
+        padding-bottom: 0; /* Bottom spacer element handles scroll space */
         padding-right: 8px;
         margin-right: -8px; /* Offset scrollbar position */
         scrollbar-width: thin;
@@ -2858,6 +2868,14 @@
         pointer-events: none;
         will-change: height;
         contain: layout style;
+    }
+    
+    .tabs-list-bottom-spacer {
+        flex-shrink: 0;
+        /* Height allows last tab to scroll to top of tabs-list area */
+        height: calc(100vh - 300px);
+        width: 100%;
+        cursor: default;
     }
     
     .tab-item-container {
