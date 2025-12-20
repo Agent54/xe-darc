@@ -557,7 +557,7 @@
 <svelte:window onkeydown={handleWindowKeyDown} onkeyup={handleWindowKeyUp} />
 
 <div bind:this={frameWrapper} id="tab_{tab.id}" class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
-    {#if (!data.frames[tab.id]?.frame || !data.frames[tab.id]?.initialLoad) && !data.frames[tab.id]?.pendingLoad}
+    {#if !data.frames[tab.id]?.frame || !data.frames[tab.id]?.initialLoad}
         <div 
             transition:fade={{duration: 200, delay: 0}}
             class="frame hibernated-frame"
@@ -572,9 +572,31 @@
                 <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Hibernated tab preview" class="hibernated-screenshot" lazy={true} />
             {:else}
                 <div class="hibernated-placeholder">
-                    <div class="hibernated-icon">💤</div>
+                    <div class="hibernated-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                            <path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
+                        </svg>
+                    </div>
                     <div class="hibernated-text">Tab is hibernated</div>
                     <div class="hibernated-url">{tab.url}</div>
+                </div>
+            {/if}
+            <!-- Hibernation indicator badge or loading spinner -->
+            {#if data.frames[tab.id]?.loading}
+                <div class="hibernated-badge">
+                    <svg class="hibernated-spinner" viewBox="0 0 16 16">
+                        <path d="M8 2 A6 6 0 0 1 14 8" 
+                            fill="none" 
+                            stroke="rgba(255, 255, 255, 0.8)" 
+                            stroke-width="2" 
+                            stroke-linecap="round"/>
+                    </svg>
+                </div>
+            {:else}
+                <div class="hibernated-badge">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                        <path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
+                    </svg>
                 </div>
             {/if}
         </div>
@@ -1032,8 +1054,12 @@
     }
 
     .hibernated-icon {
-        font-size: 48px;
         opacity: 0.6;
+        color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .hibernated-icon svg {
+        display: block;
     }
 
     .hibernated-text {
@@ -1060,31 +1086,37 @@
         max-width: 300px;
     }
 
-    .hibernated-frame::before {
-        content: '';
+    .hibernated-badge {
         position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 24px;
-        height: 24px;
-        background: rgba(0, 0, 0, 0.8);
+        top: 10px;
+        right: 10px;
+        width: 32px;
+        height: 32px;
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 12px;
         z-index: 1;
-        /* pointer-events: none; */
-        border-radius: 12px;
     }
-
-    .hibernated-frame::after {
-        content: '💤';
-        position: absolute;
-        top: 14px;
-        right: 14px;
-        font-size: 12px;
-        z-index: 2;
-        /* pointer-events: none; */
+    
+    .hibernated-badge svg {
+        color: rgba(255, 255, 255, 0.7);
+    }
+    
+    .hibernated-spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-top-color: rgba(255, 255, 255, 0.8);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+    }
+    
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
     }
 
     .iframe-blocked {
