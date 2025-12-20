@@ -1962,7 +1962,7 @@
         pendingBlurTimeout = setTimeout(() => {
             // Double-check mouse activity hasn't happened during the debounce
             const currentTimeSinceMouseActivity = Date.now() - lastMouseActivityTime
-            if (currentTimeSinceMouseActivity < 3000) {
+            if (currentTimeSinceMouseActivity < 600) {
                 console.log('####### 📍 [TAB-BLUR] Cancelled - mouse activity during debounce')
                 pendingBlurTimeout = null
                 return
