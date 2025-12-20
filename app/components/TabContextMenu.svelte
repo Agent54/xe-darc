@@ -401,7 +401,7 @@
             inset 0 1px 0 rgba(255, 255, 255, 0.1);
         overflow: visible;
         font-family: 'Inter', sans-serif;
-        animation: context-menu-appear 0.15s ease-out;
+        animation: context-menu-appear 0.1s ease-out;
         -webkit-app-region: no-drag;
         white-space: nowrap;
     }
@@ -409,7 +409,7 @@
     @keyframes context-menu-appear {
         from {
             opacity: 0;
-            transform: scale(0.95) translateY(-5px);
+            transform: scale(0.9) translateY(-8px);
         }
         to {
             opacity: 1;
@@ -469,6 +469,7 @@
         justify-content: center;
         flex-shrink: 0;
         font-size: 12px;
+        transform: translateZ(0);
     }
 
     .context-menu-separator {
