@@ -464,6 +464,10 @@
         // Just set wrapper if frames object exists
         if (data.frames[tab.id] && frameWrapper) {
             data.frames[tab.id].wrapper = frameWrapper
+        }
+        
+        // Always observe frameWrapper for scroll-based activation (even for hibernated tabs)
+        if (frameWrapper) {
             observer?.observe(frameWrapper)
         }
     
