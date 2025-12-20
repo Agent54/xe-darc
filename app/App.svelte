@@ -1854,7 +1854,7 @@
         
         const newIsWindowBackground = !shouldBeActive
         if (newIsWindowBackground !== isWindowBackground) {
-            console.log('####### 🪟 [WINDOW-STATE] isWindowBackground:', isWindowBackground, '->', newIsWindowBackground, '| doc:', documentHasFocus, '| frame:', controlledFrameHasFocus)
+            // console.log('####### 🪟 [WINDOW-STATE] isWindowBackground:', isWindowBackground, '->', newIsWindowBackground, '| doc:', documentHasFocus, '| frame:', controlledFrameHasFocus)
         }
         isWindowBackground = newIsWindowBackground
     }
@@ -1873,13 +1873,13 @@
     
     function handleFrameFocus(focusedTabId) {
         const timeSinceLastActivation = Date.now() - lastTabActivationTime
-        console.log('####### 📍 [TAB-FOCUS] handleFrameFocus called | focusedTabId:', focusedTabId, '| currentActive:', data.spaceMeta?.activeTabId, '| timeSinceLastActivation:', timeSinceLastActivation, 'ms')
+        // console.log('####### 📍 [TAB-FOCUS] handleFrameFocus called | focusedTabId:', focusedTabId, '| currentActive:', data.spaceMeta?.activeTabId, '| timeSinceLastActivation:', timeSinceLastActivation, 'ms')
         
         // Cancel any pending blur - focus came back
         if (pendingBlurTimeout) {
             clearTimeout(pendingBlurTimeout)
             pendingBlurTimeout = null
-            console.log('####### 📍 [TAB-FOCUS] Cancelled pending blur timeout')
+            // console.log('####### 📍 [TAB-FOCUS] Cancelled pending blur timeout')
         }
         
         lastFocusEventTime = Date.now()
@@ -1893,11 +1893,11 @@
                 // Debounce rapid tab switches - if we just activated a DIFFERENT tab, 
                 // ignore this focus event to prevent racing focus events from flipping tabs
                 if (timeSinceLastActivation < 200 && lastActivatedTabId && lastActivatedTabId !== focusedTabId) {
-                    console.log('####### 📍 [TAB-FOCUS] Skipped - debouncing rapid tab switch (recently activated:', lastActivatedTabId, ')')
+                    // console.log('####### 📍 [TAB-FOCUS] Skipped - debouncing rapid tab switch (recently activated:', lastActivatedTabId, ')')
                     return
                 }
                 
-                console.log('####### 📍 [TAB-FOCUS] Activating tab:', focusedTabId)
+                // console.log('####### 📍 [TAB-FOCUS] Activating tab:', focusedTabId)
                 
                 // Blur the old tab's iframe to ensure it fires focus again when clicked
                 const oldTabId = data.spaceMeta.activeTabId
@@ -1937,18 +1937,18 @@
     function handleFrameBlur(blurredTabId) {
         const timeSinceLastFocus = Date.now() - lastFocusEventTime
         const timeSinceMouseActivity = Date.now() - lastMouseActivityTime
-        console.log('####### 📍 [TAB-BLUR] handleFrameBlur called | blurredTabId:', blurredTabId, '| activeTabId:', data.spaceMeta?.activeTabId, '| timeSinceLastFocus:', timeSinceLastFocus, 'ms | timeSinceMouseActivity:', timeSinceMouseActivity, 'ms')
+        // console.log('####### 📍 [TAB-BLUR] handleFrameBlur called | blurredTabId:', blurredTabId, '| activeTabId:', data.spaceMeta?.activeTabId, '| timeSinceLastFocus:', timeSinceLastFocus, 'ms | timeSinceMouseActivity:', timeSinceMouseActivity, 'ms')
         
         // Skip blur if a focus event was fired in the last 100ms to prevent race conditions
         if (timeSinceLastFocus < 100) {
-            console.log('####### 📍 [TAB-BLUR] Skipped due to recent focus event')
+            // console.log('####### 📍 [TAB-BLUR] Skipped due to recent focus event')
             return
         }
         
         // Only process blur from the currently active tab
         // Ignore blur events from non-active tabs (e.g., when switching between tabs)
         if (blurredTabId && blurredTabId !== data.spaceMeta?.activeTabId) {
-            console.log('####### 📍 [TAB-BLUR] Skipped - blur from non-active tab')
+            // console.log('####### 📍 [TAB-BLUR] Skipped - blur from non-active tab')
             return
         }
         
@@ -1958,17 +1958,17 @@
             clearTimeout(pendingBlurTimeout)
         }
         
-        console.log('####### 📍 [TAB-BLUR] Scheduling blur with 150ms debounce')
+        // console.log('####### 📍 [TAB-BLUR] Scheduling blur with 150ms debounce')
         pendingBlurTimeout = setTimeout(() => {
             // Double-check mouse activity hasn't happened during the debounce
             const currentTimeSinceMouseActivity = Date.now() - lastMouseActivityTime
             if (currentTimeSinceMouseActivity < 600) {
-                console.log('####### 📍 [TAB-BLUR] Cancelled - mouse activity during debounce')
+                // console.log('####### 📍 [TAB-BLUR] Cancelled - mouse activity during debounce')
                 pendingBlurTimeout = null
                 return
             }
             
-            console.log('####### 📍 [TAB-BLUR] Executing debounced blur')
+            // console.log('####### 📍 [TAB-BLUR] Executing debounced blur')
             pendingBlurTimeout = null
             controlledFrameHasFocus = false
             updateWindowFocusState()

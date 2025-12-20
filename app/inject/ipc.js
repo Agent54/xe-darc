@@ -1,5 +1,5 @@
 window.addEventListener('focus', () => { 
-    console.log('####### 🎯 [FOCUS] Frame window received focus event | tabId:', tabId);
+    // console.log('####### 🎯 [FOCUS] Frame window received focus event | tabId:', tabId);
     console.log('iwa:focus');
 }, false);
 
@@ -9,10 +9,10 @@ window.addEventListener('blur', () => {
     setTimeout(() => {
         const activeEl = document.activeElement;
         const focusInChildFrame = activeEl && (activeEl.tagName === 'IFRAME' || activeEl.tagName === 'WEBVIEW');
-        console.log('####### 😴 [BLUR] Frame window received blur event | tabId:', tabId, '| activeElement:', activeEl?.tagName, '| focusInChildFrame:', focusInChildFrame);
+        // console.log('####### 😴 [BLUR] Frame window received blur event | tabId:', tabId, '| activeElement:', activeEl?.tagName, '| focusInChildFrame:', focusInChildFrame);
         
         if (focusInChildFrame) {
-            console.log('####### 😴 [BLUR] Suppressed - focus moved to child iframe');
+            // console.log('####### 😴 [BLUR] Suppressed - focus moved to child iframe');
             return;
         }
         

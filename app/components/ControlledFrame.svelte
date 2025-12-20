@@ -1559,10 +1559,10 @@ document.addEventListener('input', function(event) {
             const message = event.message
             
             if (message === 'iwa:focus') {
-                console.log('####### 🎯 [FOCUS-RECV] Received iwa:focus from inside frame | tabId:', tab?.id || tabId)
+                // console.log('####### 🎯 [FOCUS-RECV] Received iwa:focus from inside frame | tabId:', tab?.id || tabId)
                 onFrameFocus(tab?.id || tabId)
             } else if (message === 'iwa:blur') {
-                console.log('####### 😴 [BLUR-RECV] Received iwa:blur from inside frame | tabId:', tab?.id || tabId)
+                // console.log('####### 😴 [BLUR-RECV] Received iwa:blur from inside frame | tabId:', tab?.id || tabId)
                 onFrameBlur(tab?.id || tabId)
             } else if (message.startsWith('iwa:command-key-down:')) {
                 // Track command key press from controlled frame
@@ -1998,11 +1998,12 @@ document.addEventListener('input', function(event) {
     let attached = false
     let frameWrapper = $state(null)
     let retry = $state(0)
-    $effect(() => {
+    $effect(async () => {
         if (retry > 10) {
             console.error('retry error')
             return
         }
+        await tick()
 
         if (!anchor || !frameWrapper) { 
             return
