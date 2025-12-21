@@ -930,8 +930,9 @@ export default {
 
         if (!preview && !lightbox) {
             spaces[spaceId].tabs.push(tab)
-            docs[tab._id] = tab
         }
+        
+        docs[tab._id] = tab
 
         if (!$state.snapshot(frames[tab.id])) {
             frames[tab.id] = {}

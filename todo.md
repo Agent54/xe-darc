@@ -2712,3 +2712,49 @@ show the sidebars on hover when moving right, show current hovering sidebar!!!!!
 hoverstate of left sidebar stuck when moving mouse outside window
 
 scrollinto view broken activation
+
+add tab dividers for untouched tabs since time x
+
+ifame cmd hover broken and breking cmd hover after bit in svelte page
+
+gaze detectino support
+
+pie menu/ pearl menu/ ribbon menu, box menu test
+
+swipe in sidebars from side
+
+collapsible sections for tab grid
+
+hovermenu apps vs app click
+
+synced folder
+
+obsidian vault for my data subfolder, expose everything as files?, backup to obsidian vault, giant file archive with agent access
+
+spacial tools canvas mode ala bumptop with gradual transions
+
+donation/support system for indie devs
+
+linearizer for excalidraw tool
+
+macintosh demo nod opener
+
+outliner
+
+toggle between tabs not possible with activation history pop!?, instead push to front !
+
+file explorer
+
+hypercard reimpl with cards on canvas that fit mobile or desktop and thus can be absolute layouted. crossover to filemarker dbs, spreadsheets, alayout experiment with 9 sectinos that are absolute internal but reflow on cards
+
+
+thinking tools: mindmaps, notes, collections, outlines, databases, cards, canvases, tags/clouds, tables, lanes, timelines, calenerds, agendas
+
+
+note/outline app as first class tab type next to email etc.
+
+shared movie watch space
+
+shaered ua space
+
+cmd click on url parts instad of edit mode

@@ -610,6 +610,7 @@
     function handleLoadStop(tab) {
         // console.log('stopped', {tab})
         // console.log('handleLoadStop', data.frames[tab.id]?.frame?.src)
+        if (!data.frames[tab.id]) return
         const wasLoading = data.frames[tab.id].loading
         data.frames[tab.id].loading = false
         data.frames[tab.id].initialLoad = true
