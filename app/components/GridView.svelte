@@ -310,9 +310,11 @@
         {:else}
           <div class="space-grid">
             {#each tabs as tab, index (tab.id)}
+              {@const isSpaceActiveTab = spaceId !== activeSpaceId && tab.id === data.spaces[spaceId]?.activeTabsOrder?.[0]}
               <div 
                 class="grid-frame"
                 class:active={tab.id === activeTabId}
+                class:space-active-tab={isSpaceActiveTab}
               >
                 <!-- Tab title and close button bar -->
                 <div class="tab-header">
@@ -346,7 +348,7 @@
                   aria-label="Activate {tab.title || 'Untitled'}"
                 >
                   {#if tab.screenshot}
-                    <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} />
+                    <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
                   {:else}
                     <div class="no-screenshot">
                       <div class="favicon-container">
@@ -373,8 +375,7 @@
     right: 0;
     width: 100%;
     height: calc(100vh - 35px);
-    background: rgba(0, 0, 0, 0.95);
-    backdrop-filter: blur(8px);
+    background: rgb(0, 0, 0);
     overflow: hidden;
     z-index: 1000;
     opacity: 0;
@@ -390,7 +391,6 @@
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
     -ms-overflow-style: none;
-    will-change: scroll-position;
     scroll-behavior: smooth;
   }
 
@@ -603,27 +603,7 @@
     will-change: transform;
   }
 
-  .grid-frame::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.65);
-    pointer-events: none;
-    z-index: 1;
-    transition: opacity 0.2s ease-out;
-    will-change: opacity;
-  }
 
-  .grid-frame:hover::before {
-    opacity: 0.38;
-  }
-
-  .grid-frame.active::before {
-    opacity: 0;
-  }
 
   /* Frame scaler styles commented out - no longer used since replacement is disabled
   .frame-scaler {
@@ -709,18 +689,36 @@
 
   .tab-header {
     height: 28px;
-    background: rgba(40, 40, 40, 0.95);
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 3px 8px;
     border-radius: 8px 8px 0 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-    transition: background 0.2s ease-out;
+    border: 1px solid transparent;
+    border-bottom: none;
+    transition: background 0.2s ease-out, border-color 0.2s ease-out;
   }
 
   .grid-frame.active .tab-header {
-    background: rgba(50, 50, 50, 0.95);
+    background: rgb(255 255 255 / 14%);
+    border: 1px solid hsl(0deg 0% 100% / 4%);
+    border-bottom: none;
+  }
+
+  .grid-frame.space-active-tab .tab-header {
+    background: rgb(255 255 255 / 8%);
+    border: 1px solid hsl(0deg 0% 100% / 5.5%);
+    border-bottom: none;
+  }
+
+  .grid-frame.space-active-tab .header-tab-title {
+    color: #e5e5e5;
+    text-shadow: 0 0 0.3px currentColor;
+  }
+
+  .grid-frame.space-active-tab .tab-favicon {
+    opacity: 0.87;
   }
 
   .tab-info {

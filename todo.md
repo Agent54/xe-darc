@@ -2758,3 +2758,28 @@ shared movie watch space
 shaered ua space
 
 cmd click on url parts instad of edit mode
+
+expand last closed tabs section on top of menu
+
+allow websites limited browser control, eg toggling sidebar expand
+
+disable lightbox overlay in active tabs hovercard
+
+memory systems = notes system
+
+obsidian crossover pickle
+
+add pin left/ right option in already pinned tabs
+
+make spaces more dense in x achses not use full width always for easy scroll
+
+spces dont scroll in grid mode after open
+
+support lightbox for hvoercards + grid
+
+zoom out again on grid view gives spaces overview
+
+add trash next to item in closed tabs menu to romeove individual entries on hover
+
+
+block cmd closing browser tab in vscode

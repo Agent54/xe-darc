@@ -109,8 +109,16 @@ The project implements the Controlled Frame specification (https://wicg.github.i
 
 ## UI/UX Guidelines
 
+
 ### Event Handlers
 - **Use `onmousedown` instead of `onclick`** for button and interactive element handlers. This provides faster perceived response times.
 
 ### Button Styling
 - **Never use red/warning colors** for close, delete, or clear buttons unless explicitly instructed. These are normal operations and should use neutral colors (white/gray).
+
+### Css Rules
+- never use keyframe animation when a simple css transition works, never use js when css works
+
+
+### Js Rules
+- use const over let, use plain js over runes, use simple logic over effects. whenever the simpler and more error proof solution would work.
