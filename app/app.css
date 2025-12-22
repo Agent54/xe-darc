@@ -2406,6 +2406,11 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 }
 
+/* Leaflet mode - frames with max-width of 5/8 viewport width */
+.controlled-frame-container.leaflet-mode :global(.frame) {
+    max-width: 62.5vw;
+}
+
 .content-area-scrim {
     position: fixed;
     top: 48px;

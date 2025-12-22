@@ -101,7 +101,7 @@
             if (imageEl) {
                 if (fadeIn) {
                     imageEl.style.opacity = '0'
-                    imageEl.style.transition = 'opacity 0.5s ease-out'
+                    imageEl.style.transition = 'opacity 1.2s ease-out'
                 }
                 imageEl.src = resolvedSrc
                 imageEl.style.display = 'block'

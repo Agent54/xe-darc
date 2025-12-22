@@ -1565,7 +1565,7 @@
      class:multi-space-mode={multiSpaceMode}
      onmouseenter={handleMouseEnter} 
      onmouseleave={handleMouseLeave}
-     style="width: {multiSpaceMode ? (isClosingMultiSpace ? (customTabSidebarWidth || 263) + 'px' : `calc(100vw - ${closeRubberBandOffset}px)`) : ((customTabSidebarWidth || 263) + rubberBandOffset) + 'px'};"
+     style="width: {multiSpaceMode ? (isClosingMultiSpace ? (customTabSidebarWidth || 263) + 'px' : `calc(100vw - ${closeRubberBandOffset}px)`) : ((customTabSidebarWidth || 263) + rubberBandOffset + (tabSidebarVisible ? 0 : 9)) + 'px'};"
      role="complementary"
      aria-label="Tab Sidebar">
     <div class="sidebar">
@@ -2084,8 +2084,8 @@
     }
 
     .sidebar-box.visible {
-        padding-right: 9px;
-        padding-left: 9px;
+        padding-right: 0;
+        padding-left: 3px;
     }
     
     /* Constrain URL bar width to prevent stretching in fullscreen mode */
@@ -3545,9 +3545,9 @@
     }
 
     :global(.sidebar-box.visible .closed-tabs-section)   {
-        bottom: 4px;
-        left: 17px;
-        width: calc(100% - 35px);
+        /* bottom: 6px; */
+        /* left: 17px; */
+        width: calc(100% - 19px);
     }
     
     .closed-tabs-header {

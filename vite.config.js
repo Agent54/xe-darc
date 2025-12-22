@@ -225,6 +225,7 @@ export default defineConfig({
       input: {
         main: './index.html',
         agent_app: './agent_app.html',
+        service_worker: './service-worker.js'
         // web_request_test: './web_request_test.html',
         // tldraw_webview: './tldraw_webview.html'
       }

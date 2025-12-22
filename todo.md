@@ -2782,7 +2782,31 @@ zoom out again on grid view gives spaces overview
 add trash next to item in closed tabs menu to romeove individual entries on hover
 
 
-block cmd closing browser tab in vscode
+block cmd w closing browser tab in vscode
+
+spaces in groups under each other gridview?
+
+lightbox opening breaks suddenly
+
+window unloads on mac sleep, needs to restore view
+
+screenshot broken in signed bundle
+
+multi permission cards break
+
+persistent permissions
+
+unpin focus tab
+
+leaflet mode behaviours. eg scroll into view snaps, resize etc.
+
+permission sidebar opening breaks suddenly
+
+fix screenshot attach fades in wrong places eg hovercards
+
+sidebar toggle states, spaces etc. per window id.
+
+tab context menu needs to cancel hovermenu. menu needs close when open new tab 
 rember current tab hibernation override
 
 show tab screenshots in order of last used time
