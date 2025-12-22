@@ -57,12 +57,12 @@
       setTimeout(() => {
         data.newTab(spaceId, { shouldFocus: true })
         // Close the grid view after creating tab
-        onViewModeChange()
+        onViewModeChange({fromTileMode: true})
       }, 150)
     } else {
       // Already in the right space, just create tab
       data.newTab(spaceId, { shouldFocus: true })
-      onViewModeChange()
+      onViewModeChange({fromTileMode: true})
     }
   }
   
@@ -174,15 +174,15 @@
       // Wait for space switch, then activate tab and close view
       setTimeout(() => {
         onTabActivate(tab, index)
-        onViewModeChange()
+        onViewModeChange({fromTileMode: true})
       }, 100)
     } else if (tab.id === data.spaceMeta.activeTabId) {
       // Same space, same tab - just toggle view mode
-      onViewModeChange()
+      onViewModeChange({fromTileMode: true})
     } else {
       // Same space, different tab - activate tab and toggle view mode
       onTabActivate(tab, index)
-      onViewModeChange()
+      onViewModeChange({fromTileMode: true})
     }
   }
 
@@ -202,7 +202,7 @@
         if (tab.id !== data.spaceMeta.activeTabId) {
           onTabActivate(tab, index)
         }
-        onViewModeChange()
+        onViewModeChange({fromTileMode: true})
       }
     }
   }
@@ -240,10 +240,10 @@
       // If we're viewing a different space than the active one, switch to it
       if (highlightedSpaceId && highlightedSpaceId !== activeSpaceId) {
         switchSpace(highlightedSpaceId)
-        onViewModeChange()
+        onViewModeChange({fromTileMode: true})
       } else {
         // If we're already in the active space, just close the view
-        onViewModeChange()
+        onViewModeChange({fromTileMode: true})
       }
     }
   }

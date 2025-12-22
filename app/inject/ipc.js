@@ -61,6 +61,15 @@ document.addEventListener('keydown', function(event) {
         event.stopImmediatePropagation();
         return false;
     }
+    
+    // Check for F18 (grid view toggle)
+    if (event.key === 'F18') {
+        console.log(`iwa:key:F18:${tabId}`);
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return false;
+    }
 }, { capture: true, passive: false });
 
 // Global mouse event listeners for controlled frame

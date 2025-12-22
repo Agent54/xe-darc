@@ -1,5 +1,5 @@
 <script module>
-    const MAX_CONCURRENT = 5
+    const MAX_CONCURRENT = 10
     const BATCH_DELAY = 5
     let activeLoads = 0
     const loadQueue = []

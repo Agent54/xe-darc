@@ -2783,3 +2783,15 @@ add trash next to item in closed tabs menu to romeove individual entries on hove
 
 
 block cmd closing browser tab in vscode
+rember current tab hibernation override
+
+show tab screenshots in order of last used time
+
+overflow-x: hidden on .controlled-frame-container while opening sidebars, window resizing, toggling pins, changing tabs!!!!! only enable when cmd pressed?
+
+disable sidebar resizer on unhovered hidden state
+
+disable focus outlines everywhere
+
+tab activation history menu with toggle / gesture (quick go back to previosu active tabs/ spaces?)
+

@@ -602,6 +602,13 @@
         openNewTab()
     }
 
+    function handleFrameKey(event) {
+        const { key, tabId } = event.detail
+        if (key === 'F18') {
+            selectViewMode('tile', {fromZoomOrKey: true})
+        }
+    }
+
     // Track mouse state and focus for controlled frames (declared early to avoid TDZ issues)
     let isMouseDown = null // null or button number (0, 1, 2, etc.)
     let lastMouseActivityTime = 0
@@ -668,7 +675,7 @@
         // Only open grid view if threshold is reached
         if (zoomOutCounter >= ZOOM_THRESHOLD) {
             // console.log('📱 [TAB-OVERVIEW] Opening grid view - threshold reached')
-            selectViewMode('tile')
+            selectViewMode('tile', {fromZoomOrKey: true})
             // Reset both counters after action to prevent immediate bounce back
             zoomOutCounter = 0
             zoomInCounter = 0
@@ -729,6 +736,7 @@
     window.addEventListener('darc-new-tab-from-frame', handleFrameNewTab)
     window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
+    window.addEventListener('darc-key-from-frame', handleFrameKey)
     window.addEventListener('close-apps-overlay', () => { showAppsOverlay = false })
     window.addEventListener('darc-zoom-out-at-max-internal', handleZoomOutAtMaxInternal)
     window.addEventListener('darc-zoom-in', handleZoomIn)
@@ -865,6 +873,7 @@
                 }
             }
             openNewTab()
+            return
         }
         if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
             event.preventDefault()
@@ -879,16 +888,24 @@
                 }
             }
             handleTabClose(event)
+            return
         }
         if ((event.metaKey || event.ctrlKey) && event.key === '0') {
             event.preventDefault()
             event.stopPropagation()
             event.stopImmediatePropagation()
             handleZoomReset()
+            return
         }
         if (event.key === 'Escape' && showAppsOverlay) {
             event.preventDefault()
             showAppsOverlay = false
+            return
+        }
+        if (event.key === 'F18') {
+            event.preventDefault()
+            toggleViewMode()
+            return
         }
     }
 
@@ -1438,6 +1455,7 @@
             window.removeEventListener('darc-new-tab-from-frame', handleFrameNewTab)
             window.removeEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
             window.removeEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
+            window.removeEventListener('darc-key-from-frame', handleFrameKey)
         }
     })
 
@@ -1729,7 +1747,7 @@
         }, 150)
     }
 
-    function selectViewMode(mode) {
+    function selectViewMode(mode, {fromZoomOrKey} = {}) {
         // if (lastUsedViewMode !== mode) {
         //     window.instances.forEach(instance => {
         //         const wrapper = document.getElementById('backgroundFrames')
@@ -1744,17 +1762,17 @@
             data.settings.lastUsedViewMode = lastUsedViewMode
         }
         data.ui.viewMode = mode
-        localStorage.setItem('viewMode', data.ui.viewMode)
+        !fromZoomOrKey && localStorage.setItem('viewMode', data.ui.viewMode)
         data.settings.viewMode = data.ui.viewMode
     }
     
-    function toggleViewMode() {
+    function toggleViewMode({fromTileMode} = {}) {
         // window.instances.forEach(instance => {
         //         const wrapper = document.getElementById('backgroundFrames')
         //         const anchorFrame = document.getElementById('anchorFrame')
         //         wrapper.moveBefore(instance, anchorFrame)
         //     })
-        if (data.ui.viewMode === 'default') {
+        if (data.ui.viewMode === 'default' || fromTileMode) {
             data.ui.viewMode = lastUsedViewMode
         } else {
             lastUsedViewMode = data.ui.viewMode

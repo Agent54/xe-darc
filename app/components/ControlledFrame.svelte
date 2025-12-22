@@ -1614,6 +1614,17 @@ document.addEventListener('input', function(event) {
                         sourceFrame: `tab_${mytab.id}`
                     }
                 }))
+            } else if (message.startsWith('iwa:key:')) {
+                // Generic key event from frame - format: iwa:key:{keyName}:{tabId}
+                const parts = message.split(':')
+                const keyName = parts[2]
+                window.dispatchEvent(new CustomEvent('darc-key-from-frame', {
+                    detail: { 
+                        key: keyName,
+                        tabId: mytab.id,
+                        sourceFrame: `tab_${mytab.id}`
+                    }
+                }))
             } else if (message.startsWith('iwa:link-enter:')) {
                 const prefix = 'iwa:link-enter:'
                 const remainingMessage = message.substring(prefix.length)
