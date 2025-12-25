@@ -1158,6 +1158,10 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     scroll-behavior: auto;
 }
 
+.controlled-frame-container.no-scroll {
+    overflow-x: hidden;
+}
+
 .tab-hovercard {
     position: fixed;
     transform: translateX(-50%);

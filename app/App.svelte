@@ -197,6 +197,8 @@
     let isResizingTabSidebar = $state(false)
     let isResizingPinnedFrames = $derived(isResizingLeft || isResizingRight || isResizingSidebar || isResizingTabSidebar)
     let isResizingAnySidebar = $derived(isResizingLeft || isResizingRight || isResizingSidebar || isResizingTabSidebar)
+    let isTogglingPins = $state(false)
+    let isChangingTabs = $state(false)
     let resizeStartX = $state(0)
     let resizeStartWidth = $state(0)
     let resizeAnimationFrame = null
@@ -262,6 +264,9 @@
     let prevOpenSidebars = $state(new Set())
     let isSwitchingSidebars = $state(false)
     let sidebarStateUpdateTimer = null
+    
+    // Disable horizontal scrolling during layout transitions to prevent glitches
+    let isLayoutChanging = $derived(isWindowResizing || isResizingAnySidebar || isTogglingPins || isChangingTabs || isSwitchingSidebars)
 
     let agentEnabled = $state(false)
 
@@ -961,6 +966,9 @@
         // Mark window as active to prevent background styling glitches
         activateWindowFocus()
         
+        // Disable scrolling during tab change to prevent glitches
+        isChangingTabs = true
+        
         // console.log('activateTab called for tab:', tab.id, 'tabChangeFromScroll:', tabChangeFromScroll)
         // Clear the tabChangeFromScroll flag when user explicitly clicks a tab
         if (tabChangeFromScroll) {
@@ -1001,6 +1009,10 @@
             await tick()
             data.activate(tab.id)
         }
+        
+        setTimeout(() => {
+            isChangingTabs = false
+        }, 350)
         
         // // Immediate scroll for user interaction
         // tab frame?.scrollIntoView({ 
@@ -2093,6 +2105,7 @@
     }
     
     function togglePinnedFrames(side) {
+        isTogglingPins = true
         invisiblePins[side] = !invisiblePins[side]
         
         try {
@@ -2100,6 +2113,10 @@
         } catch (error) {
             console.warn('Failed to save invisible pins state:', error)
         }
+        
+        setTimeout(() => {
+            isTogglingPins = false
+        }, 350)
     }
     
     function findCurrentlyVisibleFrame() {
@@ -4207,6 +4224,7 @@
     class:sidebar-open={openSidebars.size > 0}
     class:no-transitions={isWindowResizing}
     class:resizing-pinned-frames={isResizingPinnedFrames}
+    class:no-scroll={isLayoutChanging}
     class:has-left-pins={leftPinnedTabs.length > 0 && !invisiblePins.left}
     class:has-right-pins={rightPinnedTabs.length > 0 && !invisiblePins.right}
     class:has-tab-sidebar={tabSidebarVisible}
