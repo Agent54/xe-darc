@@ -4617,6 +4617,10 @@
 <style>
     @import "app.css";
     
+    *:focus {
+        outline: none;
+    }
+    
     .dev-color-badge {
         position: fixed;
         top: 10px;

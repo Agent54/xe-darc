@@ -2825,3 +2825,5 @@ open sidebar name instead of visible.
 open tab sidebar not behind grid view
 
 long click link behaviour?
+
+focus nav support
