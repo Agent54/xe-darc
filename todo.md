@@ -2809,7 +2809,8 @@ sidebar toggle states, spaces etc. per window id.
 tab context menu needs to cancel hovermenu. menu needs close when open new tab 
 rember current tab hibernation override
 
-show tab screenshots in order of last used time
+bump tab to top feature
+
 
 overflow-x: hidden on .controlled-frame-container while opening sidebars, window resizing, toggling pins, changing tabs!!!!! only enable when cmd pressed?
 

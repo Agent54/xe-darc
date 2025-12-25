@@ -1747,6 +1747,7 @@
         }, 150)
     }
 
+    let backToDefault = false
     function selectViewMode(mode, {fromZoomOrKey} = {}) {
         // if (lastUsedViewMode !== mode) {
         //     window.instances.forEach(instance => {
@@ -1760,6 +1761,8 @@
             lastUsedViewMode = data.ui.viewMode
             localStorage.setItem('lastUsedViewMode', lastUsedViewMode)
             data.settings.lastUsedViewMode = lastUsedViewMode
+        } else if (fromZoomOrKey){
+            backToDefault = true
         }
         data.ui.viewMode = mode
         !fromZoomOrKey && localStorage.setItem('viewMode', data.ui.viewMode)
@@ -1772,12 +1775,15 @@
         //         const anchorFrame = document.getElementById('anchorFrame')
         //         wrapper.moveBefore(instance, anchorFrame)
         //     })
-        if (data.ui.viewMode === 'default' || fromTileMode) {
+        if (backToDefault === true && fromTileMode) {
+            data.ui.viewMode = 'default'
+            backToDefault = false
+        } else if (data.ui.viewMode === 'default' || fromTileMode) {
             data.ui.viewMode = lastUsedViewMode
         } else {
-                lastUsedViewMode = data.ui.viewMode
-                localStorage.setItem('lastUsedViewMode', lastUsedViewMode)
-                data.settings.lastUsedViewMode = lastUsedViewMode
+            lastUsedViewMode = data.ui.viewMode
+            localStorage.setItem('lastUsedViewMode', lastUsedViewMode)
+            data.settings.lastUsedViewMode = lastUsedViewMode
             data.ui.viewMode = 'default'
         }
         localStorage.setItem('viewMode', data.ui.viewMode)

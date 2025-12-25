@@ -101,7 +101,9 @@
             if (imageEl) {
                 if (fadeIn) {
                     imageEl.style.opacity = '0'
-                    imageEl.style.transition = 'opacity 1.2s ease-out'
+                    imageEl.style.transition = 'opacity 0.5s ease-out'
+                    imageEl.style.willChange = 'opacity'
+                    imageEl.style.transform = 'translateZ(0)'
                 }
                 imageEl.src = resolvedSrc
                 imageEl.style.display = 'block'
@@ -122,10 +124,7 @@
         
         updateDOM('loading')
         
-        await new Promise(r => setTimeout(r, 50 + Math.random() * 100))
-        if (srcToLoad !== currentSrc) return
-        
-        await enqueueLoad(async () => {
+        async function doLoad() {
             try {
                 const resolved = await data.getAttachmentUrl(srcToLoad, digest)
                 if (srcToLoad !== currentSrc) return
@@ -146,7 +145,13 @@
                     updateDOM('error')
                 }
             }
-        })
+        }
+        
+        if (lazy) {
+            await enqueueLoad(doLoad)
+        } else {
+            await doLoad()
+        }
     }
     
     // Use $effect to react to src or digest changes instead of polling interval
@@ -225,7 +230,5 @@
         height: 100%;
         object-fit: cover;
         object-position: top;
-        will-change: opacity;
-        transform: translateZ(0);
     }
 </style>
