@@ -747,6 +747,9 @@
     window.addEventListener('darc-zoom-in', handleZoomIn)
 
     function openNewTab() {  
+        isChangingTabs = true
+        setTimeout(() => { isChangingTabs = false }, 350)
+        
         collapseAndRemovePlaceholders()      
         const newTab = data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (newTab) {
@@ -1129,6 +1132,9 @@
 
     function closeTab(tab, event, createPlaceholder = false) {
         if (event) event.stopPropagation()
+        
+        isChangingTabs = true
+        setTimeout(() => { isChangingTabs = false }, 350)
 
         // Check if closing the last pinned tab and reset collapsed state
         if (tab.pinned) {
@@ -2083,6 +2089,9 @@
     }
 
     function toggleSidebar(sidebarName) {
+        isSwitchingSidebars = true
+        setTimeout(() => { isSwitchingSidebars = false }, 350)
+        
         if (openSidebars.has(sidebarName)) {
             openSidebars.delete(sidebarName)
         } else {
@@ -2093,6 +2102,9 @@
     }
 
     function closeSidebar(sidebarName) {
+        isSwitchingSidebars = true
+        setTimeout(() => { isSwitchingSidebars = false }, 350)
+        
         console.log(openSidebars)
 
         openSidebars.delete(sidebarName)

@@ -2178,7 +2178,7 @@
 
     .sidebar-box.visible .sidebar-content {
         border-radius: 0;
-        box-shadow: 13px 0 13px 7px #0000003c;
+        box-shadow: 0px 0px 9px 4px #00000040;
         border: none;
         background: transparent;
         transition: border-radius 190ms ease, box-shadow 190ms ease 100ms, border 190ms ease;

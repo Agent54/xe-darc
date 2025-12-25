@@ -2820,3 +2820,8 @@ disable focus outlines everywhere
 
 tab activation history menu with toggle / gesture (quick go back to previosu active tabs/ spaces?)
 
+open sidebar name instead of visible. 
+
+open tab sidebar not behind grid view
+
+long click link behaviour?
