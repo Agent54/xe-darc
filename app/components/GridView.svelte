@@ -377,7 +377,7 @@
     height: calc(100vh - 35px);
     background: rgb(0, 0, 0);
     overflow: hidden;
-    z-index: 1000;
+    z-index: 10000;
     opacity: 0;
     animation: grid-fade-in 0.3s cubic-bezier(0, 1, 0.3, 1) forwards;
   }
