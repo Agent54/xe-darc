@@ -2131,7 +2131,7 @@
         background: rgb(0 0 0 / 96%);
         user-select: none;
         overflow: visible;
-        border-radius: 8px;
+        border-radius: 18px;
         transform: translateZ(0);
         backface-visibility: hidden;
     }
@@ -2166,7 +2166,7 @@
         display: flex;
         flex-direction: column;
         position: relative;
-        border-radius: 9px;
+        border-radius: 18px;
         box-shadow: 0 0 16px 0 #000, -18px 0px 2px 1px #000;
         border: 1px solid hsl(0 0% 12% / 1);
         transition: border-radius 190ms ease, box-shadow 190ms ease, border 190ms ease;
@@ -3557,7 +3557,7 @@
         pointer-events: auto;
         display: flex;
         flex-direction: column;
-        width: calc(100% - 20px);
+        /* width: calc(100% - 17px); */
         flex-shrink: 0;
     }
 

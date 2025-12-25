@@ -2827,3 +2827,44 @@ open tab sidebar not behind grid view
 long click link behaviour?
 
 focus nav support
+
+new tab button in all grid spaces
+
+clicking space should switch to space not scroll to space. space buttons too small, add overview?!!
+
+screenshots etc dont update in gridview
+
+trigger grid view in all windows?
+
+screenshot support for native frame views dom screenshot
+
+three finger swipe down to close again grid view
+
+tabsidebar scroll reset on close!
+
+clsoe tab sidebar on single click bg
+
+nitification center
+
+bigger right bar icons and better svgs, title on hover
+
+fillscreen suppport
+
+keyboard support
+
+permissin modal fixes and persistence
+
+
+ fullscreen window title area bug mac
+
+top screen url? compromise?
+
+magnifier in circle cursor dependent on speed
+
+arrow key support for spaces 
+
+mac launcher alternative mode for ubiquity/ raycast/ alfred/ grid views!!
+
+quicklook like space support or long hover for grid view
+
+lightbox cross window interactions bug

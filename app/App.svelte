@@ -750,6 +750,12 @@
         isChangingTabs = true
         setTimeout(() => { isChangingTabs = false }, 350)
         
+        newTabMenuVisible = false
+        if (newTabMenuHoverTimeout) {
+            clearTimeout(newTabMenuHoverTimeout)
+            newTabMenuHoverTimeout = null
+        }
+        
         collapseAndRemovePlaceholders()      
         const newTab = data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (newTab) {
@@ -815,6 +821,10 @@
     
     function handleNewTabButtonContextMenu(e, isInline = false) {
         e.preventDefault()
+        if (newTabMenuHoverTimeout) {
+            clearTimeout(newTabMenuHoverTimeout)
+            newTabMenuHoverTimeout = null
+        }
         if (isInline && inlineNewTabButtonElement) {
             const rect = inlineNewTabButtonElement.getBoundingClientRect()
             newTabMenuPosition = { left: rect.left + rect.width / 2 }

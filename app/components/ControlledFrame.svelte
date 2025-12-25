@@ -2495,7 +2495,7 @@ loading="eager"
         width: 100%;
         height: 100%;
         display: block;
-        border-radius: 8px;
+        border-radius: 18px;
         overflow: hidden;
         border: none;
     }

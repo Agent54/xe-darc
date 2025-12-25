@@ -103,7 +103,7 @@
         max-height: 80vh;
         background: #1a1a1a;
         border: 1px solid #333;
-        border-radius: 8px;
+        border-radius: 18px;
         padding: 10px;
         z-index: 10000;
         overflow-y: auto;

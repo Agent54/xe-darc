@@ -1085,7 +1085,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 }
 
 .browser-frame {
-  border-radius: 8px;
+  border-radius: 18px;
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
 }
 
@@ -2101,11 +2101,11 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     height: calc(100vh - 72px); /* Account for tab bar (52px) + padding (18px) */
     /* border: 1px solid #ffffff12; */
     border: none;
-    /* border-radius: 8px;
+    /* border-radius: 18px;
     overflow: hidden; */
     flex-shrink: 0;
     transition: width 0.3s ease;
-    border-radius: 8px;
+    border-radius: 18px;
     box-shadow: 0px 0px 9px 4px #00000040;
     background: black;
     overflow: visible;
@@ -2376,7 +2376,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     margin: 0 auto;
     padding: 20px;
     background: #fafafa;
-    border-radius: 8px;
+    border-radius: 18px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     position: relative;
     min-height: calc(100vh - 40px);
@@ -2394,7 +2394,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .frame.reading-mode {
     background: #fafafa;
-    border-radius: 8px;
+    border-radius: 18px;
     padding: 20px;
     max-width: 800px;
     margin: 0 auto;
@@ -2403,7 +2403,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .controlled-frame-container :global(.frame.reading-mode) {
     background: #fafafa;
-    border-radius: 8px;
+    border-radius: 18px;
     padding: 20px;
     max-width: 800px;
     margin: 0 auto;
@@ -2448,14 +2448,14 @@ header.window-controls-overlay + .content-area-scrim {
 }
 
 :global(.frame > *) {
-    border-radius: 8px;
+    border-radius: 18px;
     overflow: hidden;
 }
 
 
 :global(.frame-wrapper > * ) {
     border: 1px solid #ffffff12;
-    border-radius: 8px;
+    border-radius: 18px;
     overflow: hidden;
 }
 

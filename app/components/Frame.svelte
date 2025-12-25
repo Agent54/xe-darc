@@ -1032,14 +1032,14 @@
         width: 100%;
         height: 100%;
         opacity: 0.7;
-        border-radius: 8px;
+        border-radius: 18px;
         overflow: hidden;
     }
     
     :global(.hibernated-screenshot .attachment-image) {
         object-fit: cover;
         object-position: top left;
-        border-radius: 8px;
+        border-radius: 18px;
     }
 
     .hibernated-placeholder {
@@ -1093,7 +1093,7 @@
         width: 32px;
         height: 32px;
         background: rgba(0, 0, 0, 0.7);
-        border-radius: 8px;
+        border-radius: 18px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1590,7 +1590,7 @@
         height: calc(100% - 80px);
         background: rgb(0 0 0);
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
+        border-radius: 16px;
         box-shadow: 
             0 25px 50px rgba(0, 0, 0, 0.4),
             0 0 0 1px rgba(255, 255, 255, 0.05);
@@ -1607,6 +1607,9 @@
 
     .lightbox-container.animating {
         box-shadow: none;
+    }
+    .lightbox-container :global(.frame > *) {
+        border-radius: 15px;
     }
 
     .lightbox-header {
