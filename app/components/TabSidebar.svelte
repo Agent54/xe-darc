@@ -71,6 +71,10 @@
     let hovercardUrlBarExpanded = $state(false)
     let menuCloseTimeout = null
     
+    // Resize handle visibility - only enable after sidebar is fully shown
+    let sidebarFullyShown = $state(false)
+    let sidebarShowTimeout = null
+    
     // Tab group expansion state
     let tabGroupExpanded = $state(true)
     
@@ -104,6 +108,8 @@
             }, 1)
         }
     })
+    
+
 
     let isManualScroll = false
     let previousSpaceIndex = -1
@@ -124,6 +130,13 @@
             clearTimeout(menuCloseTimeout)
             menuCloseTimeout = null
         }
+        // Schedule resize handle activation after sidebar fully slides in
+        // Transition: 190ms duration + 0ms delay when hovered (but sidebar starts hidden with 340ms delay)
+        // Use 250ms to ensure sidebar is fully visible
+        if (sidebarShowTimeout) clearTimeout(sidebarShowTimeout)
+        sidebarShowTimeout = setTimeout(() => {
+            sidebarFullyShown = true
+        }, 250)
     }
     
     function handleMouseLeave() {
@@ -131,6 +144,9 @@
         if (!urlBarExpanded && !multiSpaceMode) {
             // Always set isHovered to false for resize handle logic
             isHovered = false
+            // Immediately disable resize handle when leaving
+            if (sidebarShowTimeout) clearTimeout(sidebarShowTimeout)
+            sidebarFullyShown = false
         }
         
         // Close context menu when leaving sidebar
@@ -1958,6 +1974,7 @@
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="resize-handle resize-handle-right" 
                 class:active={isResizingTabSidebar}
+                class:disabled={!sidebarFullyShown && !tabSidebarVisible}
                 role="slider"
                 aria-orientation="vertical"
                 aria-label="Resize tab sidebar"
@@ -1965,7 +1982,7 @@
                 aria-valuemax={600}
                 aria-valuenow={customTabSidebarWidth || 263}
                 tabindex="0"
-                onmousedown={onStartResizeTabSidebar}
+                onmousedown={(sidebarFullyShown || tabSidebarVisible) ? onStartResizeTabSidebar : null}
                 title="Drag to resize tab sidebar"></div>
     </div>
 </div>
@@ -3854,6 +3871,13 @@
         background: rgba(255, 255, 255, 0.3);
         border: 1px solid rgba(0, 0, 0, 0.2);
         box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* Disable resize handle until sidebar is fully shown */
+    .sidebar .resize-handle.disabled {
+        pointer-events: none;
+        opacity: 0 !important;
+        cursor: default;
     }
     
     /* Position naturally at the right edge next to the divider line */
