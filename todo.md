@@ -2868,3 +2868,47 @@ mac launcher alternative mode for ubiquity/ raycast/ alfred/ grid views!!
 quicklook like space support or long hover for grid view
 
 lightbox cross window interactions bug
+
+app tabs, with ad hoc menu frames
+
+multi window restore function
+
+icon only sidebar size mode
+
+context sidebar (eg relevant apps, tabs, data etc.)
+
+close or hide and restore full tab groups/ spaces
+
+page up down support
+
+app connectivity simbol to what context connectivity is like 
+
+simple user UI concepts with absolute card based layouts on a canvas so complexities can go away and testing is simple. unlocking excel/ hypercard user creation
+
+stage manager like ui for sidebar lightbox view
+
+
+scroll handler for linux x11
+
+disable horizontal scroll for pages unless cmd held or in top of app.
+
+
+stage manager with clipboard/ object stash at top emptying on using the items and with drag out drag in support!!!!!
+
+
+new notification central concept and window without buttons or borders concepts
+
+youtube channel + videos on website
+
+snap to elem mode xr etc.
+
+Things that need to die:
+- the terminal! (why cant everything be at least like chrome console?!)
+- sudo
+- user/ ACL based based security for things that are not actually users (cap systems and permission managers anyone?)
+- x11
+- ?
+
+
+
+clipboard manager on top of stage manager windows with disapperaing clipboards on paste/use unless pinned
