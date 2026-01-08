@@ -76,7 +76,7 @@
     let sidebarShowTimeout = null
     
     // Tab group expansion state
-    let tabGroupExpanded = $state(true)
+    let tabGroupExpanded = $state(false)
     
     function handleTabGroupToggle() {
         tabGroupExpanded = !tabGroupExpanded

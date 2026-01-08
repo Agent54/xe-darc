@@ -2912,3 +2912,10 @@ Things that need to die:
 
 
 clipboard manager on top of stage manager windows with disapperaing clipboards on paste/use unless pinned
+
+webtop based controlled frame emulation
+
+this doc as ai summary app with diff since last read ui
+
+memory half life?
+
