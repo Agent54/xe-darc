@@ -2919,3 +2919,18 @@ this doc as ai summary app with diff since last read ui
 
 memory half life?
 
+docker checkpoints integration into jj sidebar
+
+try tangled
+
+reuse closed zero history tabs and dont show in closed tabs
+
+
+
+preppopulated buttons for each tab in agent bar
+
+force dark mode
+
+
+subversioning for shared files in repos eg. agent text, shared project files, components. normal cheked in but also in standalone repo and command line to diff, update and also update upstream!
+

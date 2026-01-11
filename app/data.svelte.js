@@ -604,6 +604,16 @@ function unhibernate (tabId) {
     frames[tabId].pendingLoad = true
 }
 
+function isInternalPage (url) {
+    return url?.startsWith('about:newtab') || url?.startsWith('about:blank') || url?.startsWith('about:tabhistory')
+}
+
+function isTabHibernated (tabId) {
+    const tab = docs[tabId]
+    if (isInternalPage(tab?.url)) return false
+    return !frames[tabId]?.frame
+}
+
 // Helper function to resolve attachment URLs to blob URLs
 const resolveAttachmentUrl = async (attachmentUrl) => {
     if (!attachmentUrl || !attachmentUrl.startsWith('attachment://')) {
@@ -776,6 +786,8 @@ export default {
 
     hibernate,
     unhibernate,
+    isInternalPage,
+    isTabHibernated,
 
     previous: () => {
         const activeSpace = spaces[spaceMeta.activeSpace]

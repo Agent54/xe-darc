@@ -781,6 +781,8 @@
     }
 
     async function updateTabMeta(tab) {
+        if (isNewTabUrl(tab?.url) || isTabHistoryUrl(tab?.url)) return
+        
         let frame = null
         if (!frame) {
             frame = data.frames[tab.id]?.frame
@@ -2032,7 +2034,8 @@ document.addEventListener('input', function(event) {
         data.frames[tabId].wrapper = frameWrapper
 
         let addNode = false
-        if (!controlledFrame && tab) {
+        const isInternalPage = isNewTabUrl(tab?.url) || isTabHistoryUrl(tab?.url)
+        if (!controlledFrame && tab && !isInternalPage) {
             controlledFrame = document.createElement('controlledframe')
             const currentTabId = tab.id
             const mytab = untrack(() => tab)

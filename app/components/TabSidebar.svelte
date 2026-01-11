@@ -1647,7 +1647,7 @@
                     </button>
                     <!-- NOTE: Tabs are also rendered in App.svelte (top bar) - keep hibernated class in sync there too -->
                     {#each globallyPinnedTabs as tab}
-                        <button class="pinned-tab" class:hibernated={!data.frames[tab.id]?.frame}
+                        <button class="pinned-tab" class:hibernated={data.isTabHibernated(tab.id)}
                                 onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                 onmouseleave={handleTabMouseLeave}>
                             <Favicon {tab} showButton={false} />
@@ -1773,7 +1773,7 @@
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
                                         {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
-                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={!data.frames[tab.id]?.frame} onmousedown={() => activateTab(tab.id, spaceId)}>
+                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} onmousedown={() => activateTab(tab.id, spaceId)}>
                                                 <Favicon {tab} showButton={false} />
                                             </button>
                                         {/each}
@@ -1850,7 +1850,7 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={!data.frames[tab.id]?.frame} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} data-tab-id={tab.id}
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} data-tab-id={tab.id}
                                                  role="listitem"
                                                  onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                  onmouseleave={handleTabMouseLeave}
