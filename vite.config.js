@@ -228,6 +228,15 @@ export default defineConfig({
         service_worker: './service-worker.js'
         // web_request_test: './web_request_test.html',
         // tldraw_webview: './tldraw_webview.html'
+      },
+      output: {
+        entryFileNames: (chunkInfo) => {
+          if (chunkInfo.name === 'service_worker') {
+            return 'service-worker.js';
+          }
+          // Default Vite behavior for other entries
+          return `assets/[name]-[hash].js`;
+        }
       }
     }
   }

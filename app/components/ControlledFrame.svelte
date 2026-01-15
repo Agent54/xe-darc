@@ -2017,13 +2017,21 @@ document.addEventListener('input', function(event) {
             console.error('retry error')
             return
         }
+        
+        // IMPORTANT: Read reactive dependencies BEFORE await to ensure they are tracked
+        // In Svelte 5 async effects, only reads before the first await trigger re-runs
+        const currentTabUrl = tab?.url
+        const currentTabId = tab?.id
+        const currentTab = tab
+        const isInternalPage = isNewTabUrl(currentTabUrl) || isTabHistoryUrl(currentTabUrl)
+        
         await tick()
 
         if (!anchor || !frameWrapper) { 
             return
         }
 
-        let controlledFrame = data.frames[tab?.id]?.frame
+        let controlledFrame = data.frames[currentTabId]?.frame
 
         // If transitioning from newtab to real URL, create frame if needed
         const framesObj = untrack(() => $state.snapshot(data.frames[tabId]))
@@ -2034,10 +2042,8 @@ document.addEventListener('input', function(event) {
         data.frames[tabId].wrapper = frameWrapper
 
         let addNode = false
-        const isInternalPage = isNewTabUrl(tab?.url) || isTabHistoryUrl(tab?.url)
-        if (!controlledFrame && tab && !isInternalPage) {
+        if (!controlledFrame && currentTab && !isInternalPage) {
             controlledFrame = document.createElement('controlledframe')
-            const currentTabId = tab.id
             const mytab = untrack(() => tab)
 
             data.frames[tabId].frame = controlledFrame

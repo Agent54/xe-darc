@@ -2934,3 +2934,4 @@ force dark mode
 
 subversioning for shared files in repos eg. agent text, shared project files, components. normal cheked in but also in standalone repo and command line to diff, update and also update upstream!
 
+mmode with bigger borders for card based ui feeling
