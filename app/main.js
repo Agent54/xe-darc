@@ -170,7 +170,20 @@ if ('serviceWorker' in navigator) {
 }
 
 
-if (typeof window !== 'undefined' && window.location.protocol === 'isolated-app:') { 
+if (typeof window !== 'undefined' && window.location.protocol === 'isolated-app:') {
   import(/* @vite-ignore */ `/${'app'}/test.js`).then(({default: test}) => test())
-} 
+}
 // isolated-app://kktqp5b4ad3rk7liu3s3svirby266incu7xsds2l56zwzm3op5aaaaac
+
+// Test Dedicated Worker
+const dedicatedWorker = new Worker('/test-dedicated-worker.js')
+dedicatedWorker.onmessage = function(e) {
+  console.log('Dedicated Worker says:', e.data)
+}
+
+// Test Shared Worker
+const sharedWorker = new SharedWorker('/test-shared-worker.js')
+sharedWorker.port.onmessage = function(e) {
+  console.log('Shared Worker says:', e.data)
+}
+sharedWorker.port.start()
