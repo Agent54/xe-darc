@@ -2938,3 +2938,20 @@ mmode with bigger borders for card based ui feeling
 
 pwa that load the app itself from folder being editable app locally?
 
+rename stacks to apps
+
+keep track of tab tasks as todos and what i was doing separate from the sidebar?
+
+
+show active tabs from other clients highlighted.
+
+window manager: snap windows to glue together, move together and stick as one window in overview!
+
+aspect types as holistic type schema system eg {contact: {}, image: {}}
+
+dont lightbox on change of url manually
+
+prpper dynamic multiwindow support with restore position and screen and desktop, scoped pin states, spaces, active tabs etc. saved and matched dimensinos
+
+forward backward in context menu
+

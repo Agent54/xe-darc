@@ -187,3 +187,9 @@ sharedWorker.port.onmessage = function(e) {
   console.log('Shared Worker says:', e.data)
 }
 sharedWorker.port.start()
+
+console.log(window.location.href)
+
+window.launchQueue.setConsumer((launchParams) => {
+  console.log({launchParams})
+})
