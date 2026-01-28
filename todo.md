@@ -2955,3 +2955,25 @@ prpper dynamic multiwindow support with restore position and screen and desktop,
 
 forward backward in context menu
 
+screenshot caching
+
+remove switch (defaultSearchEngine) { handlling form url bar!
+
+right click should never trigger mousedown! (eg tab clicks!!!!!)
+
+remove sidepin size restricion!!
+
+include colima and dev domains in orchestrator setup
+
+conversation is starred if any message is starred?
+
+darc code website and standalone focus release?
+
+app vm separate from system vm > try cloaude code yolo setup
+
+
+ask permission notification and mobile for amp and other agents etc.
+
+linting and type setup improvements, dep updates
+
+finish workerd containers
