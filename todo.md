@@ -2971,9 +2971,49 @@ darc code website and standalone focus release?
 
 app vm separate from system vm > try cloaude code yolo setup
 
-
 ask permission notification and mobile for amp and other agents etc.
 
 linting and type setup improvements, dep updates
 
 finish workerd containers
+
+viewers for file types v scode eg contact, calender, todo, links/tabs, posts, etc
+
+mergers for file types with merge ui and resoltuion logic
+
+transformers to transform file types into common json
+
+reverse web-mcp
+
+chat and vscode instances as first class citicens tabs
+
+darc youtube office hours design sessions
+
+further hardening: services:
+  sandbox:
+    image: alpine
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid
+    network_mode: none
+    mem_limit: 512m
+    pids_limit: 100
+    # No volumes from host!
+
+multiple context and colima management support
+    gpu-profile (models + linux webtop) merge with darc?
+    darc(-system) VZ
+    untrusted (agents + apps) VZ + seccomp + MAC profile + gvisor
+    + variants of these on remotes
+
+stack > subfolder support and rename
+
+agent proxy with secret management integration
+
+os secret store
+
+pie menu

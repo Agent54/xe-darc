@@ -33,7 +33,7 @@
         }
     }
 
-    // Clear forceHibernated when tab is no longer active
+    // Clear forceHibernated when tab is no longer active TODO: cleanup, move to data store
     $effect(() => {
         if (data.spaceMeta.activeTabId !== tabId && data.frames[tabId]?.forceHibernated) {
             data.frames[tabId].forceHibernated = false

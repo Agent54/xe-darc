@@ -1,5 +1,6 @@
 name: Build and Release IWA
 
+# TODO: alpha channel  = main, nightly channel = int
 on:
   push:
     branches: [int]
@@ -18,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '23'
+          node-version: '24'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -26,6 +27,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+
+      # FIXME: use secret env var instead of file!
       - name: Write signing key
         run: |
           mkdir -p certs
