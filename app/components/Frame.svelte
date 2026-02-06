@@ -1576,8 +1576,8 @@
     .lightbox-backdrop {
         position: absolute;
         top: 0;
-        /* left: 0; */
-        /* width: 100%; */
+        left: 0;
+        width: 100%;
         height: 100%;
         background: rgb(0 0 0 / 58%);
         backdrop-filter: blur(1px);
@@ -1586,7 +1586,6 @@
         justify-content: center;
         padding: 40px;
         z-index: 1;
-        width: calc(100vw - var(--space-taken, 0px) - 18px);
         /* CSS optimization tricks */
         will-change: opacity, backdrop-filter;
         transform: translateZ(0);

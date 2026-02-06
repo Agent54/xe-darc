@@ -1043,6 +1043,17 @@ export default {
             if (previews[parentId]) {
                 previews[parentId].lightbox = null
             }
+
+            const frameData = frames[lightboxId]
+            if (frameData?.frame) {
+                const backgroundFrames = document.getElementById('backgroundFrames')
+                const anchorFrame = document.getElementById('anchorFrame')
+                if (backgroundFrames && anchorFrame) {
+                    backgroundFrames.moveBefore(frameData.frame, anchorFrame)
+                    delete frameData.wrapper
+                }
+            }
+
             db.put({ ...lbTab })
             return
         }
