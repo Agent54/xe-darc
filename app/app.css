@@ -2043,6 +2043,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     top: 50px; /* Start below tab bar, aligned with main frames */
     left: 0;
     width: var(--left-pinned-width, 0px);
+    max-width: calc(100vw - 25px);
     height: calc(100vh - 52px); /* Account for tab bar height */
     padding: 9px 8px 9px 9px; /* Add 8px right padding */
     display: flex;
@@ -2067,6 +2068,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     top: 50px;
     right: var(--sidebar-width, 0px);
     width: var(--right-pinned-width, 0px);
+    max-width: calc(100vw - 25px);
     height: calc(100vh - 52px); /* Account for tab bar height */
     padding: 9px 9px 9px 0;
     border-radius: 8px 0 0 8px; /* Round left corners to match frames */
@@ -2078,6 +2080,9 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     z-index: 1;
     transition: width 0.1s ease-out, right 0.1s ease-out;
     overflow: visible;
+}
+.pinned-frames-right .frame, .pinned-frames-left .frame {
+     max-width: calc(100vw - 60px);
 }
 
 .pinned-frames-left.window-controls-overlay {

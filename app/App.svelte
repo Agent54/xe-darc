@@ -2202,7 +2202,7 @@
         // Use requestAnimationFrame for smooth updates
         resizeAnimationFrame = requestAnimationFrame(() => {
             const deltaX = event.clientX - resizeStartX
-            const newWidth = Math.max(345, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 345px, max 50% viewport
+            const newWidth = Math.max(25, Math.min(window.innerWidth - 25, resizeStartWidth + deltaX))
             customLeftPinnedWidth = newWidth
             
             // Keep the visible frame in view
@@ -2251,7 +2251,7 @@
         // Use requestAnimationFrame for smooth updates
         resizeAnimationFrame = requestAnimationFrame(() => {
             const deltaX = resizeStartX - event.clientX // Inverted for right side
-            const newWidth = Math.max(345, Math.min(window.innerWidth * 0.5, resizeStartWidth + deltaX)) // Min 345px, max 50% viewport
+            const newWidth = Math.max(25, Math.min(window.innerWidth - 25, resizeStartWidth + deltaX))
             customRightPinnedWidth = newWidth
             
             // Keep the visible frame in view
