@@ -1,18 +1,21 @@
 name: Build and Release IWA
 
-# TODO: alpha channel  = main, nightly channel = int
 on:
-  push:
-    branches: [int]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (e.g. 1.0.47). Leave empty to auto-increment patch.'
+        required: false
 
 permissions:
   contents: write
 
+# FIXME: use secret env var instead of files!
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -27,8 +30,58 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Determine channel from branch
+        id: channel
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          if [ "$BRANCH" = "main" ]; then
+            echo "channel=default" >> $GITHUB_OUTPUT
+          elif [ "$BRANCH" = "int" ]; then
+            echo "channel=nightly" >> $GITHUB_OUTPUT
+          else
+            echo "channel=default" >> $GITHUB_OUTPUT
+          fi
 
-      # FIXME: use secret env var instead of file!
+      - name: Fetch existing iwa-updates.json
+        run: |
+          gh release download updates \
+            -p iwa-updates.json -D . --clobber 2>/dev/null || echo '{"versions":[],"channels":{"default":{"name":"Stable"},"nightly":{"name":"Nightly"}}}' > iwa-updates.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version
+        id: version
+        run: |
+          VERSION_INPUT="${{ github.event.inputs.version }}"
+          VERSION_TAG_PREFIX="darc-v"
+
+          if [ -n "$VERSION_INPUT" ]; then
+            export VERSION="$VERSION_INPUT"
+          fi
+
+          # Run bump to get the version, then read it back
+          export CHANNEL="${{ steps.channel.outputs.channel }}"
+          export VERSION_TAG="placeholder"
+          export REPO="${{ github.repository }}"
+          node bump_version.js
+
+          # Read the actual version from package.json
+          ACTUAL_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('./package.json','utf8')).version")
+          echo "version=$ACTUAL_VERSION" >> $GITHUB_OUTPUT
+          echo "version_tag=${VERSION_TAG_PREFIX}${ACTUAL_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Update iwa-updates.json download URL with correct version tag
+        run: |
+          node -e "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync('./iwa-updates.json','utf-8'));
+            const v = '${{ steps.version.outputs.version }}';
+            const tag = '${{ steps.version.outputs.version_tag }}';
+            const entry = m.versions.find(e => e.version === v);
+            if (entry) entry.src = 'https://github.com/${{ github.repository }}/releases/download/' + tag + '/darc.swbn';
+            fs.writeFileSync('./iwa-updates.json', JSON.stringify(m, null, 2));
+          "
+
       - name: Write signing key
         run: |
           mkdir -p certs
@@ -40,41 +93,38 @@ jobs:
       - name: Build signed bundle
         run: node build-swbn.js
 
-      - name: Get version from manifest
-        id: version
+      - name: Commit version bump
         run: |
-          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('./public/.well-known/manifest.webmanifest', 'utf8')).version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json public/.well-known/manifest.webmanifest
+          git diff --cached --quiet || git commit -m "release: v${{ steps.version.outputs.version }}"
+          git push origin ${{ github.ref_name }}
 
-      - name: Update iwa-updates.json for release
+      - name: Create version tag
         run: |
-          cat > iwa-updates.json << EOF
-          {
-            "versions": [
-              {
-                "version": "${{ steps.version.outputs.version }}",
-                "src": "https://github.com/${{ github.repository }}/releases/download/latest/darc.swbn",
-                "channels": ["default"]
-              }
-            ],
-            "channels": {
-              "default": { "name": "Stable" }
-            }
-          }
-          EOF
+          git tag ${{ steps.version.outputs.version_tag }}
+          git push origin ${{ steps.version.outputs.version_tag }}
 
-      - name: Delete existing latest release
-        run: gh release delete latest --yes || true
+      - name: Create versioned release
+        run: |
+          gh release create ${{ steps.version.outputs.version_tag }} \
+            --title "v${{ steps.version.outputs.version }}" \
+            --notes "Release v${{ steps.version.outputs.version }} (${{ steps.channel.outputs.channel }} channel) from commit ${{ github.sha }}" \
+            ${{ steps.channel.outputs.channel == 'nightly' && '--prerelease' || '' }} \
+            darc.swbn
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create latest release
+      - name: Update unified iwa-updates.json release
         run: |
-          gh release create latest \
-            --title "Latest Build (v${{ steps.version.outputs.version }})" \
-            --notes "Automated IWA build from commit ${{ github.sha }}" \
-            --prerelease \
-            darc.swbn \
-            iwa-updates.json
+          if gh release view updates &>/dev/null; then
+            gh release upload updates --clobber iwa-updates.json
+          else
+            gh release create updates \
+              --title "IWA Update Manifest" \
+              --notes "Unified update manifest for all channels. Do not delete." \
+              iwa-updates.json
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

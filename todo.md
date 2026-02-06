@@ -3019,3 +3019,13 @@ os secret store
 pie menu
 
 vscede container extension fork with watch mode support etc.
+
+fix carabiner sticky keys
+
+fix search jump to position broken on pages
+
+writing co experiance with parallel write streams where pulling in suggesteions is seamless and does not interrupt the flow of writing. sidebar with diffs, snippets, paragraphs, or layout suggestions
+
+
+replace lightbox parent workflow breaks the tab active handling and next lightbox handling
+

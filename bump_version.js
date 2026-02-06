@@ -1,22 +1,29 @@
 /**
  * Bump version for IWA releases
- * 
+ *
  * Usage:
+ *   node bump_version.js
  *   VERSION=1.0.47 node bump_version.js
- *   
- * Or with full tag format:
- *   VERSION=darc-v1.0.47 node bump_version.js
+ *   VERSION=1.0.47 CHANNEL=nightly VERSION_TAG=darc-v1.0.47 REPO=Agent54/xe-darc node bump_version.js
+ *
+ * Environment variables:
+ *   VERSION      - Explicit version (optional, auto-increments patch if omitted)
+ *   CHANNEL      - Update channel: "default" or "nightly" (default: "default")
+ *   VERSION_TAG  - Git tag for this version, used in download URL (default: "latest")
+ *   REPO         - GitHub repo in owner/repo format (default: "Agent54/xe-darc")
  */
 
 import fs from 'fs';
 
 const tagPrefix = 'darc-v';
+const channel = process.env.CHANNEL || 'default';
+const versionTag = process.env.VERSION_TAG || 'latest';
+const repo = process.env.REPO || 'Agent54/xe-darc';
 
-let version = process.env?.VERSION;
+let version = process.env.VERSION;
 if (version) {
   version = version.replace(tagPrefix, '');
 } else {
-  // Auto-increment patch version from manifest
   const manifest = JSON.parse(
     fs.readFileSync('./public/.well-known/manifest.webmanifest', 'utf-8'),
   );
@@ -31,6 +38,9 @@ const manifest = JSON.parse(
   fs.readFileSync('./public/.well-known/manifest.webmanifest', 'utf-8'),
 );
 manifest.version = version;
+
+manifest.update_manifest_url = `https://github.com/${repo}/releases/download/updates/iwa-updates.json`;
+
 fs.writeFileSync(
   './public/.well-known/manifest.webmanifest',
   JSON.stringify(manifest, null, 2),
@@ -38,29 +48,38 @@ fs.writeFileSync(
 console.log(`Updated manifest.webmanifest to version ${version}`);
 
 // Update IWA Update Manifest
-const updateManifestPath = './public/iwa-updates.json';
-if (fs.existsSync(updateManifestPath)) {
-  const updateManifest = JSON.parse(fs.readFileSync(updateManifestPath, 'utf-8'));
-  
-  // Check if version already exists
-  const existingIndex = updateManifest.versions.findIndex(v => v.version === version);
-  
-  const newEntry = {
-    version,
-    src: `https://github.com/Agent54/xe-darc/releases/download/latest/darc.swbn`,
-    channels: ['default']
-  };
-  
-  if (existingIndex >= 0) {
-    updateManifest.versions[existingIndex] = newEntry;
-  } else {
-    // Add new version at the beginning (newest first)
-    updateManifest.versions.unshift(newEntry);
-  }
-  
-  fs.writeFileSync(updateManifestPath, JSON.stringify(updateManifest, null, 2));
-  console.log(`Updated iwa-updates.json with version ${version}`);
+const updateManifestPath = './iwa-updates.json';
+const defaultManifest = {
+  versions: [],
+  channels: {
+    default: { name: 'Stable' },
+    nightly: { name: 'Nightly' },
+  },
+};
+
+const updateManifest = fs.existsSync(updateManifestPath)
+  ? JSON.parse(fs.readFileSync(updateManifestPath, 'utf-8'))
+  : defaultManifest;
+
+const existingIndex = updateManifest.versions.findIndex(v => v.version === version);
+const newEntry = {
+  version,
+  src: `https://github.com/${repo}/releases/download/${versionTag}/darc.swbn`,
+  channels: [channel],
+};
+
+if (existingIndex >= 0) {
+  updateManifest.versions[existingIndex] = newEntry;
+} else {
+  updateManifest.versions.unshift(newEntry);
 }
+
+if (!updateManifest.channels) {
+  updateManifest.channels = defaultManifest.channels;
+}
+
+fs.writeFileSync(updateManifestPath, JSON.stringify(updateManifest, null, 2));
+console.log(`Updated iwa-updates.json with version ${version} on channel ${channel}`);
 
 // Update package.json version
 const packagePath = './package.json';
@@ -72,4 +91,3 @@ if (fs.existsSync(packagePath)) {
 }
 
 console.log(`\nVersion bump complete: ${version}`);
-console.log(`Run 'pnpm build:swbn' to create the signed bundle.`);

@@ -107,6 +107,11 @@ The project supports multiple deployment targets:
 ## Controlled Frame API
 The project implements the Controlled Frame specification (https://wicg.github.io/controlled-frame) for advanced iframe control and security.
 
+
+## Comments
+Do not make verbose comments unless needed to understand something not obvious. 
+NEVER EVER remove existing comments or commented out code unless you added them in the current session.
+
 ## UI/UX Guidelines
 
 
