@@ -1033,6 +1033,29 @@ export default {
         }
     },
 
+    promoteLightboxToTab: (lightboxId, parentId, { focus = true } = {}) => {
+        const lbTab = docs[lightboxId]
+        if (!lbTab) return
+        const parentTab = docs[parentId]
+        if (!parentTab) return
+        const spaceTabs = spaces[parentTab.spaceId]?.tabs || []
+        const sorted = spaceTabs.slice().sort((a, b) => (a.order || 0) - (b.order || 0))
+        const parentIdx = sorted.findIndex(t => t._id === parentTab._id)
+        const nextTab = sorted[parentIdx + 1]
+        const newOrder = nextTab ? (parentTab.order + nextTab.order) / 2 : parentTab.order + 1
+        lbTab.lightbox = false
+        lbTab.preview = false
+        lbTab.archive = undefined
+        lbTab.order = newOrder
+        spaceTabs.push(lbTab)
+        if (previews[parentId]) {
+            previews[parentId].lightbox = null
+            previews[parentId].tabs = previews[parentId].tabs.filter(t => t._id !== lightboxId)
+        }
+        db.put({ ...lbTab })
+        if (focus) activate(lightboxId)
+    },
+
     permissionRequest: (tabId, event) => {
         let permission = permissions[event.permission]
         const origin = new URL(event.url).origin

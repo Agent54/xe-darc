@@ -6,6 +6,7 @@
     import UrlRenderer from './UrlRenderer.svelte'
     import Tooltip from './Tooltip.svelte'
     import AttachmentImage from './AttachmentImage.svelte'
+    import LightboxHeader from './LightboxHeader.svelte'
     import { origin } from '../lib/utils.js'
     import data from '../data.svelte.js'
 
@@ -568,7 +569,26 @@
                 data.unhibernate(tab.id)
             }}
         >
-            {#if tab.screenshot}
+            {#if data.previews[tab._id]?.lightbox && data.docs[data.previews[tab._id].lightbox]}
+                {@const lbTab = data.docs[data.previews[tab._id].lightbox]}
+                <div class="hibernated-lightbox-preview">
+                    {#if tab.screenshot}
+                        <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="" class="hibernated-lightbox-bg" lazy={true} />
+                    {/if}
+                    <div class="hibernated-lightbox-card">
+                        <LightboxHeader url={lbTab.url} title={lbTab.title} showControls={false} />
+                        {#if lbTab.screenshot}
+                            <div class="hibernated-lightbox-body">
+                                <AttachmentImage src={lbTab.screenshot} digest={lbTab._attachments?.screenshot?.digest} alt="Lightbox preview" class="hibernated-lightbox-screenshot" lazy={true} />
+                            </div>
+                        {:else}
+                            <div class="hibernated-lightbox-body hibernated-lightbox-empty">
+                                <div class="hibernated-text">{lbTab.title || lbTab.url}</div>
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+            {:else if tab.screenshot}
                 <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Hibernated tab preview" class="hibernated-screenshot" lazy={true} />
             {:else}
                 <div class="hibernated-placeholder">
@@ -910,80 +930,16 @@
             >
                 <div class="lightbox-container" 
                     in:scale={{duration: 100}}>
-                    <div class="lightbox-header">
-                        <div class="lightbox-title">
-                            <img 
-                                src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={lightboxChild?.url}&size=16"
-                                alt=""
-                                class="lightbox-favicon"
-                            />
-                            <UrlRenderer url={lightboxChild?.url} variant="compact" />
-                        </div>
-                        <div class="lightbox-controls">
-                            <Tooltip text="Move to new tab" position="bottom">
-                                <button 
-                                    class="lightbox-move-to-tab"
-                                    aria-label="Move to new tab"
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M9 9h3v3"/>
-                                        <path d="M9 21V9a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z"/>
-                                        <path d="M5 3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/>
-                                    </svg>
-                                </button>
-                            </Tooltip>
-                            <Tooltip text="Expand to full tab" position="bottom">
-                                <button 
-                                    class="lightbox-expand-full"
-                                    aria-label="Expand to full tab"
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="15,3 21,3 21,9"></polyline>
-                                        <polyline points="9,21 3,21 3,15"></polyline>
-                                        <line x1="21" y1="3" x2="14" y2="10"></line>
-                                        <line x1="3" y1="21" x2="10" y2="14"></line>
-                                    </svg>
-                                </button>
-                            </Tooltip>
-                            <Tooltip text="Collapse to preview card" position="bottom">
-                                <button 
-                                    class="lightbox-collapse-preview"
-                                    aria-label="Collapse to preview card"
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="4,14 10,14 10,20"></polyline>
-                                        <polyline points="20,10 14,10 14,4"></polyline>
-                                        <line x1="14" y1="10" x2="21" y2="3"></line>
-                                        <line x1="3" y1="21" x2="10" y2="14"></line>
-                                    </svg>
-                                </button>
-                            </Tooltip>
-                            <Tooltip text="Settings" position="bottom">
-                                <button 
-                                    class="lightbox-settings"
-                                    aria-label="Settings"
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="3"></circle>
-                                        <path d="m12 1 0 6m0 6 0 6"></path>
-                                        <path d="M9 12 3 7.02M21 7.02 15 12m0 0 6 4.98M3 16.98 9 12"></path>
-                                    </svg>
-                                </button>
-                            </Tooltip>
-                            <Tooltip text="Close" position="bottom">
-                                <button 
-                                    class="lightbox-close"
-                                    aria-label="Close lightbox"
-                                    onmousedown={() => closeLightbox(tab.spaceId, lightboxChild?._id)}
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                </button>
-                            </Tooltip>
-                        </div>
-                    </div>
+                    <LightboxHeader
+                        url={lightboxChild?.url}
+                        title={lightboxChild?.title}
+                        tabId={lightboxChild?.id}
+                        onMoveToTab={(e) => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { focus: !e.metaKey })}
+                        onExpandFull={() => {}}
+                        onCollapsePreview={() => {}}
+                        onSettings={() => {}}
+                        onClose={() => closeLightbox(tab.spaceId, lightboxChild?._id)}
+                    />
                     <div class="lightbox-frame">
                         <ControlledFrame
                             {style}
@@ -1040,6 +996,69 @@
         object-fit: cover;
         object-position: top left;
         border-radius: 18px;
+    }
+
+    .hibernated-lightbox-preview {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgb(0 0 0 / 58%);
+    }
+
+    :global(.hibernated-lightbox-bg.attachment-container) {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0.4;
+        filter: blur(8px);
+        z-index: 0;
+    }
+
+    :global(.hibernated-lightbox-bg .attachment-image) {
+        object-fit: cover;
+        object-position: top left;
+    }
+
+    .hibernated-lightbox-card {
+        position: relative;
+        z-index: 1;
+        width: calc(100% - 160px);
+        height: calc(100% - 160px);
+        border-radius: 16px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+        display: flex;
+        flex-direction: column;
+        background: rgb(0 0 0);
+    }
+
+    .hibernated-lightbox-body {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .hibernated-lightbox-empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+
+    :global(.hibernated-lightbox-screenshot) {
+        width: 100%;
+        height: 100%;
+        opacity: 0.7;
+    }
+
+    :global(.hibernated-lightbox-screenshot .attachment-image) {
+        object-fit: cover;
+        object-position: top left;
     }
 
     .hibernated-placeholder {
@@ -1596,7 +1615,7 @@
             0 0 0 1px rgba(255, 255, 255, 0.05);
         display: flex;
         flex-direction: column;
-        overflow: hidden;
+        overflow: visible;
         /* CSS optimization tricks */
         will-change: transform, opacity, box-shadow;
         transform: translateZ(0);
@@ -1610,78 +1629,6 @@
     }
     .lightbox-container :global(.frame > *) {
         border-radius: 15px;
-    }
-
-    .lightbox-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 12px 16px;
-        /* border-bottom: 1px solid rgba(255, 255, 255, 0.1); */
-        background: rgba(0, 0, 0, 0.3);
-        flex-shrink: 0;
-    }
-
-    .lightbox-title {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 12px;
-        font-weight: 500;
-        min-width: 0;
-        flex: 1;
-    }
-
-    .lightbox-favicon {
-        width: 16px;
-        height: 16px;
-        flex-shrink: 0;
-        border-radius: 2px;
-    }
-
-    .lightbox-controls {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        flex-shrink: 0;
-    }
-
-    .lightbox-move-to-tab,
-    .lightbox-expand-full,
-    .lightbox-collapse-preview,
-    .lightbox-settings,
-    .lightbox-close {
-        width: 24px;
-        height: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: transparent;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        color: rgba(255, 255, 255, 0.6);
-        transition: background 0.2s ease, color 0.2s ease;
-        flex-shrink: 0;
-    }
-
-    .lightbox-move-to-tab:hover,
-    .lightbox-expand-full:hover,
-    .lightbox-collapse-preview:hover,
-    .lightbox-settings:hover,
-    .lightbox-close:hover {
-        background: rgba(255, 255, 255, 0.15);
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    .lightbox-move-to-tab svg,
-    .lightbox-expand-full svg,
-    .lightbox-collapse-preview svg,
-    .lightbox-settings svg,
-    .lightbox-close svg {
-        width: 14px;
-        height: 14px;
     }
 
     .lightbox-frame {

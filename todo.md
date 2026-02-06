@@ -3017,3 +3017,5 @@ agent proxy with secret management integration
 os secret store
 
 pie menu
+
+vscede container extension fork with watch mode support etc.
