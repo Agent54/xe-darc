@@ -935,8 +935,8 @@
                         title={lightboxChild?.title}
                         tabId={lightboxChild?.id}
                         onMoveToTab={(e) => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { focus: !e.metaKey })}
-                        onExpandFull={() => {}}
-                        onCollapsePreview={() => {}}
+                        onExpandFull={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { closeParent: true })}
+                        onCollapsePreview={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { toPreview: true })}
                         onSettings={() => {}}
                         onClose={() => closeLightbox(tab.spaceId, lightboxChild?._id)}
                     />
@@ -1028,7 +1028,7 @@
         width: calc(100% - 160px);
         height: calc(100% - 160px);
         border-radius: 16px;
-        overflow: hidden;
+        overflow: visible;
         border: 1px solid rgba(255, 255, 255, 0.08);
         box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
         display: flex;
@@ -1041,6 +1041,7 @@
         min-height: 0;
         position: relative;
         overflow: hidden;
+        border-radius: 0 0 16px 16px;
     }
 
     .hibernated-lightbox-empty {

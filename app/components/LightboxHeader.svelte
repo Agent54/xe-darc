@@ -54,6 +54,7 @@
                     <button
                         class="lightbox-btn"
                         aria-label="Expand to full tab"
+                        onmousedown={onExpandFull}
                     >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="15,3 21,3 21,9"></polyline>
@@ -69,6 +70,7 @@
                     <button
                         class="lightbox-btn"
                         aria-label="Collapse to preview card"
+                        onmousedown={onCollapsePreview}
                     >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="4,14 10,14 10,20"></polyline>

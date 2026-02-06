@@ -1033,27 +1033,54 @@ export default {
         }
     },
 
-    promoteLightboxToTab: (lightboxId, parentId, { focus = true } = {}) => {
+    promoteLightboxToTab: (lightboxId, parentId, { focus = true, toPreview = false, closeParent = false } = {}) => {
         const lbTab = docs[lightboxId]
-        if (!lbTab) return
         const parentTab = docs[parentId]
-        if (!parentTab) return
-        const spaceTabs = spaces[parentTab.spaceId]?.tabs || []
-        const sorted = spaceTabs.slice().sort((a, b) => (a.order || 0) - (b.order || 0))
-        const parentIdx = sorted.findIndex(t => t._id === parentTab._id)
-        const nextTab = sorted[parentIdx + 1]
-        const newOrder = nextTab ? (parentTab.order + nextTab.order) / 2 : parentTab.order + 1
+
+        if (toPreview) {
+            lbTab.lightbox = false
+            lbTab.preview = true
+            if (previews[parentId]) {
+                previews[parentId].lightbox = null
+            }
+            db.put({ ...lbTab })
+            return
+        }
+
+        const frameData = frames[lightboxId]
+        if (frameData?.frame) {
+            const backgroundFrames = document.getElementById('backgroundFrames')
+            const anchorFrame = document.getElementById('anchorFrame')
+            if (backgroundFrames && anchorFrame) {
+                backgroundFrames.moveBefore(frameData.frame, anchorFrame)
+                delete frameData.wrapper
+            }
+        }
+
+        //  FIXME: order not consistent const nextTab = sorted[parentIdx + 1]
+        const newOrder = parentTab.order + 1 // TODO: nextTab ? (parentTab.order + nextTab.order) / 2 : parentTab.order + 1
         lbTab.lightbox = false
         lbTab.preview = false
-        lbTab.archive = undefined
         lbTab.order = newOrder
-        spaceTabs.push(lbTab)
+        const spaceTabs = spaces[parentTab.spaceId]?.tabs
+        if (spaceTabs) {
+            spaceTabs.push(lbTab)
+        }
+
         if (previews[parentId]) {
             previews[parentId].lightbox = null
             previews[parentId].tabs = previews[parentId].tabs.filter(t => t._id !== lightboxId)
         }
+
         db.put({ ...lbTab })
-        if (focus) activate(lightboxId)
+
+        if (closeParent) {
+            closeTab(parentTab.spaceId, parentId)
+        }
+
+        if (focus) {
+            activate(lightboxId)
+        }
     },
 
     permissionRequest: (tabId, event) => {
