@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "update_manifest_url": "https://github.com/Agent54/xe-darc/releases/download/updates/iwa-updates.json",
   "short_name": "Darc",
-  "description": "U&A modified Isolated Web App to test the Controlled Frame API.",
+  "description": "A xenon browser",
   "categories": [
     "productivity"
   ],
@@ -115,7 +115,7 @@
     "picture-in-picture",
     "clipboard-read",
     "clipboard-write",
-    " screen-wake-lock"
+    "screen-wake-lock"
   ],
   "permissions_policy": {
     "sub-apps": [
