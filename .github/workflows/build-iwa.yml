@@ -52,7 +52,7 @@ jobs:
 
           ACTUAL_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('./package.json','utf8')).version")
           echo "version=$ACTUAL_VERSION" >> $GITHUB_OUTPUT
-          echo "version_tag=darc-v${ACTUAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "version_tag=v${ACTUAL_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Fix iwa-updates.json download URL
         run: |
@@ -127,7 +127,7 @@ jobs:
         id: version
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          VERSION_TAG="darc-v${VERSION}"
+          VERSION_TAG="v${VERSION}"
           if ! gh release view "$VERSION_TAG" &>/dev/null; then
             echo "::error::Release $VERSION_TAG not found. Build it on int first."
             exit 1
