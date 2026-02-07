@@ -22,6 +22,21 @@
       "sizes": "any"
     }
   ],
+  "screenshots": [
+    {
+      "src": "/screenshot.png",
+      "sizes": "1164x951",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Darc browser with stacked tabs"
+    },
+    {
+      "src": "/screenshot.png",
+      "sizes": "1164x951",
+      "type": "image/png",
+      "label": "Darc browser with stacked tabs"
+    }
+  ],
   "launch_handler": {
     "client_mode": "navigate-new"
   },

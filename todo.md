@@ -3029,3 +3029,4 @@ writing co experiance with parallel write streams where pulling in suggesteions 
 
 replace lightbox parent workflow breaks the tab active handling and next lightbox handling
 
+hovercards dont show lightbox
