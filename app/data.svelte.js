@@ -1010,6 +1010,7 @@ export default {
                     }
                 }
                 
+                
                 // Set screenshot property to attachment URL path
                 newProps.screenshot = `attachment://${tabId}/screenshot`
             } else if (screenshot === null || screenshot === undefined) {
