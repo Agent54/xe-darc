@@ -2115,6 +2115,9 @@ document.addEventListener('input', function(event) {
             try {
                 frameWrapper.moveBefore(controlledFrame, anchor)
                 attached = true
+                if (data.frames[tabId]?.promoted) {
+                    data.frames[tabId].promoted = false
+                }
             } catch (err) {
                 console.error('Error attaching ControlledFrame:', err)
                 tab?.id && delete data.frames[tab.id]
@@ -2129,7 +2132,7 @@ document.addEventListener('input', function(event) {
     onDestroy(async () => {
         await tick()
         // console.log('------------------', $state.snapshot(data.frames[tab.id].forceHibernated))
-        if (tab?.id && !detached && !data.frames[tab.id]?.forceHibernated) {
+        if (tab?.id && !detached && !data.frames[tab.id]?.forceHibernated && !data.frames[tab.id]?.promoted) {
             delete data.frames[tab.id]
         }
         

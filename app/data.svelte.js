@@ -1050,6 +1050,7 @@ export default {
 
             const frameData = frames[lightboxId]
             if (frameData?.frame) {
+                frameData.promoted = true
                 const backgroundFrames = document.getElementById('backgroundFrames')
                 const anchorFrame = document.getElementById('anchorFrame')
                 if (backgroundFrames && anchorFrame) {
@@ -1064,6 +1065,7 @@ export default {
 
         const frameData = frames[lightboxId]
         if (frameData?.frame) {
+            frameData.promoted = true
             const backgroundFrames = document.getElementById('backgroundFrames')
             const anchorFrame = document.getElementById('anchorFrame')
             if (backgroundFrames && anchorFrame) {
@@ -1076,6 +1078,8 @@ export default {
         const newOrder = parentTab.order + 1 // TODO: nextTab ? (parentTab.order + nextTab.order) / 2 : parentTab.order + 1
         lbTab.lightbox = false
         lbTab.preview = false
+        lbTab.archive = undefined
+        lbTab.opener = undefined
         lbTab.order = newOrder
         const spaceTabs = spaces[parentTab.spaceId]?.tabs
         if (spaceTabs) {
