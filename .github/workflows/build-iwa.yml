@@ -116,6 +116,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Validate version input
         run: |
           if [ -z "${{ github.event.inputs.version }}" ]; then
@@ -127,6 +129,7 @@ jobs:
         id: version
         run: |
           VERSION="${{ github.event.inputs.version }}"
+          VERSION="${VERSION#v}"
           VERSION_TAG="v${VERSION}"
           if ! gh release view "$VERSION_TAG" &>/dev/null; then
             echo "::error::Release $VERSION_TAG not found. Build it on int first."
