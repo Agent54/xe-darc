@@ -39,7 +39,7 @@ const manifest = JSON.parse(
 );
 manifest.version = version;
 
-manifest.update_manifest_url = `https://github.com/${repo}/releases/download/updates/iwa-updates.json`;
+manifest.update_manifest_url = `https://github.com/${repo}/releases/download/iwa-manifest/iwa-updates.json`;
 
 fs.writeFileSync(
   './public/.well-known/manifest.webmanifest',
