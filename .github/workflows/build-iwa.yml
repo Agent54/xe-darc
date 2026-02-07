@@ -92,7 +92,7 @@ jobs:
           git push origin ${{ steps.version.outputs.version_tag }}
           gh release create ${{ steps.version.outputs.version_tag }} \
             --title "v${{ steps.version.outputs.version }}" \
-            --notes "Nightly release v${{ steps.version.outputs.version }} from commit ${{ github.sha }}" \
+            --notes "v${{ steps.version.outputs.version }} from commit ${{ github.sha }}" \
             --prerelease \
             darc.swbn
         env:
@@ -158,6 +158,12 @@ jobs:
             fs.writeFileSync('./iwa-updates.json', JSON.stringify(m, null, 2));
             console.log('Promoted v' + v + ' to channels:', entry.channels);
           "
+
+      - name: Mark release as stable
+        run: |
+          gh release edit ${{ steps.version.outputs.version_tag }} --prerelease=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload updated iwa-updates.json
         run: |
