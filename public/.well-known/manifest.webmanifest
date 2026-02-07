@@ -1,11 +1,15 @@
 {
   "name": "Darc",
-  "version": "0.0.0",
-  "update_manifest_url": "https://github.com/Agent54/xe-darc/releases/download/latest/iwa-updates.json",
+  "version": "0.0.1",
+  "update_manifest_url": "https://github.com/Agent54/xe-darc/releases/download/updates/iwa-updates.json",
   "short_name": "Darc",
   "description": "U&A modified Isolated Web App to test the Controlled Frame API.",
-  "categories": ["productivity"],
-  "lang": ["en"],
+  "categories": [
+    "productivity"
+  ],
+  "lang": [
+    "en"
+  ],
   "dir": "ltr",
   "orientation": "landscape",
   "note_taking": {
@@ -31,7 +35,7 @@
         {
           "src": "/photon_logo.png",
           "sizes": "192x192"
-          }
+        }
       ]
     },
     {
@@ -43,7 +47,7 @@
         {
           "src": "/photon_logo.png",
           "sizes": "192x192"
-          }
+        }
       ]
     },
     {
@@ -55,7 +59,7 @@
         {
           "src": "/photon_logo.png",
           "sizes": "192x192"
-          }
+        }
       ]
     },
     {
@@ -67,7 +71,7 @@
         {
           "src": "/photon_logo.png",
           "sizes": "192x192"
-          }
+        }
       ]
     },
     {
@@ -79,7 +83,7 @@
         {
           "src": "/photon_logo.png",
           "sizes": "192x192"
-          }
+        }
       ]
     }
   ],
@@ -89,7 +93,10 @@
       "url": "/?handler=%s"
     }
   ],
-  "display_override": [ "borderless",  "window-controls-overlay" ],
+  "display_override": [
+    "borderless",
+    "window-controls-overlay"
+  ],
   "forground_color": "white",
   "start_url": "/",
   "scope": "/",
@@ -98,29 +105,103 @@
   "dark_theme_color": "black",
   "background_color": "black",
   "dark_background_color": "black",
-  "permissions": ["audioCapture", "window-management", "presentation-api","publickey-credentials-create","publickey-credentials-get", "display-capture", "picture-in-picture", "clipboard-read", "clipboard-write", " screen-wake-lock"],
+  "permissions": [
+    "audioCapture",
+    "window-management",
+    "presentation-api",
+    "publickey-credentials-create",
+    "publickey-credentials-get",
+    "display-capture",
+    "picture-in-picture",
+    "clipboard-read",
+    "clipboard-write",
+    " screen-wake-lock"
+  ],
   "permissions_policy": {
-    "sub-apps": ["self", "*"],
-    "screen-wake-lock": ["self"],
-    "controlled-frame": ["self"],
-    "picture-in-picture": ["self", "*"],
-    "display-capture": ["self", "*"],  
-    "cross-origin-isolated": ["self"],
-    "fullscreen": ["self", "*"],
-    "microphone": ["self", "*"],
-    "camera": ["self", "*"],
-    "window-management": ["self", "*"],
-    "publickey-credentials-create": ["self", "*"],
-    "publickey-credentials-get": ["self", "*"],
-    "geolocation": ["self", "*"],
-    "clipboard-read": ["self", "*"],
-    "clipboard-write": ["self", "*"],
-    "payment": ["self", "*"],
-    "usb": ["self", "*"],
-    "serial": ["self", "*"],
-    "hid": ["self", "*"],
-    "midi": ["self", "*"],
-    "xr-spatial-tracking": ["self", "*"],
-    "xr-device-access": ["self", "*"]
+    "sub-apps": [
+      "self",
+      "*"
+    ],
+    "screen-wake-lock": [
+      "self"
+    ],
+    "controlled-frame": [
+      "self"
+    ],
+    "picture-in-picture": [
+      "self",
+      "*"
+    ],
+    "display-capture": [
+      "self",
+      "*"
+    ],
+    "cross-origin-isolated": [
+      "self"
+    ],
+    "fullscreen": [
+      "self",
+      "*"
+    ],
+    "microphone": [
+      "self",
+      "*"
+    ],
+    "camera": [
+      "self",
+      "*"
+    ],
+    "window-management": [
+      "self",
+      "*"
+    ],
+    "publickey-credentials-create": [
+      "self",
+      "*"
+    ],
+    "publickey-credentials-get": [
+      "self",
+      "*"
+    ],
+    "geolocation": [
+      "self",
+      "*"
+    ],
+    "clipboard-read": [
+      "self",
+      "*"
+    ],
+    "clipboard-write": [
+      "self",
+      "*"
+    ],
+    "payment": [
+      "self",
+      "*"
+    ],
+    "usb": [
+      "self",
+      "*"
+    ],
+    "serial": [
+      "self",
+      "*"
+    ],
+    "hid": [
+      "self",
+      "*"
+    ],
+    "midi": [
+      "self",
+      "*"
+    ],
+    "xr-spatial-tracking": [
+      "self",
+      "*"
+    ],
+    "xr-device-access": [
+      "self",
+      "*"
+    ]
   }
 }
