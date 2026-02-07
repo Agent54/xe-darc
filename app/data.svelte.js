@@ -994,9 +994,12 @@ export default {
     
         if (typeof screenshot !== 'undefined') {
             if (screenshot && screenshot.startsWith('data:')) {
-                // Convert data URL to blob and store as attachment
-                const response = await fetch(screenshot)
-                const blob = await response.blob()
+                const [header, base64Data] = screenshot.split(',')
+                const mime = header.match(/:(.*?);/)?.[1] || 'image/png'
+                const binary = atob(base64Data)
+                const bytes = new Uint8Array(binary.length)
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+                const blob = new Blob([bytes], { type: mime })
                 
                 // Store as PouchDB attachment
                 newProps._attachments = {
@@ -1536,9 +1539,12 @@ export default {
             if (screenshot) {
                 const tab = docs[tabId]
                 if (tab) {
-                    // Convert data URL to blob and store as attachment
-                    const response = await fetch(screenshot)
-                    const blob = await response.blob()
+                    const [header, base64] = screenshot.split(',')
+                    const mime = header.match(/:(.*?);/)?.[1] || 'image/png'
+                    const binary = atob(base64)
+                    const bytes = new Uint8Array(binary.length)
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+                    const blob = new Blob([bytes], { type: mime })
                     
                     await db.put({
                         ...tab,

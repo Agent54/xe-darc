@@ -198,10 +198,6 @@
     "xr-spatial-tracking": [
       "self",
       "*"
-    ],
-    "xr-device-access": [
-      "self",
-      "*"
     ]
   }
 }

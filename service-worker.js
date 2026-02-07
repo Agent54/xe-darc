@@ -3,7 +3,7 @@ self.addEventListener('fetch', (e) => {
 
     if (e.request.url.includes('/app/test.js')) {
         const response = new Response(`export default function test() {
-    console.log('dynamic loading of js module successful')
+    console.log('dynamic loading of js module successful ${Math.random()}')
 }`, {
             status: 200,
             headers: {
