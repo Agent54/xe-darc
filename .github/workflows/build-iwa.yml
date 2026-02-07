@@ -1,19 +1,19 @@
 name: Build and Release IWA
 
+# TODO: alpha channel  = main, nightly channel = int
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version override (e.g. 1.0.47). Leave empty to auto-increment patch.'
+        description: 'For int: version override (leave empty to auto-increment). For main: version to promote to stable (required).'
         required: false
 
 permissions:
   contents: write
 
-# FIXME: use secret env var instead of files!
-
 jobs:
   build:
+    if: github.ref_name == 'int'
     runs-on: ubuntu-latest
 
     steps:
@@ -30,18 +30,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Determine channel from branch
-        id: channel
-        run: |
-          BRANCH="${{ github.ref_name }}"
-          if [ "$BRANCH" = "main" ]; then
-            echo "channel=default" >> $GITHUB_OUTPUT
-          elif [ "$BRANCH" = "int" ]; then
-            echo "channel=nightly" >> $GITHUB_OUTPUT
-          else
-            echo "channel=default" >> $GITHUB_OUTPUT
-          fi
-
       - name: Fetch existing iwa-updates.json
         run: |
           gh release download updates \
@@ -53,24 +41,20 @@ jobs:
         id: version
         run: |
           VERSION_INPUT="${{ github.event.inputs.version }}"
-          VERSION_TAG_PREFIX="darc-v"
-
           if [ -n "$VERSION_INPUT" ]; then
             export VERSION="$VERSION_INPUT"
           fi
 
-          # Run bump to get the version, then read it back
-          export CHANNEL="${{ steps.channel.outputs.channel }}"
+          export CHANNEL="nightly"
           export VERSION_TAG="placeholder"
           export REPO="${{ github.repository }}"
           node bump_version.js
 
-          # Read the actual version from package.json
           ACTUAL_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('./package.json','utf8')).version")
           echo "version=$ACTUAL_VERSION" >> $GITHUB_OUTPUT
-          echo "version_tag=${VERSION_TAG_PREFIX}${ACTUAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "version_tag=darc-v${ACTUAL_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Update iwa-updates.json download URL with correct version tag
+      - name: Fix iwa-updates.json download URL
         run: |
           node -e "
             const fs = require('fs');
@@ -82,6 +66,7 @@ jobs:
             fs.writeFileSync('./iwa-updates.json', JSON.stringify(m, null, 2));
           "
 
+      # FIXME: use secret env var instead of file!
       - name: Write signing key
         run: |
           mkdir -p certs
@@ -99,24 +84,21 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json public/.well-known/manifest.webmanifest
           git diff --cached --quiet || git commit -m "release: v${{ steps.version.outputs.version }}"
-          git push origin ${{ github.ref_name }}
+          git push origin int
 
-      - name: Create version tag
+      - name: Create version tag and release
         run: |
           git tag ${{ steps.version.outputs.version_tag }}
           git push origin ${{ steps.version.outputs.version_tag }}
-
-      - name: Create versioned release
-        run: |
           gh release create ${{ steps.version.outputs.version_tag }} \
             --title "v${{ steps.version.outputs.version }}" \
-            --notes "Release v${{ steps.version.outputs.version }} (${{ steps.channel.outputs.channel }} channel) from commit ${{ github.sha }}" \
-            ${{ steps.channel.outputs.channel == 'nightly' && '--prerelease' || '' }} \
+            --notes "Nightly release v${{ steps.version.outputs.version }} from commit ${{ github.sha }}" \
+            --prerelease \
             darc.swbn
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update unified iwa-updates.json release
+      - name: Update unified iwa-updates.json
         run: |
           if gh release view updates &>/dev/null; then
             gh release upload updates --clobber iwa-updates.json
@@ -126,5 +108,56 @@ jobs:
               --notes "Unified update manifest for all channels. Do not delete." \
               iwa-updates.json
           fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  promote:
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate version input
+        run: |
+          if [ -z "${{ github.event.inputs.version }}" ]; then
+            echo "::error::Version is required when promoting to stable. Specify the nightly version to promote."
+            exit 1
+          fi
+
+      - name: Verify nightly release exists
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          VERSION_TAG="darc-v${VERSION}"
+          if ! gh release view "$VERSION_TAG" &>/dev/null; then
+            echo "::error::Release $VERSION_TAG not found. Build it on int first."
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_tag=$VERSION_TAG" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch iwa-updates.json
+        run: |
+          gh release download updates -p iwa-updates.json -D . --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add default channel to version
+        run: |
+          node -e "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync('./iwa-updates.json','utf-8'));
+            const v = '${{ steps.version.outputs.version }}';
+            const entry = m.versions.find(e => e.version === v);
+            if (!entry) { console.error('Version ' + v + ' not found in iwa-updates.json'); process.exit(1); }
+            if (!entry.channels.includes('default')) entry.channels.push('default');
+            fs.writeFileSync('./iwa-updates.json', JSON.stringify(m, null, 2));
+            console.log('Promoted v' + v + ' to channels:', entry.channels);
+          "
+
+      - name: Upload updated iwa-updates.json
+        run: |
+          gh release upload updates --clobber iwa-updates.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
