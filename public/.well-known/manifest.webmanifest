@@ -1,13 +1,13 @@
 {
   "name": "Darc",
-  "version": "0.0.2",
-  "update_manifest_url": "https://github.com/Agent54/xe-darc/releases/download/updates/iwa-updates.json",
+  "version": "0.0.3",
+  "update_manifest_url": "https://github.com/Agent54/xe-darc/releases/download/iwa-manifest/iwa-updates.json",
   "short_name": "Darc",
   "description": "A xenon browser",
   "categories": [
     "productivity"
   ],
-  "lang": [ 
+  "lang": [
     "en"
   ],
   "dir": "ltr",
