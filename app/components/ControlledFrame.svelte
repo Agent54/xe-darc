@@ -1557,7 +1557,7 @@ document.addEventListener('input', function(event) {
         //     }
         // })
 
-        frame.addEventListener('consolemessage', (event) => {
+        frame.onconsolemessage = (event) => {
             // console.log('consolemessage', event)
             const message = event.message
             
@@ -1942,7 +1942,7 @@ document.addEventListener('input', function(event) {
             } else if (message.startsWith('iwa:contextmenu-native-forced:')) {
                 console.log(`🖱️ [CONTEXT MENU] Native context menu forced with cmd/ctrl key in tab ${mytab.id}`)
             }
-        })
+        }
     }
 
     // Generate random text changes for diff simulation
@@ -2113,8 +2113,10 @@ document.addEventListener('input', function(event) {
 
         if (!attached && controlledFrame && anchor) {
             try {
+                setupMessageListener(controlledFrame)
                 frameWrapper.moveBefore(controlledFrame, anchor)
                 attached = true
+
                 if (data.frames[tabId]?.promoted) {
                     data.frames[tabId].promoted = false
                 }
@@ -2132,8 +2134,11 @@ document.addEventListener('input', function(event) {
     onDestroy(async () => {
         await tick()
         // console.log('------------------', $state.snapshot(data.frames[tab.id].forceHibernated))
-        if (tab?.id && !detached && !data.frames[tab.id]?.forceHibernated && !data.frames[tab.id]?.promoted) {
+        if (tab?.id && !detached && !data.frames[tab.id]?.forceHibernated && !data.frames[tab.id]?.promoting) {
             delete data.frames[tab.id]
+        }
+        if (tab?.id && data.frames[tab.id]?.promoting) {
+            data.frames[tab.id].promoting = false
         }
         
         if (linkPreviewTimeout) {

@@ -1049,13 +1049,15 @@ export default {
             }
 
             const frameData = frames[lightboxId]
-            if (frameData?.frame) {
-                frameData.promoted = true
-                const backgroundFrames = document.getElementById('backgroundFrames')
-                const anchorFrame = document.getElementById('anchorFrame')
-                if (backgroundFrames && anchorFrame) {
-                    backgroundFrames.moveBefore(frameData.frame, anchorFrame)
-                    delete frameData.wrapper
+            if (frameData) {
+                frameData.promoting = true
+                if (frameData.frame) {
+                    const backgroundFrames = document.getElementById('backgroundFrames')
+                    const anchorFrame = document.getElementById('anchorFrame')
+                    if (backgroundFrames && anchorFrame) {
+                        backgroundFrames.moveBefore(frameData.frame, anchorFrame)
+                        delete frameData.wrapper
+                    }
                 }
             }
 
@@ -1064,13 +1066,15 @@ export default {
         }
 
         const frameData = frames[lightboxId]
-        if (frameData?.frame) {
-            frameData.promoted = true
-            const backgroundFrames = document.getElementById('backgroundFrames')
-            const anchorFrame = document.getElementById('anchorFrame')
-            if (backgroundFrames && anchorFrame) {
-                backgroundFrames.moveBefore(frameData.frame, anchorFrame)
-                delete frameData.wrapper
+        if (frameData) {
+            frameData.promoting = true
+            if (frameData.frame) {
+                const backgroundFrames = document.getElementById('backgroundFrames')
+                const anchorFrame = document.getElementById('anchorFrame')
+                if (backgroundFrames && anchorFrame) {
+                    backgroundFrames.moveBefore(frameData.frame, anchorFrame)
+                    delete frameData.wrapper
+                }
             }
         }
 
@@ -1079,7 +1083,6 @@ export default {
         lbTab.lightbox = false
         lbTab.preview = false
         lbTab.archive = undefined
-        lbTab.opener = undefined
         lbTab.order = newOrder
         const spaceTabs = spaces[parentTab.spaceId]?.tabs
         if (spaceTabs) {
