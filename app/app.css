@@ -2568,3 +2568,17 @@ header:hover .hover-menu {
 :global(select option[selected]) {
     background-color: gray;
 }
+
+/* Tab drag and drop */
+.tab-container.tab-dragging,
+.tab-item-container.tab-dragging {
+    opacity: 0.3;
+}
+
+.tab-drag-indicator {
+    position: fixed;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 2px;
+    z-index: 99999;
+    pointer-events: none;
+}

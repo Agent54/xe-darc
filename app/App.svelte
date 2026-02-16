@@ -24,6 +24,7 @@
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
+    import { tabDrag, startTabDrag } from './lib/tab-drag.svelte.js'
     window.darc = { data }
 
     // Proper detection of ControlledFrame API support
@@ -3275,9 +3276,10 @@
                         class:hibernated={data.isTabHibernated(tab.id)}
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
+                        class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
-                        onmousedown={(e) => { if (e.button === 0) activateTab(tab, i) }}
+                        onmousedown={(e) => { if (e.button === 0) { activateTab(tab, i); startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e) } }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
                         oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
                         onmouseenter={(e) => handleTabMouseEnter(tab, e)}
@@ -4624,11 +4626,46 @@
     </div>
 {/if}
 
+{#if tabDrag.indicator.visible}
+    <div class="tab-drag-indicator" style="
+        position: fixed;
+        left: {tabDrag.indicator.x}px;
+        top: {tabDrag.indicator.y}px;
+        width: {tabDrag.indicator.width}px;
+        height: {tabDrag.indicator.height}px;
+    "></div>
+{/if}
+
 <style>
     @import "app.css";
     
     *:focus {
         outline: none;
+    }
+    
+    :global(body.tab-dragging-active) .tab-container:not(.tab-dragging):hover,
+    :global(body.tab-dragging-active) .tab-container:not(.tab-dragging).hovered,
+    :global(body.tab-dragging-active) .tab-container:not(.tab-dragging).menu-open {
+        background-color: #ffffff0f !important;
+        border-color: hsl(0deg 0% 100% / 2%) !important;
+    }
+    
+    :global(body.tab-dragging-active) .tab-container.active:not(.tab-dragging):hover,
+    :global(body.tab-dragging-active) .tab-container.active:not(.tab-dragging).hovered,
+    :global(body.tab-dragging-active) .tab-container.active:not(.tab-dragging).menu-open {
+        background-color: rgb(255 255 255 / 17%) !important;
+        border-color: hsl(0deg 0% 100% / 6.5%) !important;
+    }
+
+    :global(body.tab-dragging-active) .tab-container:not(.tab-dragging) .close-btn {
+        opacity: 0 !important;
+        width: 0 !important;
+        pointer-events: none;
+    }
+    
+    :global(body.tab-dragging-active iframe),
+    :global(body.tab-dragging-active controlledframe) {
+        pointer-events: none;
     }
     
     .dev-color-badge {
