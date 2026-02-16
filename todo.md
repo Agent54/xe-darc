@@ -3022,8 +3022,6 @@ vscede container extension fork with watch mode support etc.
 
 fix carabiner sticky keys
 
-fix search jump to position broken on pages
-
 writing co experiance with parallel write streams where pulling in suggesteions is seamless and does not interrupt the flow of writing. sidebar with diffs, snippets, paragraphs, or layout suggestions
 
 
@@ -3032,3 +3030,17 @@ replace lightbox parent workflow breaks the tab active handling and next lightbo
 hovercards dont show lightbox
 
 zen mode not persistent
+
+allow build from main branch
+
+ai quue message manager
+
+official tiling library svelte for the layouts
+
+unify sidebar and gesture grid
+
+ua + darc as collective vibecoding environment  (clientside)
+
+darc app starter templates incl complete setup and agents.md
+
+fast nav with switching controlled frame instance on origin switch!!

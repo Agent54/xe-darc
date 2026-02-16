@@ -109,6 +109,9 @@
     }
   ],
   "display_override": [
+    "frameless",
+    "unframed",
+    "TODO:test",
     "borderless",
     "window-controls-overlay"
   ],

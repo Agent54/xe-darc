@@ -2563,6 +2563,7 @@
     .tab-content-container {
         overflow-x: auto;
         overflow-y: hidden;
+        overscroll-behavior-x: none;
         scroll-snap-type: x mandatory;
         scrollbar-width: none;
         -ms-overflow-style: none;
