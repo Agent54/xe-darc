@@ -3044,3 +3044,5 @@ ua + darc as collective vibecoding environment  (clientside)
 darc app starter templates incl complete setup and agents.md
 
 fast nav with switching controlled frame instance on origin switch!!
+
+smalltalk like environment

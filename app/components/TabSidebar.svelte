@@ -21,6 +21,7 @@
     import UrlBar from './UrlBar.svelte'
     import TabHoverCard from './TabHoverCard.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
+    import { tabDrag, startTabDrag } from '../lib/tab-drag.svelte.js'
     import { untrack } from 'svelte'
     
     let isHovered = $state(false)
@@ -1850,12 +1851,12 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} data-tab-id={tab.id}
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
                                                  role="listitem"
                                                  onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                  onmouseleave={handleTabMouseLeave}
                                                  oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) activateTab(tab.id, spaceId) }}>
+                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { activateTab(tab.id, spaceId); startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e) } }}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                                 </button>
@@ -2937,6 +2938,11 @@
         border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
+    :global(body.tab-dragging-active) .tab-item-container:not(.tab-dragging):hover {
+        background: #ffffff0f !important;
+        border-color: hsl(0deg 0% 100% / 2%) !important;
+    }
+    
     .tab-item-container.active {
         background: rgb(255 255 255 / 14%);
         border: 1px solid hsl(0deg 0% 100% / 4%);
@@ -2945,6 +2951,11 @@
     .tab-item-container.active:hover {
         background: rgb(255 255 255 / 17%);
         border: 1px solid hsl(0deg 0% 100% / 5%);
+    }
+    
+    :global(body.tab-dragging-active) .tab-item-container.active:not(.tab-dragging):hover {
+        background: rgb(255 255 255 / 14%) !important;
+        border-color: hsl(0deg 0% 100% / 4%) !important;
     }
     
     :global(.favicon-wrapper) {
@@ -2983,12 +2994,20 @@
         color: #fff;
     }
     
+    :global(body.tab-dragging-active) .tab-item-container:not(.tab-dragging):hover .tab-title {
+        color: #c3c3c3 !important;
+    }
+    
     .tab-item-container.active :global(.favicon-wrapper) {
         opacity: 0.87;
     }
     
     .tab-item-container:hover :global(.favicon-wrapper) {
         opacity: 1;
+    }
+    
+    :global(body.tab-dragging-active) .tab-item-container:not(.tab-dragging):hover :global(.favicon-wrapper) {
+        opacity: 0.6 !important;
     }
     
     /* Active tab in inactive space - bold text + opaque favicon, subtle border */
@@ -3034,6 +3053,13 @@
         opacity: 1;
         width: 25px;
         padding: 0 4px;
+    }
+    
+    :global(body.tab-dragging-active) .tab-item-container:hover .tab-close {
+        opacity: 0 !important;
+        width: 0 !important;
+        padding: 0 !important;
+        pointer-events: none;
     }
     
     .tab-close:hover {
