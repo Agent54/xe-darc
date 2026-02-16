@@ -3053,3 +3053,6 @@ hover effect card show optimal view for canvas elements
 show cnavas navigation trail graph while browsing mode
 
 composable widges / cnavas / ai zui exploraiton
+
+drag new window in canvas and write straight to agent
+
