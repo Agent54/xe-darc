@@ -1389,7 +1389,7 @@
                 
                 if (entry.isIntersecting) {
                     const timer = setTimeout(() => {
-                        if (tabChangeFromScroll) {
+                        if (tabChangeFromScroll || !initialScrollPerformed) {
                             return
                         }
             
