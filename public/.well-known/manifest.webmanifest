@@ -1,6 +1,6 @@
 {
   "name": "Darc",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "update_manifest_url": "https://github.com/Agent54/xe-darc/releases/download/iwa-manifest/iwa-updates.json",
   "short_name": "Darc",
   "description": "A xenon browser",
