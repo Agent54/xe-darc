@@ -3046,3 +3046,5 @@ darc app starter templates incl complete setup and agents.md
 fast nav with switching controlled frame instance on origin switch!!
 
 smalltalk like environment
+
+hover effect card show optimal view for canvas elements

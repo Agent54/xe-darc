@@ -21,8 +21,8 @@
     import UrlBar from './UrlBar.svelte'
     import TabHoverCard from './TabHoverCard.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
-    import { tabDrag, startTabDrag } from '../lib/tab-drag.svelte.js'
-    import { untrack } from 'svelte'
+    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred } from '../lib/tab-drag.svelte.js'
+    import { untrack, onMount } from 'svelte'
     
     let isHovered = $state(false)
     let tabListRef = $state(null)
@@ -98,6 +98,16 @@
         hoveredTab = null
         hovercardShowTime = null
     }
+    
+    onMount(() => {
+        const dismissHovercards = () => {
+            hoveredTab = null
+            hovercardShowTime = null
+            if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+        }
+        window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
+        return () => window.removeEventListener('darc-dismiss-hovercards', dismissHovercards)
+    })
 
     // Focus the URL input when it becomes visible
     $effect(() => {
@@ -1167,6 +1177,7 @@
     }
     
     function handleTabMouseEnter(tab, event) {
+        if (tabDrag.active) return
         // Disable hovercards while spacer is visible (scrolling to add space)
         const anySpacerVisible = Object.values(tabsListSpacerVisible).some(v => v)
         if (anySpacerVisible) return
@@ -1856,7 +1867,8 @@
                                                  onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                  onmouseleave={handleTabMouseLeave}
                                                  oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { activateTab(tab.id, spaceId); startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e) } }}>
+                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab.id, spaceId))) } } }}
+                                                    onclick={(e) => { if (e.button === 0 && !didDragOccurred() && tabDrag.wasAlreadyActive) activateTab(tab.id, spaceId) }}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                                 </button>
@@ -1988,7 +2000,7 @@
     </div>
 </div>
 
-{#if hoveredTab}
+{#if hoveredTab && !tabDrag.active}
     {#key hoveredTab.id}
         <div class="tab-hovercard-sidebar" 
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px; --hovercard-top: {hovercardPosition.y}px;">
@@ -2938,11 +2950,6 @@
         border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
-    :global(body.tab-dragging-active) .tab-item-container:not(.tab-dragging):hover {
-        background: #ffffff0f !important;
-        border-color: hsl(0deg 0% 100% / 2%) !important;
-    }
-    
     .tab-item-container.active {
         background: rgb(255 255 255 / 14%);
         border: 1px solid hsl(0deg 0% 100% / 4%);
@@ -2953,9 +2960,8 @@
         border: 1px solid hsl(0deg 0% 100% / 5%);
     }
     
-    :global(body.tab-dragging-active) .tab-item-container.active:not(.tab-dragging):hover {
-        background: rgb(255 255 255 / 14%) !important;
-        border-color: hsl(0deg 0% 100% / 4%) !important;
+    .tab-item-container.tab-dragging {
+        opacity: 0.3;
     }
     
     :global(.favicon-wrapper) {
@@ -2994,20 +3000,12 @@
         color: #fff;
     }
     
-    :global(body.tab-dragging-active) .tab-item-container:not(.tab-dragging):hover .tab-title {
-        color: #c3c3c3 !important;
-    }
-    
     .tab-item-container.active :global(.favicon-wrapper) {
         opacity: 0.87;
     }
     
     .tab-item-container:hover :global(.favicon-wrapper) {
         opacity: 1;
-    }
-    
-    :global(body.tab-dragging-active) .tab-item-container:not(.tab-dragging):hover :global(.favicon-wrapper) {
-        opacity: 0.6 !important;
     }
     
     /* Active tab in inactive space - bold text + opaque favicon, subtle border */
@@ -3053,13 +3051,6 @@
         opacity: 1;
         width: 25px;
         padding: 0 4px;
-    }
-    
-    :global(body.tab-dragging-active) .tab-item-container:hover .tab-close {
-        opacity: 0 !important;
-        width: 0 !important;
-        padding: 0 !important;
-        pointer-events: none;
     }
     
     .tab-close:hover {
