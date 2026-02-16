@@ -108,7 +108,7 @@
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
         {:else if faviconContent.type === 'image'}
-            <img src={faviconContent.src} alt="favicon" class="favicon" />
+            <img src={faviconContent.src} alt="favicon" class="favicon" draggable="false" />
         {:else if faviconContent.type === 'svg'}
             {@html faviconContent.markup}
         {:else if faviconContent.type === 'newTab'}
@@ -122,7 +122,7 @@
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
         {:else if faviconContent.type === 'image'}
-            <img src={faviconContent.src} alt="favicon" class="favicon" />
+            <img src={faviconContent.src} alt="favicon" class="favicon" draggable="false" />
         {:else if faviconContent.type === 'svg'}
             {@html faviconContent.markup}
         {:else if faviconContent.type === 'newTab'}

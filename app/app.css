@@ -2570,8 +2570,7 @@ header:hover .hover-menu {
 }
 
 /* Tab drag and drop */
-.tab-container.tab-dragging,
-.tab-item-container.tab-dragging {
+.tab-container.tab-dragging {
     opacity: 0.3;
 }
 
@@ -2581,4 +2580,5 @@ header:hover .hover-menu {
     border-radius: 2px;
     z-index: 99999;
     pointer-events: none;
+    transform: translate(-50%, -50%);
 }

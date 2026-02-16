@@ -9,8 +9,16 @@ const state = $state({
     tabEl: null,
     sourceZone: null, // 'topbar' or 'sidebar'
     sourceSpaceId: null,
+    wasAlreadyActive: false,
     startX: 0,
     startY: 0,
+    mouseX: 0,
+    mouseY: 0,
+    // Offset from mouse to tab element origin at drag start
+    grabOffsetX: 0,
+    grabOffsetY: 0,
+    previewWidth: 0,
+    previewHeight: 0,
     indicator: {
         visible: false,
         x: 0,
@@ -21,12 +29,21 @@ const state = $state({
 })
 
 let pending = null
+let activateRafId = null
+let didDrag = false
 
-function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e) {
+function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActive) {
     if (e.button !== 0) return
     pending = { tabId, tabEl, sourceZone, sourceSpaceId, startX: e.clientX, startY: e.clientY }
+    state.wasAlreadyActive = wasAlreadyActive
+    didDrag = false
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('keydown', handleKeyDown)
+}
+
+function setActivateRafId(id) {
+    activateRafId = id
 }
 
 function handleMouseMove(e) {
@@ -34,6 +51,13 @@ function handleMouseMove(e) {
         const dx = e.clientX - pending.startX
         const dy = e.clientY - pending.startY
         if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+            // Cancel pending tab activation so dragging doesn't switch tabs
+            if (activateRafId !== null) {
+                cancelAnimationFrame(activateRafId)
+                activateRafId = null
+            }
+            const tabRect = pending.tabEl.getBoundingClientRect()
+            didDrag = true
             state.active = true
             state.tabId = pending.tabId
             state.tabEl = pending.tabEl
@@ -41,9 +65,13 @@ function handleMouseMove(e) {
             state.sourceSpaceId = pending.sourceSpaceId
             state.startX = pending.startX
             state.startY = pending.startY
+            state.grabOffsetX = pending.startX - tabRect.left
+            state.grabOffsetY = pending.startY - tabRect.top
+            state.previewWidth = tabRect.width
+            state.previewHeight = tabRect.height
             document.body.classList.add('tab-dragging-active')
-            document.body.style.cursor = 'grabbing'
-            document.body.style.userSelect = 'none'
+            // Dismiss any open hovercards
+            window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
         }
     }
 
@@ -51,17 +79,19 @@ function handleMouseMove(e) {
 
     const mx = e.clientX
     const my = e.clientY
+    state.mouseX = mx
+    state.mouseY = my
 
     // Try top bar tabs first (horizontal)
     const topbarList = document.querySelector('.tab-list.tabs')
     if (topbarList) {
         const listRect = topbarList.getBoundingClientRect()
-        // Extend hit area vertically by a few px for easier targeting
         if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top - 4 && my <= listRect.bottom + 4) {
             const tabs = topbarList.querySelectorAll(':scope > .tab-container:not(.pinned-tab-container)')
-            const hit = findClosestHorizontal(tabs, mx)
+            const hit = findClosestTab(tabs, mx, 'x')
             if (hit) {
-                showIndicatorVerticalLine(hit.rect, hit.after)
+                if (isNoopDrop(tabs, hit)) { hideIndicator(); return }
+                showIndicator(tabs, hit.index, hit.after, 'x')
                 return
             }
         }
@@ -73,9 +103,10 @@ function handleMouseMove(e) {
         const listRect = list.getBoundingClientRect()
         if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top && my <= listRect.bottom) {
             const tabs = list.querySelectorAll(':scope > .tab-item-container')
-            const hit = findClosestVertical(tabs, my)
+            const hit = findClosestTab(tabs, my, 'y')
             if (hit) {
-                showIndicatorHorizontalLine(hit.rect, hit.after)
+                if (isNoopDrop(tabs, hit)) { hideIndicator(); return }
+                showIndicator(tabs, hit.index, hit.after, 'y')
                 return
             }
         }
@@ -84,81 +115,96 @@ function handleMouseMove(e) {
     hideIndicator()
 }
 
-// Find which tab the mouse is closest to horizontally
-// Each tab "owns" from its left edge minus half the gap to its right edge plus half the gap
-function findClosestHorizontal(tabs, mx) {
+function isNoopDrop(tabs, hit) {
+    const dragEl = state.tabEl
+    const i = hit.index
+    if (hit.el === dragEl) return true
+    if (hit.after && i + 1 < tabs.length && tabs[i + 1] === dragEl) return true
+    if (!hit.after && i - 1 >= 0 && tabs[i - 1] === dragEl) return true
+    return false
+}
+
+// Find which tab the mouse is closest to, returns { el, index, after }
+function findClosestTab(tabs, pos, axis) {
     if (!tabs.length) return null
-    for (const tab of tabs) {
-        const rect = tab.getBoundingClientRect()
-        // Each tab owns the space from midpoint of left gap to midpoint of right gap
-        const left = rect.left - 3.5  // half of 7px gap
-        const right = rect.right + 3.5
-        if (mx >= left && mx <= right) {
-            const mid = rect.left + rect.width / 2
-            return { rect, after: mx > mid }
+    const rects = Array.from(tabs).map(t => t.getBoundingClientRect())
+    
+    for (let i = 0; i < rects.length; i++) {
+        const r = rects[i]
+        const start = axis === 'x' ? r.left : r.top
+        const end = axis === 'x' ? r.right : r.bottom
+        const prevEnd = i > 0 ? (axis === 'x' ? rects[i-1].right : rects[i-1].bottom) : start
+        const nextStart = i < rects.length - 1 ? (axis === 'x' ? rects[i+1].left : rects[i+1].top) : end
+        
+        // This tab owns from midpoint of gap-before to midpoint of gap-after
+        const ownStart = (prevEnd + start) / 2
+        const ownEnd = (end + nextStart) / 2
+        
+        if (pos >= ownStart && pos <= ownEnd) {
+            const mid = (start + end) / 2
+            return { el: tabs[i], index: i, after: pos > mid }
         }
     }
-    // If past all tabs, snap to last one
-    const last = tabs[tabs.length - 1]
-    const lastRect = last.getBoundingClientRect()
-    if (mx > lastRect.right) return { rect: lastRect, after: true }
-    // If before all tabs, snap to first
-    const first = tabs[0]
-    const firstRect = first.getBoundingClientRect()
-    if (mx < firstRect.left) return { rect: firstRect, after: false }
-    return null
-}
-
-function findClosestVertical(tabs, my) {
-    if (!tabs.length) return null
-    for (const tab of tabs) {
-        const rect = tab.getBoundingClientRect()
-        const top = rect.top - 4  // half of 8px gap
-        const bottom = rect.bottom + 4
-        if (my >= top && my <= bottom) {
-            const mid = rect.top + rect.height / 2
-            return { rect, after: my > mid }
-        }
+    // Past all tabs
+    if (pos > rects[rects.length - 1][axis === 'x' ? 'right' : 'bottom']) {
+        return { el: tabs[tabs.length - 1], index: rects.length - 1, after: true }
     }
-    const last = tabs[tabs.length - 1]
-    const lastRect = last.getBoundingClientRect()
-    if (my > lastRect.bottom) return { rect: lastRect, after: true }
-    const first = tabs[0]
-    const firstRect = first.getBoundingClientRect()
-    if (my < firstRect.top) return { rect: firstRect, after: false }
-    return null
+    return { el: tabs[0], index: 0, after: false }
 }
 
-// Vertical line between horizontal tabs (top bar)
-function showIndicatorVerticalLine(tabRect, after) {
-    const x = after ? tabRect.right + 2.5 : tabRect.left - 4.5
-    state.indicator.visible = true
-    state.indicator.x = x
-    state.indicator.y = tabRect.top
-    state.indicator.width = 2
-    state.indicator.height = tabRect.height
-}
-
-// Horizontal line between vertical tabs (sidebar)
-function showIndicatorHorizontalLine(tabRect, after) {
-    const y = after ? tabRect.bottom + 3 : tabRect.top - 5
-    state.indicator.visible = true
-    state.indicator.x = tabRect.left
-    state.indicator.y = y
-    state.indicator.width = tabRect.width
-    state.indicator.height = 2
+// Position indicator centered between two adjacent tab edges
+function showIndicator(tabs, index, after, axis) {
+    const rects = Array.from(tabs).map(t => t.getBoundingClientRect())
+    const r = rects[index]
+    
+    if (axis === 'x') {
+        let x
+        if (after && index < rects.length - 1) {
+            x = (r.right + rects[index + 1].left) / 2
+        } else if (!after && index > 0) {
+            x = (rects[index - 1].right + r.left) / 2
+        } else {
+            x = after ? r.right + 3.5 : r.left - 3.5
+        }
+        state.indicator.visible = true
+        state.indicator.x = x
+        state.indicator.y = r.top + r.height / 2
+        state.indicator.width = 2
+        state.indicator.height = r.height
+    } else {
+        let y
+        if (after && index < rects.length - 1) {
+            y = (r.bottom + rects[index + 1].top) / 2
+        } else if (!after && index > 0) {
+            y = (rects[index - 1].bottom + r.top) / 2
+        } else {
+            y = after ? r.bottom + 4 : r.top - 4
+        }
+        state.indicator.visible = true
+        state.indicator.x = r.left + r.width / 2
+        state.indicator.y = y
+        state.indicator.width = r.width
+        state.indicator.height = 2
+    }
 }
 
 function hideIndicator() {
     state.indicator.visible = false
 }
 
+function handleKeyDown(e) {
+    if (e.key === 'Escape') {
+        e.preventDefault()
+        didDrag = true
+        handleMouseUp()
+    }
+}
+
 function handleMouseUp() {
     window.removeEventListener('mousemove', handleMouseMove)
     window.removeEventListener('mouseup', handleMouseUp)
+    window.removeEventListener('keydown', handleKeyDown)
     document.body.classList.remove('tab-dragging-active')
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
     
     // TODO: implement actual tab reorder/move here
     
@@ -169,10 +215,15 @@ function handleMouseUp() {
     state.sourceSpaceId = null
     state.indicator.visible = false
     pending = null
+    activateRafId = null
 }
 
 function cancelDrag() {
     handleMouseUp()
 }
 
-export { state as tabDrag, startPending as startTabDrag, cancelDrag }
+function didDragOccurred() {
+    return didDrag
+}
+
+export { state as tabDrag, startPending as startTabDrag, cancelDrag, setActivateRafId, didDragOccurred }
