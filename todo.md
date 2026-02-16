@@ -3048,3 +3048,8 @@ fast nav with switching controlled frame instance on origin switch!!
 smalltalk like environment
 
 hover effect card show optimal view for canvas elements
+
+
+show cnavas navigation trail graph while browsing mode
+
+composable widges / cnavas / ai zui exploraiton

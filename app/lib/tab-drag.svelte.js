@@ -39,7 +39,7 @@ function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActi
     didDrag = false
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
-    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, true)
 }
 
 function setActivateRafId(id) {
@@ -70,6 +70,11 @@ function handleMouseMove(e) {
             state.previewWidth = tabRect.width
             state.previewHeight = tabRect.height
             document.body.classList.add('tab-dragging-active')
+            // Blur any focused iframe/controlledframe so keyboard events reach the window
+            if (document.activeElement && document.activeElement !== document.body) {
+                document.activeElement.blur()
+                document.body.focus()
+            }
             // Dismiss any open hovercards
             window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
         }
@@ -195,6 +200,7 @@ function hideIndicator() {
 function handleKeyDown(e) {
     if (e.key === 'Escape') {
         e.preventDefault()
+        e.stopImmediatePropagation()
         didDrag = true
         handleMouseUp()
     }
@@ -203,7 +209,7 @@ function handleKeyDown(e) {
 function handleMouseUp() {
     window.removeEventListener('mousemove', handleMouseMove)
     window.removeEventListener('mouseup', handleMouseUp)
-    window.removeEventListener('keydown', handleKeyDown)
+    window.removeEventListener('keydown', handleKeyDown, true)
     document.body.classList.remove('tab-dragging-active')
     
     // TODO: implement actual tab reorder/move here
@@ -219,6 +225,7 @@ function handleMouseUp() {
 }
 
 function cancelDrag() {
+    didDrag = true
     handleMouseUp()
 }
 

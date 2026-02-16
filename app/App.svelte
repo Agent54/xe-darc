@@ -24,7 +24,7 @@
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
-    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred } from './lib/tab-drag.svelte.js'
+    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag } from './lib/tab-drag.svelte.js'
     window.darc = { data }
 
     // Proper detection of ControlledFrame API support
@@ -922,6 +922,12 @@
             event.stopPropagation()
             event.stopImmediatePropagation()
             handleZoomReset()
+            return
+        }
+        if (event.key === 'Escape' && tabDrag.active) {
+            event.preventDefault()
+            event.stopImmediatePropagation()
+            cancelDrag()
             return
         }
         if (event.key === 'Escape' && showAppsOverlay) {
@@ -4647,17 +4653,12 @@
 
 {#if tabDrag.active && data.docs[tabDrag.tabId]}
     {@const dragTab = data.docs[tabDrag.tabId]}
-    <div class="tab-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px;">
+    <div class="tab-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px; height: {tabDrag.previewHeight}px;">
         <div class="favicon-wrapper">
             <Favicon tab={dragTab} />
         </div>
         <span class="tab-drag-preview-title">{dragTab.title || dragTab.url || 'Untitled'}</span>
     </div>
-    {#if dragTab.url}
-        <div class="tab-drag-hovercard" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY + tabDrag.previewHeight + 4}px;">
-            <UrlRenderer url={dragTab.url} />
-        </div>
-    {/if}
 {/if}
 
 <style>
@@ -4715,27 +4716,6 @@
         flex-shrink: 0;
     }
 
-    .tab-drag-hovercard {
-        position: fixed;
-        z-index: 99999;
-        pointer-events: none;
-        padding: 4px 8px;
-        background: rgba(0, 0, 0, 0.85);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 6px;
-        backdrop-filter: blur(12px);
-        max-width: 300px;
-        overflow: hidden;
-    }
-
-    .tab-drag-hovercard :global(.url-renderer) {
-        font-size: 11px;
-        color: rgba(255, 255, 255, 0.5);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    
     .dev-color-badge {
         position: fixed;
         top: 10px;
