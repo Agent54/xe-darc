@@ -1059,6 +1059,7 @@
         const sidebarCount = openSidebars.size // just for triggering effect
         const activeTabId = data.spaceMeta.activeTabId
         const activeFrameWrapper = data.frames[activeTabId]?.wrapper
+        const activeTab = data.docs[activeTabId]
 
         if (!activeFrameWrapper) {
             return
@@ -1076,7 +1077,8 @@
         
         // Only scroll frame into view if tab change was NOT caused by scrolling
         // Also scroll on initial load when wrapper first becomes available
-        if (!tabChangeFromScroll || !initialScrollPerformed) {
+        // Skip pinned tabs — they are in fixed containers outside the scroll root
+        if ((!tabChangeFromScroll || !initialScrollPerformed) && !activeTab?.pinned) {
             // Temporarily set tabChangeFromScroll to prevent IntersectionObserver from changing active tab
             if (!initialScrollPerformed) {
                 tabChangeFromScroll = true
@@ -1094,6 +1096,10 @@
                     tabChangeFromScroll = false
                 }, 500)
             }
+        }
+
+        if (!initialScrollPerformed && activeTab?.pinned) {
+            initialScrollPerformed = true
         }
         
         if (tabButtons[activeTabId]) {
@@ -1132,6 +1138,9 @@
              // Find the active tab in unpinned tabs
             if (data.spaceMeta.activeTabId) {
                 // console.log('pins effect triggered for tab:', data.spaceMeta.activeTabId)
+                const activeTab = data.docs[data.spaceMeta.activeTabId]
+                // Skip pinned tabs — they are in fixed containers outside the scroll root
+                if (activeTab?.pinned) return
                 const activeFrameWrapper = data.frames[data.spaceMeta.activeTabId]?.wrapper
                 // Scroll the active unpinned tab into view after pinned tabs layout change
                 // setTimeout(() => {
@@ -3077,6 +3086,7 @@
     
     // Total space taken by all UI elements (affects available width)
     let spaceTaken = $derived.by(() => {
+        if (!sidebarStateLoaded) return 0
         const visibleLeftWidth = (leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0
         const visibleRightWidth = (rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0
         const visibleTabSidebarWidth = tabSidebarVisible ? (customTabSidebarWidth || 263) : 0
@@ -4265,12 +4275,12 @@
     class:no-transitions={isWindowResizing}
     class:resizing-pinned-frames={isResizingPinnedFrames}
     class:no-scroll={isLayoutChanging}
-    class:has-left-pins={leftPinnedTabs.length > 0 && !invisiblePins.left}
-    class:has-right-pins={rightPinnedTabs.length > 0 && !invisiblePins.right}
+    class:has-left-pins={sidebarStateLoaded && leftPinnedTabs.length > 0 && !invisiblePins.left}
+    class:has-right-pins={sidebarStateLoaded && rightPinnedTabs.length > 0 && !invisiblePins.right}
     class:has-tab-sidebar={tabSidebarVisible}
     onscroll={handleScroll} 
     bind:this={scrollContainer}
-    style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --right-pinned-width: {(rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
+    style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {(sidebarStateLoaded && leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --right-pinned-width: {(sidebarStateLoaded && rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
 
     {#if data.ui.viewMode === 'tile'}
         <GridView 
@@ -4336,7 +4346,7 @@
 {/if}
 
 
-{#if leftPinnedTabs.length > 0 && !invisiblePins.left}
+{#if sidebarStateLoaded && leftPinnedTabs.length > 0 && !invisiblePins.left}
     <div class="pinned-frames-left" class:window-controls-overlay={headerPartOfMain} 
     class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
     class:resizing-pinned-frames={isResizingPinnedFrames}
@@ -4370,7 +4380,7 @@
     </div>
 {/if}
 
-{#if rightPinnedTabs.length > 0 && !invisiblePins.right}
+{#if sidebarStateLoaded && rightPinnedTabs.length > 0 && !invisiblePins.right}
     <div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
     class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
     class:resizing-pinned-frames={isResizingPinnedFrames}
