@@ -24,6 +24,7 @@
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
+    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag } from './lib/tab-drag.svelte.js'
     window.darc = { data }
 
     // Proper detection of ControlledFrame API support
@@ -239,6 +240,14 @@
     // Detect Mac platform
     onMount(() => {
         isMacPlatform = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent) || navigator.platform.includes('Mac')
+        
+        const dismissHovercards = () => {
+            hoveredTab = null
+            hovercardShowTime = null
+            if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+        }
+        window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
+        return () => window.removeEventListener('darc-dismiss-hovercards', dismissHovercards)
     })
 
     // LED indicator reactive states
@@ -915,6 +924,12 @@
             handleZoomReset()
             return
         }
+        if (event.key === 'Escape' && tabDrag.active) {
+            event.preventDefault()
+            event.stopImmediatePropagation()
+            cancelDrag()
+            return
+        }
         if (event.key === 'Escape' && showAppsOverlay) {
             event.preventDefault()
             showAppsOverlay = false
@@ -1488,6 +1503,7 @@
     })
 
     function handleTabMouseEnter(tab, event, positionHint = null) {
+        if (tabDrag.active) return
         // Reset close button hover state when entering a new tab
         closeButtonHovered = false
         closeButtonHoveredDelayed = false
@@ -3275,9 +3291,11 @@
                         class:hibernated={data.isTabHibernated(tab.id)}
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
+                        class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
-                        onmousedown={(e) => { if (e.button === 0) activateTab(tab, i) }}
+                        onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, wasActive); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab, i))) } } }}
+                        onclick={(e) => { if (e.button === 0 && !didDragOccurred() && tabDrag.wasAlreadyActive) activateTab(tab, i) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
                         oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
                         onmouseenter={(e) => handleTabMouseEnter(tab, e)}
@@ -4009,7 +4027,7 @@
         }
     }} />
 
-{#if hoveredTab}
+{#if hoveredTab && !tabDrag.active}
   {#key hoveredTab.id}
     <div class="tab-hovercard" 
          class:trash-item={isTrashItemHover}
@@ -4624,6 +4642,25 @@
     </div>
 {/if}
 
+{#if tabDrag.indicator.visible}
+    <div class="tab-drag-indicator" style="
+        left: {tabDrag.indicator.x}px;
+        top: {tabDrag.indicator.y}px;
+        width: {tabDrag.indicator.width}px;
+        height: {tabDrag.indicator.height}px;
+    "></div>
+{/if}
+
+{#if tabDrag.active && data.docs[tabDrag.tabId]}
+    {@const dragTab = data.docs[tabDrag.tabId]}
+    <div class="tab-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px; height: {tabDrag.previewHeight}px;">
+        <div class="favicon-wrapper">
+            <Favicon tab={dragTab} />
+        </div>
+        <span class="tab-drag-preview-title">{dragTab.title || dragTab.url || 'Untitled'}</span>
+    </div>
+{/if}
+
 <style>
     @import "app.css";
     
@@ -4631,6 +4668,54 @@
         outline: none;
     }
     
+    :global(body.tab-dragging-active),
+    :global(body.tab-dragging-active *) {
+        cursor: grabbing !important;
+        user-select: none !important;
+    }
+    
+    /* Kill all hover by disabling pointer-events on non-dragging tabs + iframes */
+    :global(body.tab-dragging-active .tab-container:not(.tab-dragging)),
+    :global(body.tab-dragging-active .tab-item-container:not(.tab-dragging)),
+    :global(body.tab-dragging-active iframe),
+    :global(body.tab-dragging-active controlledframe) {
+        pointer-events: none;
+    }
+
+    .tab-drag-preview {
+        position: fixed;
+        z-index: 99999;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px;
+        background-color: rgb(50 50 50);
+        border: 1px solid rgb(70 70 70);
+        border-radius: 8px;
+        box-sizing: border-box;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+
+    .tab-drag-preview-title {
+        color: #e5e5e5;
+        text-shadow: 0 0 0.3px currentColor;
+        font-size: 13px;
+        font-weight: 400;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+    }
+
+    .tab-drag-preview :global(.favicon-wrapper) {
+        opacity: 0.87;
+        flex-shrink: 0;
+    }
+
     .dev-color-badge {
         position: fixed;
         top: 10px;

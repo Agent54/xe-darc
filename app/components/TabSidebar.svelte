@@ -21,7 +21,8 @@
     import UrlBar from './UrlBar.svelte'
     import TabHoverCard from './TabHoverCard.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
-    import { untrack } from 'svelte'
+    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred } from '../lib/tab-drag.svelte.js'
+    import { untrack, onMount } from 'svelte'
     
     let isHovered = $state(false)
     let tabListRef = $state(null)
@@ -97,6 +98,16 @@
         hoveredTab = null
         hovercardShowTime = null
     }
+    
+    onMount(() => {
+        const dismissHovercards = () => {
+            hoveredTab = null
+            hovercardShowTime = null
+            if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+        }
+        window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
+        return () => window.removeEventListener('darc-dismiss-hovercards', dismissHovercards)
+    })
 
     // Focus the URL input when it becomes visible
     $effect(() => {
@@ -1166,6 +1177,7 @@
     }
     
     function handleTabMouseEnter(tab, event) {
+        if (tabDrag.active) return
         // Disable hovercards while spacer is visible (scrolling to add space)
         const anySpacerVisible = Object.values(tabsListSpacerVisible).some(v => v)
         if (anySpacerVisible) return
@@ -1850,12 +1862,13 @@
                                                 {/if}
                                             </div>
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} data-tab-id={tab.id}
+                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
                                                  role="listitem"
                                                  onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                  onmouseleave={handleTabMouseLeave}
                                                  oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) activateTab(tab.id, spaceId) }}>
+                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab.id, spaceId))) } } }}
+                                                    onclick={(e) => { if (e.button === 0 && !didDragOccurred() && tabDrag.wasAlreadyActive) activateTab(tab.id, spaceId) }}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                                 </button>
@@ -1987,7 +2000,7 @@
     </div>
 </div>
 
-{#if hoveredTab}
+{#if hoveredTab && !tabDrag.active}
     {#key hoveredTab.id}
         <div class="tab-hovercard-sidebar" 
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px; --hovercard-top: {hovercardPosition.y}px;">
@@ -2945,6 +2958,10 @@
     .tab-item-container.active:hover {
         background: rgb(255 255 255 / 17%);
         border: 1px solid hsl(0deg 0% 100% / 5%);
+    }
+    
+    .tab-item-container.tab-dragging {
+        opacity: 0.3;
     }
     
     :global(.favicon-wrapper) {
