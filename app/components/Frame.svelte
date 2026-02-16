@@ -467,8 +467,10 @@
             data.frames[tab.id].wrapper = frameWrapper
         }
         
-        // Always observe frameWrapper for scroll-based activation (even for hibernated tabs)
-        if (frameWrapper) {
+        // Only observe unpinned frames for scroll-based activation
+        // Pinned frames are in fixed containers outside the scroll root, so observing them
+        // causes incorrect intersection callbacks and layout issues on reload
+        if (frameWrapper && !tab?.pinned) {
             observer?.observe(frameWrapper)
         }
     
