@@ -249,8 +249,16 @@ function handleMouseUp() {
     window.removeEventListener('keydown', handleKeyDown, true)
     document.body.classList.remove('tab-dragging-active')
     
-    if (state.active && state.sidepinZone && dropCallback) {
-        dropCallback({ type: 'sidepin', tabId: state.tabId, side: state.sidepinZone })
+    if (state.active && dropCallback) {
+        if (state.sidepinZone) {
+            dropCallback({ type: 'sidepin', tabId: state.tabId, side: state.sidepinZone })
+        } else if (state.indicator.visible) {
+            // Determine drop target from indicator position
+            const drop = resolveDropTarget(state.mouseX, state.mouseY, state.tabId)
+            if (drop) {
+                dropCallback({ type: 'reorder', tabId: state.tabId, sourceSpaceId: state.sourceSpaceId, ...drop })
+            }
+        }
     }
     
     state.active = false
@@ -262,6 +270,71 @@ function handleMouseUp() {
     state.sidepinZone = null
     pending = null
     activateRafId = null
+}
+
+// Resolve the drop target: which space, and the tab IDs of neighbors for order calculation
+function resolveDropTarget(mx, my, dragTabId) {
+    // Check topbar
+    const topbarList = document.querySelector('.tab-list.tabs')
+    if (topbarList) {
+        const listRect = topbarList.getBoundingClientRect()
+        if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top - 4 && my <= listRect.bottom + 4) {
+            const tabs = topbarList.querySelectorAll(':scope > .tab-container:not(.pinned-tab-container)')
+            const hit = findClosestTab(tabs, mx, 'x')
+            if (hit && !isNoopDrop(tabs, hit)) {
+                return buildDropInfo(tabs, hit, dragTabId, null) // null = same space (topbar is always active space)
+            }
+        }
+    }
+
+    // Check sidebar lists
+    const sidebarLists = document.querySelectorAll('.tabs-list')
+    for (const list of sidebarLists) {
+        const listRect = list.getBoundingClientRect()
+        const scrollParent = list.closest('.tab-content-container')
+        if (scrollParent) {
+            const sp = scrollParent.getBoundingClientRect()
+            if (listRect.right <= sp.left || listRect.left >= sp.right) continue
+        }
+        if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top && my <= listRect.bottom) {
+            const tabs = list.querySelectorAll(':scope > .tab-item-container')
+            const hit = findClosestTab(tabs, my, 'y')
+            if (hit && !isNoopDrop(tabs, hit)) {
+                const spaceContent = list.closest('.space-content')
+                const targetSpaceId = spaceContent?.getAttribute('data-space-id') || null
+                return buildDropInfo(tabs, hit, dragTabId, targetSpaceId)
+            }
+        }
+    }
+
+    return null
+}
+
+function buildDropInfo(tabs, hit, dragTabId, targetSpaceId) {
+    const tabEls = Array.from(tabs)
+    // The insert position: if after, insert after hit.index; if before, insert before hit.index
+    // Get the IDs of the neighbors the dragged tab will land between
+    let beforeTabId = null // tab that will be before the dragged tab
+    let afterTabId = null  // tab that will be after the dragged tab
+
+    if (hit.after) {
+        beforeTabId = getTabId(tabEls[hit.index])
+        afterTabId = hit.index + 1 < tabEls.length ? getTabId(tabEls[hit.index + 1]) : null
+    } else {
+        beforeTabId = hit.index > 0 ? getTabId(tabEls[hit.index - 1]) : null
+        afterTabId = getTabId(tabEls[hit.index])
+    }
+
+    // Skip the dragged tab if it appears as a neighbor (shouldn't happen due to isNoopDrop, but safety)
+    if (beforeTabId === dragTabId) beforeTabId = null
+    if (afterTabId === dragTabId) afterTabId = null
+
+    return { beforeTabId, afterTabId, targetSpaceId }
+}
+
+function getTabId(el) {
+    if (!el) return null
+    return el.getAttribute('data-tab-id') || el.id?.replace('tab_', '') || null
 }
 
 function cancelDrag() {
