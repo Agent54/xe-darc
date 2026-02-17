@@ -1107,6 +1107,8 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     width: calc(100vw - var(--space-taken, 0px) - 18px);
     height: calc(100vh - 18px);
     overflow: visible;
+    content-visibility: auto;
+    /* ?? contain-intrinsic-size: auto calc(100vw - var(--space-taken, 0px) - 18px) auto calc(100vh - 18px); */
 }
 /* @media (min-width: 1800px) {
     :global(.tab-group .frame) {
