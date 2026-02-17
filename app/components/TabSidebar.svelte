@@ -22,6 +22,7 @@
     import TabHoverCard from './TabHoverCard.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred } from '../lib/tab-drag.svelte.js'
+    import { colors as spaceColors } from '../lib/utils.js'
     import { untrack, onMount } from 'svelte'
     
     let isHovered = $state(false)
@@ -39,6 +40,10 @@
     let urlInput = $state(null)
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
+    let renamingSpaceId = $state(null)
+    let renameInputValue = $state('')
+    let renameInputRef = $state(null)
+    let colorPickerSpaceId = $state(null)
     
     // Multi-space expansion state
     let multiSpaceMode = $state(false)
@@ -862,16 +867,47 @@
     }
     
     function handleMenuItemClick(action, spaceId) {
-        // Handle the action (rename, change icon, set default container)
         console.log(`Action: ${action} for space: ${data.spaces[spaceId].name}`)
         
-        if (action.startsWith('container-')) {
+        if (action === 'rename') {
+            startRename(spaceId)
+        } else if (action === 'change-color') {
+            colorPickerSpaceId = spaceId
+        } else if (action.startsWith('container-')) {
             const containerType = action.replace('container-', '')
             console.log(`Setting container to: ${containerType} for space: ${data.spaces[spaceId].name}`)
-            // TODO: Implement container assignment logic
         }
         
         openMenuId = null
+    }
+
+    function startRename(spaceId) {
+        renamingSpaceId = spaceId
+        renameInputValue = data.spaces[spaceId].name
+        requestAnimationFrame(() => {
+            renameInputRef?.focus()
+            renameInputRef?.select()
+        })
+    }
+
+    function commitRename() {
+        if (renamingSpaceId && renameInputValue.trim()) {
+            data.updateSpace(renamingSpaceId, { name: renameInputValue.trim() })
+        }
+        renamingSpaceId = null
+    }
+
+    function handleRenameKeydown(e) {
+        if (e.key === 'Enter') {
+            commitRename()
+        } else if (e.key === 'Escape') {
+            renamingSpaceId = null
+        }
+    }
+
+    function pickColor(spaceId, color) {
+        data.updateSpace(spaceId, { color })
+        colorPickerSpaceId = null
     }
     
     function handleClickOutside(event) {
@@ -1323,16 +1359,14 @@
     
     function handleSpaceContextMenuAction(action, spaceId) {
         if (action === 'rename') {
-            // TODO: Implement rename functionality
-            console.log('Rename space:', spaceId)
+            startRename(spaceId)
         } else if (action === 'change-color') {
-            // TODO: Implement color change functionality
-            console.log('Change color for space:', spaceId)
+            colorPickerSpaceId = spaceId
         } else if (action === 'change-icon') {
-            // TODO: Implement icon change functionality
             console.log('Change icon for space:', spaceId)
+        } else if (action === 'container') {
+            console.log('Container for space:', spaceId)
         } else if (action === 'delete') {
-            // TODO: Implement delete functionality
             console.log('Delete space:', spaceId)
         }
         
@@ -1635,6 +1669,9 @@
             <button class="space-context-menu-item"
                     onmouseup={() => handleSpaceContextMenuAction('change-icon', spaceContextMenuId)}
                     role="menuitem">Change Icon</button>
+            <button class="space-context-menu-item"
+                    onmouseup={() => handleSpaceContextMenuAction('container', spaceContextMenuId)}
+                    role="menuitem">Container</button>
             <button class="space-context-menu-item delete"
                     onmouseup={() => handleSpaceContextMenuAction('delete', spaceContextMenuId)}
                     role="menuitem">Delete</button>
@@ -1776,11 +1813,39 @@
                                  role="group"
                                  aria-label="Space tabs">
                                 <div class="space-title-container">
-                                    <button class="space-title" 
-                                            class:active={data.spaceMeta.activeSpace === spaceId}
-                                            onmousedown={(e) => handleSpaceClick(e, spaceId)}>
-                                        {data.spaces[spaceId].name}
-                                    </button>
+                                    {#if renamingSpaceId === spaceId}
+                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                        <input class="space-title-rename"
+                                               bind:this={renameInputRef}
+                                               bind:value={renameInputValue}
+                                               onblur={commitRename}
+                                               onkeydown={handleRenameKeydown} />
+                                    {:else}
+                                        <button class="space-title" 
+                                                class:active={data.spaceMeta.activeSpace === spaceId}
+                                                onmousedown={(e) => handleSpaceClick(e, spaceId)}
+                                                oncontextmenu={(e) => e.preventDefault()}>
+                                            {#if data.spaces[spaceId]?.glyph}
+                                                <span class="space-title-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
+                                            {:else}
+                                                <span class="space-title-dot" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>
+                                            {/if}
+                                            {data.spaces[spaceId].name}
+                                        </button>
+                                    {/if}
+                                    {#if colorPickerSpaceId === spaceId}
+                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                        <div class="menu-scrim" onmousedown={() => colorPickerSpaceId = null}></div>
+                                        <div class="color-picker-dropdown">
+                                            {#each spaceColors as c}
+                                                <button class="color-swatch" 
+                                                        class:active={data.spaces[spaceId]?.color === c.color}
+                                                        style="background-color: {c.color}"
+                                                        onmousedown={() => pickColor(spaceId, c.color)}
+                                                        aria-label={c.name}></button>
+                                            {/each}
+                                        </div>
+                                    {/if}
                                     <div class="space-menu">
                                         <button class="space-menu-button" 
                                                 onmousedown={(e) => { e.stopPropagation(); handleMenuToggle(spaceId); }}
@@ -1802,6 +1867,9 @@
                                             <button class="space-menu-item"
                                                     onmouseup={() => handleMenuItemClick('container', spaceId)}
                                                     role="menuitem">Container</button>
+                                            <button class="space-menu-item delete"
+                                                    onmouseup={() => handleMenuItemClick('delete', spaceId)}
+                                                    role="menuitem">Delete</button>
                                         </div>
                                     </div>
                                 </div>
@@ -2486,6 +2554,7 @@
         padding: 0 4px 0px 6px;
         margin-bottom: -4px;
         flex-shrink: 0;
+        position: relative;
     }
     
     .space-title {
@@ -2501,6 +2570,32 @@
         padding: 0;
         margin: 0;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .space-title-glyph {
+        font-size: 11px;
+        line-height: 1;
+        width: 11px;
+        height: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    :global(.space-title-glyph svg) {
+        width: 100%;
+        height: 100%;
+    }
+    
+    .space-title-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
     }
     
     .space-title:hover {
@@ -2510,6 +2605,57 @@
     .space-title.active {
         color: white;
         font-weight: 600;
+    }
+
+    .space-title-rename {
+        color: white;
+        font-size: 11px;
+        font-weight: 500;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        padding: 1px 4px;
+        margin: 0;
+        outline: none;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .color-picker-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        background: rgba(0, 0, 0, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 8px;
+        z-index: 10001;
+        backdrop-filter: blur(12px);
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 4px;
+        width: 140px;
+    }
+
+    .color-swatch {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+        padding: 0;
+        transition: transform 150ms ease;
+    }
+
+    .color-swatch:hover {
+        transform: scale(1.2);
+    }
+
+    .color-swatch.active {
+        border-color: white;
     }
     
     .space-menu {
@@ -2587,7 +2733,20 @@
         background: rgba(255, 255, 255, 0.15);
     }
 
-    .space-item.scrolled:not(.active):after {
+    .space-menu-item.delete {
+        color: #ff6b6b;
+    }
+
+    .space-menu-item.delete:hover {
+        color: #ff4444;
+        background: rgba(255, 107, 107, 0.1);
+    }
+
+    .space-menu-item.delete:active {
+        background: rgba(255, 107, 107, 0.2);
+    }
+
+    .space-item.scrolled:after {
         border: 1px solid rgb(138 138 138);
         display: block;
         content: ' ';
@@ -3836,19 +3995,21 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
         padding: 4px 0;
-        width: 140px;
+        min-width: 180px;
         z-index: 10000;
         opacity: 0;
         visibility: hidden;
+        transform: translateY(-4px);
+        transition: all 150ms ease;
         backdrop-filter: blur(12px);
         overflow: visible;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
         pointer-events: auto;
     }
 
     .space-context-menu-dropdown.open {
         opacity: 1;
         visibility: visible;
+        transform: translateY(0);
     }
 
     .space-context-menu-item {
@@ -3859,7 +4020,7 @@
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
         cursor: pointer;
-        transition: background 50ms ease;
+        transition: background 150ms ease;
         background: transparent;
         border: none;
         width: 100%;
