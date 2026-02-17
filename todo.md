@@ -3056,3 +3056,66 @@ composable widges / cnavas / ai zui exploraiton
 
 drag new window in canvas and write straight to agent
 
+interface studies tahiland onsite
+
+fullscreen dektop mode experiment
+
+light box mode for canvas
+
+ubiquity = omnibar = top of context pie menu!!! = new tab bar ?
+
+pie menu/ webapp cntx menu togle above cursor
+
+remove titels from tabs (pinned) and make drag pinned tab back tonormal posible
+
+pinned tabs broder missing on frames
+
+sidebar for full graph instead tabsidebar
+
+lightbox nav controls
+
+hover previews use screenshots if available, replace with screenshot and hibernate if permission reqest
+
+last frame scewed border logic
+
+core os actions: minimize, maximize, close, new window, back, forward, home, overview/switch
+
+missing pins on gridview
+
+rename impl. and put colordots in space titles
+
+lighbox popout history merge
+
+fixed view window into canvas
+
+card stack navigation pattern with scroll between alternate paths!!!
+
+nav history collapse for broken sites or unusual nav behav
+
+
+streamlined actions on subgraphs
+
+long hold cmd to show drraggable areas > help menu
+
+
+tabs right of current vs end 
+
+
+constrain zoom to current element parent
+
+per page reduce animations setting etc!!!!!
+
+ubiquitey pipes > canvas connections + dnd 
+
+text box pie menu > ad hoc interfaces / lightbox > new page > sidebar > whatever
+
+
+integrated inspector and modificators for all styles and componentes without chrome dev tools, every component view json
+
+
+
+space bar lightbox and arrow keys siwtch lighbox tabs/ or screenshots / hovercard to lightbox on space bar
+
+vim/ keyboard/ chording
+
+type to jump/ search
