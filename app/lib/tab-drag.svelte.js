@@ -106,6 +106,12 @@ function handleMouseMove(e) {
     const sidebarLists = document.querySelectorAll('.tabs-list')
     for (const list of sidebarLists) {
         const listRect = list.getBoundingClientRect()
+        // Skip lists clipped by a scroll container (e.g. off-screen spaces)
+        const scrollParent = list.closest('.tab-content-container')
+        if (scrollParent) {
+            const sp = scrollParent.getBoundingClientRect()
+            if (listRect.right <= sp.left || listRect.left >= sp.right) continue
+        }
         if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top && my <= listRect.bottom) {
             const tabs = list.querySelectorAll(':scope > .tab-item-container')
             const hit = findClosestTab(tabs, my, 'y')
