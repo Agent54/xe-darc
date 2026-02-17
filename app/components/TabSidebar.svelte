@@ -1883,8 +1883,8 @@
                                                  onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                  onmouseleave={handleTabMouseLeave}
                                                  oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
-                                                    onclick={(e) => { if (e.button === 0 && !didDragOccurred() && tabDrag.wasAlreadyActive) activateTab(tab.id, spaceId) }}>
+                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive && !multiSpaceMode) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
+                                                    onclick={(e) => { if (e.button === 0 && !didDragOccurred()) { if (multiSpaceMode) { activateTab(tab.id, spaceId) } else if (tabDrag.wasAlreadyActive) { activateTab(tab.id, spaceId) } } }}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                                 </button>
