@@ -2582,3 +2582,39 @@ header:hover .hover-menu {
     pointer-events: none;
     transform: translate(-50%, -50%);
 }
+
+/* Sidepin drop zone overlay */
+.sidepin-drop-overlay {
+    position: fixed;
+    top: 50px;
+    bottom: 8px;
+    width: 20%;
+    z-index: 99998;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px dashed rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+}
+
+.sidepin-drop-overlay.left {
+    left: calc(var(--left-inset, 0px) + 8px);
+}
+
+.sidepin-drop-overlay.right {
+    right: calc(var(--right-inset, 0px) + 8px);
+}
+
+.sidepin-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
