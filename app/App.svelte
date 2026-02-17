@@ -1085,17 +1085,39 @@
             }
             
             console.log('%c[TAB-DEBUG] scrollIntoView called for tab: ' + activeTabId + ' (initialScrollPerformed=' + initialScrollPerformed + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
-            activeFrameWrapper.scrollIntoView({ 
-                behavior: 'instant'
-            })
             
-            // Mark initial scroll as done and reset flag after a delay
-            if (!initialScrollPerformed) {
+            // On initial load, use direct scrollLeft after layout to avoid scrollIntoView firing before dimensions are ready
+            // Temporarily disable smooth scrolling and snap so the position is set instantly and exactly
+            // Retry a few times since frame wrappers may not have final layout yet
+            if (!initialScrollPerformed && scrollContainer) {
+                const scrollToActive = () => {
+                    if (!activeFrameWrapper || !scrollContainer) return
+                    scrollContainer.style.scrollBehavior = 'auto'
+                    scrollContainer.style.scrollSnapType = 'none'
+                    const wrapperRect = activeFrameWrapper.getBoundingClientRect()
+                    const containerRect = scrollContainer.getBoundingClientRect()
+                    const offset = wrapperRect.left - containerRect.left
+                    if (Math.abs(offset) > 2) {
+                        scrollContainer.scrollLeft += offset - 9
+                    }
+                    scrollContainer.style.scrollBehavior = ''
+                    scrollContainer.style.scrollSnapType = ''
+                }
+                // Run immediately, then retry after frames have laid out
+                scrollToActive()
+                requestAnimationFrame(scrollToActive)
+                setTimeout(scrollToActive, 100)
+                setTimeout(scrollToActive, 300)
                 initialScrollPerformed = true
                 setTimeout(() => {
                     tabChangeFromScroll = false
                 }, 500)
+            } else {
+                activeFrameWrapper.scrollIntoView({ 
+                    behavior: 'instant'
+                })
             }
+
         }
 
         if (!initialScrollPerformed && activeTab?.pinned) {
