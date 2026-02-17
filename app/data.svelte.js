@@ -879,6 +879,14 @@ export default {
         spaces[spaceId] = data
     },
 
+    updateSpace: (spaceId, updates) => {
+        const space = spaces[spaceId]
+        if (!space) return
+        const updated = { ...space, ...updates }
+        spaces[spaceId] = updated
+        db.put(updated)
+    },
+
     pin({ tabId, pinned }) {
         const tab = docs[tabId]
         db.put({
