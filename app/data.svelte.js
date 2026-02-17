@@ -1370,6 +1370,51 @@ export default {
 
     closeTab,
 
+    moveTab: (tabId, { beforeTabId, afterTabId, targetSpaceId }) => {
+        const tab = docs[tabId]
+        if (!tab) return
+
+        const sourceSpaceId = tab.spaceId
+        const destSpaceId = targetSpaceId || sourceSpaceId
+        const destTabs = spaces[destSpaceId]?.tabs
+        if (!destTabs) return
+
+        // Calculate new order
+        const beforeTab = beforeTabId ? docs[beforeTabId] : null
+        const afterTab = afterTabId ? docs[afterTabId] : null
+        let newOrder
+        if (beforeTab && afterTab) {
+            newOrder = (beforeTab.order + afterTab.order) / 2
+        } else if (beforeTab) {
+            newOrder = beforeTab.order + 1
+        } else if (afterTab) {
+            newOrder = afterTab.order - 1
+        } else {
+            newOrder = Date.now()
+        }
+
+        // Optimistic update: remove from source
+        const sourceTabs = spaces[sourceSpaceId]?.tabs
+        if (sourceTabs) {
+            const srcIdx = sourceTabs.findIndex(t => t.id === tabId)
+            if (srcIdx !== -1) sourceTabs.splice(srcIdx, 1)
+        }
+
+        // Update the doc
+        tab.order = newOrder
+        if (destSpaceId !== sourceSpaceId) {
+            tab.spaceId = destSpaceId
+        }
+
+        // Optimistic update: insert into dest at correct position
+        let insertIdx = destTabs.findIndex(t => t.order > newOrder)
+        if (insertIdx === -1) insertIdx = destTabs.length
+        destTabs.splice(insertIdx, 0, tab)
+
+        // Persist
+        db.put({ ...tab })
+    },
+
     clearClosedTabs: () => {
         // Update each closed tab to be marked as deleted
         const docsToUpdate = spaceMeta.closedTabs.map(tab => ({
