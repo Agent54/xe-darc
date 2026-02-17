@@ -1065,7 +1065,7 @@
             return
         }
         
-        // console.log('scroll effect triggered for tab:', activeTabId, 'tabChangeFromScroll:', {tabChangeFromScroll}, 'initialScrollPerformed:', initialScrollPerformed)
+        console.log('%c[TAB-DEBUG] scroll effect triggered for tab: ' + activeTabId + ' tabChangeFromScroll=' + tabChangeFromScroll + ' initialScrollPerformed=' + initialScrollPerformed, 'color: #d946ef; font-weight: bold; font-size: 13px')
 
         // Don't scroll if tab change was caused by scrolling
         // if (tabChangeFromScroll) {
@@ -1084,7 +1084,7 @@
                 tabChangeFromScroll = true
             }
             
-            // console.log('calling scrollIntoView for tab:', activeTabId)
+            console.log('%c[TAB-DEBUG] scrollIntoView called for tab: ' + activeTabId + ' (initialScrollPerformed=' + initialScrollPerformed + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
             activeFrameWrapper.scrollIntoView({ 
                 behavior: 'instant'
             })
@@ -1425,12 +1425,14 @@
                 if (entry.isIntersecting) {
                     const timer = setTimeout(() => {
                         if (tabChangeFromScroll || !initialScrollPerformed) {
+                            console.log('%c[TAB-DEBUG] IntersectionObserver SKIPPED tab: ' + tabId + ' (tabChangeFromScroll=' + tabChangeFromScroll + ' initialScrollPerformed=' + initialScrollPerformed + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
                             return
                         }
             
                         const isForceHibernated = data.frames[tabId]?.forceHibernated === true
 
                         if (entry.isIntersecting && tab && !isForceHibernated) {
+                            console.log('%c[TAB-DEBUG] IntersectionObserver activating tab: ' + tab.id + ' (ratio=' + entry.intersectionRatio.toFixed(2) + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
                             tabChangeFromScroll = true
                             if (tabChangeFromScrollTimer) {
                                 clearTimeout(tabChangeFromScrollTimer)
