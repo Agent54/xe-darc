@@ -2600,6 +2600,7 @@ header:hover .hover-menu {
     border: 2px dashed rgba(255, 255, 255, 0.2);
     border-radius: 12px;
     backdrop-filter: blur(8px);
+    transform: translateZ(0);
 }
 
 .sidepin-drop-overlay.left {
