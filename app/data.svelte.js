@@ -1376,8 +1376,7 @@ export default {
 
         const sourceSpaceId = tab.spaceId
         const destSpaceId = targetSpaceId || sourceSpaceId
-        const destTabs = spaces[destSpaceId]?.tabs
-        if (!destTabs) return
+        const isSpaceMove = destSpaceId !== sourceSpaceId
 
         // Calculate new order
         const beforeTab = beforeTabId ? docs[beforeTabId] : null
@@ -1393,26 +1392,70 @@ export default {
             newOrder = Date.now()
         }
 
-        // Optimistic update: remove from source
-        const sourceTabs = spaces[sourceSpaceId]?.tabs
-        if (sourceTabs) {
-            const srcIdx = sourceTabs.findIndex(t => t.id === tabId)
-            if (srcIdx !== -1) sourceTabs.splice(srcIdx, 1)
+        // Park ONLY the moved tab's controlledframe before Svelte reorders DOM
+        const frameData = frames[tabId]
+        const controlledFrame = frameData?.frame
+        const savedWrapper = frameData?.wrapper
+        if (controlledFrame) {
+            const bgFrames = document.getElementById('backgroundFrames')
+            const bgAnchor = document.getElementById('anchorFrame')
+            if (bgFrames && bgAnchor) {
+                bgFrames.moveBefore(controlledFrame, bgAnchor)
+            }
         }
 
-        // Update the doc
         tab.order = newOrder
-        if (destSpaceId !== sourceSpaceId) {
+
+        if (isSpaceMove) {
+            // Cross-space: protect frame from destruction via onDestroy
+            if (frameData) {
+                frameData.promoting = true
+                delete frameData.wrapper
+            }
+
             tab.spaceId = destSpaceId
+
+            const sourceTabs = spaces[sourceSpaceId]?.tabs
+            if (sourceTabs) {
+                const srcIdx = sourceTabs.findIndex(t => t.id === tabId)
+                if (srcIdx !== -1) sourceTabs.splice(srcIdx, 1)
+            }
+
+            const destTabs = spaces[destSpaceId]?.tabs
+            if (destTabs) {
+                let insertIdx = destTabs.findIndex(t => t.order > newOrder)
+                if (insertIdx === -1) insertIdx = destTabs.length
+                destTabs.splice(insertIdx, 0, tab)
+            }
+        } else {
+            // Same-space: sort in-place, never remove the item
+            const spaceTabs = spaces[sourceSpaceId]?.tabs
+            if (spaceTabs) {
+                spaceTabs.sort((a, b) => (a.order || 0) - (b.order || 0))
+            }
         }
 
-        // Optimistic update: insert into dest at correct position
-        let insertIdx = destTabs.findIndex(t => t.order > newOrder)
-        if (insertIdx === -1) insertIdx = destTabs.length
-        destTabs.splice(insertIdx, 0, tab)
+        // Re-attach the controlledframe after Svelte finishes moving the (now-empty) wrapper
+        if (controlledFrame && !isSpaceMove) {
+            tick().then(() => {
+                const wrapper = frames[tabId]?.wrapper
+                if (wrapper && controlledFrame) {
+                    const anchor = wrapper.querySelector('.hidden')
+                    if (anchor) {
+                        wrapper.moveBefore(controlledFrame, anchor)
+                    }
+                }
+            })
+        }
 
-        // Persist
-        db.put({ ...tab })
+        // Prevent change feed from triggering a redundant refresh
+        editingId = tabId
+        db.put({ ...tab }).then((res) => {
+            editingId = null
+            if (res.rev) tab._rev = res.rev
+        }).catch(() => {
+            editingId = null
+        })
     },
 
     clearClosedTabs: () => {

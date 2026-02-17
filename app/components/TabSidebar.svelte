@@ -134,8 +134,29 @@
 
     const globallyPinnedTabs = $derived(data.spaceMeta.globalPins)
     
+    // Track if mouse left during a drag so we can close sidebar when drag ends
+    let mouseLeftDuringDrag = false
+    // Track if sidebar was open when drag started (to prevent drag from OPENING sidebar)
+    let sidebarOpenedBeforeDrag = false
+    $effect(() => {
+        if ((tabDrag.active || tabDrag.pending) && !sidebarOpenedBeforeDrag) {
+            sidebarOpenedBeforeDrag = isHovered
+        }
+        if (!tabDrag.active && !tabDrag.pending) {
+            if (mouseLeftDuringDrag) {
+                mouseLeftDuringDrag = false
+                if (multiSpaceMode) exitMultiSpaceMode()
+                isHovered = false
+                if (sidebarShowTimeout) clearTimeout(sidebarShowTimeout)
+                sidebarFullyShown = false
+            }
+            sidebarOpenedBeforeDrag = false
+        }
+    })
+    
     function handleMouseEnter() {
         isHovered = true
+        mouseLeftDuringDrag = false
         // Cancel pending menu close if re-entering
         if (menuCloseTimeout) {
             clearTimeout(menuCloseTimeout)
@@ -151,13 +172,15 @@
     }
     
     function handleMouseLeave() {
-        // Don't hide sidebar when URL bar is expanded or in multi-space mode
-        if (!urlBarExpanded && !multiSpaceMode) {
+        // Don't hide sidebar when URL bar is expanded, in multi-space mode, or dragging/pending drag
+        if (!urlBarExpanded && !multiSpaceMode && !tabDrag.active && !tabDrag.pending) {
             // Always set isHovered to false for resize handle logic
             isHovered = false
             // Immediately disable resize handle when leaving
             if (sidebarShowTimeout) clearTimeout(sidebarShowTimeout)
             sidebarFullyShown = false
+        } else if (tabDrag.active || tabDrag.pending) {
+            mouseLeftDuringDrag = true
         }
         
         // Close context menu when leaving sidebar
@@ -762,8 +785,8 @@
     }
 
     function activateTab(tabId, spaceId) {
-        // Close multi-space mode when switching tabs
-        if (multiSpaceMode) {
+        // Close multi-space mode when switching tabs, but not during drag
+        if (multiSpaceMode && !tabDrag.active && !tabDrag.pending) {
             exitMultiSpaceMode()
         }
         
@@ -1588,7 +1611,7 @@
 <svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 <div class="sidebar-box" 
-     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible}
+     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
      class:multi-space-mode={multiSpaceMode}
@@ -1868,8 +1891,8 @@
                                                  onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                  onmouseleave={handleTabMouseLeave}
                                                  oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab.id, spaceId))) } } }}
-                                                    onclick={(e) => { if (e.button === 0 && !didDragOccurred() && tabDrag.wasAlreadyActive) activateTab(tab.id, spaceId) }}>
+                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive && !multiSpaceMode) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
+                                                    onclick={(e) => { if (e.button === 0 && !didDragOccurred()) { if (multiSpaceMode) { activateTab(tab.id, spaceId) } else if (tabDrag.wasAlreadyActive) { activateTab(tab.id, spaceId) } } }}>
                                                     <Favicon {tab} showButton={false} />
                                                     <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                                 </button>

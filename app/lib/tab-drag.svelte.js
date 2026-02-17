@@ -5,6 +5,7 @@ const DRAG_THRESHOLD = 5
 
 const state = $state({
     active: false,
+    pending: false,
     tabId: null,
     tabEl: null,
     sourceZone: null, // 'topbar' or 'sidebar'
@@ -37,6 +38,7 @@ let dropCallback = null
 function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActive) {
     if (e.button !== 0) return
     pending = { tabId, tabEl, sourceZone, sourceSpaceId, startX: e.clientX, startY: e.clientY }
+    state.pending = true
     state.wasAlreadyActive = wasAlreadyActive
     didDrag = false
     window.addEventListener('mousemove', handleMouseMove)
@@ -45,6 +47,7 @@ function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActi
 }
 
 function setActivateRafId(id) {
+    if (activateRafId !== null) clearTimeout(activateRafId)
     activateRafId = id
 }
 
@@ -55,12 +58,13 @@ function handleMouseMove(e) {
         if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
             // Cancel pending tab activation so dragging doesn't switch tabs
             if (activateRafId !== null) {
-                cancelAnimationFrame(activateRafId)
+                clearTimeout(activateRafId)
                 activateRafId = null
             }
             const tabRect = pending.tabEl.getBoundingClientRect()
             didDrag = true
             state.active = true
+            state.pending = false
             state.tabId = pending.tabId
             state.tabEl = pending.tabEl
             state.sourceZone = pending.sourceZone
@@ -124,10 +128,16 @@ function handleMouseMove(e) {
                 state.sidepinZone = null
                 return
             }
+            // Empty list or mouse past all tabs — show indicator at list top/after last tab
+            showIndicatorInList(list, tabs)
+            state.sidepinZone = null
+            return
         }
     }
 
     // Check for sidepin drop zones (left/right 20% of window, excluding tab sidebar and right sidebar)
+    // Disable sidepin when sidebar is in multi-space (full width) mode
+    if (document.querySelector('.sidebar-box.multi-space-mode')) { hideIndicator(); state.sidepinZone = null; return }
     const tabSidebar = document.querySelector('.sidebar-box.visible')
     const rightSidebarPanels = document.querySelectorAll('.sidebar-panel')
     const areaLeft = tabSidebar ? tabSidebar.getBoundingClientRect().right : 0
@@ -230,6 +240,27 @@ function showIndicator(tabs, index, after, axis) {
     }
 }
 
+// Show indicator in a sidebar list when there are no tabs or mouse is past all of them
+function showIndicatorInList(list, tabs) {
+    const listRect = list.getBoundingClientRect()
+    if (tabs.length) {
+        // After last tab
+        const lastRect = tabs[tabs.length - 1].getBoundingClientRect()
+        state.indicator.visible = true
+        state.indicator.x = lastRect.left + lastRect.width / 2
+        state.indicator.y = lastRect.bottom + 4
+        state.indicator.width = lastRect.width
+        state.indicator.height = 2
+    } else {
+        // Empty list — show at top
+        state.indicator.visible = true
+        state.indicator.x = listRect.left + listRect.width / 2
+        state.indicator.y = listRect.top + 8
+        state.indicator.width = listRect.width - 16
+        state.indicator.height = 2
+    }
+}
+
 function hideIndicator() {
     state.indicator.visible = false
 }
@@ -262,6 +293,7 @@ function handleMouseUp() {
     }
     
     state.active = false
+    state.pending = false
     state.tabId = null
     state.tabEl = null
     state.sourceZone = null
@@ -304,6 +336,13 @@ function resolveDropTarget(mx, my, dragTabId) {
                 const targetSpaceId = spaceContent?.getAttribute('data-space-id') || null
                 return buildDropInfo(tabs, hit, dragTabId, targetSpaceId)
             }
+            // Empty list or past all tabs — drop at end (or beginning if empty)
+            const spaceContent = list.closest('.space-content')
+            const targetSpaceId = spaceContent?.getAttribute('data-space-id') || null
+            const tabEls = Array.from(tabs)
+            const lastId = tabEls.length ? getTabId(tabEls[tabEls.length - 1]) : null
+            const beforeTabId = lastId === dragTabId ? null : lastId
+            return { beforeTabId, afterTabId: null, targetSpaceId }
         }
     }
 
