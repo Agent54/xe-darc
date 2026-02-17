@@ -2084,7 +2084,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     overflow: visible;
 }
 .pinned-frames-right .frame, .pinned-frames-left .frame {
-     max-width: calc(100vw - 60px);
+    max-width: calc(100vw - 60px);
 }
 
 .pinned-frames-left.window-controls-overlay {
@@ -2105,9 +2105,8 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .pinned-frames-left :global(.frame),
 .pinned-frames-right :global(.frame) {
-    height: calc(100vh - 72px); /* Account for tab bar (52px) + padding (18px) */
-    /* border: 1px solid #ffffff12; */
-    border: none;
+    height: calc(100vh - 72px); /* Account for tab bar (52px) + padding (18px) + 1px border */
+    /* border: 1px solid rgba(255, 255, 255, 0.07); */
     /* border-radius: 18px;
     overflow: hidden; */
     flex-shrink: 0;
@@ -2121,8 +2120,9 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .pinned-frames-left.window-controls-overlay :global(.frame),
 .pinned-frames-right.window-controls-overlay :global(.frame) {
-    height: calc(100vh - 54px);
+    height: calc(100vh - 52px);
     margin-bottom: 1px;
+    overflow: hidden;
 }
 
 .pinned-frames-left :global(.frame) {
