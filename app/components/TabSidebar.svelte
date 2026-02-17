@@ -1000,6 +1000,7 @@
             if (activeTabElement) {
                 const tabsList = activeTabElement.closest('.tabs-list')
                 if (tabsList) {
+                    console.log('%c[TAB-DEBUG] TabSidebar scrolling active tab into view: ' + data.spaceMeta.activeTabId, 'color: #d946ef; font-weight: bold; font-size: 13px')
                     // Scroll the tab into view within its tabs list
                     activeTabElement.scrollIntoView({
                         behavior: 'smooth',
