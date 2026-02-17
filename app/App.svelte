@@ -24,7 +24,7 @@
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
-    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag } from './lib/tab-drag.svelte.js'
+    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag, onDrop } from './lib/tab-drag.svelte.js'
     window.darc = { data }
 
     // Proper detection of ControlledFrame API support
@@ -1401,6 +1401,17 @@
         hideContextMenu()
     }
 
+    onDrop((event) => {
+        if (event.type === 'sidepin') {
+            const tab = data.docs[event.tabId]
+            if (!tab) return
+            if (event.side === 'left') {
+                pinTabLeft(tab)
+            } else if (event.side === 'right') {
+                pinTabRight(tab)
+            }
+        }
+    })
 
     let observer = $state(null)
     let scrollContainer = null
@@ -4334,7 +4345,8 @@
                 {/if}
             {/key}
         {/each}
-    {/if}    
+    {/if}
+
 </div>
 
 <CertificateMonitor 
@@ -4668,6 +4680,25 @@
             <Favicon tab={dragTab} />
         </div>
         <span class="tab-drag-preview-title">{dragTab.title || dragTab.url || 'Untitled'}</span>
+    </div>
+{/if}
+
+{#if tabDrag.active && tabDrag.sidepinZone}
+    {@const leftInset = tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}
+    {@const rightInset = rightSidebarWidth}
+    <div class="sidepin-drop-overlay {tabDrag.sidepinZone}" style="--left-inset: {leftInset}px; --right-inset: {rightInset}px;">
+        <div class="sidepin-drop-zone">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                {#if tabDrag.sidepinZone === 'left'}
+                    <rect x="3" y="3" width="7" height="18" rx="2" />
+                    <rect x="14" y="3" width="7" height="18" rx="2" opacity="0.3" />
+                {:else}
+                    <rect x="3" y="3" width="7" height="18" rx="2" opacity="0.3" />
+                    <rect x="14" y="3" width="7" height="18" rx="2" />
+                {/if}
+            </svg>
+            <span>Pin {tabDrag.sidepinZone}</span>
+        </div>
     </div>
 {/if}
 

@@ -25,12 +25,14 @@ const state = $state({
         y: 0,
         width: 0,
         height: 0,
-    }
+    },
+    sidepinZone: null, // null, 'left', or 'right'
 })
 
 let pending = null
 let activateRafId = null
 let didDrag = false
+let dropCallback = null
 
 function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActive) {
     if (e.button !== 0) return
@@ -95,8 +97,9 @@ function handleMouseMove(e) {
             const tabs = topbarList.querySelectorAll(':scope > .tab-container:not(.pinned-tab-container)')
             const hit = findClosestTab(tabs, mx, 'x')
             if (hit) {
-                if (isNoopDrop(tabs, hit)) { hideIndicator(); return }
+                if (isNoopDrop(tabs, hit)) { hideIndicator(); state.sidepinZone = null; return }
                 showIndicator(tabs, hit.index, hit.after, 'x')
+                state.sidepinZone = null
                 return
             }
         }
@@ -116,12 +119,40 @@ function handleMouseMove(e) {
             const tabs = list.querySelectorAll(':scope > .tab-item-container')
             const hit = findClosestTab(tabs, my, 'y')
             if (hit) {
-                if (isNoopDrop(tabs, hit)) { hideIndicator(); return }
+                if (isNoopDrop(tabs, hit)) { hideIndicator(); state.sidepinZone = null; return }
                 showIndicator(tabs, hit.index, hit.after, 'y')
+                state.sidepinZone = null
                 return
             }
         }
     }
+
+    // Check for sidepin drop zones (left/right 20% of window, excluding tab sidebar and right sidebar)
+    const tabSidebar = document.querySelector('.sidebar-box.visible')
+    const rightSidebarPanels = document.querySelectorAll('.sidebar-panel')
+    const areaLeft = tabSidebar ? tabSidebar.getBoundingClientRect().right : 0
+    let areaRight = window.innerWidth
+    for (const panel of rightSidebarPanels) {
+        const panelLeft = panel.getBoundingClientRect().left
+        if (panelLeft < areaRight) areaRight = panelLeft
+    }
+    const areaWidth = areaRight - areaLeft
+    const topBarEl = document.querySelector('.tab-list.tabs')
+    const areaTop = topBarEl ? topBarEl.getBoundingClientRect().bottom : 50
+
+    if (mx >= areaLeft && mx <= areaRight && my >= areaTop) {
+        const zoneWidth = areaWidth * 0.2
+        if (mx <= areaLeft + zoneWidth) {
+            state.sidepinZone = 'left'
+            hideIndicator()
+            return
+        } else if (mx >= areaRight - zoneWidth) {
+            state.sidepinZone = 'right'
+            hideIndicator()
+            return
+        }
+    }
+    state.sidepinZone = null
 
     hideIndicator()
 }
@@ -218,7 +249,9 @@ function handleMouseUp() {
     window.removeEventListener('keydown', handleKeyDown, true)
     document.body.classList.remove('tab-dragging-active')
     
-    // TODO: implement actual tab reorder/move here
+    if (state.active && state.sidepinZone && dropCallback) {
+        dropCallback({ type: 'sidepin', tabId: state.tabId, side: state.sidepinZone })
+    }
     
     state.active = false
     state.tabId = null
@@ -226,6 +259,7 @@ function handleMouseUp() {
     state.sourceZone = null
     state.sourceSpaceId = null
     state.indicator.visible = false
+    state.sidepinZone = null
     pending = null
     activateRafId = null
 }
@@ -239,4 +273,8 @@ function didDragOccurred() {
     return didDrag
 }
 
-export { state as tabDrag, startPending as startTabDrag, cancelDrag, setActivateRafId, didDragOccurred }
+function onDrop(cb) {
+    dropCallback = cb
+}
+
+export { state as tabDrag, startPending as startTabDrag, cancelDrag, setActivateRafId, didDragOccurred, onDrop }
