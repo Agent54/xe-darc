@@ -1410,6 +1410,12 @@
             } else if (event.side === 'right') {
                 pinTabRight(tab)
             }
+        } else if (event.type === 'reorder') {
+            data.moveTab(event.tabId, {
+                beforeTabId: event.beforeTabId,
+                afterTabId: event.afterTabId,
+                targetSpaceId: event.targetSpaceId
+            })
         }
     })
 
@@ -3309,6 +3315,7 @@
                     <li 
                         bind:this={tabButtons[tab.id]}
                         class="tab-container" 
+                        data-tab-id={tab.id}
                         class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:previous-active-tab={data.spaceMeta.lastActiveNonPinnedTabId && tab.id === data.spaceMeta.lastActiveNonPinnedTabId}
                         class:hibernated={data.isTabHibernated(tab.id)}
