@@ -1433,6 +1433,18 @@
                 pinTabRight(tab)
             }
         } else if (event.type === 'reorder') {
+            const tab = data.docs[event.tabId]
+            if (tab?.pinned) {
+                const pinnedSide = tab.pinned === 'right' ? 'right' : 'left'
+                const sameSidePins = tabs.filter(t => 
+                    pinnedSide === 'right' ? t.pinned === 'right' : (t.pinned === true || t.pinned === 'left')
+                )
+                if (sameSidePins.length === 1 && invisiblePins[pinnedSide]) {
+                    invisiblePins[pinnedSide] = false
+                    localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+                }
+                tab.pinned = null
+            }
             data.moveTab(event.tabId, {
                 beforeTabId: event.beforeTabId,
                 afterTabId: event.afterTabId,
@@ -3155,15 +3167,18 @@
         <li 
             bind:this={tabButtons[tab.id]}
             class="tab-container pinned-tab-container" 
+            data-tab-id={tab.id}
             class:active={tab.id === data.spaceMeta.activeTabId} 
             class:hibernated={data.isTabHibernated(tab.id)}
             class:hovered={tab.id === hoveredTab?.id}
             class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
             class:collapsed={invisiblePins.right}
+            class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
             role="tab"
             tabindex="0"
             title={tab.title || tab.url}
-            onmousedown={(e) => { if (e.button === 0) activateTab(tab, i) }}
+            onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, wasActive, 'right'); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab, i))) } } }}
+            onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
             oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
             onmouseenter={(e) => handleTabMouseEnter(tab, e, 'right-pin')}
@@ -3190,7 +3205,7 @@
             </div>
             <button class="pinned-toggle-btn" 
                     aria-label={invisiblePins.right ? "Expand pinned tabs" : "Collapse pinned tabs"}
-                    onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); togglePinnedFrames('right') } }} 
+                    onclick={(e) => { if (!didDragOccurred()) { e.stopPropagation(); togglePinnedFrames('right') } }} 
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('right') } }}>
                 {#if invisiblePins.right}
                     <!-- Closed: point right (toward where panel would appear) -->
@@ -3268,15 +3283,18 @@
                     <li 
                         bind:this={tabButtons[tab.id]}
                         class="tab-container pinned-tab-container" 
+                        data-tab-id={tab.id}
                         class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:hibernated={data.isTabHibernated(tab.id)}
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         class:collapsed={invisiblePins.left}
+                        class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
                         title={tab.title || tab.url}
-                        onmousedown={(e) => { if (e.button === 0) activateTab(tab, i) }}
+                        onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, wasActive, 'left'); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab, i))) } } }}
+                        onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
                         oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
                         onmouseenter={(e) => handleTabMouseEnter(tab, e, 'left-pin')}
@@ -3303,7 +3321,7 @@
                         </div>
                         <button class="pinned-toggle-btn" 
                                 aria-label={invisiblePins.left ? "Expand pinned tabs" : "Collapse pinned tabs"}
-                                onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); togglePinnedFrames('left') } }} 
+                                onclick={(e) => { if (!didDragOccurred()) { e.stopPropagation(); togglePinnedFrames('left') } }} 
                                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('left') } }}>
                             {#if invisiblePins.left}
                                 <!-- Closed: point left (toward where panel would appear) -->

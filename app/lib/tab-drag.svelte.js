@@ -35,9 +35,9 @@ let activateRafId = null
 let didDrag = false
 let dropCallback = null
 
-function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActive) {
+function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActive, pinnedSide) {
     if (e.button !== 0) return
-    pending = { tabId, tabEl, sourceZone, sourceSpaceId, startX: e.clientX, startY: e.clientY }
+    pending = { tabId, tabEl, sourceZone, sourceSpaceId, startX: e.clientX, startY: e.clientY, pinnedSide: pinnedSide || null }
     state.pending = true
     state.wasAlreadyActive = wasAlreadyActive
     didDrag = false
@@ -152,11 +152,11 @@ function handleMouseMove(e) {
 
     if (mx >= areaLeft && mx <= areaRight && my >= areaTop) {
         const zoneWidth = areaWidth * 0.2
-        if (mx <= areaLeft + zoneWidth) {
+        if (mx <= areaLeft + zoneWidth && pending?.pinnedSide !== 'left') {
             state.sidepinZone = 'left'
             hideIndicator()
             return
-        } else if (mx >= areaRight - zoneWidth) {
+        } else if (mx >= areaRight - zoneWidth && pending?.pinnedSide !== 'right') {
             state.sidepinZone = 'right'
             hideIndicator()
             return
