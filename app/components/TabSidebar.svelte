@@ -136,13 +136,21 @@
     
     // Track if mouse left during a drag so we can close sidebar when drag ends
     let mouseLeftDuringDrag = false
+    // Track if sidebar was open when drag started (to prevent drag from OPENING sidebar)
+    let sidebarOpenedBeforeDrag = false
     $effect(() => {
-        if (!tabDrag.active && !tabDrag.pending && mouseLeftDuringDrag) {
-            mouseLeftDuringDrag = false
-            if (multiSpaceMode) exitMultiSpaceMode()
-            isHovered = false
-            if (sidebarShowTimeout) clearTimeout(sidebarShowTimeout)
-            sidebarFullyShown = false
+        if ((tabDrag.active || tabDrag.pending) && !sidebarOpenedBeforeDrag) {
+            sidebarOpenedBeforeDrag = isHovered
+        }
+        if (!tabDrag.active && !tabDrag.pending) {
+            if (mouseLeftDuringDrag) {
+                mouseLeftDuringDrag = false
+                if (multiSpaceMode) exitMultiSpaceMode()
+                isHovered = false
+                if (sidebarShowTimeout) clearTimeout(sidebarShowTimeout)
+                sidebarFullyShown = false
+            }
+            sidebarOpenedBeforeDrag = false
         }
     })
     
@@ -1603,7 +1611,7 @@
 <svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 <div class="sidebar-box" 
-     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || tabDrag.active || tabDrag.pending}
+     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
      class:multi-space-mode={multiSpaceMode}
