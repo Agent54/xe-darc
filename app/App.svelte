@@ -1060,8 +1060,11 @@
         const activeTabId = data.spaceMeta.activeTabId
         const activeFrameWrapper = data.frames[activeTabId]?.wrapper
         const activeTab = data.docs[activeTabId]
+        // Subscribe to last non-pinned tab's wrapper so effect re-runs when it mounts
+        const _lastNonPinnedId = activeTab?.pinned ? data.getLastActiveNonPinnedTabId() : null
+        const _lastNonPinnedWrapper = _lastNonPinnedId ? data.frames[_lastNonPinnedId]?.wrapper : null
 
-        if (!activeFrameWrapper) {
+        if (!activeFrameWrapper && !activeTab?.pinned) {
             return
         }
         
@@ -1078,7 +1081,7 @@
         // Only scroll frame into view if tab change was NOT caused by scrolling
         // Also scroll on initial load when wrapper first becomes available
         // Skip pinned tabs — they are in fixed containers outside the scroll root
-        if ((!tabChangeFromScroll || !initialScrollPerformed) && !activeTab?.pinned) {
+        if ((!tabChangeFromScroll || !initialScrollPerformed) && !activeTab?.pinned && activeFrameWrapper) {
             // Temporarily set tabChangeFromScroll to prevent IntersectionObserver from changing active tab
             if (!initialScrollPerformed) {
                 tabChangeFromScroll = true
@@ -1122,7 +1125,35 @@
         }
 
         if (!initialScrollPerformed && activeTab?.pinned) {
-            initialScrollPerformed = true
+            // When active tab is a sidepin, scroll the last active non-pinned tab into view
+            const lastNonPinnedId = data.getLastActiveNonPinnedTabId()
+            const lastNonPinnedWrapper = lastNonPinnedId && data.frames[lastNonPinnedId]?.wrapper
+            if (lastNonPinnedWrapper && scrollContainer) {
+                initialScrollPerformed = true
+                tabChangeFromScroll = true
+                const scrollToLastActive = () => {
+                    if (!lastNonPinnedWrapper || !scrollContainer) return
+                    scrollContainer.style.scrollBehavior = 'auto'
+                    scrollContainer.style.scrollSnapType = 'none'
+                    const wrapperRect = lastNonPinnedWrapper.getBoundingClientRect()
+                    const containerRect = scrollContainer.getBoundingClientRect()
+                    const offset = wrapperRect.left - containerRect.left
+                    if (Math.abs(offset) > 2) {
+                        scrollContainer.scrollLeft += offset - 9
+                    }
+                    scrollContainer.style.scrollBehavior = ''
+                    scrollContainer.style.scrollSnapType = ''
+                }
+                scrollToLastActive()
+                requestAnimationFrame(scrollToLastActive)
+                setTimeout(scrollToLastActive, 100)
+                setTimeout(scrollToLastActive, 1000)
+                setTimeout(() => { tabChangeFromScroll = false }, 500)
+            } else if (!lastNonPinnedId) {
+                initialScrollPerformed = true
+            }
+            // If lastNonPinnedWrapper not yet mounted, don't set initialScrollPerformed
+            // so this effect re-runs when the wrapper becomes available
         }
         
         if (tabButtons[activeTabId]) {
@@ -3358,7 +3389,7 @@
                         class="tab-container" 
                         data-tab-id={tab.id}
                         class:active={tab.id === data.spaceMeta.activeTabId} 
-                        class:previous-active-tab={data.spaceMeta.lastActiveNonPinnedTabId && tab.id === data.spaceMeta.lastActiveNonPinnedTabId}
+                        class:previous-active-tab={data.docs[data.spaceMeta.activeTabId]?.pinned && tab.id === data.getLastActiveNonPinnedTabId()}
                         class:hibernated={data.isTabHibernated(tab.id)}
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}

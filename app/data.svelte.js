@@ -121,7 +121,6 @@ const spaceMeta = $state({
     spaceOrder: [],
     closedTabs: [],
     activeTabId: localStorage.getItem('activeTabId') || null, // FIXME: use _local/ persistent active tab array
-    lastActiveNonPinnedTabId: null, // Track last non-pinned tab when a pinned tab is active
     globalPins: [],
     config: {
         leftPinnedTabWidth: 400,
@@ -294,6 +293,13 @@ const refresh = throttle(async function (spaceId) {
         if (spaceMeta.activeSpace && spaceMeta.activeSpacesOrder.length === 0) {
             spaceMeta.activeSpacesOrder = [spaceMeta.activeSpace]
         }
+        // Restore persisted activeTabsOrder for each space
+        for (const spaceId of Object.keys(spaces)) {
+            const saved = localStorage.getItem(`activeTabsOrder:${spaceId}`)
+            if (saved) {
+                try { spaces[spaceId].activeTabsOrder = JSON.parse(saved) } catch {}
+            }
+        }
         if (spaceMeta.activeTabId && spaces[spaceMeta.activeSpace]) {
             spaces[spaceMeta.activeSpace].activeTabsOrder ??= []
             if (spaces[spaceMeta.activeSpace].activeTabsOrder.length === 0) {
@@ -326,12 +332,6 @@ function removedActiveTabId (previousActiveTabId) {
     console.log('setting active tab id b', { current : spaceMeta.activeTabId, next : spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1], previousIndex, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
     
     const nextTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]
-    const nextTab = docs[nextTabId]
-    
-    // Clear last active non-pinned tab if switching to a non-pinned tab
-    if (nextTab && !nextTab.pinned) {
-        spaceMeta.lastActiveNonPinnedTabId = null
-    }
     
     spaceMeta.activeTabId = nextTabId
 }
@@ -379,19 +379,6 @@ live: true,
 
 function activate(tabId) {   
     // console.log('activate tab id ..', {tabId})
-
-    const newTab = docs[tabId]
-    const currentTab = docs[spaceMeta.activeTabId]
-    
-    // Track last non-pinned tab when switching to a pinned tab
-    if (newTab?.pinned) {
-        if (currentTab && !currentTab.pinned) {
-            spaceMeta.lastActiveNonPinnedTabId = spaceMeta.activeTabId
-        }
-    } else {
-        // Switching to a non-pinned tab, clear the tracker
-        spaceMeta.lastActiveNonPinnedTabId = null
-    }
 
     spaceMeta.activeTabId = tabId
 
@@ -553,6 +540,15 @@ const destroy = $effect.root(() => {
         }
     })
 
+    $effect(() => {
+        const spaceId = spaceMeta.activeSpace
+        const order = spaceId && spaces[spaceId]?.activeTabsOrder
+        if (spaceId && order) {
+            const trimmed = order.length > 100 ? order.slice(0, 100) : order
+            localStorage.setItem(`activeTabsOrder:${spaceId}`, JSON.stringify(trimmed))
+        }
+    })
+
     return () => {
         // console.log('---- unsubscribing from changes feed ----')
         changesFeed.cancel()
@@ -678,6 +674,15 @@ const getAttachmentUrl = async (attachmentUrl, digest) => {
     return resolvedUrl
 }
 
+function getLastActiveNonPinnedTabId(spaceId) {
+    const space = spaces[spaceId || spaceMeta.activeSpace]
+    if (!space?.activeTabsOrder) return null
+    for (const tabId of space.activeTabsOrder) {
+        if (docs[tabId] && !docs[tabId].pinned && !docs[tabId].archive) return tabId
+    }
+    return null
+}
+
 export default {
     origins,
     spaceMeta,
@@ -697,6 +702,7 @@ export default {
     activate,
     activateSpace,
     getPreviousActiveSpace,
+    getLastActiveNonPinnedTabId,
     loadSampleData,
 
     restoreClosedTab: (tabId) => {
@@ -828,9 +834,6 @@ export default {
             // No non-pinned previous tab found
             return false
         }
-        
-        // Clear last active non-pinned tab since we're switching to a non-pinned tab
-        spaceMeta.lastActiveNonPinnedTabId = null
         
         // Set the previous tab as active
         spaceMeta.activeTabId = previousTab.id
