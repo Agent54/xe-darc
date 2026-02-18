@@ -119,14 +119,14 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
     position: fixed;
     top: 35px;
     right: 0;
-    width: 27px;
+    width: 38px;
     height: calc(100vh - 35px);
     z-index: 1000;
     pointer-events: auto;
     transition: transform 190ms 300ms cubic-bezier(.78,-0.01,.34,1.04), opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45s;
     background-color: rgba(0, 0, 0, 0.802);
     backdrop-filter: blur(7px);
-    transform: translateX(18px);
+    transform: translateX(26px);
     border-left: 1px solid transparent;
     /* opacity: 0; */
 }
@@ -199,12 +199,12 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
 }
 
 .sidebar-button {
-    width: 20px;
-    height: 20px;
+    width: 28px;
+    height: 28px;
     border: none;
     background: rgba(255, 255, 255, 0.05);
     color: rgba(255, 255, 255, 0.6);
-    border-radius: 4px;
+    border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -235,7 +235,7 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
 }
 
 .sidebar-divider {
-    width: 12px;
+    width: 18px;
     height: 1px;
     background: rgba(255, 255, 255, 0.2);
     margin: 6px 0;
