@@ -192,6 +192,12 @@
         if (spaceContextMenuId !== null) {
             spaceContextMenuId = null
         }
+        if (colorPickerSpaceId !== null) {
+            colorPickerSpaceId = null
+        }
+        if (renamingSpaceId !== null) {
+            commitRename()
+        }
         // Close dropdown menus when sidebar actually hides (after 340ms delay)
         if (newSpaceMenuOpen || openMenuId !== null) {
             if (menuCloseTimeout) clearTimeout(menuCloseTimeout)
@@ -919,6 +925,12 @@
         }
         if (spaceContextMenuId !== null && !event.target.closest('.space-context-menu-dropdown') && !event.target.closest('.space-item') && !contextMenuJustOpened) {
             spaceContextMenuId = null
+        }
+        if (colorPickerSpaceId !== null && !event.target.closest('.color-picker-dropdown')) {
+            colorPickerSpaceId = null
+        }
+        if (renamingSpaceId !== null && !event.target.closest('.space-title-rename')) {
+            commitRename()
         }
         if (urlBarExpanded && !event.target.closest('.url-bar-container')) {
             urlBarExpanded = false
@@ -2559,8 +2571,8 @@
     
     .space-title {
         color: rgba(255, 255, 255, 0.6);
-        font-size: 11px;
-        font-weight: 500;
+        font-size: 12px;
+        font-weight: 600;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
@@ -2604,7 +2616,7 @@
     
     .space-title.active {
         color: white;
-        font-weight: 600;
+        font-weight: 700;
     }
 
     .space-title-rename {

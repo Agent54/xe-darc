@@ -3159,3 +3159,5 @@ sort filter group stack bar + uri pattern
 
 
 
+fix the active tab after mac hibernation!!!!
+
