@@ -2081,6 +2081,11 @@
                                     <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                     <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
                                 </div>
+                                <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                    </svg>
+                                </div>
                             </button>
                         {/each}
                     </div>
@@ -3921,7 +3926,7 @@
         gap: 2px;
         flex: 1;
         min-width: 0;
-        max-width: 180px;
+        overflow: hidden;
     }
     
     .closed-tab-item .tab-title {
@@ -3929,8 +3934,9 @@
         font-size: 12px;
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
         line-height: 1.2;
+        mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
+        -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
     }
     
     .closed-tab-item .tab-space {
@@ -3939,10 +3945,42 @@
         font-weight: 400;
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
         line-height: 1.2;
+        mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
+        -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
     }
     
+    .closed-tab-remove {
+        background: none;
+        border: none;
+        color: rgba(255, 255, 255, 0.3);
+        cursor: pointer;
+        font-size: 18px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 0;
+        height: 20px;
+        border-radius: 4px;
+        opacity: 0;
+        margin-right: 8px;
+        flex-shrink: 0;
+        overflow: hidden;
+        line-height: 1;
+        max-width: 28px;
+    }
+
+    .closed-tab-item:hover .closed-tab-remove {
+        opacity: 1;
+        width: 25px;
+        padding: 0 4px;
+    }
+
+    .closed-tab-remove:hover {
+        color: rgba(255, 255, 255, 0.9);
+    }
+
     .closed-tab-item:hover :global(.favicon-wrapper) {
         opacity: 0.6;
     }
