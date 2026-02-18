@@ -1469,6 +1469,13 @@ export default {
         })
     },
 
+    removeClosedTab: (tabId) => {
+        const tab = spaceMeta.closedTabs.find(t => t.id === tabId)
+        if (!tab) return
+        spaceMeta.closedTabs = spaceMeta.closedTabs.filter(t => t.id !== tabId)
+        const doc = { ...tab, deleted: true, archive: 'deleted', modified: Date.now() }
+        db.put(doc).catch(err => console.error('Failed to delete closed tab:', err))
+    },
     clearClosedTabs: () => {
         // Update each closed tab to be marked as deleted
         const docsToUpdate = spaceMeta.closedTabs.map(tab => ({
