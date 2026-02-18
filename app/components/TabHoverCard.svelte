@@ -656,7 +656,7 @@
         margin-top: -2px;
     }
     
-    .history-section-title:hover .expand-icon {
+    .history-section:hover .expand-icon {
         opacity: 1;
     }
     
