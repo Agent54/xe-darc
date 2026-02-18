@@ -23,6 +23,19 @@
   function setActiveView(view) {
     activeView = view
     localStorage.setItem('gridActiveView', view)
+    if (view === 'tabs') {
+      tick().then(() => {
+        if (scrollContainer) {
+          highlightedSpaceId = activeSpaceId
+          const spaceIndex = spaceOrder.indexOf(activeSpaceId)
+          if (spaceIndex >= 0) {
+            scrollContainer.style.scrollBehavior = 'auto'
+            scrollContainer.scrollLeft = spaceIndex * scrollContainer.clientWidth
+            setTimeout(() => { scrollContainer.style.scrollBehavior = '' }, 0)
+          }
+        }
+      })
+    }
   }
 
   function toggleSpaceScope() {
@@ -1280,11 +1293,13 @@
 
   .grid-context-menu {
     position: fixed;
+    display: flex;
+    flex-direction: column;
     background: rgba(0, 0, 0, 0.9);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     padding: 4px 0;
-    min-width: 180px;
+    width: max-content;
     z-index: 10001;
     backdrop-filter: blur(12px);
     transform: translateY(-4px);
@@ -1296,7 +1311,7 @@
   }
 
   .grid-context-item {
-    padding: 6px 12px;
+    padding: 6px 14px;
     color: rgba(255, 255, 255, 0.8);
     font-size: 12px;
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -1306,7 +1321,6 @@
     transition: background 150ms ease;
     background: transparent;
     border: none;
-    width: 100%;
     text-align: left;
   }
 
