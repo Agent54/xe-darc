@@ -3119,3 +3119,43 @@ space bar lightbox and arrow keys siwtch lighbox tabs/ or screenshots / hovercar
 vim/ keyboard/ chording
 
 type to jump/ search
+
+show classic title bar url bar option
+hide tab title bar option
+show title behind drag area in zen mode option
+
+open sidebar on tab drag to side
+
+drag to pinned tab position option
+
+toggle sidepins individually
+
+merge right sidebar and right sidepins feature
+
+raycasst + command line + chat + piping omnibox unification (agent = bin + wrkdir = command plugin = website)
+
+request mobile page/ desktop page toggle / reduce animation toggle
+
+translate 
+
+screenshot/ ui lib platform as gh + behance replacement
+
+
+show all spaces closed tabs meny option +  one menu per space
+
+closed tabs menu in titlebar 
+
+vista + spotlight browser + winfs etc. interface revival and blog post
+
+show lightbox graph of history when switching history entries / trying to history nav
+
+bump to top sidebar
+
+grid view vertical scroll logic and toggles
+
+more dnd support for app pins
+
+sort filter group stack bar + uri pattern
+
+
+

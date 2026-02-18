@@ -1104,10 +1104,11 @@
                     scrollContainer.style.scrollSnapType = ''
                 }
                 // Run immediately, then retry after frames have laid out
+                // FIXE: ugly as hell 
                 scrollToActive()
                 requestAnimationFrame(scrollToActive)
                 setTimeout(scrollToActive, 100)
-                setTimeout(scrollToActive, 300)
+                setTimeout(scrollToActive, 1000)
                 initialScrollPerformed = true
                 setTimeout(() => {
                     tabChangeFromScroll = false
