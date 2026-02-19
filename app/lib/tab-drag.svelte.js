@@ -2,6 +2,44 @@
 // Used by both App.svelte (top bar) and TabSidebar.svelte (sidebar)
 
 const DRAG_THRESHOLD = 5
+const AUTO_SCROLL_EDGE = 60 // px from edge to start scrolling
+const AUTO_SCROLL_SPEED = 12 // px per frame
+
+let autoScrollRafId = null
+
+function startAutoScroll() {
+    if (autoScrollRafId) return
+    function tick() {
+        if (!state.active) { autoScrollRafId = null; return }
+        const container = document.querySelector('.tab-content-container.multi-space')
+        if (!container) { autoScrollRafId = null; return }
+        const rect = container.getBoundingClientRect()
+        const mx = state.mouseX
+        let scrolled = false
+        if (mx < rect.left + AUTO_SCROLL_EDGE && container.scrollLeft > 0) {
+            const intensity = 1 - (mx - rect.left) / AUTO_SCROLL_EDGE
+            container.scrollLeft -= AUTO_SCROLL_SPEED * Math.max(0, Math.min(1, intensity))
+            scrolled = true
+        } else if (mx > rect.right - AUTO_SCROLL_EDGE && container.scrollLeft < container.scrollWidth - container.clientWidth) {
+            const intensity = 1 - (rect.right - mx) / AUTO_SCROLL_EDGE
+            container.scrollLeft += AUTO_SCROLL_SPEED * Math.max(0, Math.min(1, intensity))
+            scrolled = true
+        }
+        if (scrolled) {
+            // Re-trigger hit detection with current mouse position
+            handleMouseMove({ clientX: state.mouseX, clientY: state.mouseY })
+        }
+        autoScrollRafId = requestAnimationFrame(tick)
+    }
+    autoScrollRafId = requestAnimationFrame(tick)
+}
+
+function stopAutoScroll() {
+    if (autoScrollRafId) {
+        cancelAnimationFrame(autoScrollRafId)
+        autoScrollRafId = null
+    }
+}
 
 const state = $state({
     active: false,
@@ -83,6 +121,10 @@ function handleMouseMove(e) {
             }
             // Dismiss any open hovercards
             window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
+            // Start auto-scrolling if in multi-space mode
+            if (document.querySelector('.tab-content-container.multi-space')) {
+                startAutoScroll()
+            }
         }
     }
 
@@ -303,6 +345,7 @@ function handleKeyDown(e) {
 }
 
 function handleMouseUp() {
+    stopAutoScroll()
     window.removeEventListener('mousemove', handleMouseMove)
     window.removeEventListener('mouseup', handleMouseUp)
     window.removeEventListener('keydown', handleKeyDown, true)
