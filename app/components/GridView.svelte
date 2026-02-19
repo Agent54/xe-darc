@@ -57,12 +57,12 @@
   }
 
   function handleGridContextAction(action, spaceId) {
-    const el = document.querySelector(`[data-space-id="${spaceId}"]`)
+    const chipEl = document.querySelector(`.space-chip-wrapper [data-space-id="${spaceId}"]`)
     if (action === 'rename') {
       gridRenamingSpaceId = spaceId
       gridRenameInputValue = data.spaces[spaceId].name
-      if (el) {
-        const rect = el.getBoundingClientRect()
+      if (chipEl) {
+        const rect = chipEl.getBoundingClientRect()
         gridOverlayPosition = { x: rect.left, y: rect.bottom + 4 }
       }
       requestAnimationFrame(() => {
@@ -71,8 +71,8 @@
       })
     } else if (action === 'change-color') {
       gridColorPickerSpaceId = spaceId
-      if (el) {
-        const rect = el.getBoundingClientRect()
+      if (chipEl) {
+        const rect = chipEl.getBoundingClientRect()
         gridOverlayPosition = { x: rect.left, y: rect.bottom + 4 }
       }
     } else {
@@ -102,6 +102,7 @@
   let spaceOrder = $derived(data.spaceMeta.spaceOrder || [])
   let activeSpaceId = $derived(data.spaceMeta.activeSpace)
   let activeTabId = $derived(data.spaceMeta.activeTabId)
+  let highlightedSpaceId = $state(data.spaceMeta.activeSpace)
   
   // Pre-compute spaces data with filtered tabs to avoid reactive lookups in template
   let spacesData = $derived.by(() => {
@@ -128,6 +129,7 @@
   function switchSpace(id) {
     if (id && id !== activeSpaceId) {
       onSpaceSwitch(id)
+      highlightedSpaceId = id
     }
   }
   
@@ -216,7 +218,8 @@
     // Don't handle if clicking on tabs, space chips, or other interactive elements
     const isInteractiveElement = (
       target.closest('.grid-frame') ||
-      target.closest('.space-group-header') ||
+      target.closest('.space-chip') ||
+      target.closest('.spaces-switcher') ||
       target.closest('.new-tab-button') ||
       target.closest('.grid-top-bar') ||
       target.closest('.grid-empty-view') ||
@@ -229,7 +232,14 @@
     if (gridContextMenuId || gridColorPickerSpaceId || gridRenamingSpaceId) return
     
     if (isBackgroundClick && !isInteractiveElement) {
-      onViewModeChange({fromTileMode: true})
+      // If we're viewing a different space than the active one, switch to it
+      if (highlightedSpaceId && highlightedSpaceId !== activeSpaceId) {
+        switchSpace(highlightedSpaceId)
+        onViewModeChange({fromTileMode: true})
+      } else {
+        // If we're already in the active space, just close the view
+        onViewModeChange({fromTileMode: true})
+      }
     }
   }
 </script>
@@ -273,7 +283,70 @@
     {/if}
   </div>
 
-
+  <div class="spaces-switcher" class:hidden={spaceScope === 'current'} role="navigation" aria-label="Spaces">
+    {#each spaceOrder as id (id)}
+      {@const space = spacesData[id]}
+      {#if space}
+        <div class="space-chip-wrapper">
+            <button 
+              class="space-chip"
+              class:active={id === activeSpaceId}
+              class:highlighted={id === highlightedSpaceId}
+              style="--space-color: {space.color || '#5b5b5b'}"
+              data-space-id={id}
+              onmousedown={() => switchSpace(id)}
+              oncontextmenu={(e) => handleSpaceChipContext(e, id)}
+              aria-current={id === activeSpaceId ? 'true' : 'false'}
+              title={space.title || space.name}
+              type="button"
+            >
+              {#if space.glyph}
+                <span class="space-chip-glyph" style="color: {space.color || '#5b5b5b'}" aria-hidden="true">{@html space.glyph}</span>
+              {:else}
+                <span class="space-color-dot" aria-hidden="true"></span>
+              {/if}
+              <span class="space-name">{space.name || 'Space'}</span>
+            </button>
+        </div>
+      {/if}
+    {/each}
+  </div>
+  {#if gridContextMenuId}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="grid-menu-scrim" onmousedown={(e) => { e.stopPropagation(); gridContextMenuId = null; }}></div>
+    <div class="grid-context-menu" style="top: {gridContextMenuPosition.y}px; left: {gridContextMenuPosition.x}px;">
+      <button class="grid-context-item" onmouseup={() => handleGridContextAction('rename', gridContextMenuId)} role="menuitem">Rename</button>
+      <button class="grid-context-item" onmouseup={() => handleGridContextAction('change-icon', gridContextMenuId)} role="menuitem">Change icon</button>
+      <button class="grid-context-item" onmouseup={() => handleGridContextAction('change-color', gridContextMenuId)} role="menuitem">Change color</button>
+      <button class="grid-context-item" onmouseup={() => handleGridContextAction('container', gridContextMenuId)} role="menuitem">Container</button>
+      <button class="grid-context-item delete" onmouseup={() => handleGridContextAction('delete', gridContextMenuId)} role="menuitem">Delete</button>
+    </div>
+  {/if}
+  {#if gridRenamingSpaceId}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="grid-menu-scrim" onmousedown={(e) => { e.stopPropagation(); commitGridRename(); }}></div>
+    <div class="grid-rename-overlay" style="top: {gridOverlayPosition.y}px; left: {gridOverlayPosition.x}px;">
+      <input class="grid-rename-input"
+             bind:this={gridRenameInputRef}
+             bind:value={gridRenameInputValue}
+             onblur={commitGridRename}
+             onkeydown={handleGridRenameKeydown} />
+    </div>
+  {/if}
+  {#if gridColorPickerSpaceId}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="grid-menu-scrim" onmousedown={(e) => { e.stopPropagation(); gridColorPickerSpaceId = null; }}></div>
+    <div class="grid-color-picker-dropdown" style="top: {gridOverlayPosition.y}px; left: {gridOverlayPosition.x}px;">
+      {#each spaceColors as c}
+        <button class="grid-color-swatch" 
+                class:active={data.spaces[gridColorPickerSpaceId]?.color === c.color}
+                style="background-color: {c.color}"
+                onmousedown={(e) => { e.stopPropagation(); pickGridColor(gridColorPickerSpaceId, c.color); }}
+                aria-label={c.name}></button>
+      {/each}
+    </div>
+  {/if}
+  
   {#if activeView === 'tabs'}
     <div class="spaces-vertical-container">
       {#each displayedSpaceOrder as spaceId (spaceId)}
@@ -290,8 +363,7 @@
               class:collapsed={isCollapsed}
               class:active={spaceId === activeSpaceId}
               style="--space-color: {space?.color || '#5b5b5b'}"
-              data-space-id={spaceId}
-              onmousedown={(e) => { if (e.button === 0) toggleSpaceCollapsed(spaceId) }}
+              onmousedown={() => toggleSpaceCollapsed(spaceId)}
               oncontextmenu={(e) => handleSpaceChipContext(e, spaceId)}
               type="button"
             >
@@ -477,42 +549,6 @@
   {/if}
 </div>
 
-{#if gridContextMenuId}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="grid-menu-scrim" onmousedown={(e) => { e.stopPropagation(); gridContextMenuId = null; }}></div>
-  <div class="grid-context-menu" style="top: {gridContextMenuPosition.y}px; left: {gridContextMenuPosition.x}px;">
-    <button class="grid-context-item" onmouseup={() => handleGridContextAction('rename', gridContextMenuId)} role="menuitem">Rename</button>
-    <button class="grid-context-item" onmouseup={() => handleGridContextAction('change-icon', gridContextMenuId)} role="menuitem">Change icon</button>
-    <button class="grid-context-item" onmouseup={() => handleGridContextAction('change-color', gridContextMenuId)} role="menuitem">Change color</button>
-    <button class="grid-context-item" onmouseup={() => handleGridContextAction('container', gridContextMenuId)} role="menuitem">Container</button>
-    <button class="grid-context-item delete" onmouseup={() => handleGridContextAction('delete', gridContextMenuId)} role="menuitem">Delete</button>
-  </div>
-{/if}
-{#if gridRenamingSpaceId}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="grid-menu-scrim" onmousedown={(e) => { e.stopPropagation(); commitGridRename(); }}></div>
-  <div class="grid-rename-overlay" style="top: {gridOverlayPosition.y}px; left: {gridOverlayPosition.x}px;">
-    <input class="grid-rename-input"
-           bind:this={gridRenameInputRef}
-           bind:value={gridRenameInputValue}
-           onblur={commitGridRename}
-           onkeydown={handleGridRenameKeydown} />
-  </div>
-{/if}
-{#if gridColorPickerSpaceId}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="grid-menu-scrim" onmousedown={(e) => { e.stopPropagation(); gridColorPickerSpaceId = null; }}></div>
-  <div class="grid-color-picker-dropdown" style="top: {gridOverlayPosition.y}px; left: {gridOverlayPosition.x}px;">
-    {#each spaceColors as c}
-      <button class="grid-color-swatch" 
-              class:active={data.spaces[gridColorPickerSpaceId]?.color === c.color}
-              style="background-color: {c.color}"
-              onmousedown={(e) => { e.stopPropagation(); pickGridColor(gridColorPickerSpaceId, c.color); }}
-              aria-label={c.name}></button>
-    {/each}
-  </div>
-{/if}
-
 <style>
   .grid-view {
     position: fixed;
@@ -689,6 +725,10 @@
     color: rgba(255, 255, 255, 0.45);
   }
 
+  .spaces-switcher.hidden {
+    display: none;
+  }
+
   .spaces-vertical-container {
     width: 100%;
     height: 100%;
@@ -698,13 +738,6 @@
     box-sizing: border-box;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .spaces-vertical-container > .space-section {
-    flex-shrink: 0;
   }
 
   .spaces-vertical-container::-webkit-scrollbar {
@@ -834,7 +867,7 @@
     grid-auto-rows: 180px;
     gap: 20px;
     width: 100%;
-    padding-left: 1px;
+    padding-left: 22px;
     will-change: auto;
     contain: layout style;
   }
@@ -932,9 +965,63 @@
     color: rgba(255, 255, 255, 0.45);
   }
 
+  .spaces-switcher {
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(30, 30, 30, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+    border-radius: 9999px;
+    max-width: calc(100% - 32px);
+    overflow-x: auto;
+    z-index: 10;
+  }
+
+  .space-chip-wrapper {
+    position: relative;
+  }
+
+  .space-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 9999px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .space-chip-glyph {
+    font-size: 12px;
+    line-height: 1;
+    width: 12px;
+    height: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  :global(.space-chip-glyph svg) {
+    width: 100%;
+    height: 100%;
+  }
+
   .grid-rename-overlay {
     position: fixed;
-    z-index: 10002;
+    z-index: 10001;
   }
 
   .grid-rename-input {
@@ -949,6 +1036,71 @@
     outline: none;
     min-width: 120px;
     backdrop-filter: blur(12px);
+  }
+
+  .space-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .space-chip.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-weight: 600;
+  }
+
+  .space-chip.highlighted:not(.active) {
+    position: relative;
+  }
+
+  .space-chip.highlighted:not(.active)::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 1px;
+    opacity: 0;
+    animation: underline-fade-in 0.3s ease-out 0.15s forwards;
+  }
+
+  @keyframes underline-fade-in {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) scaleX(0.5);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) scaleX(1);
+    }
+  }
+
+  .space-chip.active .space-color-dot {
+    opacity: 0.9;
+    filter: saturate(1.1) brightness(1.0) contrast(1.1);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+  }
+
+  .space-chip.highlighted:not(.active) .space-color-dot {
+    opacity: 0.75;
+    filter: saturate(0.9) brightness(0.85) contrast(1.0);
+  }
+
+  .space-color-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--space-color, #6b7280);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+    opacity: 0.6;
+    filter: saturate(0.85) brightness(0.75) contrast(0.95);
+  }
+
+  .space-chip:not(.active) .space-color-dot {
+    opacity: 0.55;
   }
 
   @keyframes grid-fade-in {
@@ -1181,7 +1333,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 10001;
+    z-index: 9999;
   }
 
   .grid-context-menu {
@@ -1193,7 +1345,7 @@
     border-radius: 10px;
     padding: 4px 0;
     width: max-content;
-    z-index: 10002;
+    z-index: 10001;
     backdrop-filter: blur(12px);
     transform: translateY(-4px);
     animation: grid-menu-in 150ms ease forwards;
@@ -1241,7 +1393,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     padding: 8px;
-    z-index: 10002;
+    z-index: 10001;
     backdrop-filter: blur(12px);
     display: grid;
     grid-template-columns: repeat(5, 1fr);
