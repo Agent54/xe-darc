@@ -3161,3 +3161,5 @@ sort filter group stack bar + uri pattern
 
 fix the active tab after mac hibernation!!!!
 
+implement seen links style and badge to show open tabs for links and counters!!!
+
