@@ -3170,3 +3170,15 @@ open closed tabs menu on new closed ones, hide after while
 interface bug bench browser testing/debugging
 
 sticky current tab in tab scrolling
+
+drag to new window feature
+
+allow overview to show real frames mode to check the progress!!!!!
+
+
+live mode for grid view! with live indicators etc
+
+sort by last used with timestamps for grid view!
+
+
+alt tab instead of custom three gesture, switch to by last used sort on alt tab again and activate previous until letting go of alt key

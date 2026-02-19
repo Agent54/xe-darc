@@ -104,6 +104,12 @@
         return false;
     }
     
+    const hasAnySearchResults = $derived.by(() => {
+        if (!tabSearchQuery) return true;
+        return data.spaceMeta.spaceOrder.some(spaceId => spaceHasMatchingTabs(spaceId)) ||
+               data.spaceMeta.closedTabs.some(tab => tabMatchesSearch(tab));
+    });
+    
     function handleTabGroupToggle() {
         tabGroupExpanded = !tabGroupExpanded
     }
@@ -1745,7 +1751,7 @@
                 />
             {/if}
             
-            <div class="section search-section">
+            <div class="section search-section" class:multi-space={multiSpaceMode}>
                 <div class="tab-search-container">
                     <svg class="tab-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
@@ -1851,11 +1857,29 @@
                      onscroll={handleTabScroll}
                      onwheel={handleTabContentWheel}
                      onscrollend={handleTabContentScrollEnd}
-                     ondblclick={handleBackgroundDoubleClick}
+                     onmousedown={(e) => {
+                         if (multiSpaceMode && (e.target === tabListRef || e.target.closest('.tab-content-track') === e.target || e.target.closest('.tab-content-container') === e.target)) {
+                             exitMultiSpaceMode()
+                         }
+                     }}
+                     ondblclick={(e) => {
+                         if (!multiSpaceMode) {
+                             handleBackgroundDoubleClick()
+                         }
+                     }}
                      role="region"
                      aria-label="Tab content area - double-click to create new tab"
                      style=""
                     >
+                    {#if tabSearchQuery && !hasAnySearchResults}
+                        <div class="no-search-results">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <p>No tabs found for "{tabSearchQuery}"</p>
+                        </div>
+                    {/if}
                     <div class="tab-content-track" class:multi-space={multiSpaceMode}>
                         {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
                             {#if spaceHasMatchingTabs(spaceId)}
@@ -2093,12 +2117,19 @@
                                     {#if !tabSearchQuery}
                                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                                         <!-- Bottom spacer for scrolling and double-click to create new tab -->
-                                        <div class="tabs-list-bottom-spacer" ondblclick={async () => {
-                                            const newTab = await data.newTab(spaceId)
-                                            if (newTab) {
-                                                data.activateSpace(spaceId)
-                                                data.activate(newTab.id)
-                                            }
+                                        <div class="tabs-list-bottom-spacer"
+                                             onmousedown={(e) => {
+                                                 if (multiSpaceMode) {
+                                                     exitMultiSpaceMode()
+                                                 }
+                                             }}
+                                             ondblclick={async (e) => {
+                                                e.stopPropagation()
+                                                const newTab = await data.newTab(spaceId)
+                                                if (newTab) {
+                                                    data.activateSpace(spaceId)
+                                                    data.activate(newTab.id)
+                                                }
                                         }}></div>
                                     {/if}
                                 </div>
@@ -2376,6 +2407,38 @@
         padding: 4px 4px 4px 4px;
         margin-bottom: 4px;
         flex-shrink: 0;
+    }
+    
+    .search-section.multi-space {
+        width: 20vw;
+        min-width: 263px;
+        max-width: 600px;
+    }
+    
+    .no-search-results {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        color: rgba(255, 255, 255, 0.4);
+        text-align: center;
+        gap: 12px;
+        height: 100%;
+        width: 100%;
+    }
+    
+    .no-search-results svg {
+        width: 32px;
+        height: 32px;
+        opacity: 0.5;
+    }
+    
+    .no-search-results p {
+        font-size: 13px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        margin: 0;
+        word-break: break-word;
     }
     
     .tab-search-container {
@@ -2934,7 +2997,7 @@
         contain: layout style;
     }
     
-    .tab-content-container.searching {
+    .tab-content-container.searching:not(.multi-space) {
         overflow-x: hidden;
         overflow-y: auto;
         scroll-snap-type: none;
@@ -2968,7 +3031,7 @@
         gap: 20px;
     }
     
-    .tab-content-container.searching .tab-content-track {
+    .tab-content-container.searching:not(.multi-space) .tab-content-track {
         flex-direction: column;
         height: auto;
         gap: 12px;
@@ -2990,7 +3053,7 @@
         position: relative;
     }
     
-    .tab-content-container.searching .space-content {
+    .tab-content-container.searching:not(.multi-space) .space-content {
         height: auto;
         max-height: calc(36px * 5 + 8px * 4 + 40px); /* 5 tabs + gaps + header */
     }
@@ -3234,7 +3297,7 @@
         backface-visibility: hidden;
     }
     
-    .tab-content-container.searching .tabs-list {
+    .tab-content-container.searching:not(.multi-space) .tabs-list {
         overscroll-behavior-y: auto;
         overflow-y: auto;
         padding-top: 0;
