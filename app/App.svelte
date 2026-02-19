@@ -1459,10 +1459,24 @@
         if (event.type === 'sidepin') {
             const tab = data.docs[event.tabId]
             if (!tab) return
-            if (event.side === 'left') {
-                pinTabLeft(tab)
-            } else if (event.side === 'right') {
-                pinTabRight(tab)
+            const side = event.side
+
+            if (event.beforeTabId || event.afterTabId) {
+                // Positional sidepin: set pinned state in-memory, then moveTab persists everything in one db.put
+                const wasActive = data.spaceMeta.activeTabId === tab.id
+                tab.pinned = side === 'right' ? 'right' : 'left'
+                if (wasActive) data.previous()
+                data.moveTab(event.tabId, {
+                    beforeTabId: event.beforeTabId,
+                    afterTabId: event.afterTabId,
+                    targetSpaceId: null
+                })
+            } else {
+                if (side === 'left') {
+                    pinTabLeft(tab)
+                } else {
+                    pinTabRight(tab)
+                }
             }
         } else if (event.type === 'reorder') {
             const tab = data.docs[event.tabId]
@@ -4764,7 +4778,7 @@
     </div>
 {/if}
 
-{#if tabDrag.active && tabDrag.sidepinZone}
+{#if tabDrag.active && tabDrag.sidepinZone && !tabDrag.indicator.visible}
     {@const leftInset = tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}
     {@const rightInset = rightSidebarWidth}
     <div class="sidepin-drop-overlay {tabDrag.sidepinZone}" style="--left-inset: {leftInset}px; --right-inset: {rightInset}px;">
