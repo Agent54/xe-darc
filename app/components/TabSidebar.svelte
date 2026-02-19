@@ -83,6 +83,26 @@
     
     // Tab group expansion state
     let tabGroupExpanded = $state(false)
+    let tabSearchQuery = $state('')
+    
+    function tabMatchesSearch(tab) {
+        if (!tabSearchQuery) return true;
+        const query = tabSearchQuery.toLowerCase();
+        const title = (data.docs[tab.id]?.title || tab.title || '').toLowerCase();
+        const url = (data.docs[tab.id]?.url || tab.url || '').toLowerCase();
+        return title.includes(query) || url.includes(query);
+    }
+    
+    function spaceHasMatchingTabs(spaceId) {
+        if (!tabSearchQuery) return true;
+        const space = data.spaces[spaceId];
+        if (!space) return false;
+        
+        if (space.pinnedTabs?.some(tab => tabMatchesSearch(tab))) return true;
+        if (space.tabs?.some(tab => tab.type !== 'divider' && tabMatchesSearch(tab))) return true;
+        
+        return false;
+    }
     
     function handleTabGroupToggle() {
         tabGroupExpanded = !tabGroupExpanded
@@ -255,7 +275,7 @@
     let horizontalScrollTimeout = null
     
     function handleTabContentWheel(event) {
-        if (!tabListRef) return
+        if (!tabListRef || tabSearchQuery) return
         
         const scrollLeft = tabListRef.scrollLeft
         const maxScroll = tabListRef.scrollWidth - tabListRef.clientWidth
@@ -537,7 +557,7 @@
     
     function handleTabsListWheel(event, spaceId) {
         const tabsList = event.currentTarget
-        if (!tabsList) return
+        if (!tabsList || tabSearchQuery) return
         
 
         
@@ -748,10 +768,19 @@
         if (event.button === 0) {
             // If clicking the currently active space, switch to previous active space
             if (data.spaceMeta.activeSpace === spaceId) {
-                const previousSpace = data.getPreviousActiveSpace()
-                if (previousSpace && data.spaces[previousSpace]) {
-                    spaceId = previousSpace
+                // Only switch to previous space if the current space is already scrolled into view
+                if (currentScrolledSpace === spaceId || currentScrolledSpace === null) {
+                    const previousSpace = data.getPreviousActiveSpace()
+                    if (previousSpace && data.spaces[previousSpace]) {
+                        spaceId = previousSpace
+                    } else {
+                        return
+                    }
                 } else {
+                    // If not scrolled into view, just scroll it into view without switching spaces
+                    isManualScroll = true
+                    scrollToCurrentSpace('smooth')
+                    setTimeout(() => { isManualScroll = false }, 500)
                     return
                 }
             }
@@ -1701,7 +1730,7 @@
                 </button>
             {/if}
             {#if showUrl}
-                <UrlBar 
+                <UrlBar
                     url={data.docs[data.spaceMeta.activeTabId]?.url || ''}
                     tabId={data.spaceMeta.activeTabId}
                     expanded={urlBarExpanded}
@@ -1715,6 +1744,22 @@
                     onExpandedChange={(v) => urlBarExpanded = v}
                 />
             {/if}
+            
+            <div class="section search-section">
+                <div class="tab-search-container">
+                    <svg class="tab-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
+                    </svg>
+                    <input type="text" class="tab-search-input" placeholder="Search tabs..." bind:value={tabSearchQuery} />
+                    {#if tabSearchQuery}
+                        <button class="tab-search-clear" onmousedown={() => tabSearchQuery = ''} aria-label="Clear search">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                            </svg>
+                        </button>
+                    {/if}
+                </div>
+            </div>
             
             <div class="section global-pins-section">
                 <div class="pinned-tabs-grid">
@@ -1741,9 +1786,10 @@
                 </div>
             </div>
 
-            <div class="section">
-                <div class="spaces-container">
-                    <div class="spaces-list-wrapper">
+            {#if !tabSearchQuery}
+                <div class="section">
+                    <div class="spaces-container">
+                        <div class="spaces-list-wrapper">
                         <div class="spaces-list-fade-left" class:visible={spacesScrolledLeft}></div>
                         <div class="spaces-list" bind:this={spacesListRef} onscroll={handleSpacesScroll}>
                             {#each data.spaceMeta.spaceOrder as spaceId}
@@ -1778,27 +1824,29 @@
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div class="menu-scrim" onmousedown={() => newSpaceMenuOpen = false}></div>
                         {/if}
-                        <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
-                            <button class="new-space-menu-item"
-                                    onmouseup={() => handleNewSpaceMenuAction('new-space')}
-                                    role="menuitem">New Space</button>
-                            <button class="new-space-menu-item"
-                                    onmouseup={() => handleNewSpaceMenuAction('new-divider')}
-                                    role="menuitem">New Divider</button>
-                            <button class="new-space-menu-item"
-                                    onmouseup={() => handleNewSpaceMenuAction('new-folder')}
-                                    role="menuitem">New Folder</button>
+                            <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
+                                <button class="new-space-menu-item"
+                                        onmouseup={() => handleNewSpaceMenuAction('new-space')}
+                                        role="menuitem">New Space</button>
+                                <button class="new-space-menu-item"
+                                        onmouseup={() => handleNewSpaceMenuAction('new-divider')}
+                                        role="menuitem">New Divider</button>
+                                <button class="new-space-menu-item"
+                                        onmouseup={() => handleNewSpaceMenuAction('new-folder')}
+                                        role="menuitem">New Folder</button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            {/if}
 
             <div class="section flex-1">
-                <div class="tab-content-container" 
+                <div class="tab-content-container"
                      class:multi-space={multiSpaceMode}
                      class:rubber-banding={isRubberBanding}
                      class:closing={isClosingMultiSpace}
                      class:horizontal-scrolling={isHorizontalScrolling}
+                     class:searching={tabSearchQuery.length > 0}
                      bind:this={tabListRef}
                      onscroll={handleTabScroll}
                      onwheel={handleTabContentWheel}
@@ -1810,20 +1858,21 @@
                     >
                     <div class="tab-content-track" class:multi-space={multiSpaceMode}>
                         {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
-                            {#if multiSpaceMode && index > 0}
-                                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-                                <div class="lane-divider" 
-                                     onmousedown={handleLaneDividerMouseDown}
-                                     role="separator"></div>
-                            {/if}
-                            <div class="space-content" 
-                                 class:multi-space={multiSpaceMode}
-                                 data-space-id={spaceId}
-                                 style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}
-                                 onmouseenter={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = spaceId }}
-                                 onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
-                                 role="group"
-                                 aria-label="Space tabs">
+                            {#if spaceHasMatchingTabs(spaceId)}
+                                {#if multiSpaceMode && index > 0}
+                                    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                    <div class="lane-divider"
+                                         onmousedown={handleLaneDividerMouseDown}
+                                         role="separator"></div>
+                                {/if}
+                                <div class="space-content"
+                                     class:multi-space={multiSpaceMode}
+                                     data-space-id={spaceId}
+                                     style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}
+                                     onmouseenter={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = spaceId }}
+                                     onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
+                                     role="group"
+                                     aria-label="Space tabs">
                                 <div class="space-title-container">
                                     {#if renamingSpaceId === spaceId}
                                         <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1889,9 +1938,11 @@
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
                                         {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
-                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} onmousedown={() => activateTab(tab.id, spaceId)}>
-                                                <Favicon {tab} showButton={false} />
-                                            </button>
+                                            {#if tabMatchesSearch(tab)}
+                                                <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} onmousedown={() => activateTab(tab.id, spaceId)}>
+                                                    <Favicon {tab} showButton={false} />
+                                                </button>
+                                            {/if}
                                         {/each}
                                     </div>
                                 {/if}
@@ -1945,7 +1996,7 @@
                                          onwheel={(e) => handleTabsListWheel(e, spaceId)}
                                          style="transform: translateY({tabsListVerticalRubberBand[spaceId] || 0}px) translateZ(0)">
                                         
-                                        {#if tabsListSpacerVisible[spaceId]}
+                                        {#if tabsListSpacerVisible[spaceId] && !tabSearchQuery}
                                             <div class="tabs-list-spacer" style="height: {tabsListSpacerHeight[spaceId] || 0}px"></div>
                                         {/if}
                                         
@@ -1957,52 +2008,56 @@
                                         
                                    {#each data.spaces[spaceId].tabs as tab, i (tab.id)}
                                         {#if tab.type === 'divider'}
-                                            <div class="tab-divider">
-                                                {#if tab.title}
-                                                    <span class="tab-divider-title">{tab.title}</span>
-                                                    <div class="tab-divider-line"></div>
-                                                {:else}
-                                                    <div class="tab-divider-line-only"></div>
-                                                {/if}
-                                            </div>
+                                            {#if !tabSearchQuery}
+                                                <div class="tab-divider">
+                                                    {#if tab.title}
+                                                        <span class="tab-divider-title">{tab.title}</span>
+                                                        <div class="tab-divider-line"></div>
+                                                    {:else}
+                                                        <div class="tab-divider-line-only"></div>
+                                                    {/if}
+                                                </div>
+                                            {/if}
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
-                                                 role="listitem"
-                                                 onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                                                 onmouseleave={handleTabMouseLeave}
-                                                 oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive && !multiSpaceMode) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
-                                                    onclick={(e) => { if (e.button === 0 && !didDragOccurred()) { if (multiSpaceMode) { activateTab(tab.id, spaceId) } else if (tabDrag.wasAlreadyActive) { activateTab(tab.id, spaceId) } } }}>
-                                                    <Favicon {tab} showButton={false} />
-                                                    <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
-                                                </button>
-                                                
-                                                <button class="tab-close" aria-label="Close tab" 
-                                                        onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}
-                                                        onmouseenter={() => {
-                                                            closeButtonHovered = true
-                                                            if (closeButtonHoverTimer) clearTimeout(closeButtonHoverTimer)
-                                                            if (instantHovercardsMode) {
-                                                                closeButtonHoverTimer = setTimeout(() => {
-                                                                    closeButtonHoveredDelayed = true
-                                                                }, 300)
-                                                            } else {
-                                                                closeButtonHoveredDelayed = true
-                                                            }
-                                                        }}
-                                                        onmouseleave={() => {
-                                                            closeButtonHovered = false
-                                                            closeButtonHoveredDelayed = false
-                                                            if (closeButtonHoverTimer) {
-                                                                clearTimeout(closeButtonHoverTimer)
-                                                                closeButtonHoverTimer = null
-                                                            }
-                                                        }}>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                                                        </svg>
+                                            {#if tabMatchesSearch(tab)}
+                                                <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
+                                                     role="listitem"
+                                                     onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                                                     onmouseleave={handleTabMouseLeave}
+                                                     oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
+                                                    <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive && !multiSpaceMode) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
+                                                        onclick={(e) => { if (e.button === 0 && !didDragOccurred()) { if (multiSpaceMode) { activateTab(tab.id, spaceId) } else if (tabDrag.wasAlreadyActive) { activateTab(tab.id, spaceId) } } }}>
+                                                        <Favicon {tab} showButton={false} />
+                                                        <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                                     </button>
-                                            </div>
+                                                    
+                                                    <button class="tab-close" aria-label="Close tab"
+                                                            onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}
+                                                            onmouseenter={() => {
+                                                                closeButtonHovered = true
+                                                                if (closeButtonHoverTimer) clearTimeout(closeButtonHoverTimer)
+                                                                if (instantHovercardsMode) {
+                                                                    closeButtonHoverTimer = setTimeout(() => {
+                                                                        closeButtonHoveredDelayed = true
+                                                                    }, 300)
+                                                                } else {
+                                                                    closeButtonHoveredDelayed = true
+                                                                }
+                                                            }}
+                                                            onmouseleave={() => {
+                                                                closeButtonHovered = false
+                                                                closeButtonHoveredDelayed = false
+                                                                if (closeButtonHoverTimer) {
+                                                                    clearTimeout(closeButtonHoverTimer)
+                                                                    closeButtonHoverTimer = null
+                                                                }
+                                                            }}>
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                                            </svg>
+                                                        </button>
+                                                </div>
+                                            {/if}
                                         {/if}
                                     {/each}
                                     
@@ -2035,19 +2090,22 @@
                                         </div>
                                     </div><!-- -->
                                     
-                                    <!-- svelte-ignore a11y_no_static_element_interactions -->
-                                    <!-- Bottom spacer for scrolling and double-click to create new tab -->
-                                    <div class="tabs-list-bottom-spacer" ondblclick={async () => {
-                                        const newTab = await data.newTab(spaceId)
-                                        if (newTab) {
-                                            data.activateSpace(spaceId)
-                                            data.activate(newTab.id)
-                                        }
-                                    }}></div>
+                                    {#if !tabSearchQuery}
+                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                        <!-- Bottom spacer for scrolling and double-click to create new tab -->
+                                        <div class="tabs-list-bottom-spacer" ondblclick={async () => {
+                                            const newTab = await data.newTab(spaceId)
+                                            if (newTab) {
+                                                data.activateSpace(spaceId)
+                                                data.activate(newTab.id)
+                                            }
+                                        }}></div>
+                                    {/if}
                                 </div>
-                                    <div class="tabs-list-fade-bottom" class:visible={tabsListScrolledBottom[spaceId]}></div>
+                                        <div class="tabs-list-fade-bottom" class:visible={tabsListScrolledBottom[spaceId]}></div>
+                                    </div>
                                 </div>
-                            </div>
+                            {/if}
                         {/each}
                     </div>
                 </div>
@@ -2072,21 +2130,23 @@
                 <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
                         {#each data.spaceMeta.closedTabs as tab}
-                            <button class="closed-tab-item" 
-                                    onmousedown={() => data.restoreClosedTab(tab.id)}
-                                    onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                                    onmouseleave={handleTabMouseLeave}>
-                                <Favicon {tab} showButton={false} />
-                                <div class="tab-text">
-                                    <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
-                                    <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
-                                </div>
-                                <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                                    </svg>
-                                </div>
-                            </button>
+                            {#if tabMatchesSearch(tab)}
+                                <button class="closed-tab-item"
+                                        onmousedown={() => data.restoreClosedTab(tab.id)}
+                                        onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                                        onmouseleave={handleTabMouseLeave}>
+                                    <Favicon {tab} showButton={false} />
+                                    <div class="tab-text">
+                                        <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
+                                        <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
+                                    </div>
+                                    <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                        </svg>
+                                    </div>
+                                </button>
+                            {/if}
                         {/each}
                     </div>
                 </div>
@@ -2312,6 +2372,90 @@
         flex-shrink: 0;
     }
     
+    .search-section {
+        padding: 4px 4px 4px 4px;
+        margin-bottom: 4px;
+        flex-shrink: 0;
+    }
+    
+    .tab-search-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+        width: 100%;
+    }
+    
+    .tab-search-icon {
+        position: absolute;
+        left: 10px;
+        width: 14px;
+        height: 14px;
+        color: rgba(255, 255, 255, 0.3);
+        pointer-events: none;
+        transition: color 150ms ease;
+    }
+    
+    .tab-search-input {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 10px;
+        padding: 8px 30px 8px 30px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 13px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        outline: none;
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    
+    .tab-search-clear {
+        position: absolute;
+        right: 8px;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.4);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 150ms ease;
+        padding: 0;
+    }
+    
+    .tab-search-clear:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.8);
+    }
+    
+    .tab-search-clear svg {
+        width: 14px;
+        height: 14px;
+    }
+    
+    .tab-search-input:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .tab-search-input:focus {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.15);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+    
+    .tab-search-input:focus + .tab-search-icon {
+        color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .tab-search-input::placeholder {
+        color: rgba(255, 255, 255, 0.3);
+        font-weight: 400;
+    }
+
     .global-pins-section {
         margin-bottom: 10px;
         flex-shrink: 0;
@@ -2790,6 +2934,12 @@
         contain: layout style;
     }
     
+    .tab-content-container.searching {
+        overflow-x: hidden;
+        overflow-y: auto;
+        scroll-snap-type: none;
+    }
+    
     .tab-content-container.rubber-banding {
         transition: none;
     }
@@ -2818,6 +2968,13 @@
         gap: 20px;
     }
     
+    .tab-content-container.searching .tab-content-track {
+        flex-direction: column;
+        height: auto;
+        gap: 12px;
+        padding-bottom: 20px;
+    }
+    
     .space-content {
         width: 100%;
         flex-shrink: 0;
@@ -2831,6 +2988,11 @@
         padding-top: 0;
         padding-right: 8px;
         position: relative;
+    }
+    
+    .tab-content-container.searching .space-content {
+        height: auto;
+        max-height: calc(36px * 5 + 8px * 4 + 40px); /* 5 tabs + gaps + header */
     }
     
     .tab-content-track.multi-space {
@@ -3070,6 +3232,12 @@
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
         will-change: transform;
         backface-visibility: hidden;
+    }
+    
+    .tab-content-container.searching .tabs-list {
+        overscroll-behavior-y: auto;
+        overflow-y: auto;
+        padding-top: 0;
     }
     
     .tab-content-container.horizontal-scrolling .tabs-list {
