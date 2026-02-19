@@ -7,27 +7,62 @@ const AUTO_SCROLL_SPEED = 12 // px per frame
 
 let autoScrollRafId = null
 
+function autoScrollContainer(container, axis) {
+    const rect = container.getBoundingClientRect()
+    const pos = axis === 'x' ? state.mouseX : state.mouseY
+    const start = axis === 'x' ? rect.left : rect.top
+    const end = axis === 'x' ? rect.right : rect.bottom
+    const scrollPos = axis === 'x' ? container.scrollLeft : container.scrollTop
+    const scrollMax = axis === 'x' ? container.scrollWidth - container.clientWidth : container.scrollHeight - container.clientHeight
+
+    if (pos < start + AUTO_SCROLL_EDGE && scrollPos > 0) {
+        const intensity = 1 - (pos - start) / AUTO_SCROLL_EDGE
+        const delta = -AUTO_SCROLL_SPEED * Math.max(0, Math.min(1, intensity))
+        if (axis === 'x') container.scrollLeft += delta; else container.scrollTop += delta
+        return true
+    } else if (pos > end - AUTO_SCROLL_EDGE && scrollPos < scrollMax) {
+        const intensity = 1 - (end - pos) / AUTO_SCROLL_EDGE
+        const delta = AUTO_SCROLL_SPEED * Math.max(0, Math.min(1, intensity))
+        if (axis === 'x') container.scrollLeft += delta; else container.scrollTop += delta
+        return true
+    }
+    return false
+}
+
 function startAutoScroll() {
     if (autoScrollRafId) return
     function tick() {
         if (!state.active) { autoScrollRafId = null; return }
-        const container = document.querySelector('.tab-content-container.multi-space')
-        if (!container) { autoScrollRafId = null; return }
-        const rect = container.getBoundingClientRect()
         const mx = state.mouseX
+        const my = state.mouseY
         let scrolled = false
-        if (mx < rect.left + AUTO_SCROLL_EDGE && container.scrollLeft > 0) {
-            const intensity = 1 - (mx - rect.left) / AUTO_SCROLL_EDGE
-            container.scrollLeft -= AUTO_SCROLL_SPEED * Math.max(0, Math.min(1, intensity))
-            scrolled = true
-        } else if (mx > rect.right - AUTO_SCROLL_EDGE && container.scrollLeft < container.scrollWidth - container.clientWidth) {
-            const intensity = 1 - (rect.right - mx) / AUTO_SCROLL_EDGE
-            container.scrollLeft += AUTO_SCROLL_SPEED * Math.max(0, Math.min(1, intensity))
-            scrolled = true
+
+        // Horizontal: multi-space sidebar container
+        const multiSpace = document.querySelector('.tab-content-container.multi-space')
+        if (multiSpace) scrolled = autoScrollContainer(multiSpace, 'x') || scrolled
+
+        // Horizontal: title bar tab list
+        const topbar = document.querySelector('.tab-list.tabs')
+        if (topbar && topbar.scrollWidth > topbar.clientWidth) {
+            const r = topbar.getBoundingClientRect()
+            if (my >= r.top - 4 && my <= r.bottom + 4) {
+                scrolled = autoScrollContainer(topbar, 'x') || scrolled
+            }
         }
+
+        // Vertical: sidebar tabs-list the mouse is over
+        const sidebarLists = document.querySelectorAll('.tabs-list')
+        for (const list of sidebarLists) {
+            if (list.scrollHeight <= list.clientHeight) continue
+            const r = list.getBoundingClientRect()
+            if (mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom) {
+                scrolled = autoScrollContainer(list, 'y') || scrolled
+                break
+            }
+        }
+
         if (scrolled) {
-            // Re-trigger hit detection with current mouse position
-            handleMouseMove({ clientX: state.mouseX, clientY: state.mouseY })
+            handleMouseMove({ clientX: mx, clientY: my })
         }
         autoScrollRafId = requestAnimationFrame(tick)
     }
@@ -121,10 +156,7 @@ function handleMouseMove(e) {
             }
             // Dismiss any open hovercards
             window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
-            // Start auto-scrolling if in multi-space mode
-            if (document.querySelector('.tab-content-container.multi-space')) {
-                startAutoScroll()
-            }
+            startAutoScroll()
         }
     }
 
