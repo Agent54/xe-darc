@@ -4990,8 +4990,8 @@
         border-top: 10px solid black;
         position: fixed;
         top: 35px;
-        left: calc(var(--left-pinned-width, 0px) + var(--tab-sidebar-width, 0px));
-        right: calc(var(--sidebar-width, 0px) + 9px);
+        left: 0;
+        right: 0;
         bottom: 0;
         background: rgba(0, 0, 0, 0.8);
         backdrop-filter: blur(12px);
