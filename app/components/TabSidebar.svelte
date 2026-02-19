@@ -2700,9 +2700,9 @@
     }
     
     .new-space-button {
-        width: 20px;
-        height: 20px;
-        border-radius: 10px;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
         background: transparent;
         display: flex;
         align-items: center;
@@ -2733,9 +2733,9 @@
     .plus-icon {
         font-size: 16px;
         line-height: 1;
-        width: 14px;
-        height: 14px;
-        color: rgba(255, 255, 255, 0.3);
+        width: 16px;
+        height: 16px;
+        color: rgba(255, 255, 255, 0.6);
     }    
     .new-space-menu-dropdown {
         position: absolute;
