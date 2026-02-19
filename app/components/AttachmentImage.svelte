@@ -4,8 +4,8 @@
     let activeLoads = 0
     const loadQueue = []
     
-    // Cache resolved URLs keyed by src+digest to avoid re-loading and re-animating
-    const resolvedUrlCache = new Map()
+    // Track which src+digest combos have already been displayed (to skip fade-in on remount)
+    const displayedSet = new Set()
     
     function processNext() {
         if (loadQueue.length > 0 && activeLoads < MAX_CONCURRENT) {
@@ -105,7 +105,7 @@
                 const shouldAnimate = fadeIn && !skipFade
                 if (shouldAnimate) {
                     imageEl.style.opacity = '0'
-                    imageEl.style.transition = 'opacity 0.5s ease-out'
+                    imageEl.style.transition = 'none'
                     imageEl.style.willChange = 'opacity'
                     imageEl.style.transform = 'translateZ(0)'
                 } else {
@@ -118,8 +118,18 @@
                 imageEl.style.display = 'block'
                 if (loadingEl) loadingEl.style.display = 'none'
                 if (shouldAnimate) {
-                    void imageEl.offsetWidth
-                    imageEl.style.opacity = '1'
+                    const reveal = () => {
+                        imageEl.removeEventListener('load', reveal)
+                        requestAnimationFrame(() => {
+                            imageEl.style.transition = 'opacity 0.5s ease-out'
+                            imageEl.style.opacity = '1'
+                        })
+                    }
+                    if (imageEl.complete) {
+                        reveal()
+                    } else {
+                        imageEl.addEventListener('load', reveal)
+                    }
                 }
             }
         }
@@ -132,29 +142,27 @@
         }
         
         const cacheKey = srcToLoad + '|' + (digest || '')
-        const cached = resolvedUrlCache.get(cacheKey)
-        if (cached) {
-            updateDOM('loaded', cached, true)
-            return
-        }
+        const alreadyDisplayed = displayedSet.has(cacheKey)
         
-        updateDOM('loading')
+        if (!alreadyDisplayed) updateDOM('loading')
         
         async function doLoad() {
             try {
                 const resolved = await data.getAttachmentUrl(srcToLoad, digest)
                 if (srcToLoad !== currentSrc) return
                 
-                await new Promise((resolve, reject) => {
-                    const img = new Image()
-                    img.onload = resolve
-                    img.onerror = reject
-                    img.src = resolved
-                })
+                if (!alreadyDisplayed) {
+                    await new Promise((resolve, reject) => {
+                        const img = new Image()
+                        img.onload = resolve
+                        img.onerror = reject
+                        img.src = resolved
+                    })
+                }
                 
                 if (srcToLoad === currentSrc) {
-                    resolvedUrlCache.set(cacheKey, resolved)
-                    updateDOM('loaded', resolved)
+                    displayedSet.add(cacheKey)
+                    updateDOM('loaded', resolved, alreadyDisplayed)
                 }
             } catch (err) {
                 console.warn('Failed to resolve attachment image:', err)

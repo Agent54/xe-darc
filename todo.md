@@ -3167,5 +3167,3 @@ activation history section in overview
 
 open closed tabs menu on new closed ones, hide after while
 
-
-
