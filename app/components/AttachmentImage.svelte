@@ -4,6 +4,9 @@
     let activeLoads = 0
     const loadQueue = []
     
+    // Cache resolved URLs keyed by src+digest to avoid re-loading and re-animating
+    const resolvedUrlCache = new Map()
+    
     function processNext() {
         if (loadQueue.length > 0 && activeLoads < MAX_CONCURRENT) {
             const next = loadQueue.shift()
@@ -82,7 +85,7 @@
     let currentDigest = null
     let shouldLoad = $state(!lazy)
 
-    function updateDOM(state, resolvedSrc = null) {
+    function updateDOM(state, resolvedSrc = null, skipFade = false) {
         if (!containerEl) return
         
         const loadingEl = containerEl.querySelector('.attachment-loading')
@@ -99,16 +102,22 @@
             if (errorEl) errorEl.style.display = 'flex'
         } else if (state === 'loaded' && resolvedSrc) {
             if (imageEl) {
-                if (fadeIn) {
+                const shouldAnimate = fadeIn && !skipFade
+                if (shouldAnimate) {
                     imageEl.style.opacity = '0'
                     imageEl.style.transition = 'opacity 0.5s ease-out'
                     imageEl.style.willChange = 'opacity'
                     imageEl.style.transform = 'translateZ(0)'
+                } else {
+                    imageEl.style.opacity = '1'
+                    imageEl.style.transition = ''
+                    imageEl.style.willChange = ''
+                    imageEl.style.transform = ''
                 }
                 imageEl.src = resolvedSrc
                 imageEl.style.display = 'block'
                 if (loadingEl) loadingEl.style.display = 'none'
-                if (fadeIn) {
+                if (shouldAnimate) {
                     void imageEl.offsetWidth
                     imageEl.style.opacity = '1'
                 }
@@ -119,6 +128,13 @@
     async function loadImage(srcToLoad) {
         if (!srcToLoad || !shouldLoad) {
             updateDOM('loading')
+            return
+        }
+        
+        const cacheKey = srcToLoad + '|' + (digest || '')
+        const cached = resolvedUrlCache.get(cacheKey)
+        if (cached) {
+            updateDOM('loaded', cached, true)
             return
         }
         
@@ -137,6 +153,7 @@
                 })
                 
                 if (srcToLoad === currentSrc) {
+                    resolvedUrlCache.set(cacheKey, resolved)
                     updateDOM('loaded', resolved)
                 }
             } catch (err) {

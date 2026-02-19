@@ -3163,3 +3163,9 @@ fix the active tab after mac hibernation!!!!
 
 implement seen links style and badge to show open tabs for links and counters!!!
 
+activation history section in overview
+
+open closed tabs menu on new closed ones, hide after while
+
+
+
