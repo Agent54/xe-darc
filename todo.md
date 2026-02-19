@@ -3169,3 +3169,4 @@ open closed tabs menu on new closed ones, hide after while
 
 interface bug bench browser testing/debugging
 
+sticky current tab in tab scrolling
