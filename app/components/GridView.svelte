@@ -48,7 +48,7 @@
   let gridRenameInputValue = $state('')
   let gridRenameInputRef = $state(null)
 
-  function handleSpaceChipContext(e, id) {
+  function handleSpaceHeaderContext(e, id) {
     e.preventDefault()
     e.stopPropagation()
     const rect = e.currentTarget.getBoundingClientRect()
@@ -57,13 +57,13 @@
   }
 
   function handleGridContextAction(action, spaceId) {
-    const chipEl = document.querySelector(`.space-chip-wrapper [data-space-id="${spaceId}"]`)
+    const headerEl = document.querySelector(`.space-group-header[data-space-id="${spaceId}"]`)
     if (action === 'rename') {
       gridRenamingSpaceId = spaceId
       gridRenameInputValue = data.spaces[spaceId].name
-      if (chipEl) {
-        const rect = chipEl.getBoundingClientRect()
-        gridOverlayPosition = { x: rect.left, y: rect.bottom + 4 }
+      if (headerEl) {
+        const rect = headerEl.getBoundingClientRect()
+        gridOverlayPosition = { x: rect.left + 22, y: rect.bottom + 4 }
       }
       requestAnimationFrame(() => {
         gridRenameInputRef?.focus()
@@ -71,9 +71,9 @@
       })
     } else if (action === 'change-color') {
       gridColorPickerSpaceId = spaceId
-      if (chipEl) {
-        const rect = chipEl.getBoundingClientRect()
-        gridOverlayPosition = { x: rect.left, y: rect.bottom + 4 }
+      if (headerEl) {
+        const rect = headerEl.getBoundingClientRect()
+        gridOverlayPosition = { x: rect.left + 22, y: rect.bottom + 4 }
       }
     } else {
       console.log(`Action: ${action} for space: ${data.spaces[spaceId]?.name}`)
@@ -288,14 +288,12 @@
       {@const space = spacesData[id]}
       {#if space}
         <div class="space-chip-wrapper">
-            <button 
+            <button
               class="space-chip"
               class:active={id === activeSpaceId}
               class:highlighted={id === highlightedSpaceId}
               style="--space-color: {space.color || '#5b5b5b'}"
-              data-space-id={id}
               onmousedown={() => switchSpace(id)}
-              oncontextmenu={(e) => handleSpaceChipContext(e, id)}
               aria-current={id === activeSpaceId ? 'true' : 'false'}
               title={space.title || space.name}
               type="button"
@@ -364,8 +362,9 @@
               class:collapsed={isCollapsed}
               class:active={spaceId === activeSpaceId}
               style="--space-color: {space?.color || '#5b5b5b'}"
-              onmousedown={() => toggleSpaceCollapsed(spaceId)}
-              oncontextmenu={(e) => handleSpaceChipContext(e, spaceId)}
+              data-space-id={spaceId}
+              onmousedown={(e) => { if (e.button === 0) toggleSpaceCollapsed(spaceId) }}
+              oncontextmenu={(e) => handleSpaceHeaderContext(e, spaceId)}
               type="button"
             >
               <span class="space-group-left">
