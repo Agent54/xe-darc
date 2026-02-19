@@ -435,7 +435,11 @@
             const savedInvisiblePins = localStorage.getItem('invisiblePins')
             if (savedInvisiblePins !== null) {
                 try {
-                    invisiblePins = JSON.parse(savedInvisiblePins)
+                    const parsed = JSON.parse(savedInvisiblePins)
+                    // Migrate old per-side format ({ left: true, right: true }) to per-tab format
+                    delete parsed.left
+                    delete parsed.right
+                    invisiblePins = parsed
                 } catch (e) {
                     console.warn('Failed to parse saved invisible pins state:', e)
                     invisiblePins = {}
@@ -1008,24 +1012,8 @@
         }
         
         // If activating a collapsed pinned tab, expand it first
-        if (tab.pinned === 'left' || tab.pinned === true) {
-            if (invisiblePins.left) {
-                invisiblePins.left = false
-                try {
-                    localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
-                } catch (error) {
-                    console.warn('Failed to save invisible pins state:', error)
-                }
-            }
-        } else if (tab.pinned === 'right') {
-            if (invisiblePins.right) {
-                invisiblePins.right = false
-                try {
-                    localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
-                } catch (error) {
-                    console.warn('Failed to save invisible pins state:', error)
-                }
-            }
+        if (tab.pinned && isPinHidden(tab.id)) {
+            togglePinHidden(tab.id)
         }
         
         // For unpinned tabs, use the original behavior
@@ -1224,16 +1212,10 @@
         isChangingTabs = true
         setTimeout(() => { isChangingTabs = false }, 350)
 
-        // Check if closing the last pinned tab and reset collapsed state
-        if (tab.pinned) {
-            const pinnedSide = tab.pinned === 'right' ? 'right' : 'left'
-            const sameSidePins = tabs.filter(t => 
-                pinnedSide === 'right' ? t.pinned === 'right' : (t.pinned === true || t.pinned === 'left')
-            )
-            if (sameSidePins.length === 1 && invisiblePins[pinnedSide]) {
-                invisiblePins[pinnedSide] = false
-                localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
-            }
+        // Clean up visibility state for closing pinned tab
+        if (tab.pinned && isPinHidden(tab.id)) {
+            delete invisiblePins[tab.id]
+            localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
         }
 
         data.closeTab(data.spaceMeta.activeSpace, tab.id)
@@ -1414,16 +1396,10 @@
     }
 
     function unpinTab(tab) {
-        // Check if unpinning the last pinned tab and reset collapsed state
-        if (tab.pinned) {
-            const pinnedSide = tab.pinned === 'right' ? 'right' : 'left'
-            const sameSidePins = tabs.filter(t => 
-                pinnedSide === 'right' ? t.pinned === 'right' : (t.pinned === true || t.pinned === 'left')
-            )
-            if (sameSidePins.length === 1 && invisiblePins[pinnedSide]) {
-                invisiblePins[pinnedSide] = false
-                localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
-            }
+        // Clean up visibility state when unpinning
+        if (tab.pinned && isPinHidden(tab.id)) {
+            delete invisiblePins[tab.id]
+            localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
         }
         
         data.pin({ tabId: tab.id, pinned: null })
@@ -1481,12 +1457,8 @@
         } else if (event.type === 'reorder') {
             const tab = data.docs[event.tabId]
             if (tab?.pinned) {
-                const pinnedSide = tab.pinned === 'right' ? 'right' : 'left'
-                const sameSidePins = tabs.filter(t => 
-                    pinnedSide === 'right' ? t.pinned === 'right' : (t.pinned === true || t.pinned === 'left')
-                )
-                if (sameSidePins.length === 1 && invisiblePins[pinnedSide]) {
-                    invisiblePins[pinnedSide] = false
+                if (isPinHidden(tab.id)) {
+                    delete invisiblePins[tab.id]
                     localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
                 }
                 tab.pinned = null
@@ -2250,15 +2222,9 @@
         }
     }
     
-    function togglePinnedFrames(side) {
+    function togglePinnedFrames(tabId) {
         isTogglingPins = true
-        invisiblePins[side] = !invisiblePins[side]
-        
-        try {
-            localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
-        } catch (error) {
-            console.warn('Failed to save invisible pins state:', error)
-        }
+        togglePinHidden(tabId)
         
         setTimeout(() => {
             isTogglingPins = false
@@ -3146,20 +3112,37 @@
     let leftPinnedTabs = $derived(tabs.filter(tab => (tab.pinned === true || tab.pinned === 'left')))
     let rightPinnedTabs = $derived(tabs.filter(tab => tab.pinned === 'right'))
     let unpinnedTabs = $derived(tabs.filter(tab => !tab.pinned))
+    let visibleLeftPinnedTabs = $derived(leftPinnedTabs.filter(t => !invisiblePins[t.id]))
+    let visibleRightPinnedTabs = $derived(rightPinnedTabs.filter(t => !invisiblePins[t.id]))
+    
+    const isPinHidden = (tabId) => !!invisiblePins[tabId]
+    
+    function togglePinHidden(tabId) {
+        if (invisiblePins[tabId]) {
+            delete invisiblePins[tabId]
+        } else {
+            invisiblePins[tabId] = true
+        }
+        try {
+            localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+        } catch (error) {
+            console.warn('Failed to save invisible pins state:', error)
+        }
+    }
     
     // Calculate space taken by different UI elements
     let leftPinnedWidth = $derived.by(() => {
         if (customLeftPinnedWidth !== null) {
-            return customLeftPinnedWidth
+            return visibleLeftPinnedTabs.length > 0 ? customLeftPinnedWidth : 0
         }
-        return leftPinnedTabs.length * data.spaceMeta.config.leftPinnedTabWidth
+        return visibleLeftPinnedTabs.length * data.spaceMeta.config.leftPinnedTabWidth
     })
     
     let rightPinnedWidth = $derived.by(() => {
         if (customRightPinnedWidth !== null) {
-            return customRightPinnedWidth
+            return visibleRightPinnedTabs.length > 0 ? customRightPinnedWidth : 0
         }
-        return rightPinnedTabs.length * data.spaceMeta.config.rightPinnedTabWidth
+        return visibleRightPinnedTabs.length * data.spaceMeta.config.rightPinnedTabWidth
     })
     
     let rightSidebarWidth = $derived.by(() => {
@@ -3186,15 +3169,13 @@
     // Total space taken by all UI elements (affects available width)
     let spaceTaken = $derived.by(() => {
         if (!sidebarStateLoaded) return 0
-        const visibleLeftWidth = (leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0
-        const visibleRightWidth = (rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0
         const visibleTabSidebarWidth = tabSidebarVisible ? (customTabSidebarWidth || 263) : 0
-        const baseSpace = visibleLeftWidth + visibleRightWidth + rightSidebarWidth + visibleTabSidebarWidth
+        const baseSpace = leftPinnedWidth + rightPinnedWidth + rightSidebarWidth + visibleTabSidebarWidth
         
         // Reduce space taken to allow content to scroll behind pinned tabs
         let reduction = 0
-        if (leftPinnedTabs.length > 0 && !invisiblePins.left) reduction += 9
-        if (rightPinnedTabs.length > 0 && !invisiblePins.right) reduction += 9
+        if (visibleLeftPinnedTabs.length > 0) reduction += 9
+        if (visibleRightPinnedTabs.length > 0) reduction += 9
         
         return baseSpace - reduction
     })
@@ -3218,7 +3199,7 @@
             class:hibernated={data.isTabHibernated(tab.id)}
             class:hovered={tab.id === hoveredTab?.id}
             class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
-            class:collapsed={invisiblePins.right}
+            class:collapsed={isPinHidden(tab.id)}
             class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
             role="tab"
             tabindex="0"
@@ -3250,10 +3231,10 @@
                 {/if}
             </div>
             <button class="pinned-toggle-btn" 
-                    aria-label={invisiblePins.right ? "Expand pinned tabs" : "Collapse pinned tabs"}
-                    onclick={(e) => { if (!didDragOccurred()) { e.stopPropagation(); togglePinnedFrames('right') } }} 
-                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('right') } }}>
-                {#if invisiblePins.right}
+                    aria-label={isPinHidden(tab.id) ? "Expand pinned tab" : "Collapse pinned tab"}
+                    onclick={(e) => { if (!didDragOccurred()) { e.stopPropagation(); togglePinnedFrames(tab.id) } }} 
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames(tab.id) } }}>
+                {#if isPinHidden(tab.id)}
                     <!-- Closed: point right (toward where panel would appear) -->
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
@@ -3334,7 +3315,7 @@
                         class:hibernated={data.isTabHibernated(tab.id)}
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
-                        class:collapsed={invisiblePins.left}
+                        class:collapsed={isPinHidden(tab.id)}
                         class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
@@ -3366,10 +3347,10 @@
                             {/if}
                         </div>
                         <button class="pinned-toggle-btn" 
-                                aria-label={invisiblePins.left ? "Expand pinned tabs" : "Collapse pinned tabs"}
-                                onclick={(e) => { if (!didDragOccurred()) { e.stopPropagation(); togglePinnedFrames('left') } }} 
-                                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames('left') } }}>
-                            {#if invisiblePins.left}
+                                aria-label={isPinHidden(tab.id) ? "Expand pinned tab" : "Collapse pinned tab"}
+                                onclick={(e) => { if (!didDragOccurred()) { e.stopPropagation(); togglePinnedFrames(tab.id) } }} 
+                                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames(tab.id) } }}>
+                            {#if isPinHidden(tab.id)}
                                 <!-- Closed: point left (toward where panel would appear) -->
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
@@ -3389,7 +3370,7 @@
      
         <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: {(showNavigationToolbar ? 175 : 110) + leftPinnedTabsWidth}px; width: calc(100% - {devModeEnabled ? (showNavigationToolbar ? 478 : 413) + leftPinnedTabsWidth + rightPinnedTabsWidth : (showNavigationToolbar ? 448 : 383) + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
-        <ul class="tab-list tabs" class:pinned-collapsed-left={invisiblePins.left} class:pinned-collapsed-right={invisiblePins.right} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
+        <ul class="tab-list tabs" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
                 {@const tab = data.docs[unpinned.id]}
                 {@const frameData = data.frames[tab.id]}
@@ -4381,12 +4362,12 @@
     class:no-transitions={isWindowResizing}
     class:resizing-pinned-frames={isResizingPinnedFrames}
     class:no-scroll={isLayoutChanging}
-    class:has-left-pins={sidebarStateLoaded && leftPinnedTabs.length > 0 && !invisiblePins.left}
-    class:has-right-pins={sidebarStateLoaded && rightPinnedTabs.length > 0 && !invisiblePins.right}
+    class:has-left-pins={sidebarStateLoaded && visibleLeftPinnedTabs.length > 0}
+    class:has-right-pins={sidebarStateLoaded && visibleRightPinnedTabs.length > 0}
     class:has-tab-sidebar={tabSidebarVisible}
     onscroll={handleScroll} 
     bind:this={scrollContainer}
-    style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {(sidebarStateLoaded && leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --right-pinned-width: {(sidebarStateLoaded && rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0}px; --left-pinned-count: {leftPinnedTabs.length}; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
+    style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {visibleLeftPinnedTabs.length}; --right-pinned-count: {visibleRightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
 
     {#if data.ui.viewMode === 'tile'}
         <GridView 
@@ -4397,8 +4378,8 @@
             onTabActivate={activateTab} 
             onViewModeChange={toggleViewMode} 
             onTabClose={closeTab} 
-            leftPinnedWidth={(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0} 
-            rightPinnedWidth={(rightPinnedTabs.length > 0 && !invisiblePins.right) ? rightPinnedWidth : 0} 
+            leftPinnedWidth={leftPinnedWidth} 
+            rightPinnedWidth={rightPinnedWidth} 
             {rightSidebarWidth} 
             tabSidebarWidth={tabSidebarVisible ? (customTabSidebarWidth || 263) : 0} 
             {spaceTaken}
@@ -4453,13 +4434,13 @@
 {/if}
 
 
-{#if sidebarStateLoaded && leftPinnedTabs.length > 0 && !invisiblePins.left}
+{#if sidebarStateLoaded && visibleLeftPinnedTabs.length > 0}
     <div class="pinned-frames-left" class:window-controls-overlay={headerPartOfMain} 
     class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
     class:resizing-pinned-frames={isResizingPinnedFrames}
     class:has-tab-sidebar={tabSidebarVisible}
-    style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {leftPinnedTabs.length}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
-        {#each leftPinnedTabs as leftPinned (leftPinned.id)}
+    style="--left-pinned-width: {leftPinnedWidth}px; --left-pinned-count: {visibleLeftPinnedTabs.length}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
+        {#each visibleLeftPinnedTabs as leftPinned (leftPinned.id)}
             {@const tab = data.docs[leftPinned.id]}
             {#key userModsHash}
                 {#if tab.type !== 'divider'}
@@ -4487,11 +4468,11 @@
     </div>
 {/if}
 
-{#if sidebarStateLoaded && rightPinnedTabs.length > 0 && !invisiblePins.right}
+{#if sidebarStateLoaded && visibleRightPinnedTabs.length > 0}
     <div class="pinned-frames-right" class:window-controls-overlay={headerPartOfMain} 
     class:scrolling={isScrolling} class:no-transitions={isWindowResizing}
     class:resizing-pinned-frames={isResizingPinnedFrames}
-    style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {rightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px;">
+    style="--right-pinned-width: {rightPinnedWidth}px; --right-pinned-count: {visibleRightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px;">
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="resize-handle resize-handle-left" 
              class:active={isResizingRight}
@@ -4500,7 +4481,7 @@
              aria-label="Resize right pinned tabs"
              onmousedown={startResizeRight}
              title="Drag to resize right pinned tabs"></div>
-        {#each rightPinnedTabs as rigthPinned (rigthPinned.id)}
+        {#each visibleRightPinnedTabs as rigthPinned (rigthPinned.id)}
             {@const tab = data.docs[rigthPinned.id]}
             {#key userModsHash}
                 {#if  tab.type !== 'divider'}
@@ -4748,7 +4729,7 @@
 
 {#if showAppsOverlay}
     <div class="apps-overlay" 
-         style="--left-pinned-width: {(leftPinnedTabs.length > 0 && !invisiblePins.left) ? leftPinnedWidth : 0}px; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px; --sidebar-width: {rightSidebarWidth}px;"
+         style="--left-pinned-width: {leftPinnedWidth}px; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px; --sidebar-width: {rightSidebarWidth}px;"
          role="dialog" 
          aria-label="All Apps"
          tabindex="-1"
