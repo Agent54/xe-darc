@@ -4385,7 +4385,15 @@
             {spaceTaken}
             spaces={data.spaces}
             activeSpaceId={data.spaceMeta.activeSpace}
-            onSpaceSwitch={(spaceId) => { data.activateSpace(spaceId) }} />
+            onSpaceSwitch={(spaceId) => { data.activateSpace(spaceId) }}
+            initialZenModeWasActive={focusModeEnabled}
+            onZenModeChange={(enable) => {
+                if (enable && !focusModeEnabled) {
+                    toggleFocusMode()
+                } else if (!enable && focusModeEnabled) {
+                    toggleFocusMode()
+                }
+            }} />
     {/if} 
         
     {#if data.ui.viewMode === 'canvas'}
