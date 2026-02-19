@@ -349,6 +349,7 @@
   
   {#if activeView === 'tabs'}
     <div class="spaces-vertical-container">
+      <div class="spaces-content">
       {#each displayedSpaceOrder as spaceId (spaceId)}
         {@const space = spacesData[spaceId]}
         {@const tabs = space?.unpinnedTabs || []}
@@ -529,6 +530,7 @@
           {/if}
         </div>
       {/each}
+      </div>
     </div>
   {:else if activeView === 'history'}
     <div class="grid-empty-view">
@@ -734,10 +736,16 @@
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 60px 40px 40px 40px;
+    display: flex;
+    flex-direction: column;
     box-sizing: border-box;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
+  .spaces-content {
+    padding: 60px 40px 40px 40px;
+    margin: auto 0;
   }
 
   .spaces-vertical-container::-webkit-scrollbar {
