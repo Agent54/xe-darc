@@ -26,10 +26,13 @@
     const tab = $derived(data.docs[tabId])
 
     // Immediately unhibernate unhidden pinned frames on initial load
+    // Also unhibernate the last active non-pinned tab when the active tab is pinned
     // This runs once on component mount - no effect needed
     {
         const initialTab = data.docs[tabId]
         if (initialTab?.pinned && !initialTab?.hidden) {
+            data.unhibernate(tabId)
+        } else if (!initialTab?.pinned && data.docs[data.spaceMeta.activeTabId]?.pinned && tabId === data.getLastActiveNonPinnedTabId()) {
             data.unhibernate(tabId)
         }
     }
