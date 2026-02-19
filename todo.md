@@ -3182,3 +3182,7 @@ sort by last used with timestamps for grid view!
 
 
 alt tab instead of custom three gesture, switch to by last used sort on alt tab again and activate previous until letting go of alt key
+
+translations feature!!!!
+
+pip mode!
