@@ -84,6 +84,8 @@
     // Tab group expansion state
     let tabGroupExpanded = $state(false)
     let tabSearchQuery = $state('')
+    let isSearchModeActive = $state(false)
+    let searchInputRef = $state(null)
     
     function tabMatchesSearch(tab) {
         if (!tabSearchQuery) return true;
@@ -1751,46 +1753,54 @@
                 />
             {/if}
             
-            <div class="section search-section" class:multi-space={multiSpaceMode}>
-                <div class="tab-search-container">
-                    <svg class="tab-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
-                    </svg>
-                    <input type="text" class="tab-search-input" placeholder="Search tabs..." bind:value={tabSearchQuery} />
-                    {#if tabSearchQuery}
-                        <button class="tab-search-clear" onmousedown={() => tabSearchQuery = ''} aria-label="Clear search">
+            {#if isSearchModeActive}
+                <div class="section search-section" class:multi-space={multiSpaceMode}>
+                    <div class="tab-search-container">
+                        <svg class="tab-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
+                        </svg>
+                        <input type="text" class="tab-search-input" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) isSearchModeActive = false }} onkeydown={(e) => { if (e.key === 'Escape') { tabSearchQuery = ''; isSearchModeActive = false; searchInputRef?.blur(); } }} />
+                        <button class="tab-search-clear" onmousedown={() => { tabSearchQuery = ''; isSearchModeActive = false; }} aria-label="Close search">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                 <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                             </svg>
                         </button>
-                    {/if}
+                    </div>
                 </div>
-            </div>
-            
-            <div class="section global-pins-section">
-                <div class="pinned-tabs-grid">
-                    <button class="pinned-tab all-apps-tab" 
-                            title="All Apps"
-                            onmousedown={(e) => { e.stopPropagation(); handleAppsToggle(); }}
-                            aria-label="Show all apps">
-
-                            <!-- <svg class="all-apps-icon" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
-                            </svg> -->
-                        <svg class="all-apps-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
-                        </svg>
-                    </button>
-                    <!-- NOTE: Tabs are also rendered in App.svelte (top bar) - keep hibernated class in sync there too -->
-                    {#each globallyPinnedTabs as tab}
-                        <button class="pinned-tab" class:hibernated={data.isTabHibernated(tab.id)}
-                                onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                                onmouseleave={handleTabMouseLeave}>
-                            <Favicon {tab} showButton={false} />
+            {:else}
+                <div class="section global-pins-section">
+                    <div class="pinned-tabs-grid">
+                        <button class="pinned-tab search-toggle-tab"
+                                title="Search Tabs"
+                                onmousedown={(e) => { e.stopPropagation(); isSearchModeActive = true; setTimeout(() => searchInputRef?.focus(), 50); }}
+                                aria-label="Search tabs">
+                            <svg class="search-toggle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
+                            </svg>
                         </button>
-                    {/each}
+                        <button class="pinned-tab all-apps-tab"
+                                title="All Apps"
+                                onmousedown={(e) => { e.stopPropagation(); handleAppsToggle(); }}
+                                aria-label="Show all apps">
+
+                                <!-- <svg class="all-apps-icon" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
+                                </svg> -->
+                            <svg class="all-apps-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                            </svg>
+                        </button>
+                        <!-- NOTE: Tabs are also rendered in App.svelte (top bar) - keep hibernated class in sync there too -->
+                        {#each globallyPinnedTabs as tab}
+                            <button class="pinned-tab" class:hibernated={data.isTabHibernated(tab.id)}
+                                    onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                                    onmouseleave={handleTabMouseLeave}>
+                                <Favicon {tab} showButton={false} />
+                            </button>
+                        {/each}
+                    </div>
                 </div>
-            </div>
+            {/if}
 
             {#if !tabSearchQuery}
                 <div class="section">
@@ -2404,9 +2414,11 @@
     }
     
     .search-section {
-        padding: 4px 4px 4px 4px;
-        margin-bottom: 4px;
+        padding: 4px;
+        margin-bottom: 10px;
         flex-shrink: 0;
+        height: 44px; /* Match pinned-tabs-grid height (36px tab + 8px padding) */
+        box-sizing: border-box;
     }
     
     .search-section.multi-space {
@@ -2460,16 +2472,18 @@
     
     .tab-search-input {
         width: 100%;
+        height: 36px; /* Match pinned-tab height */
         background: rgba(255, 255, 255, 0.04);
         border: 1px solid rgba(255, 255, 255, 0.06);
         border-radius: 10px;
-        padding: 8px 30px 8px 30px;
+        padding: 0 30px 0 30px;
         color: rgba(255, 255, 255, 0.9);
         font-size: 13px;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         outline: none;
         transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+        box-sizing: border-box;
     }
     
     .tab-search-clear {
@@ -3218,6 +3232,20 @@
     }
 
     .all-apps-tab:hover .all-apps-icon {
+        color: rgba(255, 255, 255, 0.7);
+    }
+    
+    .search-toggle-tab {
+        position: relative;
+    }
+    
+    .search-toggle-icon {
+        width: 16px;
+        height: 16px;
+        color: rgba(255, 255, 255, 0.3);
+    }
+    
+    .search-toggle-tab:hover .search-toggle-icon {
         color: rgba(255, 255, 255, 0.7);
     }
     
