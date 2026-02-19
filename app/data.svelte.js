@@ -802,9 +802,9 @@ export default {
         }
         
         // Remove the current tab (at index 0) from the order
-        activeSpace.activeTabsOrder.shift()
+        const currentTabId = activeSpace.activeTabsOrder.shift()
         
-        // Pop pinned tabs and invalid tabs until we find a non-pinned tab
+        // Pop pinned, invalid, or duplicate-of-current tabs until we find a different valid tab
         let previousTabId = null
         let previousTab = null
         
@@ -824,7 +824,13 @@ export default {
                 continue
             }
             
-            // Found a non-pinned tab
+            // If same tab as the one we just removed, skip it
+            if (tabId === currentTabId) {
+                activeSpace.activeTabsOrder.shift()
+                continue
+            }
+            
+            // Found a different valid non-pinned tab
             previousTabId = tabId
             previousTab = tab
             break
