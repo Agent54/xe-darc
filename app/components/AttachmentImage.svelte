@@ -4,6 +4,9 @@
     let activeLoads = 0
     const loadQueue = []
     
+    // Track which src+digest combos have already been displayed (to skip fade-in on remount)
+    const displayedSet = new Set()
+    
     function processNext() {
         if (loadQueue.length > 0 && activeLoads < MAX_CONCURRENT) {
             const next = loadQueue.shift()
@@ -82,7 +85,7 @@
     let currentDigest = null
     let shouldLoad = $state(!lazy)
 
-    function updateDOM(state, resolvedSrc = null) {
+    function updateDOM(state, resolvedSrc = null, skipFade = false) {
         if (!containerEl) return
         
         const loadingEl = containerEl.querySelector('.attachment-loading')
@@ -99,18 +102,34 @@
             if (errorEl) errorEl.style.display = 'flex'
         } else if (state === 'loaded' && resolvedSrc) {
             if (imageEl) {
-                if (fadeIn) {
+                const shouldAnimate = fadeIn && !skipFade
+                if (shouldAnimate) {
                     imageEl.style.opacity = '0'
-                    imageEl.style.transition = 'opacity 0.5s ease-out'
+                    imageEl.style.transition = 'none'
                     imageEl.style.willChange = 'opacity'
                     imageEl.style.transform = 'translateZ(0)'
+                } else {
+                    imageEl.style.opacity = '1'
+                    imageEl.style.transition = ''
+                    imageEl.style.willChange = ''
+                    imageEl.style.transform = ''
                 }
                 imageEl.src = resolvedSrc
                 imageEl.style.display = 'block'
                 if (loadingEl) loadingEl.style.display = 'none'
-                if (fadeIn) {
-                    void imageEl.offsetWidth
-                    imageEl.style.opacity = '1'
+                if (shouldAnimate) {
+                    const reveal = () => {
+                        imageEl.removeEventListener('load', reveal)
+                        requestAnimationFrame(() => {
+                            imageEl.style.transition = 'opacity 0.5s ease-out'
+                            imageEl.style.opacity = '1'
+                        })
+                    }
+                    if (imageEl.complete) {
+                        reveal()
+                    } else {
+                        imageEl.addEventListener('load', reveal)
+                    }
                 }
             }
         }
@@ -122,22 +141,28 @@
             return
         }
         
-        updateDOM('loading')
+        const cacheKey = srcToLoad + '|' + (digest || '')
+        const alreadyDisplayed = displayedSet.has(cacheKey)
+        
+        if (!alreadyDisplayed) updateDOM('loading')
         
         async function doLoad() {
             try {
                 const resolved = await data.getAttachmentUrl(srcToLoad, digest)
                 if (srcToLoad !== currentSrc) return
                 
-                await new Promise((resolve, reject) => {
-                    const img = new Image()
-                    img.onload = resolve
-                    img.onerror = reject
-                    img.src = resolved
-                })
+                if (!alreadyDisplayed) {
+                    await new Promise((resolve, reject) => {
+                        const img = new Image()
+                        img.onload = resolve
+                        img.onerror = reject
+                        img.src = resolved
+                    })
+                }
                 
                 if (srcToLoad === currentSrc) {
-                    updateDOM('loaded', resolved)
+                    displayedSet.add(cacheKey)
+                    updateDOM('loaded', resolved, alreadyDisplayed)
                 }
             } catch (err) {
                 console.warn('Failed to resolve attachment image:', err)

@@ -1,9 +1,9 @@
 <script>
-  import { onMount, tick } from 'svelte'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
   import data from '../data.svelte.js'
   import { colors as spaceColors } from '../lib/utils.js'
+  import { onMount } from 'svelte'
 
   let {
     onTabActivate = () => {},
@@ -14,33 +14,61 @@
     rightSidebarWidth = 0,
     tabSidebarWidth = 0,
     spaceTaken = 0,
-    onSpaceSwitch = () => {}
+    onSpaceSwitch = () => {},
+    onZenModeChange = () => {},
+    initialZenModeWasActive = false
   } = $props()
 
   let activeView = $state(localStorage.getItem('gridActiveView') || 'tabs')
   let spaceScope = $state(localStorage.getItem('gridSpaceScope') || 'current')
+  let zenModeWasActiveOnOpen = $state(false)
 
   function setActiveView(view) {
     activeView = view
     localStorage.setItem('gridActiveView', view)
-    if (view === 'tabs') {
-      tick().then(() => {
-        if (scrollContainer) {
-          highlightedSpaceId = activeSpaceId
-          const spaceIndex = spaceOrder.indexOf(activeSpaceId)
-          if (spaceIndex >= 0) {
-            scrollContainer.style.scrollBehavior = 'auto'
-            scrollContainer.scrollLeft = spaceIndex * scrollContainer.clientWidth
-            setTimeout(() => { scrollContainer.style.scrollBehavior = '' }, 0)
-          }
-        }
-      })
-    }
   }
 
   function toggleSpaceScope() {
     spaceScope = spaceScope === 'current' ? 'all' : 'current'
     localStorage.setItem('gridSpaceScope', spaceScope)
+  }
+
+  // Track collapsed spaces
+  let collapsedSpaces = $state(new Set(JSON.parse(localStorage.getItem('gridCollapsedSpaces') || '[]')))
+  
+  // On mount: enable zen mode (if not already), and ensure current space is expanded
+  onMount(() => {
+    // Store whether zen mode was active when opening
+    zenModeWasActiveOnOpen = initialZenModeWasActive
+    
+    // Enable zen mode when opening grid view
+    if (!initialZenModeWasActive) {
+      onZenModeChange(true)
+    }
+    
+    // Ensure current space is always expanded when opening grid view
+    const activeSpaceId = data.spaceMeta.activeSpace
+    if (activeSpaceId && collapsedSpaces.has(activeSpaceId)) {
+      const next = new Set(collapsedSpaces)
+      next.delete(activeSpaceId)
+      collapsedSpaces = next
+      localStorage.setItem('gridCollapsedSpaces', JSON.stringify([...next]))
+    }
+    
+    // Cleanup: disable zen mode on close (only if it wasn't active before)
+    return () => {
+      if (!zenModeWasActiveOnOpen) {
+        onZenModeChange(false)
+      }
+    }
+  })
+
+  function toggleSpaceCollapsed(spaceId) {
+    const next = new Set(collapsedSpaces)
+    if (next.has(spaceId)) next.delete(spaceId)
+    else next.add(spaceId)
+    collapsedSpaces = next
+    localStorage.setItem('gridCollapsedSpaces', JSON.stringify([...next]))
   }
 
   let gridContextMenuId = $state(null)
@@ -51,7 +79,7 @@
   let gridRenameInputValue = $state('')
   let gridRenameInputRef = $state(null)
 
-  function handleSpaceChipContext(e, id) {
+  function handleSpaceHeaderContext(e, id) {
     e.preventDefault()
     e.stopPropagation()
     const rect = e.currentTarget.getBoundingClientRect()
@@ -60,13 +88,13 @@
   }
 
   function handleGridContextAction(action, spaceId) {
-    const chipEl = document.querySelector(`.space-chip-wrapper [data-space-id="${spaceId}"]`)
+    const headerEl = document.querySelector(`.space-group-header[data-space-id="${spaceId}"]`)
     if (action === 'rename') {
       gridRenamingSpaceId = spaceId
       gridRenameInputValue = data.spaces[spaceId].name
-      if (chipEl) {
-        const rect = chipEl.getBoundingClientRect()
-        gridOverlayPosition = { x: rect.left, y: rect.bottom + 4 }
+      if (headerEl) {
+        const rect = headerEl.getBoundingClientRect()
+        gridOverlayPosition = { x: rect.left + 22, y: rect.bottom + 4 }
       }
       requestAnimationFrame(() => {
         gridRenameInputRef?.focus()
@@ -74,9 +102,9 @@
       })
     } else if (action === 'change-color') {
       gridColorPickerSpaceId = spaceId
-      if (chipEl) {
-        const rect = chipEl.getBoundingClientRect()
-        gridOverlayPosition = { x: rect.left, y: rect.bottom + 4 }
+      if (headerEl) {
+        const rect = headerEl.getBoundingClientRect()
+        gridOverlayPosition = { x: rect.left + 22, y: rect.bottom + 4 }
       }
     } else {
       console.log(`Action: ${action} for space: ${data.spaces[spaceId]?.name}`)
@@ -105,7 +133,6 @@
   let spaceOrder = $derived(data.spaceMeta.spaceOrder || [])
   let activeSpaceId = $derived(data.spaceMeta.activeSpace)
   let activeTabId = $derived(data.spaceMeta.activeTabId)
-  let highlightedSpaceId = $state(data.spaceMeta.activeSpace)
   
   // Pre-compute spaces data with filtered tabs to avoid reactive lookups in template
   let spacesData = $derived.by(() => {
@@ -129,22 +156,11 @@
     spaceScope === 'current' ? spaceOrder.filter(id => id === activeSpaceId) : spaceOrder
   )
   
-  function switchSpace(id) {
-    if (id && id !== activeSpaceId) {
-      onSpaceSwitch(id)
-      // Scroll to the new space after switching
-      setTimeout(() => {
-        highlightedSpaceId = id
-        scrollToSpace(id)
-      }, 50)
-    }
-  }
-  
   // Handle new tab creation in specific space
   function handleNewTabInSpace(spaceId) {
     // Switch to the space first if not already active
     if (spaceId !== activeSpaceId) {
-      switchSpace(spaceId)
+      onSpaceSwitch(spaceId)
       // Wait for space switch, then create new tab
       setTimeout(() => {
         data.newTab(spaceId, { shouldFocus: true })
@@ -158,111 +174,13 @@
     }
   }
   
-  // Grid container and scroll references
   let gridContainer
-  let scrollContainer
-  let isScrolling = $state(false)
-  let scrollTimeout = null
-  
-  // Handle scroll to highlight current space (throttled for performance)
-  let scrollThrottleFrame = null
-  function handleScroll() {
-    if (!scrollContainer || scrollThrottleFrame) return
-    
-    scrollThrottleFrame = requestAnimationFrame(() => {
-      if (!scrollContainer) {
-        scrollThrottleFrame = null
-        return
-      }
-      
-      isScrolling = true
-      if (scrollTimeout) clearTimeout(scrollTimeout)
-      
-      const containerWidth = scrollContainer.clientWidth
-      const scrollLeft = scrollContainer.scrollLeft
-      const currentPage = Math.round(scrollLeft / containerWidth)
-      const spaceId = spaceOrder[currentPage]
-      
-      if (spaceId && spaceId !== highlightedSpaceId) {
-        highlightedSpaceId = spaceId
-      }
-      
-      scrollTimeout = setTimeout(() => {
-        isScrolling = false
-      }, 150)
-      
-      scrollThrottleFrame = null
-    })
-  }
-  
-  // Scroll to specific space
-  function scrollToSpace(spaceId) {
-    if (!scrollContainer) return
-    const spaceIndex = spaceOrder.indexOf(spaceId)
-    if (spaceIndex >= 0) {
-      const containerWidth = scrollContainer.clientWidth
-      scrollContainer.scrollTo({
-        left: spaceIndex * containerWidth,
-        behavior: 'smooth'
-      })
-    }
-  }
-  
-  // Initialize scroll position immediately without animation
-  let hasInitialized = $state(false)
-  
-  onMount(async () => {
-    // Wait for DOM to be ready
-    await tick()
-    if (scrollContainer && !hasInitialized) {
-      highlightedSpaceId = activeSpaceId
-      // Scroll immediately without animation by setting scrollLeft directly
-      const spaceIndex = spaceOrder.indexOf(activeSpaceId)
-      if (spaceIndex >= 0) {
-        // Temporarily disable smooth scrolling for instant positioning
-        const originalBehavior = scrollContainer.style.scrollBehavior
-        scrollContainer.style.scrollBehavior = 'auto'
-        
-        const containerWidth = scrollContainer.clientWidth
-        scrollContainer.scrollLeft = spaceIndex * containerWidth
-        
-        // Restore smooth scrolling for user interactions
-        setTimeout(() => {
-          scrollContainer.style.scrollBehavior = originalBehavior
-        }, 0)
-      }
-      hasInitialized = true
-    }
-  })
-  
-  $effect(() => {
-    // Fallback effect in case onMount doesn't work
-    if (!hasInitialized && scrollContainer && scrollContainer.clientWidth > 0) {
-      highlightedSpaceId = activeSpaceId
-      // Scroll immediately without animation
-      const spaceIndex = spaceOrder.indexOf(activeSpaceId)
-      if (spaceIndex >= 0) {
-        // Temporarily disable smooth scrolling for instant positioning
-        const originalBehavior = scrollContainer.style.scrollBehavior
-        scrollContainer.style.scrollBehavior = 'auto'
-        
-        const containerWidth = scrollContainer.clientWidth
-        scrollContainer.scrollLeft = spaceIndex * containerWidth
-        
-        // Restore smooth scrolling for user interactions
-        setTimeout(() => {
-          scrollContainer.style.scrollBehavior = originalBehavior
-        }, 0)
-      }
-      hasInitialized = true
-    }
-  })
 
   // Handle clicking on frame screenshot
   function handleFrameClick(tab, index, spaceId) {
     // If clicking a tab from a different space, switch to that space first
     if (spaceId !== activeSpaceId) {
-      switchSpace(spaceId)
+      onSpaceSwitch(spaceId)
       // Wait for space switch, then activate tab and close view
       setTimeout(() => {
         onTabActivate(tab, index)
@@ -309,8 +227,8 @@
     const target = event.target
     const isBackgroundClick = (
       target === gridContainer || 
-      target === scrollContainer ||
-      target.classList.contains('space-page') ||
+      target.classList.contains('spaces-vertical-container') ||
+      target.classList.contains('space-section') ||
       target.classList.contains('space-grid') ||
       target.classList.contains('empty-space') ||
       target.classList.contains('empty-space-icon') ||
@@ -320,31 +238,23 @@
       (target.tagName === 'path' && target.closest('.empty-space'))
     )
     
-    // Don't handle if clicking on tabs, space chips, or other interactive elements
+    // Don't handle if clicking on tabs or other interactive elements
     const isInteractiveElement = (
       target.closest('.grid-frame') ||
-      target.closest('.space-chip') ||
-      target.closest('.spaces-switcher') ||
       target.closest('.new-tab-button') ||
       target.closest('.grid-top-bar') ||
       target.closest('.grid-empty-view') ||
       target.closest('.grid-context-menu') ||
       target.closest('.grid-menu-scrim') ||
       target.closest('.grid-color-picker-dropdown') ||
-      target.closest('.grid-rename-overlay')
+      target.closest('.grid-rename-overlay') ||
+      target.closest('.space-group-header')
     )
     
     if (gridContextMenuId || gridColorPickerSpaceId || gridRenamingSpaceId) return
     
     if (isBackgroundClick && !isInteractiveElement) {
-      // If we're viewing a different space than the active one, switch to it
-      if (highlightedSpaceId && highlightedSpaceId !== activeSpaceId) {
-        switchSpace(highlightedSpaceId)
-        onViewModeChange({fromTileMode: true})
-      } else {
-        // If we're already in the active space, just close the view
-        onViewModeChange({fromTileMode: true})
-      }
+      onViewModeChange({fromTileMode: true})
     }
   }
 </script>
@@ -378,36 +288,17 @@
       <span class="grid-scope-track"><span class="grid-scope-thumb"></span></span>
       <span class="grid-scope-label">All Spaces</span>
     </button>
+    {#if spaceScope === 'all'}
+      <button class="grid-collapse-btn" onmousedown={() => { collapsedSpaces = new Set(spaceOrder); localStorage.setItem('gridCollapsedSpaces', JSON.stringify(spaceOrder)) }} title="Collapse All" aria-label="Collapse All" type="button">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8Zm3.646-2.146a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 1 1-.708.708L8.5 3.707V6.5a.5.5 0 0 1-1 0V3.707L5.354 5.854a.5.5 0 0 1-.708 0Zm0 4.292a.5.5 0 0 0 0 .708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 12.293V9.5a.5.5 0 0 0-1 0v2.793l-2.146-2.147a.5.5 0 0 0-.708 0Z" clip-rule="evenodd"/></svg>
+      </button>
+      <button class="grid-collapse-btn" onmousedown={() => { collapsedSpaces = new Set(); localStorage.setItem('gridCollapsedSpaces', '[]') }} title="Expand All" aria-label="Expand All" type="button">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8ZM4.646 2.146a.5.5 0 0 1 .708 0L8 4.793l2.646-2.647a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 0-.708Zm0 11.708a.5.5 0 0 0 .708 0L8 11.207l2.646 2.647a.5.5 0 0 0 .708-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 0 0 0 .708Z" clip-rule="evenodd"/></svg>
+      </button>
+    {/if}
   </div>
 
-  <div class="spaces-switcher" class:hidden={spaceScope === 'current'} role="navigation" aria-label="Spaces">
-    {#each spaceOrder as id (id)}
-      {@const space = spacesData[id]}
-      {#if space}
-        <div class="space-chip-wrapper">
-            <button 
-              class="space-chip"
-              class:active={id === activeSpaceId}
-              class:highlighted={id === highlightedSpaceId}
-              style="--space-color: {space.color || '#5b5b5b'}"
-              data-space-id={id}
-              onmousedown={() => switchSpace(id)}
-              oncontextmenu={(e) => handleSpaceChipContext(e, id)}
-              aria-current={id === activeSpaceId ? 'true' : 'false'}
-              title={space.title || space.name}
-              type="button"
-            >
-              {#if space.glyph}
-                <span class="space-chip-glyph" style="color: {space.color || '#5b5b5b'}" aria-hidden="true">{@html space.glyph}</span>
-              {:else}
-                <span class="space-color-dot" aria-hidden="true"></span>
-              {/if}
-              <span class="space-name">{space.name || 'Space'}</span>
-            </button>
-        </div>
-      {/if}
-    {/each}
-  </div>
+
   {#if gridContextMenuId}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="grid-menu-scrim" onmousedown={(e) => { e.stopPropagation(); gridContextMenuId = null; }}></div>
@@ -445,166 +336,190 @@
   {/if}
   
   {#if activeView === 'tabs'}
-    <div 
-      class="spaces-scroll-container"
-      class:scrolling={isScrolling}
-      class:single-space={spaceScope === 'current'}
-      bind:this={scrollContainer}
-      onscroll={handleScroll}
-    >
+    <div class="spaces-vertical-container">
+      <div class="spaces-content">
       {#each displayedSpaceOrder as spaceId (spaceId)}
         {@const space = spacesData[spaceId]}
         {@const tabs = space?.unpinnedTabs || []}
         {@const leftPins = space?.leftPinnedTabs || []}
         {@const rightPins = space?.rightPinnedTabs || []}
-        <div class="space-page">
-          {#if tabs.length === 0 && leftPins.length === 0 && rightPins.length === 0}
-            <div class="empty-space">
-              <button 
-                class="empty-space-icon new-tab-button"
-                onmousedown={(e) => { e.stopPropagation(); handleNewTabInSpace(spaceId); }}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleNewTabInSpace(spaceId); } }}
-                title="New Tab (⌘T)"
-                aria-label="New Tab"
-                type="button"
-              >
-                <svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-              </button>
-              <div class="empty-space-title">No open tabs</div>
-              <div class="empty-space-subtitle">This space is empty</div>
-            </div>
-          {:else}
-            <div class="space-grid">
-              {#each leftPins as tab, index (tab.id)}
-                <div 
-                  class="grid-frame pinned-frame"
-                  class:active={tab.id === activeTabId}
-                  class:pinned-last={index === leftPins.length - 1 && (tabs.length > 0 || rightPins.length > 0)}
+        {@const isCollapsed = collapsedSpaces.has(spaceId)}
+        {@const tabCount = leftPins.length + tabs.length + rightPins.length}
+        <div class="space-section">
+          {#if spaceScope === 'all'}
+            <button
+              class="space-group-header"
+              class:collapsed={isCollapsed}
+              class:active={spaceId === activeSpaceId}
+              style="--space-color: {space?.color || '#5b5b5b'}"
+              data-space-id={spaceId}
+              onmousedown={(e) => { if (e.button === 0) toggleSpaceCollapsed(spaceId) }}
+              oncontextmenu={(e) => handleSpaceHeaderContext(e, spaceId)}
+              type="button"
+            >
+              <span class="space-group-left">
+                <svg class="collapse-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+                {#if space?.glyph}
+                  <span class="space-group-glyph" style="color: {space.color || '#5b5b5b'}" aria-hidden="true">{@html space.glyph}</span>
+                {:else}
+                  <span class="space-group-dot" aria-hidden="true"></span>
+                {/if}
+                <span class="space-group-name">{space?.name || 'Space'}</span>
+                <span class="space-group-count">{tabCount}</span>
+              </span>
+              <span class="space-group-line"></span>
+            </button>
+          {/if}
+          {#if !isCollapsed || spaceScope === 'current'}
+            {#if tabCount === 0}
+              <div class="empty-space">
+                <button 
+                  class="empty-space-icon new-tab-button"
+                  onmousedown={(e) => { e.stopPropagation(); handleNewTabInSpace(spaceId); }}
+                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleNewTabInSpace(spaceId); } }}
+                  title="New Tab (⌘T)"
+                  aria-label="New Tab"
+                  type="button"
                 >
-                  <div class="tab-header">
-                    <div class="tab-info clickable"
-                         onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                         tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}">
-                      <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
-                      <div class="tab-favicon"><Favicon url={tab.url} /></div>
-                      <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                  <svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                </button>
+                <div class="empty-space-title">No open tabs</div>
+                <div class="empty-space-subtitle">This space is empty</div>
+              </div>
+            {:else}
+              <div class="space-grid">
+                {#each leftPins as tab, index (tab.id)}
+                  <div 
+                    class="grid-frame pinned-frame"
+                    class:active={tab.id === activeTabId}
+                    class:pinned-last={index === leftPins.length - 1 && (tabs.length > 0 || rightPins.length > 0)}
+                  >
+                    <div class="tab-header">
+                      <div class="tab-info clickable"
+                           onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                           tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}">
+                        <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
+                        <div class="tab-favicon"><Favicon url={tab.url} /></div>
+                        <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                      </div>
+                    </div>
+                    <div 
+                      class="frame-screenshot clickable" 
+                      onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                      onwheel={(e) => handleFrameWheel(e, tab, index)}
+                      tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}"
+                    >
+                      {#if tab.screenshot}
+                        <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
+                      {:else}
+                        <div class="no-screenshot">
+                          <div class="favicon-container"><Favicon url={tab.url} /></div>
+                          <div class="tab-title">{tab.title || 'Untitled'}</div>
+                        </div>
+                      {/if}
                     </div>
                   </div>
+                {/each}
+                {#each tabs as tab, index (tab.id)}
+                  {@const isSpaceActiveTab = spaceId !== activeSpaceId && tab.id === data.spaces[spaceId]?.activeTabsOrder?.[0]}
                   <div 
-                    class="frame-screenshot clickable" 
-                    onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                    onwheel={(e) => handleFrameWheel(e, tab, index)}
-                    tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}"
+                    class="grid-frame"
+                    class:active={tab.id === activeTabId}
+                    class:space-active-tab={isSpaceActiveTab}
+                    class:pinned-last={index === tabs.length - 1 && rightPins.length > 0}
                   >
-                    {#if tab.screenshot}
-                      <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
-                    {:else}
-                      <div class="no-screenshot">
-                        <div class="favicon-container"><Favicon url={tab.url} /></div>
-                        <div class="tab-title">{tab.title || 'Untitled'}</div>
-                      </div>
-                    {/if}
-                  </div>
-                </div>
-              {/each}
-              {#each tabs as tab, index (tab.id)}
-                {@const isSpaceActiveTab = spaceId !== activeSpaceId && tab.id === data.spaces[spaceId]?.activeTabsOrder?.[0]}
-                <div 
-                  class="grid-frame"
-                  class:active={tab.id === activeTabId}
-                  class:space-active-tab={isSpaceActiveTab}
-                  class:pinned-last={index === tabs.length - 1 && rightPins.length > 0}
-                >
-                  <div class="tab-header">
-                    <div class="tab-info clickable"
-                         onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
-                         tabindex="0"
-                         role="button"
-                         aria-label="Activate {tab.title || 'Untitled'}">
-                      <div class="tab-favicon">
-                        <Favicon url={tab.url} />
-                      </div>
-                      <div class="header-tab-title">{tab.title || 'Untitled'}</div>
-                    </div>
-                    <button 
-                      class="close-button"
-                      onmousedown={(e) => handleCloseTab(e, tab, index, spaceId)}
-                      aria-label="Close {tab.title || 'Untitled'}"
-                      type="button"
-                    >×</button>
-                  </div>
-                  
-                  <div 
-                    class="frame-screenshot clickable" 
-                    onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
-                    onwheel={(e) => handleFrameWheel(e, tab, index)}
-                    tabindex="0"
-                    role="button"
-                    aria-label="Activate {tab.title || 'Untitled'}"
-                  >
-                    {#if tab.screenshot}
-                      <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
-                    {:else}
-                      <div class="no-screenshot">
-                        <div class="favicon-container">
+                    <div class="tab-header">
+                      <div class="tab-info clickable"
+                           onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
+                           tabindex="0"
+                           role="button"
+                           aria-label="Activate {tab.title || 'Untitled'}">
+                        <div class="tab-favicon">
                           <Favicon url={tab.url} />
                         </div>
-                        <div class="tab-title">{tab.title || 'Untitled'}</div>
+                        <div class="header-tab-title">{tab.title || 'Untitled'}</div>
                       </div>
-                    {/if}
-                  </div>
-                </div>
-              {/each}
-              {#each rightPins as tab, index (tab.id)}
-                <div 
-                  class="grid-frame pinned-frame"
-                  class:active={tab.id === activeTabId}
-                >
-                  <div class="tab-header">
-                    <div class="tab-info clickable"
-                         onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                         tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}">
-                      <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
-                      <div class="tab-favicon"><Favicon url={tab.url} /></div>
-                      <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                      <button 
+                        class="close-button"
+                        onmousedown={(e) => handleCloseTab(e, tab, index, spaceId)}
+                        aria-label="Close {tab.title || 'Untitled'}"
+                        type="button"
+                      >×</button>
+                    </div>
+                    
+                    <div 
+                      class="frame-screenshot clickable" 
+                      onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
+                      onwheel={(e) => handleFrameWheel(e, tab, index)}
+                      tabindex="0"
+                      role="button"
+                      aria-label="Activate {tab.title || 'Untitled'}"
+                    >
+                      {#if tab.screenshot}
+                        <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
+                      {:else}
+                        <div class="no-screenshot">
+                          <div class="favicon-container">
+                            <Favicon url={tab.url} />
+                          </div>
+                          <div class="tab-title">{tab.title || 'Untitled'}</div>
+                        </div>
+                      {/if}
                     </div>
                   </div>
+                {/each}
+                {#each rightPins as tab, index (tab.id)}
                   <div 
-                    class="frame-screenshot clickable" 
-                    onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                    onwheel={(e) => handleFrameWheel(e, tab, index)}
-                    tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}"
+                    class="grid-frame pinned-frame"
+                    class:active={tab.id === activeTabId}
                   >
-                    {#if tab.screenshot}
-                      <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
-                    {:else}
-                      <div class="no-screenshot">
-                        <div class="favicon-container"><Favicon url={tab.url} /></div>
-                        <div class="tab-title">{tab.title || 'Untitled'}</div>
+                    <div class="tab-header">
+                      <div class="tab-info clickable"
+                           onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                           tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}">
+                        <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
+                        <div class="tab-favicon"><Favicon url={tab.url} /></div>
+                        <div class="header-tab-title">{tab.title || 'Untitled'}</div>
                       </div>
-                    {/if}
+                    </div>
+                    <div 
+                      class="frame-screenshot clickable" 
+                      onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                      onwheel={(e) => handleFrameWheel(e, tab, index)}
+                      tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}"
+                    >
+                      {#if tab.screenshot}
+                        <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
+                      {:else}
+                        <div class="no-screenshot">
+                          <div class="favicon-container"><Favicon url={tab.url} /></div>
+                          <div class="tab-title">{tab.title || 'Untitled'}</div>
+                        </div>
+                      {/if}
+                    </div>
                   </div>
-                </div>
-              {/each}
-              <button 
-                class="grid-new-tab new-tab-button"
-                onmousedown={(e) => { e.stopPropagation(); handleNewTabInSpace(spaceId); }}
-                title="New Tab (⌘T)"
-                aria-label="New Tab"
-                type="button"
-              >
-                <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-              </button>
-            </div>
+                {/each}
+                <button 
+                  class="grid-new-tab new-tab-button"
+                  onmousedown={(e) => { e.stopPropagation(); handleNewTabInSpace(spaceId); }}
+                  title="New Tab (⌘T)"
+                  aria-label="New Tab"
+                  type="button"
+                >
+                  <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                </button>
+              </div>
+            {/if}
           {/if}
         </div>
       {/each}
+      </div>
     </div>
   {:else if activeView === 'history'}
     <div class="grid-empty-view">
@@ -646,23 +561,24 @@
     left: 16px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 2px;
     z-index: 10;
+    background: rgba(30, 30, 30, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+    border-radius: 9999px;
+    padding: 4px;
   }
 
   .grid-view-tabs {
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 3px;
-    background: rgba(10, 10, 10, 0.36);
-    backdrop-filter: blur(4px);
-    border-radius: 8px;
   }
 
   .grid-view-tab {
-    padding: 4px 12px;
-    border-radius: 6px;
+    padding: 6px 14px;
+    border-radius: 9999px;
     background: transparent;
     border: none;
     color: rgba(255, 255, 255, 0.5);
@@ -696,11 +612,12 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 4px 10px;
-    background: rgba(10, 10, 10, 0.36);
-    backdrop-filter: blur(4px);
-    border-radius: 8px;
+    padding: 6px 12px;
+    background: transparent;
+    border-radius: 9999px;
     border: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    margin-left: 2px;
     cursor: pointer;
   }
 
@@ -745,6 +662,32 @@
     color: rgba(255, 255, 255, 0.9);
   }
 
+  .grid-collapse-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 9999px;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 150ms ease, color 150ms ease;
+  }
+
+  .grid-collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .grid-collapse-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
   .grid-empty-view {
     display: flex;
     flex-direction: column;
@@ -773,54 +716,173 @@
     color: rgba(255, 255, 255, 0.45);
   }
 
-  .spaces-switcher.hidden {
-    display: none;
-  }
-
-  .spaces-scroll-container {
-    display: flex;
+  .spaces-vertical-container {
     width: 100%;
     height: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    scroll-behavior: smooth;
-  }
-
-  .spaces-scroll-container.scrolling .space-page {
-    pointer-events: none;
-  }
-
-  .spaces-scroll-container.scrolling .grid-frame {
-    pointer-events: none;
-  }
-
-  .spaces-scroll-container::-webkit-scrollbar {
-    display: none;
-  }
-
-  .space-page {
-    flex: 0 0 100%;
-    width: 100%;
-    height: 100%;
-    scroll-snap-align: start;
-    padding: 60px 40px 40px 40px;
-    box-sizing: border-box;
-    transform: translateZ(0);
     overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
+  .spaces-content {
+    padding: 60px 40px 40px 40px;
+    margin: auto 0;
+  }
+
+  .spaces-vertical-container::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .spaces-vertical-container::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .spaces-vertical-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+  }
+
+  .space-section {
+    margin-bottom: 40px;
+  }
+
+  .space-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .space-group-header {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    padding: 0;
+    margin-bottom: 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+  }
+
+  .space-group-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding: 5px 14px 5px 8px;
+    border-radius: 8px;
+    transition: background 150ms ease;
+  }
+
+  .space-group-header:hover .space-group-left {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .space-group-header:hover .space-group-name {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .space-group-header:hover .collapse-chevron {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .space-group-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .space-group-header:hover .space-group-line {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .collapse-chevron {
+    width: 14px;
+    height: 14px;
+    color: rgba(255, 255, 255, 0.3);
+    flex-shrink: 0;
+    transition: transform 150ms ease, color 150ms ease;
+  }
+
+  .space-group-header.collapsed .collapse-chevron {
+    transform: rotate(-90deg);
+  }
+
+  .space-group-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--space-color, #6b7280);
+    flex-shrink: 0;
+  }
+
+  .space-group-glyph {
+    font-size: 12px;
+    line-height: 1;
+    width: 13px;
+    height: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  :global(.space-group-glyph svg) {
+    width: 100%;
+    height: 100%;
+  }
+
+  .space-group-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 0.01em;
+    text-align: left;
+    transition: color 150ms ease;
+  }
+
+  .space-group-header.active .space-group-left {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .space-group-header.active .space-group-name {
+    color: white;
+    font-weight: 600;
+  }
+
+  .space-group-header.active .space-group-dot {
+    opacity: 0.9;
+    filter: saturate(1.1) brightness(1.0) contrast(1.1);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+  }
+
+  .space-group-header.active .space-group-glyph {
+    filter: saturate(1.1) brightness(1.1);
+  }
+
+  .space-group-header.active .collapse-chevron {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .space-group-header.active .space-group-count {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .space-group-count {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.25);
   }
 
   .space-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fill, 320px);
     grid-auto-rows: 180px;
-    gap: 24px;
-    place-content: center;
-    place-items: center;
+    gap: 20px;
     width: 100%;
-    min-height: 100%;
     will-change: auto;
     contain: layout style;
   }
@@ -842,7 +904,7 @@
   }
 
   .grid-new-tab {
-    width: 320px;
+    width: 100%;
     height: 180px;
     border-radius: 8px;
     border: 1px dashed rgba(255, 255, 255, 0.12);
@@ -876,7 +938,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    height: 100%;
+    min-height: 180px;
     gap: 16px;
     opacity: 0.6;
   }
@@ -918,60 +980,6 @@
     color: rgba(255, 255, 255, 0.45);
   }
 
-  .spaces-switcher {
-    position: absolute;
-    top: 10px;
-    right: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    background: rgba(10, 10, 10, 0.36);
-    backdrop-filter: blur(4px);
-    border: none;
-    border-radius: 9999px;
-    max-width: calc(100% - 32px);
-    overflow-x: auto;
-    z-index: 10;
-  }
-
-  .space-chip-wrapper {
-    position: relative;
-  }
-
-  .space-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid transparent;
-    color: rgba(255, 255, 255, 0.72);
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-  }
-
-  .space-chip-glyph {
-    font-size: 12px;
-    line-height: 1;
-    width: 12px;
-    height: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  :global(.space-chip-glyph svg) {
-    width: 100%;
-    height: 100%;
-  }
-
   .grid-rename-overlay {
     position: fixed;
     z-index: 10001;
@@ -989,73 +997,6 @@
     outline: none;
     min-width: 120px;
     backdrop-filter: blur(12px);
-  }
-
-  .space-chip:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.9);
-  }
-
-  .space-chip.active {
-    background: rgba(255, 255, 255, 0.07);
-    color: rgba(255, 255, 255, 1);
-    font-weight: 700;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .space-chip.highlighted:not(.active) {
-    position: relative;
-  }
-
-  .space-chip.highlighted:not(.active)::after {
-    content: '';
-    position: absolute;
-    bottom: -2px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 28px;
-    height: 2px;
-    background: rgba(255, 255, 255, 0.8);
-    border-radius: 1px;
-    opacity: 0;
-    animation: underline-fade-in 0.3s ease-out 0.15s forwards;
-  }
-
-  @keyframes underline-fade-in {
-    from {
-      opacity: 0;
-      transform: translateX(-50%) scaleX(0.5);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(-50%) scaleX(1);
-    }
-  }
-
-  .space-chip.active .space-color-dot {
-    opacity: 0.9;
-    filter: saturate(1.1) brightness(1.0) contrast(1.1);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3) inset;
-  }
-
-  .space-chip.highlighted:not(.active) .space-color-dot {
-    opacity: 0.75;
-    filter: saturate(0.9) brightness(0.85) contrast(1.0);
-  }
-
-  .space-color-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--space-color, #6b7280);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
-    opacity: 0.6;
-    filter: saturate(0.85) brightness(0.75) contrast(0.95);
-  }
-
-  .space-chip:not(.active) .space-color-dot {
-    opacity: 0.55;
   }
 
   @keyframes grid-fade-in {
