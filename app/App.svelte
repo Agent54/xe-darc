@@ -1086,25 +1086,21 @@
                 scrollContainer.style.scrollSnapType = 'none'
                 const scrollToActive = () => {
                     if (!activeFrameWrapper || !scrollContainer) return
-                    const wrapperRect = activeFrameWrapper.getBoundingClientRect()
-                    const containerRect = scrollContainer.getBoundingClientRect()
-                    const offset = wrapperRect.left - containerRect.left
-                    if (Math.abs(offset) > 2) {
-                        scrollContainer.scrollLeft += offset - 9
-                    }
+                    scrollContainer.scrollLeft = activeFrameWrapper.offsetLeft - 9
                 }
                 scrollToActive()
                 requestAnimationFrame(scrollToActive)
                 setTimeout(scrollToActive, 100)
+                setTimeout(scrollToActive, 500)
                 setTimeout(() => {
                     scrollToActive()
                     scrollContainer.style.scrollBehavior = ''
                     scrollContainer.style.scrollSnapType = ''
-                }, 1000)
+                }, 2000)
                 initialScrollPerformed = true
                 setTimeout(() => {
                     tabChangeFromScroll = false
-                }, 1100)
+                }, 2100)
             } else {
                 activeFrameWrapper.scrollIntoView({ 
                     behavior: 'instant'
