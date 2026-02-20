@@ -2657,8 +2657,8 @@
     }
     
     .space-item {
-        width: 24px;
-        height: 24px;
+        width: 22px;
+        height: 22px;
         border-radius: 100%;
         background: transparent;
         display: flex;
@@ -2699,8 +2699,8 @@
     }
     
     .space-glyph-default {
-        width: 11px;
-        height: 11px;
+        width: 12px;
+        height: 12px;
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.7);
         display: flex;
@@ -3002,13 +3002,12 @@
         background: rgba(255, 107, 107, 0.2);
     }
 
-    .space-item.scrolled:after {
-        border: 1px solid rgb(138 138 138);
-        display: block;
-        content: ' ';
-        width: 48%;
-        position: absolute;
-        bottom: 1px;
+    .space-item.scrolled {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .space-item.active.scrolled {
+        background: rgba(255, 255, 255, 0.14);
     }
 
     /* Horizontal Tab Content */
