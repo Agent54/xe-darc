@@ -3451,7 +3451,7 @@
     }
     
     .tab-title {
-        color: hsl(0 0% 50% / 1);
+        color: hsl(0 0% 61% / 1);
         font-size: 13px;
         font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -3488,11 +3488,12 @@
     /* Active tab in inactive space - bold text + opaque favicon, subtle border */
     .tab-item-container.space-active-tab {
         border: 1px solid hsl(0deg 0% 100% / 5.5%);
+            background: rgb(255 255 255 / 6%);
     }
     
     .tab-item-container.space-active-tab .tab-title {
-        color: #e5e5e5;
-        text-shadow: 0 0 0.3px currentColor;
+        color: rgb(255 255 255 / 75%);
+        /* text-shadow: 0 0 0.3px currentColor; */
     }
     
     .tab-item-container.space-active-tab :global(.favicon-wrapper) {
@@ -3636,9 +3637,9 @@
     }
     
     .new-tab-text {
-        color: #c6c6c6;
+        color: hsl(0 0% 66% / 1);
         font-size: 13px;
-        font-weight: 400;
+        font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         white-space: nowrap;
         overflow: hidden;
@@ -3856,7 +3857,8 @@
         border-radius: 12px;
         /* background: #ffffff0f; */
         transition: background-color 150ms ease;
-        border: 1px solid hsl(0deg 0% 100% / 2%);
+        border: 1px solid  transparent;
+        /* hsl(0deg 0% 100% / 2%); */
         height: 36px;
         flex-shrink: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
