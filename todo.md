@@ -3211,3 +3211,4 @@ url change not always working (split out lighbox?)
 minimize sideboar to icons only mode + unify with right sidebar?
 
 
+extensions::webView:197 <controlledframe>: Script cannot be injected into content until the page has loaded.
