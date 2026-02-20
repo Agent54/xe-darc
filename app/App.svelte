@@ -1082,29 +1082,29 @@
             // Temporarily disable smooth scrolling and snap so the position is set instantly and exactly
             // Retry a few times since frame wrappers may not have final layout yet
             if (!initialScrollPerformed && scrollContainer) {
+                scrollContainer.style.scrollBehavior = 'auto'
+                scrollContainer.style.scrollSnapType = 'none'
                 const scrollToActive = () => {
                     if (!activeFrameWrapper || !scrollContainer) return
-                    scrollContainer.style.scrollBehavior = 'auto'
-                    scrollContainer.style.scrollSnapType = 'none'
                     const wrapperRect = activeFrameWrapper.getBoundingClientRect()
                     const containerRect = scrollContainer.getBoundingClientRect()
                     const offset = wrapperRect.left - containerRect.left
                     if (Math.abs(offset) > 2) {
                         scrollContainer.scrollLeft += offset - 9
                     }
-                    scrollContainer.style.scrollBehavior = ''
-                    scrollContainer.style.scrollSnapType = ''
                 }
-                // Run immediately, then retry after frames have laid out
-                // FIXE: ugly as hell 
                 scrollToActive()
                 requestAnimationFrame(scrollToActive)
                 setTimeout(scrollToActive, 100)
-                setTimeout(scrollToActive, 1000)
+                setTimeout(() => {
+                    scrollToActive()
+                    scrollContainer.style.scrollBehavior = ''
+                    scrollContainer.style.scrollSnapType = ''
+                }, 1000)
                 initialScrollPerformed = true
                 setTimeout(() => {
                     tabChangeFromScroll = false
-                }, 500)
+                }, 1100)
             } else {
                 activeFrameWrapper.scrollIntoView({ 
                     behavior: 'instant'
