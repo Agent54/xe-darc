@@ -236,7 +236,7 @@ const refresh = throttle(async function (spaceId) {
 
             if (!spaceMeta.activeTabId && doc.spaceId === spaceMeta.activeSpace) {
                 spaceMeta.activeTabId = doc.id
-                console.log('setting active tab id a', spaceMeta.activeTabId)
+                console.log('setting active tab id a', spaceMeta.activeTabId, '"' + (doc.title || doc.url || '') + '"')
             }
 
             if (!spaces[doc.spaceId]) {
@@ -281,7 +281,7 @@ const refresh = throttle(async function (spaceId) {
         spaces[spaceId].tabs = newSpaceTabs[spaceId]
     }
 
-    console.log('setting active tab id b', { current : spaceMeta.activeTabId, activeTabIdExists, list :spaces[spaceMeta.activeSpace]?.activeTabsOrder })
+    console.log('setting active tab id b', { current : spaceMeta.activeTabId, title: docs[spaceMeta.activeTabId]?.title || '', activeTabIdExists, list :spaces[spaceMeta.activeSpace]?.activeTabsOrder })
     if (spaceMeta.activeTabId && !activeTabIdExists && spaces[spaceMeta.activeSpace]?.activeTabsOrder?.length > 0) {
         removedActiveTabId(spaceMeta.activeTabId)
     }
@@ -329,7 +329,7 @@ function removedActiveTabId (previousActiveTabId) {
         }
         return true
     })
-    console.log('setting active tab id b', { current : spaceMeta.activeTabId, next : spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1], previousIndex, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
+    console.log('setting active tab id b', { current : spaceMeta.activeTabId, currentTitle: docs[spaceMeta.activeTabId]?.title || '', next : spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1], nextTitle: docs[spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]]?.title || '', previousIndex, list :spaces[spaceMeta.activeSpace].activeTabsOrder })
     
     const nextTabId = spaces[spaceMeta.activeSpace].activeTabsOrder[previousIndex - 1]
     
