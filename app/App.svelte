@@ -5043,8 +5043,8 @@
         border-top: 10px solid black;
         position: fixed;
         top: 35px;
-        left: 0;
-        right: 0;
+        left: var(--tab-sidebar-width, 0px);
+        right: var(--sidebar-width, 0px);
         bottom: 0;
         background: rgba(0, 0, 0, 0.8);
         backdrop-filter: blur(12px);
