@@ -312,7 +312,6 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
     overflow-y: hidden;
     -webkit-app-region: no-drag;
     position: relative;
-    z-index: 1;
     scrollbar-width: none;
     -ms-overflow-style: none;
     width: 100%;
@@ -472,7 +471,7 @@ ul::-webkit-scrollbar {
     position: sticky;
     left: 0;
     right: 0;
-    z-index: 2;
+    z-index: 3;
     box-shadow: -8px 0 8px -2px black, 8px 0 8px -2px black;
 }
 .tab-container.active:hover, .tab-container.active.hovered, .tab-container.active.menu-open {

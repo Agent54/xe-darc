@@ -2041,7 +2041,7 @@
                                     <div class="tabs-list" 
                                          onscroll={(e) => { handleTabsListScroll(e); handleTabsListScrollForSpacer(e, spaceId); }}
                                          onwheel={(e) => handleTabsListWheel(e, spaceId)}
-                                         style="transform: translateY({tabsListVerticalRubberBand[spaceId] || 0}px) translateZ(0)">
+                                         style={tabsListVerticalRubberBand[spaceId] ? `transform: translateY(${tabsListVerticalRubberBand[spaceId]}px)` : ''}>
                                         
                                         {#if tabsListSpacerVisible[spaceId] && !tabSearchQuery}
                                             <div class="tabs-list-spacer" style="height: {tabsListSpacerHeight[spaceId] || 0}px"></div>
@@ -3339,8 +3339,6 @@
         margin-right: -8px; /* Offset scrollbar position */
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-        will-change: transform;
-        backface-visibility: hidden;
     }
     
     .tab-content-container.searching:not(.multi-space) .tabs-list {
@@ -3433,7 +3431,7 @@
         position: sticky;
         top: 0;
         bottom: 0;
-        z-index: 2;
+        z-index: 15;
         box-shadow: 0 -8px 8px -2px black, 0 8px 8px -2px black;
     }
     
