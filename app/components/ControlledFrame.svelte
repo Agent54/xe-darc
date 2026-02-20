@@ -406,7 +406,7 @@
     }
 
     function handleEvent(eventName, tab, event) {
-        console.log(eventName, tab, event)
+        console.log(eventName, $state.snapshot(tab), event)
     }
     function handleAudioStateChanged (tab, event) {
         tab.audioPlaying = event.audible
