@@ -845,7 +845,8 @@
   }
 
   .space-group-header.active .space-group-left {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid #151515;
   }
 
   .space-group-header.active .space-group-name {
