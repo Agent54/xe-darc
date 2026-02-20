@@ -3428,16 +3428,17 @@
     }
     
     .tab-item-container.active {
-        background: rgb(255 255 255 / 11%);
+        background: #1c1c1c;
         border: 1px solid hsl(0deg 0% 100% / 3%);
         position: sticky;
         top: 0;
         bottom: 0;
         z-index: 2;
+        box-shadow: 0 -8px 8px -2px black, 0 8px 8px -2px black;
     }
     
     .tab-item-container.active:hover {
-        background: rgb(255 255 255 / 16%);
+        background: #292929;
         border: 1px solid hsl(0deg 0% 100% / 4%);
     }
     
