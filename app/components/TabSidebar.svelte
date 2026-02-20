@@ -2572,9 +2572,9 @@
     .pinned-tab {
         width: 36px;
         height: 36px;
-            border-radius: 12px;
+        border-radius: 12px;
         /* background: rgb(255 255 255 / 7%); */
-        background: #ffffff0f;
+        background: rgb(255 255 255 / 6.5%);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -3423,8 +3423,8 @@
     }
     
     .tab-item-container:hover {
-        background-color: rgb(255 255 255 / 9%);
-        border: 1px solid hsl(0deg 0% 100% / 3%);
+        background-color: rgb(255 255 255 / 7%);
+        border: 1px solid hsl(0deg 0% 100% / 2%);
     }
     
     .tab-item-container.active {
@@ -3619,7 +3619,7 @@
     }
 
     .new-tab-button:hover {
-        background-color: rgb(255 255 255 / 9%);
+        background-color: rgb(255 255 255 / 7%);
         border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
