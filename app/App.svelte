@@ -1487,7 +1487,7 @@
                         const isForceHibernated = data.frames[tabId]?.forceHibernated === true
 
                         if (entry.isIntersecting && tab && !isForceHibernated) {
-                            console.log('%c[TAB-DEBUG] IntersectionObserver activating tab: ' + tab.id + ' (ratio=' + entry.intersectionRatio.toFixed(2) + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
+                            console.log('%c[TAB-DEBUG] IntersectionObserver activating tab: ' + tab.id + ' "' + (tab.title || tab.url || '') + '" (ratio=' + entry.intersectionRatio.toFixed(2) + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
                             tabChangeFromScroll = true
                             if (tabChangeFromScrollTimer) {
                                 clearTimeout(tabChangeFromScrollTimer)
