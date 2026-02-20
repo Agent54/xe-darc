@@ -3190,3 +3190,24 @@ agent dev tool integration when clicking an item can also add commands about it 
 window resize and pined tab resizeing
 
 
+fullscreen / OS mode with stage manager
+
+zoom slider grid view
+
+view transitions grid view.
+
+screenshots for system tabs
+
+activation delay 2s
+
+use native res for frames until min scale in canvas
+
+market? dev ev? iwa studio? (niche-) browser? web os?
+
+installation ui and sub apps
+
+url change not always working (split out lighbox?)
+
+minimize sideboar to icons only mode + unify with right sidebar?
+
+
