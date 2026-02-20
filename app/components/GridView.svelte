@@ -908,7 +908,7 @@
     width: 100%;
     height: 180px;
     border-radius: 8px;
-    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border: 1px dashed rgba(255, 255, 255, 0.06);
     background: transparent;
     display: flex;
     align-items: center;
