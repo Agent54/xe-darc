@@ -3169,8 +3169,6 @@ open closed tabs menu on new closed ones, hide after while
 
 interface bug bench browser testing/debugging
 
-sticky current tab in tab scrolling
-
 drag to new window feature
 
 allow overview to show real frames mode to check the progress!!!!!
@@ -3185,7 +3183,10 @@ alt tab instead of custom three gesture, switch to by last used sort on alt tab 
 
 translations feature!!!!
 
-pip mode!
+video pip mode!
 
 agent dev tool integration when clicking an item can also add commands about it and mention it
+
+window resize and pined tab resizeing
+
 
