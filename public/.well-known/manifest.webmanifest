@@ -1,6 +1,6 @@
 {
   "name": "Darc",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "update_manifest_url": "https://github.com/Agent54/xe-darc/releases/download/iwa-manifest/iwa-updates.json",
   "short_name": "Darc",
   "description": "A xenon browser",
@@ -108,14 +108,14 @@
       "url": "/?handler=%s"
     }
   ],
+  "display": "standalone",
   "display_override": [
-    "frameless",
+    "unframed",
     "window-controls-overlay"
   ],
   "forground_color": "white",
   "start_url": "/",
   "scope": "/",
-  "display": "fullscreen",
   "theme_color": "black",
   "dark_theme_color": "black",
   "background_color": "black",
