@@ -3186,3 +3186,6 @@ alt tab instead of custom three gesture, switch to by last used sort on alt tab 
 translations feature!!!!
 
 pip mode!
+
+agent dev tool integration when clicking an item can also add commands about it and mention it
+

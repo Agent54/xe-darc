@@ -44,6 +44,7 @@
     let renameInputValue = $state('')
     let renameInputRef = $state(null)
     let colorPickerSpaceId = $state(null)
+    let colorPickerFromMenu = $state(false)
     
     // Multi-space expansion state
     let multiSpaceMode = $state(false)
@@ -916,6 +917,7 @@
             if (action === 'rename') {
                 startRename(spaceId)
             } else if (action === 'change-color') {
+                colorPickerFromMenu = true
                 colorPickerSpaceId = spaceId
             } else if (action === 'change-icon') {
                 console.log('Change icon for space:', spaceId)
@@ -1415,6 +1417,7 @@
         if (action === 'rename') {
             startRename(spaceId)
         } else if (action === 'change-color') {
+            colorPickerFromMenu = false
             colorPickerSpaceId = spaceId
         } else if (action === 'change-icon') {
             console.log('Change icon for space:', spaceId)
@@ -1936,7 +1939,7 @@
                                     {#if colorPickerSpaceId === spaceId}
                                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                                         <div class="menu-scrim" onmousedown={() => colorPickerSpaceId = null}></div>
-                                        <div class="color-picker-dropdown">
+                                        <div class="color-picker-dropdown" class:from-menu={colorPickerFromMenu}>
                                             {#each spaceColors as c}
                                                 <button class="color-swatch" 
                                                         class:active={data.spaces[spaceId]?.color === c.color}
@@ -2851,7 +2854,7 @@
     }
     
     .space-title.active {
-        color: white;
+        color: hsl(0 0% 87% / 1);
         font-weight: 700;
     }
 
@@ -2886,6 +2889,11 @@
         grid-template-columns: repeat(5, 1fr);
         gap: 4px;
         width: 140px;
+    }
+
+    .color-picker-dropdown.from-menu {
+        left: auto;
+        right: 0;
     }
 
     .color-swatch {
@@ -3384,9 +3392,9 @@
         gap: 4px;
         border-radius: 12px;
         /* background: rgb(255 255 255 / 7%); */
-         background: #ffffff0f;
+         /* background: #ffffff0f; */
         transition: all 150ms ease;
-        border: 1px solid hsl(0deg 0% 100% / 2%);
+        border: 1px solid transparent;
         height: 36px;
         flex-shrink: 0;
         width: 100%;
@@ -3420,13 +3428,13 @@
     }
     
     .tab-item-container.active {
-        background: rgb(255 255 255 / 14%);
-        border: 1px solid hsl(0deg 0% 100% / 4%);
+        background: rgb(255 255 255 / 11%);
+        border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
     .tab-item-container.active:hover {
-        background: rgb(255 255 255 / 17%);
-        border: 1px solid hsl(0deg 0% 100% / 5%);
+        background: rgb(255 255 255 / 16%);
+        border: 1px solid hsl(0deg 0% 100% / 4%);
     }
     
     .tab-item-container.tab-dragging {
@@ -3443,9 +3451,9 @@
     }
     
     .tab-title {
-        color: #c3c3c3;
+        color: hsl(0 0% 50% / 1);
         font-size: 13px;
-        font-weight: 400;
+        font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         white-space: nowrap;
         overflow: hidden;
@@ -3462,11 +3470,11 @@
     
     .tab-item-container.active .tab-title {
         color: #e5e5e5;
-        text-shadow: 0 0 0.3px currentColor;
+        /* text-shadow: 0 0 0.3px currentColor; */
     }
     
     .tab-item-container:hover .tab-title {
-        color: #fff;
+        color: hsl(0 0% 85% / 1);
     }
     
     .tab-item-container.active :global(.favicon-wrapper) {
@@ -3846,7 +3854,7 @@
         align-items: center;
         gap: 4px;
         border-radius: 12px;
-        background: #ffffff0f;
+        /* background: #ffffff0f; */
         transition: background-color 150ms ease;
         border: 1px solid hsl(0deg 0% 100% / 2%);
         height: 36px;
@@ -3925,9 +3933,14 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        color: rgba(255, 255, 255, 0.4);
+        color: white;
+        opacity: 50%;
         position: relative;
         margin-left: 4px;
+    }
+
+    .tab-group-wrapper:hover .tab-group-favicon {
+        opacity: 85%;
     }
     
     .tab-group-favicon:first-child {
@@ -3946,7 +3959,7 @@
     }
     
     .tab-group-title {
-        color: #c3c3c3;
+        color: hsl(0 0% 50% / 1);
         font-size: 13px;
         font-weight: 600;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -4027,7 +4040,7 @@
     }
     
     .tab-group-wrapper:hover .tab-group-title {
-        color: #fff;
+        color: rgba(255, 255, 255, 0.8);
     }
     
     .tab-group-wrapper:hover .tab-group-favicon {
