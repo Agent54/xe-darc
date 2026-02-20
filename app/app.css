@@ -442,13 +442,13 @@ ul::-webkit-scrollbar {
     user-select: none;
     cursor: pointer;
     font-size: 13px;
-    font-weight: 400;
+    font-weight: 500;
     padding: 4px;
     list-style: none;
     transition: border-color 0.3s ease, width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease, flex-basis 0.2s ease;
-    border-radius: 8px;
+    border-radius: 10px;
     /* background-color: rgb(255 255 255 / 6%); */
-    background-color: #ffffff0f;
+    /* background-color: #ffffff0f; */
     min-width: 130px;
     max-width: 200px;
     flex: 0 1 200px; /* Don't grow, can shrink from 200px basis */
@@ -456,19 +456,27 @@ ul::-webkit-scrollbar {
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
     -webkit-font-smoothing: subpixel-antialiased;
     text-rendering: optimizeLegibility;
-    border: 1px solid hsl(0deg 0% 100% / 2%);
+    border: 1px solid transparent;
+    /* hsl(0deg 0% 100% / 2%); */
 }
 .tab-container:hover, .tab-container.hovered, .tab-container.menu-open {
-    background-color: rgb(255 255 255 / 9%);
+    background-color: rgb(255 255 255 / 12%);
     border: 1px solid hsl(0deg 0% 100% / 3%);
 }
 .tab-container.active {
-    background-color: rgb(255 255 255 / 17%);
-    border: 1px solid hsl(0deg 0% 100% / 6.5%);
+    /* background-color: rgb(255 255 255 / 17%);
+    border: 1px solid hsl(0deg 0% 100% / 6.5%); */
+
+    background: rgb(255 255 255 / 15%);
+    border: 1px solid hsl(0deg 0% 100% / 5%);
+    position: sticky;
+    left: 0;
+    right: 0;
+    z-index: 2;
 }
 .tab-container.active:hover, .tab-container.active.hovered, .tab-container.active.menu-open {
-    background-color: rgb(255 255 255 / 19%);
-    border: 1px solid hsl(0deg 0% 100% / 8%);
+    background-color: rgb(255 255 255 / 17%);
+    border: 1px solid hsl(0deg 0% 100% / 7%);
 
 }
 .tab-container .tab {
@@ -476,7 +484,7 @@ ul::-webkit-scrollbar {
     white-space: nowrap;
     text-overflow: ellipsis;
     text-decoration: none;
-    color: #c3c3c3;
+    color: hsl(0 0% 61% / 1);
     overflow: hidden;
     text-align: center;
     width: 100%;
@@ -488,7 +496,7 @@ ul::-webkit-scrollbar {
 }
 .tab-container.active .tab {
     color: #e5e5e5;
-    text-shadow: 0 0 0.3px currentColor;
+    /* text-shadow: 0 0 0.3px currentColor; */
 }
 .tab-container.active .favicon-wrapper {
     opacity: 0.87;
@@ -501,7 +509,7 @@ ul::-webkit-scrollbar {
 }
 .tab-container.previous-active-tab .tab {
     color: #e5e5e5;
-    text-shadow: 0 0 0.3px currentColor;
+    /* text-shadow: 0 0 0.3px currentColor; */
 }
 .tab-container.previous-active-tab .favicon-wrapper {
     opacity: 0.87;

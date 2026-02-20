@@ -3430,6 +3430,10 @@
     .tab-item-container.active {
         background: rgb(255 255 255 / 11%);
         border: 1px solid hsl(0deg 0% 100% / 3%);
+        position: sticky;
+        top: 0;
+        bottom: 0;
+        z-index: 2;
     }
     
     .tab-item-container.active:hover {
