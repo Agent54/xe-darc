@@ -755,7 +755,7 @@
     window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
     window.addEventListener('darc-key-from-frame', handleFrameKey)
-    window.addEventListener('close-apps-overlay', () => { showAppsOverlay = false })
+    window.addEventListener('close-apps-overlay', () => { closeAppsOverlay() })
     window.addEventListener('darc-zoom-out-at-max-internal', handleZoomOutAtMaxInternal)
     window.addEventListener('darc-zoom-in', handleZoomIn)
 
@@ -936,7 +936,7 @@
         }
         if (event.key === 'Escape' && showAppsOverlay) {
             event.preventDefault()
-            showAppsOverlay = false
+            closeAppsOverlay()
             return
         }
         if (event.key === 'F18') {
@@ -2479,8 +2479,29 @@
     }
 
 
+    let appsOverlayZenModeWasActive = false
+
+    function openAppsOverlay() {
+        appsOverlayZenModeWasActive = focusModeEnabled
+        showAppsOverlay = true
+        if (!focusModeEnabled) {
+            toggleFocusMode()
+        }
+    }
+
+    function closeAppsOverlay() {
+        showAppsOverlay = false
+        if (!appsOverlayZenModeWasActive && focusModeEnabled) {
+            toggleFocusMode()
+        }
+    }
+
     function toggleAppsOverlay() {
-        showAppsOverlay = !showAppsOverlay
+        if (showAppsOverlay) {
+            closeAppsOverlay()
+        } else {
+            openAppsOverlay()
+        }
     }
 
     function toggleFocusMode() {
@@ -4741,9 +4762,9 @@
          role="dialog" 
          aria-label="All Apps"
          tabindex="-1"
-         onmousedown={(e) => { if (e.target === e.currentTarget) showAppsOverlay = false }}>        
+         onmousedown={(e) => { if (e.target === e.currentTarget) closeAppsOverlay() }}>
         <div class="apps-overlay-content">
-            <Apps onClose={() => showAppsOverlay = false} />
+            <Apps onClose={() => closeAppsOverlay()} />
         </div>
     </div>
 {/if}
