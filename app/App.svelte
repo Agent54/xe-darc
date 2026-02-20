@@ -216,6 +216,7 @@
     let dataSaver = $state(false)
     let batterySaver = $state(false)
     let secondScreenActive = $state(false)
+    let isFullscreen = $state(!!document.fullscreenElement)
     let statusLightsEnabled = $state(true)
     let certificateMonitorForTab = $state(null)
     let devModeEnabled = $state(false)
@@ -2568,6 +2569,18 @@
         data.settings.batterySaver = batterySaver
     }
     
+    function toggleFullscreen() {
+        if (document.fullscreenElement) {
+            document.exitFullscreen()
+        } else {
+            document.documentElement.requestFullscreen()
+        }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+        isFullscreen = !!document.fullscreenElement
+    })
+
     function toggleSecondScreen() {
         // TODO: xr detection + presentation api 
         if (secondScreenActive) {
@@ -3939,8 +3952,27 @@
                 <span>Second Screen</span>
                 {#if secondScreenActive}<span class="checkmark">•</span>{/if}
             </div>
+
+            <div class="settings-menu-item menu-item"
+                class:active={isFullscreen}
+                role="button"
+                tabindex="0"
+                onmousedown={(e) => { e.stopPropagation(); toggleFullscreen(); closeMenuImmediately() }}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleFullscreen() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        {#if isFullscreen}
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" />
+                        {:else}
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                        {/if}
+                    </svg>
+                </span>
+                <span>Fullscreen</span>
+                {#if isFullscreen}<span class="checkmark">•</span>{/if}
+            </div>
             
-            <!-- <div class="settings-menu-item menu-item" 
+            <!-- <div class="settings-menu-item menu-item"
                  class:active={openSidebars.has('resources')}
                  role="button"
                  tabindex="0"
