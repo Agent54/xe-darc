@@ -110,9 +110,6 @@
   ],
   "display_override": [
     "frameless",
-    "unframed",
-    "TODO:test",
-    "borderless",
     "window-controls-overlay"
   ],
   "forground_color": "white",
@@ -210,10 +207,6 @@
       "*"
     ],
     "midi": [
-      "self",
-      "*"
-    ],
-    "xr-spatial-tracking": [
       "self",
       "*"
     ]
