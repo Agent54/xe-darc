@@ -182,11 +182,226 @@ dedicatedWorker.onmessage = function(e) {
 }
 
 // Test Shared Worker
-const sharedWorker = new SharedWorker('/test-shared-worker.js')
-sharedWorker.port.onmessage = function(e) {
-  console.log('Shared Worker says:', e.data)
+if (typeof SharedWorker !== 'undefined') {
+  const sharedWorker = new SharedWorker('/test-shared-worker.js', { name: 'darc-shared-worker' })
+  const port = sharedWorker.port
+  const heartbeatMs = 2000
+  const clientId = crypto?.randomUUID
+    ? crypto.randomUUID()
+    : `client-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
+
+  let windowId = null
+  let goodbyeSent = false
+
+  function ensureWindowIdInUrl() {
+    if (!windowId) return
+
+    const currentUrl = new URL(window.location.href)
+    if (currentUrl.searchParams.get('darcWindowId') === windowId) return
+
+    currentUrl.searchParams.set('darcWindowId', windowId)
+    const nextUrl = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`
+    history.replaceState(history.state, '', nextUrl)
+  }
+
+  function getHintWindowId() {
+    const params = new URLSearchParams(window.location.search)
+    const urlHint = params.get('darcWindowId')
+    if (urlHint) return urlHint
+
+    if (typeof window.name === 'string' && window.name.startsWith('darc-window-')) {
+      return window.name.slice('darc-window-'.length)
+    }
+
+    return null
+  }
+
+  function buildWindowInfoPayload() {
+    return {
+      clientId,
+      hintWindowId: getHintWindowId(),
+      windowId,
+      url: window.location.href,
+      timestamp: Date.now(),
+      devicePixelRatio: window.devicePixelRatio,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight
+      },
+      outer: {
+        width: window.outerWidth,
+        height: window.outerHeight
+      },
+      placement: {
+        x: window.screenX ?? window.screenLeft ?? 0,
+        y: window.screenY ?? window.screenTop ?? 0
+      },
+      screen: {
+        width: screen.width,
+        height: screen.height,
+        availWidth: screen.availWidth,
+        availHeight: screen.availHeight,
+        availLeft: screen.availLeft ?? 0,
+        availTop: screen.availTop ?? 0,
+        colorDepth: screen.colorDepth,
+        pixelDepth: screen.pixelDepth,
+        orientation: {
+          type: screen.orientation?.type,
+          angle: screen.orientation?.angle
+        }
+      }
+    }
+  }
+
+  async function getScreenDetailsPayload() {
+    if (typeof window.getScreenDetails !== 'function') return null
+
+    try {
+      const details = await window.getScreenDetails()
+      return {
+        isExtended: !!details.isExtended,
+        currentScreen: details.currentScreen ? {
+          label: details.currentScreen.label || '',
+          left: details.currentScreen.left,
+          top: details.currentScreen.top,
+          width: details.currentScreen.width,
+          height: details.currentScreen.height,
+          availLeft: details.currentScreen.availLeft,
+          availTop: details.currentScreen.availTop,
+          availWidth: details.currentScreen.availWidth,
+          availHeight: details.currentScreen.availHeight,
+          isPrimary: !!details.currentScreen.isPrimary,
+          isInternal: !!details.currentScreen.isInternal
+        } : null,
+        screens: details.screens?.map(screenInfo => ({
+          label: screenInfo.label || '',
+          left: screenInfo.left,
+          top: screenInfo.top,
+          width: screenInfo.width,
+          height: screenInfo.height,
+          availLeft: screenInfo.availLeft,
+          availTop: screenInfo.availTop,
+          availWidth: screenInfo.availWidth,
+          availHeight: screenInfo.availHeight,
+          isPrimary: !!screenInfo.isPrimary,
+          isInternal: !!screenInfo.isInternal
+        })) || []
+      }
+    } catch (error) {
+      return {
+        error: error?.message || 'getScreenDetails failed'
+      }
+    }
+  }
+
+  async function sendConnect() {
+    const payload = buildWindowInfoPayload()
+    payload.screenDetails = await getScreenDetailsPayload()
+
+    port.postMessage({
+      type: 'CONNECT',
+      payload
+    })
+  }
+
+  function sendGoodbye(reason) {
+    if (goodbyeSent) return
+    goodbyeSent = true
+
+    port.postMessage({
+      type: 'GOODBYE',
+      payload: {
+        clientId,
+        windowId,
+        reason,
+        timestamp: Date.now()
+      }
+    })
+  }
+
+  const FULL_SYNC_MS = 5000
+  let lastFullSyncAt = 0
+
+  function sendHeartbeat() {
+    if (!windowId) return
+
+    const now = Date.now()
+    const needsFullSync = (now - lastFullSyncAt) >= FULL_SYNC_MS
+
+    if (needsFullSync) {
+      requestIdleCallback(() => {
+        lastFullSyncAt = Date.now()
+        const payload = buildWindowInfoPayload()
+        payload.full = true
+        port.postMessage({ type: 'HEARTBEAT', payload })
+      })
+    } else {
+      port.postMessage({
+        type: 'HEARTBEAT',
+        payload: {
+          clientId,
+          windowId,
+          timestamp: now,
+          placement: {
+            x: window.screenX ?? window.screenLeft ?? 0,
+            y: window.screenY ?? window.screenTop ?? 0
+          },
+          outer: {
+            width: window.outerWidth,
+            height: window.outerHeight
+          }
+        }
+      })
+    }
+  }
+
+  port.onmessage = function(e) {
+    const message = e.data
+    if (!message || !message.type) return
+
+    if (message.type === 'CONNECTED_ACK') {
+      if (message.payload?.clientId && message.payload.clientId !== clientId) return
+      if (message.payload?.windowId) {
+        windowId = message.payload.windowId
+        window.name = `darc-window-${windowId}`
+        ensureWindowIdInUrl()
+      }
+
+      sendHeartbeat()
+      return
+    }
+
+    if (message.type !== 'HEARTBEAT_ACK') {
+      console.log('Shared Worker event:', message)
+    }
+  }
+
+  port.start()
+  sendConnect()
+
+  sendHeartbeat()
+  const heartbeatInterval = setInterval(sendHeartbeat, heartbeatMs)
+
+  window.addEventListener('pagehide', () => {
+    sendGoodbye('pagehide')
+  })
+
+  window.addEventListener('beforeunload', () => {
+    sendGoodbye('beforeunload')
+  })
+
+  window.addEventListener('hashchange', () => {
+    ensureWindowIdInUrl()
+  })
+
+  window.addEventListener('popstate', () => {
+    ensureWindowIdInUrl()
+  })
+
+  window.addEventListener('unload', () => {
+    clearInterval(heartbeatInterval)
+  })
 }
-sharedWorker.port.start()
 
 console.log(window.location.href)
 
