@@ -1492,7 +1492,9 @@
                             if (tabChangeFromScrollTimer) {
                                 clearTimeout(tabChangeFromScrollTimer)
                             }
-                            data.spaceMeta.activeTabId = tab.id
+                            // Keep activeTabsOrder in sync with observer-driven activation so
+                            // previous-active-tab styling and pinned-tab fallback remain correct.
+                            data.activate(tab.id)
                             tabChangeFromScrollTimer = setTimeout(() => {
                                 tabChangeFromScroll = false
                                 tabChangeFromScrollTimer = null

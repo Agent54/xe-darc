@@ -1,3 +1,4 @@
+Important: use native tooling over bash every time possible (eg search, replace, find in file etc.)
 use js over ts unless in a ts file or ts requested
 use deno if possible if node required use pnpm not npm for everything except for exsiting lock files indicating yarn or npm
 no semicolons, use standard js where possible (eg. space between funciton name and paranthesis)
