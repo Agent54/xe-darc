@@ -750,14 +750,16 @@ export default {
     disableZoomForAllFrames: () => {
         // console.log('🔍 [ZOOM-CONTROL] disabling zoom for all frames')
         Object.values(frames).forEach(frameData => {
-            console.log('frameData', frameData)
+            // console.log('frameData', frameData)
             if (frameData?.frame?.executeScript) {
                 try {   
-                    console.log(frameData.frame.executeScript({
-                        code: 'window.darcZoomControl?.disable()'
-                    }).catch(err => {
-                        console.log('Failed to disable zoom for frame:', err)
-                    }))
+                    setTimeout(() => {
+                        frameData.frame.executeScript({
+                            code: 'window.darcZoomControl?.disable()'
+                        }).catch(err => {
+                            console.log('Failed to disable zoom for frame:', err)
+                        })
+                    }, 200)
                 } catch (err) {
                     console.log('Failed to disable zoom for frame:', err)
                 }
