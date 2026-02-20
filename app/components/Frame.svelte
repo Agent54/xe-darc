@@ -4,7 +4,7 @@
 
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
-    import Tooltip from './Tooltip.svelte'
+    // import Tooltip from './Tooltip.svelte'
     import AttachmentImage from './AttachmentImage.svelte'
     import LightboxHeader from './LightboxHeader.svelte'
     import { origin } from '../lib/utils.js'
