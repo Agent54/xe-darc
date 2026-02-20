@@ -1086,8 +1086,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: #1a1a1a;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #070707;
+    border: 1px solid rgb(58 58 58 / 10%);
     gap: 12px;
     padding: 20px;
   }
