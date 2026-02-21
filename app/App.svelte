@@ -995,7 +995,7 @@
     }
 
     async function activateTab (tab, index) {
-        // console.log('[DEBUG:ActivateTab]', tab.id, '| idx:', index, '| current:', data.spaceMeta?.activeTabId)
+        console.log('[DEBUG:ActivateTab]', tab.id, '| idx:', index, '| current:', data.spaceMeta?.activeTabId)
         // Mark window as active to prevent background styling glitches
         activateWindowFocus()
         
@@ -1019,6 +1019,7 @@
         
         // For unpinned tabs, use the original behavior
         if (tab.id === data.spaceMeta.activeTabId) {
+            console.log('[DEBUG:PreviousTabSwitch]')
             data.previous()
         } else {
             // Set this tab as active using the data store function
