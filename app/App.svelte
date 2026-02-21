@@ -1469,19 +1469,19 @@
     })
 
     let observer = $state(null)
+    let _observer = null
     let scrollContainer = null
     onMount(() => {
         // console.log('scrollContainer', scrollContainer)
-        observer = new IntersectionObserver((entries) => {
+        _observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 const tabId = entry.target.id.replace('tab_', '')
                 const tab = data.docs[tabId]
                 
                 if (entry.isIntersecting) {
-                    const wasInitialScrollPerformed = initialScrollPerformed
                     const timer = setTimeout(() => {
-                        if (tabChangeFromScroll || !wasInitialScrollPerformed) {
-                            console.log('%c[TAB-DEBUG] IntersectionObserver SKIPPED tab: ' + tabId + ' (tabChangeFromScroll=' + tabChangeFromScroll + ' initialScrollPerformed=' + initialScrollPerformed + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
+                        if (tabChangeFromScroll) {
+                            console.log('%c[TAB-DEBUG] IntersectionObserver SKIPPED tab: ' + tabId + ' (tabChangeFromScroll=' + tabChangeFromScroll + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
                             return
                         }
             
@@ -1515,6 +1515,14 @@
             threshold: 0.6,
             root: scrollContainer
         })
+    })
+
+    // Only expose the observer to Frame components after initial scroll is done
+    // This prevents any intersection callbacks from firing during startup
+    $effect(() => {
+        if (initialScrollPerformed && _observer && !observer) {
+            observer = _observer
+        }
     })
 
     let tabChangeFromScroll = false
@@ -1552,8 +1560,8 @@
     $effect(() => {
         return () => {
             stopHovercardPositionCheck()
-            if (observer) {
-                observer.disconnect()
+            if (_observer) {
+                _observer.disconnect()
             }
             if (hovercardResetTimer) {
                 clearTimeout(hovercardResetTimer)
