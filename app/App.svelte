@@ -1478,8 +1478,9 @@
                 const tab = data.docs[tabId]
                 
                 if (entry.isIntersecting) {
+                    const wasInitialScrollPerformed = initialScrollPerformed
                     const timer = setTimeout(() => {
-                        if (tabChangeFromScroll || !initialScrollPerformed) {
+                        if (tabChangeFromScroll || !wasInitialScrollPerformed) {
                             console.log('%c[TAB-DEBUG] IntersectionObserver SKIPPED tab: ' + tabId + ' (tabChangeFromScroll=' + tabChangeFromScroll + ' initialScrollPerformed=' + initialScrollPerformed + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
                             return
                         }
