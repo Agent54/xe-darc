@@ -3213,8 +3213,13 @@ The current system demonstrates strong performance and security characteristics.
 		border: 1px solid rgba(255, 255, 255, 0.06);
 		border-radius: 4px;
 		padding: 6px 12px;
-		color: rgba(255, 255, 255, 0.8);
-		font-size: 11px;
+		color: #fff;
+		font-size: 13px;
+		font-weight: 500;
+		letter-spacing: -0.008em;
+		line-height: 1;
+		font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+		-webkit-font-smoothing: antialiased;
 		cursor: pointer;
 		transition: all 0.2s ease;
 		display: flex;
@@ -3247,6 +3252,8 @@ The current system demonstrates strong performance and security characteristics.
 		min-width: 280px;
 		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 		margin-top: 4px;
+		font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+		-webkit-font-smoothing: antialiased;
 	}
 
 	.agent-history-dropdown:hover .agent-history-dropdown-content {
@@ -3290,8 +3297,10 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	.agent-history-item-title {
-		font-size: 12px;
-		color: rgba(255, 255, 255, 0.9);
+		font-size: 13px;
+		font-weight: 500;
+		letter-spacing: -0.008em;
+		color: #fff;
 		margin-bottom: 2px;
 		line-height: 1.3;
 		display: -webkit-box;

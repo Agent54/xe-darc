@@ -400,7 +400,8 @@
             0 8px 16px rgba(0, 0, 0, 0.2),
             inset 0 1px 0 rgba(255, 255, 255, 0.1);
         overflow: visible;
-        font-family: 'Inter', sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: antialiased;
         animation: context-menu-appear 0.1s ease-out;
         -webkit-app-region: no-drag;
         white-space: nowrap;
@@ -418,14 +419,17 @@
     }
 
     .context-menu-item {
-        padding: 6px 12px;
+        padding: 8px 14px;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
         cursor: pointer;
         transition: all 0.2s ease;
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.9);
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: -0.008em;
+        color: #fff;
+        line-height: 1;
         user-select: none;
     }
 
@@ -470,6 +474,12 @@
         flex-shrink: 0;
         font-size: 12px;
         transform: translateZ(0);
+        color: rgba(255, 255, 255, 0.85);
+    }
+
+    .context-menu-icon :global(svg) {
+        width: 16px;
+        height: 16px;
     }
 
     .context-menu-separator {
@@ -562,14 +572,17 @@
     }
 
     .context-submenu-item {
-        padding: 6px 12px;
+        padding: 8px 14px;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
         cursor: pointer;
         transition: all 0.15s ease;
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.9);
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: -0.008em;
+        color: #fff;
+        line-height: 1;
         user-select: none;
         position: relative;
         white-space: nowrap;
