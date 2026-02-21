@@ -5078,6 +5078,7 @@
     }
 
     /* LED Indicator Array - positioned in hover sidebar */
+    
     .led-indicator-array {
         display: flex;
         flex-direction: column;
@@ -5085,8 +5086,12 @@
         padding: 8px 0;
         align-items: center;
         position: fixed;
-        right: 30px;
+        right: 33px;
         bottom: 13px;
+    }
+
+    .sidebar-right:hover .led-indicator-array { 
+         right: 18px;
     }
 
     .led-dot {

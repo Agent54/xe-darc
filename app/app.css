@@ -126,7 +126,7 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
     transition: transform 190ms 300ms cubic-bezier(.78,-0.01,.34,1.04), opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45s;
     background-color: rgba(0, 0, 0, 0.802);
     backdrop-filter: blur(7px);
-    transform: translateX(26px);
+    transform: translateX(30px);
     border-left: 1px solid transparent;
     /* opacity: 0; */
 }

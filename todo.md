@@ -3215,9 +3215,33 @@ extensions::webView:197 <controlledframe>: Script cannot be injected into conten
 
 notification for bookmaark ingestion
 
-
-
 context menu bold text
 
 kilo browser tool
+
+forgejo local/remote holistic agent factory setup
+
+up down to change space, left right for tabs, swipe with hotkey instead of end of scroll
+
+vscdode rememeber fullscrreen sidebar mode after toggle
+++
+allow sidebar width changing from tiggers of size req change!
+
+apps run in the angent not agents run in the apps
+
+vscode layout switcher (cli, agent, version control, notes)
+
+per spac global global sidepins
+
+toole sidebar width absed on sidebar space req (eg change width of vscode if view mode open inside)
+
+agent: preque and approve possible commands in one upfront task!!!!
+
+conversation pioonning and mangement for agents integration
+
+canvas broken
+
+group by serrvice or by environment for apps
+
+deep mode long task tests
 
