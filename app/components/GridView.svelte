@@ -1253,12 +1253,14 @@
   }
 
   .grid-context-item {
-    padding: 6px 14px;
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 12px;
+    padding: 8px 14px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.008em;
+    line-height: 1;
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-    -webkit-font-smoothing: subpixel-antialiased;
-    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
     cursor: pointer;
     transition: background 150ms ease;
     background: transparent;

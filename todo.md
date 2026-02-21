@@ -3219,3 +3219,5 @@ notification for bookmaark ingestion
 
 context menu bold text
 
+kilo browser tool
+
