@@ -35,17 +35,64 @@
     localStorage.setItem('gridSpaceScope', spaceScope)
   }
 
+  function getGridCollapsedSpacesStorageKey(windowId = gridWindowId || window.darcWindowId) {
+    if (!windowId) {
+      return null
+    }
+
+    return `gridCollapsedSpaces:${windowId}`
+  }
+
+  function readCollapsedSpaces(windowId = gridWindowId || window.darcWindowId) {
+    const storageKey = getGridCollapsedSpacesStorageKey(windowId)
+    if (!storageKey) {
+      return new Set()
+    }
+
+    try {
+      const parsed = JSON.parse(localStorage.getItem(storageKey) || '[]')
+      return new Set(Array.isArray(parsed) ? parsed : [])
+    } catch {
+      return new Set()
+    }
+  }
+
+  function saveCollapsedSpaces(nextSpaces, windowId = gridWindowId || window.darcWindowId) {
+    const storageKey = getGridCollapsedSpacesStorageKey(windowId)
+    if (!storageKey) {
+      return
+    }
+
+    localStorage.setItem(storageKey, JSON.stringify([...nextSpaces]))
+  }
+
+  function loadCollapsedSpacesForWindow(windowId = gridWindowId || window.darcWindowId) {
+    const next = readCollapsedSpaces(windowId)
+    const activeSpaceId = data.spaceMeta.activeSpace
+
+    // Keep active space expanded when grid opens.
+    if (activeSpaceId && next.has(activeSpaceId)) {
+      next.delete(activeSpaceId)
+      saveCollapsedSpaces(next, windowId)
+    }
+
+    collapsedSpaces = next
+  }
+
   // Track collapsed spaces
-  let collapsedSpaces = $state(new Set(JSON.parse(localStorage.getItem('gridCollapsedSpaces') || '[]')))
+  let collapsedSpaces = $state(new Set())
   
   // On mount: enable zen mode (if not already), and ensure current space is expanded
   onMount(() => {
     gridInstanceId = window.darcInstanceId || ''
     gridWindowId = window.darcWindowId || ''
+    loadCollapsedSpacesForWindow(gridWindowId)
+
     window.waitForDarcWindowId?.()
       .then(nextWindowId => {
         if (nextWindowId) {
           gridWindowId = nextWindowId
+          loadCollapsedSpacesForWindow(nextWindowId)
         }
       })
       .catch(() => {})
@@ -56,15 +103,6 @@
     // Enable zen mode when opening grid view
     if (!initialZenModeWasActive) {
       onZenModeChange(true)
-    }
-    
-    // Ensure current space is always expanded when opening grid view
-    const activeSpaceId = data.spaceMeta.activeSpace
-    if (activeSpaceId && collapsedSpaces.has(activeSpaceId)) {
-      const next = new Set(collapsedSpaces)
-      next.delete(activeSpaceId)
-      collapsedSpaces = next
-      localStorage.setItem('gridCollapsedSpaces', JSON.stringify([...next]))
     }
     
     // Cleanup: disable zen mode on close (only if it wasn't active before)
@@ -80,7 +118,7 @@
     if (next.has(spaceId)) next.delete(spaceId)
     else next.add(spaceId)
     collapsedSpaces = next
-    localStorage.setItem('gridCollapsedSpaces', JSON.stringify([...next]))
+    saveCollapsedSpaces(next)
   }
 
   let gridContextMenuId = $state(null)
@@ -301,10 +339,10 @@
       <span class="grid-scope-label">All Spaces</span>
     </button>
     {#if spaceScope === 'all'}
-      <button class="grid-collapse-btn" onmousedown={() => { collapsedSpaces = new Set(spaceOrder); localStorage.setItem('gridCollapsedSpaces', JSON.stringify(spaceOrder)) }} title="Collapse All" aria-label="Collapse All" type="button">
+      <button class="grid-collapse-btn" onmousedown={() => { const next = new Set(spaceOrder); collapsedSpaces = next; saveCollapsedSpaces(next) }} title="Collapse All" aria-label="Collapse All" type="button">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8Zm3.646-2.146a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 1 1-.708.708L8.5 3.707V6.5a.5.5 0 0 1-1 0V3.707L5.354 5.854a.5.5 0 0 1-.708 0Zm0 4.292a.5.5 0 0 0 0 .708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 12.293V9.5a.5.5 0 0 0-1 0v2.793l-2.146-2.147a.5.5 0 0 0-.708 0Z" clip-rule="evenodd"/></svg>
       </button>
-      <button class="grid-collapse-btn" onmousedown={() => { collapsedSpaces = new Set(); localStorage.setItem('gridCollapsedSpaces', '[]') }} title="Expand All" aria-label="Expand All" type="button">
+      <button class="grid-collapse-btn" onmousedown={() => { const next = new Set(); collapsedSpaces = next; saveCollapsedSpaces(next) }} title="Expand All" aria-label="Expand All" type="button">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8ZM4.646 2.146a.5.5 0 0 1 .708 0L8 4.793l2.646-2.647a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 0-.708Zm0 11.708a.5.5 0 0 0 .708 0L8 11.207l2.646 2.647a.5.5 0 0 0 .708-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 0 0 0 .708Z" clip-rule="evenodd"/></svg>
       </button>
     {/if}
