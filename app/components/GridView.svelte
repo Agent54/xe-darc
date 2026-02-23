@@ -483,7 +483,9 @@
                   </div>
                 {/each}
                 {#each tabs as tab, index (tab.id)}
-                  {@const isSpaceActiveTab = spaceId !== activeSpaceId && tab.id === data.spaces[spaceId]?.activeTabsOrder?.[0]}
+                  {@const firstActiveHistoryEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
+                  {@const firstActiveTabId = typeof firstActiveHistoryEntry === 'string' ? firstActiveHistoryEntry : firstActiveHistoryEntry?.id}
+                  {@const isSpaceActiveTab = spaceId !== activeSpaceId && tab.id === firstActiveTabId}
                   <div 
                     class="grid-frame"
                     class:active={tab.id === activeTabId}
@@ -676,7 +678,6 @@
     background: transparent;
     border-radius: 9999px;
     border: none;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
     margin-left: 2px;
     cursor: pointer;
   }
@@ -790,17 +791,19 @@
   }
 
   .grid-instance-meta {
-    position: sticky;
-    top: 10px;
-    right: 0;
-    margin: 8px 14px -20px auto;
+    position: fixed;
+    bottom: 22px;
+    right: 24px;
     z-index: 12;
-    width: min(620px, calc(100% - 28px));
+    width: fit-content;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 5px;
-    pointer-events: none;
+    opacity: 0;
+  }
+  .grid-instance-meta:hover {
+    opacity: 1
   }
 
   .grid-instance-meta-pill {
