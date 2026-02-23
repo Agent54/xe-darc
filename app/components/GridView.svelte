@@ -22,6 +22,8 @@
   let activeView = $state(localStorage.getItem('gridActiveView') || 'tabs')
   let spaceScope = $state(localStorage.getItem('gridSpaceScope') || 'current')
   let zenModeWasActiveOnOpen = $state(false)
+  let gridWindowId = $state(window.darcWindowId || '')
+  let gridInstanceId = $state(window.darcInstanceId || '')
 
   function setActiveView(view) {
     activeView = view
@@ -38,6 +40,16 @@
   
   // On mount: enable zen mode (if not already), and ensure current space is expanded
   onMount(() => {
+    gridInstanceId = window.darcInstanceId || ''
+    gridWindowId = window.darcWindowId || ''
+    window.waitForDarcWindowId?.()
+      .then(nextWindowId => {
+        if (nextWindowId) {
+          gridWindowId = nextWindowId
+        }
+      })
+      .catch(() => {})
+
     // Store whether zen mode was active when opening
     zenModeWasActiveOnOpen = initialZenModeWasActive
     
@@ -337,6 +349,16 @@
   
   {#if activeView === 'tabs'}
     <div class="spaces-vertical-container">
+      <div class="grid-instance-meta" title="Per-window and per-instance identifiers">
+        <div class="grid-instance-meta-pill" title={`Window ID: ${gridWindowId || 'pending assignment'}`}>
+          <span class="grid-instance-meta-label">Window ID</span>
+          <span class="grid-instance-meta-value">{gridWindowId || 'pending assignment'}</span>
+        </div>
+        <div class="grid-instance-meta-pill" title={`Instance ID: ${gridInstanceId || 'missing'}`}>
+          <span class="grid-instance-meta-label">Instance ID</span>
+          <span class="grid-instance-meta-value">{gridInstanceId || 'missing'}</span>
+        </div>
+      </div>
       <div class="spaces-content">
       {#each displayedSpaceOrder as spaceId (spaceId)}
         {@const space = spacesData[spaceId]}
@@ -719,6 +741,7 @@
   .spaces-vertical-container {
     width: 100%;
     height: 100%;
+    position: relative;
     overflow-y: auto;
     overflow-x: hidden;
     display: flex;
@@ -726,6 +749,52 @@
     box-sizing: border-box;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
+  .grid-instance-meta {
+    position: sticky;
+    top: 10px;
+    right: 0;
+    margin: 8px 14px -20px auto;
+    z-index: 12;
+    width: min(620px, calc(100% - 28px));
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+    pointer-events: none;
+  }
+
+  .grid-instance-meta-pill {
+    width: fit-content;
+    max-width: min(620px, calc(100vw - 28px));
+    padding: 4px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    background: rgba(22, 22, 22, 0.52);
+    color: rgba(255, 255, 255, 0.54);
+    font-size: 10px;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-all;
+    backdrop-filter: blur(6px);
+  }
+
+  .grid-instance-meta-label {
+    display: block;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: rgba(255, 255, 255, 0.39);
+    margin-bottom: 1px;
+  }
+
+  .grid-instance-meta-value {
+    display: block;
   }
 
   .spaces-content {

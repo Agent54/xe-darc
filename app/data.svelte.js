@@ -11,7 +11,80 @@ import permissionTypes from './lib/resourceTypes.js'
 
 import { colors as projectColors } from './lib/utils.js'
 
-window.darcWindowId = crypto.randomUUID()
+function parseWindowId(value) {
+    if (typeof value !== 'string') {
+        return null
+    }
+
+    const parsed = value.trim()
+    return parsed || null
+}
+
+if (!window.darcWindowIdPromise || typeof window.resolveDarcWindowId !== 'function') {
+    let resolveWindowIdPromise
+    let windowIdPromiseResolved = false
+
+    window.darcWindowIdPromise = new Promise(resolve => {
+        resolveWindowIdPromise = resolve
+    })
+
+    window.resolveDarcWindowId = (nextWindowId) => {
+        const parsedWindowId = parseWindowId(nextWindowId)
+        if (!parsedWindowId) {
+            return window.darcWindowId || null
+        }
+
+        const previousWindowId = window.darcWindowId || null
+
+        if (previousWindowId && previousWindowId !== parsedWindowId) {
+            throw new Error('darcWindowId is immutable and cannot be reassigned')
+        }
+
+        window.darcWindowId = parsedWindowId
+
+        if (!windowIdPromiseResolved) {
+            windowIdPromiseResolved = true
+            resolveWindowIdPromise(parsedWindowId)
+        }
+
+        return parsedWindowId
+    }
+}
+
+window.darcWindowId = parseWindowId(window.darcWindowId)
+
+if (window.darcWindowId) {
+    window.resolveDarcWindowId(window.darcWindowId)
+}
+
+if (typeof window.waitForDarcWindowId !== 'function') {
+    window.waitForDarcWindowId = () => window.darcWindowIdPromise
+}
+
+function getActiveSpaceStorageKey(windowId = window.darcWindowId) {
+    const parsedWindowId = parseWindowId(windowId)
+    if (!parsedWindowId) return null
+
+    return `activeSpaceId:${parsedWindowId}`
+}
+
+function persistActiveSpaceForWindow(spaceId, windowId = window.darcWindowId) {
+    if (!spaceId) {
+        return
+    }
+
+    const parsedWindowId = parseWindowId(windowId)
+    if (!parsedWindowId) {
+        return
+    }
+
+    const storageKey = getActiveSpaceStorageKey(parsedWindowId)
+    if (!storageKey) {
+        return
+    }
+
+    localStorage.setItem(storageKey, spaceId)
+}
 
 window.darcInstanceId = localStorage.getItem('darcInstanceId')
 if (!window.darcInstanceId) {
@@ -116,7 +189,7 @@ if (remote) {
 }
 
 const spaceMeta = $state({
-    activeSpace: localStorage.getItem('activeSpaceId') || null,
+    activeSpace: null,
     activeSpacesOrder: [], // Track order of active spaces for previous space switching
     spaceOrder: [],
     closedTabs: [],
@@ -130,6 +203,32 @@ const spaceMeta = $state({
         showLinkPreviews: true
     }
 })
+
+function loadActiveSpaceForWindow(windowId) {
+    const parsedWindowId = parseWindowId(windowId)
+    if (!parsedWindowId) {
+        return
+    }
+
+    const scopedStorageKey = getActiveSpaceStorageKey(parsedWindowId)
+    if (!scopedStorageKey) {
+        return
+    }
+
+    const storedActiveSpace = localStorage.getItem(scopedStorageKey) || null
+
+    if (storedActiveSpace && spaceMeta.activeSpace !== storedActiveSpace) {
+        spaceMeta.activeSpace = storedActiveSpace
+    }
+}
+
+window.darcWindowIdPromise
+    .then(windowId => {
+        loadActiveSpaceForWindow(windowId)
+    })
+    .catch(error => {
+        console.error('Failed to load active space for window', error)
+    })
 
 // Cleanup frame instances
 setInterval(() => {
@@ -151,6 +250,10 @@ setInterval(() => {
 let initialLoad = true
 // TODO: disable leading ?
 const refresh = throttle(async function (spaceId) {
+    const resolvedWindowId = await window.darcWindowIdPromise.catch(() => null)
+    if (resolvedWindowId) {
+        loadActiveSpaceForWindow(resolvedWindowId)
+    }
 
     // db.viewCleanup().then(function (result) {
     //    console.log('viewCleanup', result)
@@ -417,7 +520,7 @@ function activateSpace(spaceId) {
         : [spaceId, ...spaceMeta.activeSpacesOrder.filter(id => id !== spaceId)]
     
     spaceMeta.activeSpace = spaceId
-    localStorage.setItem('activeSpaceId', spaceId)
+    persistActiveSpaceForWindow(spaceId)
     
     return true
 }
@@ -525,11 +628,28 @@ const destroy = $effect.root(() => {
 
     // Save active space to localStorage whenever it changes
     $effect(() => {
-        if (spaceMeta.activeSpace) {
-            setTimeout(() => {
-                localStorage.setItem('activeSpaceId', spaceMeta.activeSpace)
-            }, 10)
+        const activeSpace = spaceMeta.activeSpace
+        if (!activeSpace) {
+            return
         }
+
+        window.darcWindowIdPromise
+            .then(windowId => {
+                const parsedWindowId = parseWindowId(windowId)
+                if (!parsedWindowId) {
+                    return
+                }
+
+                // Skip stale async writes if active space changed while waiting for window id.
+                if (spaceMeta.activeSpace !== activeSpace) {
+                    return
+                }
+
+                persistActiveSpaceForWindow(activeSpace, parsedWindowId)
+            })
+            .catch(error => {
+                console.error('Failed to persist active space for window', error)
+            })
     })
 
     $effect(() => {
