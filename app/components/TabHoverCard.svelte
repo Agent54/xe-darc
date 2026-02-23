@@ -227,7 +227,9 @@
     let historyEntries = $derived([...debugHistoryEntries, ...closedTabEntry])
 
     let historyLastActiveText = $derived.by(() => {
-        const spaceId = data.docs[tab.id]?.spaceId || tab.spaceId || data.spaceMeta.activeSpace
+        const spaceId = tab.spaceId || data.docs[tab.id]?.spaceId
+        if (!spaceId) return ''
+
         const lastActiveAt = data.getTabLastActiveAt?.(tab.id, spaceId)
         const timeAgo = formatRelativeTime(lastActiveAt)
         if (!timeAgo) return ''

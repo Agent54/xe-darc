@@ -142,6 +142,7 @@
         background: rgba(0, 0, 0, 0.3);
         flex-shrink: 0;
         gap: 8px;
+        border-radius: 12px;
     }
 
     .lightbox-info {
