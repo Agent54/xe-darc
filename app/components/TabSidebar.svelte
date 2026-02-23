@@ -808,7 +808,12 @@
             const targetSpace = data.spaces[spaceId]
             if (targetSpace?.activeTabsOrder?.length > 0) {
                 // Find the first valid (non-closed, non-pinned) tab from the order
-                for (const tabId of targetSpace.activeTabsOrder) {
+                for (const historyEntry of targetSpace.activeTabsOrder) {
+                    const tabId = typeof historyEntry === 'string' ? historyEntry : historyEntry?.id
+                    if (!tabId) {
+                        continue
+                    }
+
                     const tab = data.docs[tabId]
                     if (tab && !tab.archive && !tab.pinned) {
                         data.activate(tabId)
@@ -2067,7 +2072,7 @@
                                             {/if}
                                         {:else}
                                             {#if tabMatchesSearch(tab)}
-                                                <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
+                                                <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
                                                      role="listitem"
                                                      onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                      onmouseleave={handleTabMouseLeave}

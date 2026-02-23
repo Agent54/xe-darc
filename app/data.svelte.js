@@ -95,6 +95,63 @@ function getTabActiveHistoryStorageKey(spaceId, windowId = window.darcWindowId) 
     return `tabActiveHistory:${parsedWindowId}:${spaceId}`
 }
 
+function getTabIdFromActiveHistoryEntry(entry) {
+    if (typeof entry === 'string') {
+        return entry.trim() || null
+    }
+
+    if (typeof entry?.id !== 'string') {
+        return null
+    }
+
+    const tabId = entry.id.trim()
+    return tabId || null
+}
+
+function getActivatedAtFromActiveHistoryEntry(entry) {
+    if (typeof entry?.activatedAt === 'number' && Number.isFinite(entry.activatedAt) && entry.activatedAt > 0) {
+        return entry.activatedAt
+    }
+
+    // Backward compatibility for already persisted shape.
+    if (typeof entry?.lastActiveAt === 'number' && Number.isFinite(entry.lastActiveAt) && entry.lastActiveAt > 0) {
+        return entry.lastActiveAt
+    }
+
+    return 0
+}
+
+function normalizeActiveHistoryEntries(rawEntries = []) {
+    if (!Array.isArray(rawEntries)) {
+        return []
+    }
+
+    const entries = []
+    for (const entry of rawEntries) {
+        const tabId = getTabIdFromActiveHistoryEntry(entry)
+        if (!tabId) {
+            continue
+        }
+
+        entries.push({
+            id: tabId,
+            activatedAt: getActivatedAtFromActiveHistoryEntry(entry)
+        })
+    }
+
+    return entries
+}
+
+function getSpaceActiveHistoryEntries(spaceId = spaceMeta.activeSpace) {
+    const space = spaces[spaceId]
+    if (!space) {
+        return []
+    }
+
+    // Read-only helper: never mutate state here because this can be called from $derived/template paths.
+    return normalizeActiveHistoryEntries(space.activeTabsOrder)
+}
+
 function readTabActiveHistoryEntries(spaceId, windowId = window.darcWindowId) {
     const storageKey = getTabActiveHistoryStorageKey(spaceId, windowId)
     if (!storageKey) {
@@ -103,30 +160,7 @@ function readTabActiveHistoryEntries(spaceId, windowId = window.darcWindowId) {
 
     try {
         const parsed = JSON.parse(localStorage.getItem(storageKey) || '[]')
-        if (!Array.isArray(parsed)) {
-            return []
-        }
-
-        const entries = []
-        for (const item of parsed) {
-            const tabIdValue = typeof item === 'string' ? item : item?.id
-            if (typeof tabIdValue !== 'string') {
-                continue
-            }
-
-            const tabId = tabIdValue.trim()
-            if (!tabId) {
-                continue
-            }
-
-            const lastActiveAt = typeof item?.lastActiveAt === 'number' && Number.isFinite(item.lastActiveAt)
-                ? item.lastActiveAt
-                : 0
-
-            entries.push({ id: tabId, lastActiveAt })
-        }
-
-        return entries
+        return normalizeActiveHistoryEntries(parsed)
     } catch {
         return []
     }
@@ -138,19 +172,36 @@ function writeTabActiveHistoryEntries(spaceId, windowId = window.darcWindowId) {
         return
     }
 
-    const activeHistory = spaces[spaceId]?.activeTabsOrder
-    if (!activeHistory) {
+    const activeHistory = getSpaceActiveHistoryEntries(spaceId)
+    const trimmed = activeHistory.length > 100 ? activeHistory.slice(0, 100) : activeHistory
+    const entries = []
+    for (const entry of trimmed) {
+        const tabId = getTabIdFromActiveHistoryEntry(entry)
+        if (!tabId) {
+            continue
+        }
+
+        entries.push({
+            id: tabId,
+            activatedAt: getActivatedAtFromActiveHistoryEntry(entry)
+        })
+    }
+
+    localStorage.setItem(storageKey, JSON.stringify(entries))
+}
+
+function persistTabActiveHistoryForSpace(spaceId) {
+    if (!spaceId) {
         return
     }
 
-    const activeTimes = tabLastActiveBySpace[spaceId] || {}
-    const trimmed = activeHistory.length > 100 ? activeHistory.slice(0, 100) : activeHistory
-    const entries = trimmed.map(tabId => ({
-        id: tabId,
-        lastActiveAt: activeTimes[tabId] || 0
-    }))
-
-    localStorage.setItem(storageKey, JSON.stringify(entries))
+    window.darcWindowIdPromise
+        .then(windowId => {
+            writeTabActiveHistoryEntries(spaceId, windowId)
+        })
+        .catch(error => {
+            console.error('Failed to persist tab active history for window', error)
+        })
 }
 
 function markTabActive(spaceId, tabId, activatedAt = Date.now(), recordIfAlreadyCurrent = false) {
@@ -159,17 +210,24 @@ function markTabActive(spaceId, tabId, activatedAt = Date.now(), recordIfAlready
         return
     }
 
-    space.activeTabsOrder ??= []
-    let tabBecameCurrent = false
-    if (space.activeTabsOrder[0] !== tabId) {
+    const activeHistory = getSpaceActiveHistoryEntries(spaceId)
+    const currentTabId = getTabIdFromActiveHistoryEntry(activeHistory[0])
+    const currentActivatedAt = getActivatedAtFromActiveHistoryEntry(activeHistory[0])
+
+    if (currentTabId !== tabId) {
         // Keep repeated visits in history; only suppress adjacent duplicates.
-        space.activeTabsOrder = [tabId, ...space.activeTabsOrder]
-        tabBecameCurrent = true
+        space.activeTabsOrder = [{ id: tabId, activatedAt }, ...activeHistory]
+        persistTabActiveHistoryForSpace(spaceId)
+        return
     }
 
-    if (tabBecameCurrent || recordIfAlreadyCurrent) {
-        tabLastActiveBySpace[spaceId] ??= {}
-        tabLastActiveBySpace[spaceId][tabId] = activatedAt
+    // Upgrade legacy/blank timestamps on the active entry to keep UI labels stable.
+    if (recordIfAlreadyCurrent || !currentActivatedAt) {
+        space.activeTabsOrder = [
+            { id: tabId, activatedAt: currentActivatedAt || activatedAt },
+            ...activeHistory.slice(1)
+        ]
+        persistTabActiveHistoryForSpace(spaceId)
     }
 }
 
@@ -206,7 +264,6 @@ const activity = $state({})
 const resources = $state({})
 const frames = $state({})
 let lastForceHibernateTime = 0
-const tabLastActiveBySpace = $state({})
 const previews = $state({})
 const settings = $state({})
 const ui = $state({ viewMode: 'default' })
@@ -412,15 +469,18 @@ const refresh = throttle(async function (spaceId) {
         }
 
         if (doc.type === 'space') {
+            const { activeTabsOrder: _ignoredActiveHistory, ...spaceDoc } = doc
+
             if (!spaceMeta.activeSpace) {
                 spaceMeta.activeSpace = 'darc:space_default'
             }
             if (!spaces[doc._id]) {
-                doc.tabs = []
-                spaces[doc._id] = doc
+                spaces[doc._id] = { ...spaceDoc, tabs: [] }
             } else {
-                spaces[doc._id] = { ...spaces[doc._id], ...doc }
+                spaces[doc._id] = { ...spaces[doc._id], ...spaceDoc }
             }
+
+            spaces[doc._id].activeTabsOrder ??= []
            
         } else if (doc.type === 'tab') {
             doc.id = doc._id // legacy compat, remove this later
@@ -488,18 +548,14 @@ const refresh = throttle(async function (spaceId) {
         // Restore persisted tab active history/timestamps for each space.
         for (const spaceId of Object.keys(spaces)) {
             const entries = readTabActiveHistoryEntries(spaceId)
-            if (entries.length > 0) {
-                spaces[spaceId].activeTabsOrder = entries.map(entry => entry.id)
-                tabLastActiveBySpace[spaceId] = Object.fromEntries(entries.map(entry => [entry.id, entry.lastActiveAt]))
-            } else {
-                tabLastActiveBySpace[spaceId] ??= {}
-            }
+            spaces[spaceId].activeTabsOrder = entries
         }
 
         if (spaces[spaceMeta.activeSpace]) {
             const lastActiveTabId = getLastActiveNonPinnedTabId(spaceMeta.activeSpace)
             if (lastActiveTabId) {
                 spaceMeta.activeTabId = lastActiveTabId
+                markTabActive(spaceMeta.activeSpace, lastActiveTabId, Date.now(), true)
             }
         }
     }
@@ -516,30 +572,36 @@ function removedActiveTabId (previousActiveTabId) {
         return
     }
 
-    tabLastActiveBySpace[spaceMeta.activeSpace] ??= {}
-    delete tabLastActiveBySpace[spaceMeta.activeSpace][previousActiveTabId]
-
-    if (!activeSpace.activeTabsOrder) {
-        activeSpace.activeTabsOrder = []
-    }
-    if (activeSpace.activeTabsOrder.length === 0) {
+    const activeHistory = getSpaceActiveHistoryEntries(spaceMeta.activeSpace)
+    if (activeHistory.length === 0) {
         return
     }
 
-    activeSpace.activeTabsOrder = activeSpace.activeTabsOrder.filter((id, i) => {
-        if (id === previousActiveTabId) {
+    activeSpace.activeTabsOrder = activeHistory.filter((entry, i) => {
+        const tabId = getTabIdFromActiveHistoryEntry(entry)
+        if (tabId === previousActiveTabId) {
             i > previousIndex && (previousIndex = i)
             return false
         }
         return true
     })
-    console.log('setting active tab id b', { current : spaceMeta.activeTabId, currentTitle: docs[spaceMeta.activeTabId]?.title || '', next : activeSpace.activeTabsOrder[previousIndex - 1], nextTitle: docs[activeSpace.activeTabsOrder[previousIndex - 1]]?.title || '', previousIndex, list :activeSpace.activeTabsOrder })
-    
-    const nextTabId = activeSpace.activeTabsOrder[previousIndex - 1]
+
+    const nextEntry = activeSpace.activeTabsOrder[previousIndex - 1]
+    const nextTabId = getTabIdFromActiveHistoryEntry(nextEntry)
+    console.log('setting active tab id b', {
+        current: spaceMeta.activeTabId,
+        currentTitle: docs[spaceMeta.activeTabId]?.title || '',
+        next: nextTabId,
+        nextTitle: docs[nextTabId]?.title || '',
+        previousIndex,
+        list: activeSpace.activeTabsOrder.map(entry => getTabIdFromActiveHistoryEntry(entry)).filter(Boolean)
+    })
     
     spaceMeta.activeTabId = nextTabId
     if (nextTabId) {
         markTabActive(spaceMeta.activeSpace, nextTabId, Date.now(), true)
+    } else {
+        persistTabActiveHistoryForSpace(spaceMeta.activeSpace)
     }
 }
 
@@ -573,7 +635,9 @@ live: true,
                     console.log('refreshing', change.doc.spaceId)
                     refresh(change.doc.spaceId)
                 } else if (change.doc.type === 'space') {
-                    spaces[change.doc._id] = { ...spaces[change.doc._id], ...change.doc }
+                    const { activeTabsOrder: _ignoredActiveHistory, ...spaceDoc } = change.doc
+                    spaces[change.doc._id] = { ...spaces[change.doc._id], ...spaceDoc }
+                    spaces[change.doc._id].activeTabsOrder ??= []
                     spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
                 } else {
                     console.warn('unknown change', change)
@@ -752,9 +816,6 @@ const destroy = $effect.root(() => {
     $effect(() => {
         const spaceId = spaceMeta.activeSpace
         const activeHistory = spaceId && spaces[spaceId]?.activeTabsOrder
-        const activeTabId = spaceMeta.activeTabId
-        const activeTabLastActiveAt = spaceId && activeTabId ? tabLastActiveBySpace[spaceId]?.[activeTabId] : 0
-        void activeTabLastActiveAt
 
         if (!spaceId || !activeHistory) {
             return
@@ -899,11 +960,18 @@ const getAttachmentUrl = async (attachmentUrl, digest) => {
 }
 
 function getLastActiveNonPinnedTabId(spaceId) {
-    const space = spaces[spaceId || spaceMeta.activeSpace]
-    if (!space?.activeTabsOrder) return null
-    for (const tabId of space.activeTabsOrder) {
+    const activeHistory = getSpaceActiveHistoryEntries(spaceId || spaceMeta.activeSpace)
+    if (!activeHistory.length) return null
+
+    for (const entry of activeHistory) {
+        const tabId = getTabIdFromActiveHistoryEntry(entry)
+        if (!tabId) {
+            continue
+        }
+
         if (docs[tabId] && !docs[tabId].pinned && !docs[tabId].archive) return tabId
     }
+
     return null
 }
 
@@ -912,7 +980,20 @@ function getTabLastActiveAt(tabId, spaceId = spaceMeta.activeSpace) {
         return 0
     }
 
-    return tabLastActiveBySpace[spaceId]?.[tabId] || 0
+    const activeHistory = getSpaceActiveHistoryEntries(spaceId)
+    let latestFromHistory = 0
+    for (const entry of activeHistory) {
+        if (getTabIdFromActiveHistoryEntry(entry) === tabId) {
+            const activatedAt = getActivatedAtFromActiveHistoryEntry(entry)
+            activatedAt > latestFromHistory && (latestFromHistory = activatedAt)
+        }
+    }
+
+    if (latestFromHistory) {
+        return latestFromHistory
+    }
+
+    return frames[tabId]?.active || 0
 }
 
 export default {
@@ -1032,36 +1113,47 @@ export default {
 
     previous: () => {
         const activeSpace = spaces[spaceMeta.activeSpace]
-        if (!activeSpace || !activeSpace.activeTabsOrder || activeSpace.activeTabsOrder.length < 2) {
+        if (!activeSpace) {
+            return false // No previous tab available
+        }
+
+        const activeHistory = getSpaceActiveHistoryEntries(spaceMeta.activeSpace)
+        if (activeHistory.length < 2) {
             return false // No previous tab available
         }
         
         // Remove the current tab (at index 0) from the order
-        const currentTabId = activeSpace.activeTabsOrder.shift()
+        const currentEntry = activeHistory.shift()
+        const currentTabId = getTabIdFromActiveHistoryEntry(currentEntry)
         
         // Pop pinned, invalid, or duplicate-of-current tabs until we find a different valid tab
         let previousTabId = null
         let previousTab = null
         
-        while (activeSpace.activeTabsOrder.length > 0) {
-            const tabId = activeSpace.activeTabsOrder[0]
+        while (activeHistory.length > 0) {
+            const tabId = getTabIdFromActiveHistoryEntry(activeHistory[0])
+            if (!tabId) {
+                activeHistory.shift()
+                continue
+            }
+
             const tab = activeSpace.tabs?.find(t => t.id === tabId)
             
             // If tab doesn't exist, pop it and continue
             if (!tab) {
-                activeSpace.activeTabsOrder.shift()
+                activeHistory.shift()
                 continue
             }
             
             // If tab is pinned, pop it and continue
             if (docs[tabId]?.pinned) {
-                activeSpace.activeTabsOrder.shift()
+                activeHistory.shift()
                 continue
             }
             
             // If same tab as the one we just removed, skip it
             if (tabId === currentTabId) {
-                activeSpace.activeTabsOrder.shift()
+                activeHistory.shift()
                 continue
             }
             
@@ -1073,6 +1165,10 @@ export default {
         
         if (!previousTabId) {
             // No non-pinned previous tab found
+            if (currentEntry) {
+                activeSpace.activeTabsOrder = [currentEntry, ...activeHistory]
+                persistTabActiveHistoryForSpace(spaceMeta.activeSpace)
+            }
             return false
         }
         
@@ -1779,10 +1875,16 @@ export default {
         
         // Restore the active tab for this space from its activeTabsOrder
         const newSpace = spaces[newActiveSpace]
-        if (newSpace?.activeTabsOrder?.length > 0) {
+        const newSpaceActiveHistory = getSpaceActiveHistoryEntries(newActiveSpace)
+        if (newSpaceActiveHistory.length > 0) {
             // Find the first valid (non-closed, non-pinned) tab from the order
             let activated = false
-            for (const tabId of newSpace.activeTabsOrder) {
+            for (const entry of newSpaceActiveHistory) {
+                const tabId = getTabIdFromActiveHistoryEntry(entry)
+                if (!tabId) {
+                    continue
+                }
+
                 const tab = docs[tabId]
                 if (tab && !tab.archive && !tab.pinned) {
                     activate(tabId)
@@ -1840,10 +1942,16 @@ export default {
         
         // Restore the active tab for this space from its activeTabsOrder
         const newSpace = spaces[newActiveSpace]
-        if (newSpace?.activeTabsOrder?.length > 0) {
+        const newSpaceActiveHistory = getSpaceActiveHistoryEntries(newActiveSpace)
+        if (newSpaceActiveHistory.length > 0) {
             // Find the first valid (non-closed, non-pinned) tab from the order
             let activated = false
-            for (const tabId of newSpace.activeTabsOrder) {
+            for (const entry of newSpaceActiveHistory) {
+                const tabId = getTabIdFromActiveHistoryEntry(entry)
+                if (!tabId) {
+                    continue
+                }
+
                 const tab = docs[tabId]
                 if (tab && !tab.archive && !tab.pinned) {
                     activate(tabId)
