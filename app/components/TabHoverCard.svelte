@@ -133,6 +133,8 @@
     }
     
     function formatRelativeTime(timestamp) {
+        if (!timestamp || !Number.isFinite(timestamp)) return ''
+
         const now = Date.now()
         const diff = now - timestamp
         const seconds = Math.floor(diff / 1000)
@@ -223,6 +225,16 @@
     }] : []
     
     let historyEntries = $derived([...debugHistoryEntries, ...closedTabEntry])
+
+    let historyLastActiveText = $derived.by(() => {
+        const spaceId = data.docs[tab.id]?.spaceId || tab.spaceId || data.spaceMeta.activeSpace
+        const lastActiveAt = data.getTabLastActiveAt?.(tab.id, spaceId)
+        const timeAgo = formatRelativeTime(lastActiveAt)
+        if (!timeAgo) return ''
+
+        const isCurrentActiveTab = data.spaceMeta.activeTabId === tab.id
+        return isCurrentActiveTab ? `active since ${timeAgo}` : `last active ${timeAgo}`
+    })
     
     // Handle showHistoryImmediately (already has delay applied from parent)
     $effect(() => {
@@ -369,6 +381,9 @@
             <div class="history-section-header">
                 <button class="history-section-title" onclick={openTabHistory}>
                     Tab History
+                    {#if historyLastActiveText}
+                        <span class="history-last-active">({historyLastActiveText})</span>
+                    {/if}
                     <svg class="expand-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                     </svg>
@@ -646,6 +661,13 @@
     
     .history-section-title:hover {
         color: rgba(255, 255, 255, 0.8);
+    }
+
+    .history-last-active {
+        text-transform: none;
+        letter-spacing: 0;
+        font-weight: 500;
+        opacity: 0.8;
     }
     
     .history-section-title .expand-icon {
