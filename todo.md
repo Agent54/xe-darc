@@ -3,6 +3,13 @@ lanes_project_id: 2
 lanes_treat_as_stories: lines
 ---
 
+# Intro
+This is a todo list that acts mostly as an append only file with just occasional cleanup of tasks as they pop up, so items appearing does not mean they are not already done.
+Items appear potentially multiple times, if they are brought up by users or devs own usecases or requirements. If the item is still scrolled into view instead of duplicate entries the item is usally append an excalmation mark.
+Items can be pre-emphasized with a number of exclamation marks depending on importance for features or excitement in case of research/ exploration tasks, so they dont alwasy correspond to importance and need to be considered in context.
+
+---
+
 google doc chrome team / bug reports most important issues
 
 fix window background detection on active content frame
