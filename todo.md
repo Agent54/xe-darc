@@ -3255,3 +3255,46 @@ deep mode long task tests
 up front queue approval for expected permissions in bulk!
 
 api key and permission proxy for agent direct api calls
+
+couchd sync activation
+sync all projects as repos
+app/stacks etc. > packages!
+
+shared packages for skills, dotfiles etc.
+
+up and down scroll only switches between expanded spaces in space overview!
+
+
+post:amp shutdown, new agent architecture plan, open for feedback (thanks to @kaijellinghaus  for putting my attention back to opencode):
+- radical isolation 
+
+conversations part of repo or central store?
+
+dont unpin tabs when moving to start or end of current tabs and pine don other side
+
+make permissions: create, append and modify current session created files in cwd, no execute
+do permission: execute
+plan: read only
+
+window title space - tab title!!
+
+new project quickstart one click
+
+bug: replace lightbox from within sidepin unpins
+
+doc editing inline and chat mode interleaving!
+
+filter sidebar folderes by file status and hidden toggle, pin folder to top of fileview vscode
+
+todo: smalltalk like module/instance browser/editor for deno + browser
+
+svelte state + component debuggers with blckboxing and style editors!
+
+property context menus with tranfer 
+
+website rework, style fixes, blog, youtube and darc landing page
+
+schedules: summaries, notifications, scouts, reminders etc.
+
+Our very own Transloadian Peter Assentorp was tired of describing UI changes to AI, so he built "Design In The Browser". This tool lets you point at any element on your website, describe what change you want to make, and it will directly send a prompt with your request and surrounding
+
