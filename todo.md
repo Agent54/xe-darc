@@ -3254,3 +3254,4 @@ deep mode long task tests
 
 up front queue approval for expected permissions in bulk!
 
+api key and permission proxy for agent direct api calls
