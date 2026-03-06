@@ -3298,3 +3298,14 @@ schedules: summaries, notifications, scouts, reminders etc.
 
 Our very own Transloadian Peter Assentorp was tired of describing UI changes to AI, so he built "Design In The Browser". This tool lets you point at any element on your website, describe what change you want to make, and it will directly send a prompt with your request and surrounding
 
+open any page in vscode!
+
+ui review platform for discussions etc.
+
+JJ workspaces, you might want to enable auto-snapshotting for them in VisualJJ: jj config set --repo visualjj.snapshot-workspaces true
+(the feature is not launched yet)
+this is convenient if you create a few JJ workspaces and run an agent in each of them, something like cd path/to/workspaces/agent-1 && docker sandbox run claude-agent-1 -- --continue
+there is no drag&drop for JJ workspaces in the UI yet but you can create new commit in workspace with Alt+click
+
+split images in canvas into subimages reusing same base
+
