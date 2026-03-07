@@ -4,7 +4,6 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
 RUN npm install -g pnpm
-RUN npm install -g @anthropic-ai/claude-code
 
 ENV PATH=$PATH:/root/.cargo/bin
 RUN apt-get update && apt-get install -y build-essential lsof
@@ -18,11 +17,16 @@ RUN jj config set --user user.name "Dev" && jj config set --user user.email "dev
 RUN mkdir /app
 WORKDIR /app
 
-COPY . /app
-# COPY .claude/claude.json /root/.claude.json
+
+COPY ./package.json /app/package.json
+COPY ./pnpm-lock.yaml /app/pnpm-lock.yaml
 
 # --mount=type=cache,id=pnpm,target=/pnpm/store
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
+# RUN pnpm lint 
 
 ENV container=true
+
+COPY . /app
+# COPY .claude/claude.json /root/.claude.json
 CMD pnpm dev
