@@ -21,3 +21,6 @@ Darc eats as much resources as needed to provide the best UX without any comprom
  enable focus mode to hide the header tabs giving a feeling of native dev environment
  pinning the logs to the right of vscode to have full kibana for logsearch while developing
  left pinning vscode and having either a scrollable list of webapps or the canvas of the apps on the right. just resize the left vscode sidebar to fit your needs and it will stay locked while you navigate the webapps working on the right
+
+
+ test
