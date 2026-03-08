@@ -1,0 +1,116 @@
+name: agent
+
+on:
+  issue_comment:
+    types: [created,edited]
+  pull_request_review_comment:
+    types: [created,edited]
+   
+permissions:
+  # id-token: write
+  contents: write
+  pull-requests: read
+  issues: read
+  checks: read
+
+jobs:
+  agent:
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/agent') &&
+      github.event.sender.type != 'Bot' &&
+      contains('OWNER,MEMBER,COLLABORATOR', github.event.comment.author_association)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Read pull request metadata
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.issue.number
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            })
+
+            core.setOutput('number', String(pr.number))
+            core.setOutput('head_sha', pr.head.sha)
+            core.setOutput('is_fork', String(pr.head.repo.fork))
+
+      - name: Block fork pull requests
+        if: steps.pr.outputs.is_fork == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(context.payload.issue.number),
+              body: '`/agent` is disabled for fork-based pull requests in this repository.',
+            })
+            core.setFailed('Fork PRs are not allowed for /agent fix')
+            throw new Error('Stop execution on fork')
+
+      - name: Read check-run summary
+        id: checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ steps.pr.outputs.head_sha }}',
+              per_page: 100,
+            })
+
+            const summary = data.check_runs
+              .map((run) => `${run.name}: ${run.status}${run.conclusion ? ` (${run.conclusion})` : ''}`)
+              .join('\n')
+
+            core.setOutput('summary', summary || 'No check runs found for the current head commit.')
+
+      # - name: Build OpenCode prompt
+      #   id: prompt
+      #   uses: actions/github-script@v7
+      #   env:
+      #     CHECK_SUMMARY: ${{ steps.checks.outputs.summary }}
+      #   with:
+      #     script: |
+      #       const body = context.payload.comment.body
+      #       const request = body.replace(/^\/agent fix\s*/i, '').trim()
+      #       const summary = process.env.CHECK_SUMMARY || 'No check runs found for the current head commit.'
+      #       const prompt = [
+      #         'You are fixing an existing pull request in this repository.',
+      #         `PR number: #${{ steps.pr.outputs.number }}`,
+      #         '',
+      #         'Requester instruction:',
+      #         request || 'Fix the pull request based on current CI failures and obvious defects.',
+      #         '',
+      #         'Current check-run summary:',
+      #         summary,
+      #         '',
+      #         'Requirements:',
+      #         '- Keep changes scoped to the request and failing checks.',
+      #         '- Run targeted commands needed to validate your edits.',
+      #         '- Commit and push the fix to the pull request branch.',
+      #       ].join('\n')
+      #       core.setOutput('value', prompt)
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          use_github_token: true
+          # prompt: ${{ steps.prompt.outputs.value }}
+          # share: true
