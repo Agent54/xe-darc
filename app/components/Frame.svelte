@@ -4,7 +4,7 @@
 
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
-    import Tooltip from './Tooltip.svelte'
+    // import Tooltip from './Tooltip.svelte'
     import AttachmentImage from './AttachmentImage.svelte'
     import LightboxHeader from './LightboxHeader.svelte'
     import { origin } from '../lib/utils.js'
@@ -26,10 +26,13 @@
     const tab = $derived(data.docs[tabId])
 
     // Immediately unhibernate unhidden pinned frames on initial load
+    // Also unhibernate the last active non-pinned tab when the active tab is pinned
     // This runs once on component mount - no effect needed
     {
         const initialTab = data.docs[tabId]
         if (initialTab?.pinned && !initialTab?.hidden) {
+            data.unhibernate(tabId)
+        } else if (!initialTab?.pinned && data.docs[data.spaceMeta.activeTabId]?.pinned && tabId === data.getLastActiveNonPinnedTabId()) {
             data.unhibernate(tabId)
         }
     }
@@ -467,8 +470,10 @@
             data.frames[tab.id].wrapper = frameWrapper
         }
         
-        // Always observe frameWrapper for scroll-based activation (even for hibernated tabs)
-        if (frameWrapper) {
+        // Only observe unpinned frames for scroll-based activation
+        // Pinned frames are in fixed containers outside the scroll root, so observing them
+        // causes incorrect intersection callbacks and layout issues on reload
+        if (frameWrapper && !tab?.pinned) {
             observer?.observe(frameWrapper)
         }
     

@@ -21,7 +21,9 @@
     import UrlBar from './UrlBar.svelte'
     import TabHoverCard from './TabHoverCard.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
-    import { untrack } from 'svelte'
+    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred } from '../lib/tab-drag.svelte.js'
+    import { colors as spaceColors } from '../lib/utils.js'
+    import { untrack, onMount } from 'svelte'
     
     let isHovered = $state(false)
     let tabListRef = $state(null)
@@ -38,6 +40,11 @@
     let urlInput = $state(null)
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
+    let renamingSpaceId = $state(null)
+    let renameInputValue = $state('')
+    let renameInputRef = $state(null)
+    let colorPickerSpaceId = $state(null)
+    let colorPickerFromMenu = $state(false)
     
     // Multi-space expansion state
     let multiSpaceMode = $state(false)
@@ -77,6 +84,34 @@
     
     // Tab group expansion state
     let tabGroupExpanded = $state(false)
+    let tabSearchQuery = $state('')
+    let isSearchModeActive = $state(false)
+    let searchInputRef = $state(null)
+    
+    function tabMatchesSearch(tab) {
+        if (!tabSearchQuery) return true;
+        const query = tabSearchQuery.toLowerCase();
+        const title = (data.docs[tab.id]?.title || tab.title || '').toLowerCase();
+        const url = (data.docs[tab.id]?.url || tab.url || '').toLowerCase();
+        return title.includes(query) || url.includes(query);
+    }
+    
+    function spaceHasMatchingTabs(spaceId) {
+        if (!tabSearchQuery) return true;
+        const space = data.spaces[spaceId];
+        if (!space) return false;
+        
+        if (space.pinnedTabs?.some(tab => tabMatchesSearch(tab))) return true;
+        if (space.tabs?.some(tab => tab.type !== 'divider' && tabMatchesSearch(tab))) return true;
+        
+        return false;
+    }
+    
+    const hasAnySearchResults = $derived.by(() => {
+        if (!tabSearchQuery) return true;
+        return data.spaceMeta.spaceOrder.some(spaceId => spaceHasMatchingTabs(spaceId)) ||
+               data.spaceMeta.closedTabs.some(tab => tabMatchesSearch(tab));
+    });
     
     function handleTabGroupToggle() {
         tabGroupExpanded = !tabGroupExpanded
@@ -97,6 +132,16 @@
         hoveredTab = null
         hovercardShowTime = null
     }
+    
+    onMount(() => {
+        const dismissHovercards = () => {
+            hoveredTab = null
+            hovercardShowTime = null
+            if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+        }
+        window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
+        return () => window.removeEventListener('darc-dismiss-hovercards', dismissHovercards)
+    })
 
     // Focus the URL input when it becomes visible
     $effect(() => {
@@ -123,8 +168,29 @@
 
     const globallyPinnedTabs = $derived(data.spaceMeta.globalPins)
     
+    // Track if mouse left during a drag so we can close sidebar when drag ends
+    let mouseLeftDuringDrag = false
+    // Track if sidebar was open when drag started (to prevent drag from OPENING sidebar)
+    let sidebarOpenedBeforeDrag = false
+    $effect(() => {
+        if ((tabDrag.active || tabDrag.pending) && !sidebarOpenedBeforeDrag) {
+            sidebarOpenedBeforeDrag = isHovered
+        }
+        if (!tabDrag.active && !tabDrag.pending) {
+            if (mouseLeftDuringDrag) {
+                mouseLeftDuringDrag = false
+                if (multiSpaceMode) exitMultiSpaceMode()
+                isHovered = false
+                if (sidebarShowTimeout) clearTimeout(sidebarShowTimeout)
+                sidebarFullyShown = false
+            }
+            sidebarOpenedBeforeDrag = false
+        }
+    })
+    
     function handleMouseEnter() {
         isHovered = true
+        mouseLeftDuringDrag = false
         // Cancel pending menu close if re-entering
         if (menuCloseTimeout) {
             clearTimeout(menuCloseTimeout)
@@ -140,18 +206,26 @@
     }
     
     function handleMouseLeave() {
-        // Don't hide sidebar when URL bar is expanded or in multi-space mode
-        if (!urlBarExpanded && !multiSpaceMode) {
+        // Don't hide sidebar when URL bar is expanded, in multi-space mode, or dragging/pending drag
+        if (!urlBarExpanded && !multiSpaceMode && !tabDrag.active && !tabDrag.pending) {
             // Always set isHovered to false for resize handle logic
             isHovered = false
             // Immediately disable resize handle when leaving
             if (sidebarShowTimeout) clearTimeout(sidebarShowTimeout)
             sidebarFullyShown = false
+        } else if (tabDrag.active || tabDrag.pending) {
+            mouseLeftDuringDrag = true
         }
         
         // Close context menu when leaving sidebar
         if (spaceContextMenuId !== null) {
             spaceContextMenuId = null
+        }
+        if (colorPickerSpaceId !== null) {
+            colorPickerSpaceId = null
+        }
+        if (renamingSpaceId !== null) {
+            commitRename()
         }
         // Close dropdown menus when sidebar actually hides (after 340ms delay)
         if (newSpaceMenuOpen || openMenuId !== null) {
@@ -210,7 +284,7 @@
     let horizontalScrollTimeout = null
     
     function handleTabContentWheel(event) {
-        if (!tabListRef) return
+        if (!tabListRef || tabSearchQuery) return
         
         const scrollLeft = tabListRef.scrollLeft
         const maxScroll = tabListRef.scrollWidth - tabListRef.clientWidth
@@ -492,7 +566,7 @@
     
     function handleTabsListWheel(event, spaceId) {
         const tabsList = event.currentTarget
-        if (!tabsList) return
+        if (!tabsList || tabSearchQuery) return
         
 
         
@@ -703,10 +777,19 @@
         if (event.button === 0) {
             // If clicking the currently active space, switch to previous active space
             if (data.spaceMeta.activeSpace === spaceId) {
-                const previousSpace = data.getPreviousActiveSpace()
-                if (previousSpace && data.spaces[previousSpace]) {
-                    spaceId = previousSpace
+                // Only switch to previous space if the current space is already scrolled into view
+                if (currentScrolledSpace === spaceId || currentScrolledSpace === null) {
+                    const previousSpace = data.getPreviousActiveSpace()
+                    if (previousSpace && data.spaces[previousSpace]) {
+                        spaceId = previousSpace
+                    } else {
+                        return
+                    }
                 } else {
+                    // If not scrolled into view, just scroll it into view without switching spaces
+                    isManualScroll = true
+                    scrollToCurrentSpace('smooth')
+                    setTimeout(() => { isManualScroll = false }, 500)
                     return
                 }
             }
@@ -725,7 +808,12 @@
             const targetSpace = data.spaces[spaceId]
             if (targetSpace?.activeTabsOrder?.length > 0) {
                 // Find the first valid (non-closed, non-pinned) tab from the order
-                for (const tabId of targetSpace.activeTabsOrder) {
+                for (const historyEntry of targetSpace.activeTabsOrder) {
+                    const tabId = typeof historyEntry === 'string' ? historyEntry : historyEntry?.id
+                    if (!tabId) {
+                        continue
+                    }
+
                     const tab = data.docs[tabId]
                     if (tab && !tab.archive && !tab.pinned) {
                         data.activate(tabId)
@@ -751,8 +839,8 @@
     }
 
     function activateTab(tabId, spaceId) {
-        // Close multi-space mode when switching tabs
-        if (multiSpaceMode) {
+        // Close multi-space mode when switching tabs, but not during drag
+        if (multiSpaceMode && !tabDrag.active && !tabDrag.pending) {
             exitMultiSpaceMode()
         }
         
@@ -828,16 +916,53 @@
     }
     
     function handleMenuItemClick(action, spaceId) {
-        // Handle the action (rename, change icon, set default container)
         console.log(`Action: ${action} for space: ${data.spaces[spaceId].name}`)
         
-        if (action.startsWith('container-')) {
-            const containerType = action.replace('container-', '')
-            console.log(`Setting container to: ${containerType} for space: ${data.spaces[spaceId].name}`)
-            // TODO: Implement container assignment logic
+        setTimeout(() => {
+            if (action === 'rename') {
+                startRename(spaceId)
+            } else if (action === 'change-color') {
+                colorPickerFromMenu = true
+                colorPickerSpaceId = spaceId
+            } else if (action === 'change-icon') {
+                console.log('Change icon for space:', spaceId)
+            } else if (action === 'container') {
+                console.log('Container for space:', spaceId)
+            } else if (action === 'delete') {
+                console.log('Delete space:', spaceId)
+            }
+            
+            openMenuId = null
+        }, 10)
+    }
+
+    function startRename(spaceId) {
+        renamingSpaceId = spaceId
+        renameInputValue = data.spaces[spaceId].name
+        requestAnimationFrame(() => {
+            renameInputRef?.focus()
+            renameInputRef?.select()
+        })
+    }
+
+    function commitRename() {
+        if (renamingSpaceId && renameInputValue.trim()) {
+            data.updateSpace(renamingSpaceId, { name: renameInputValue.trim() })
         }
-        
-        openMenuId = null
+        renamingSpaceId = null
+    }
+
+    function handleRenameKeydown(e) {
+        if (e.key === 'Enter') {
+            commitRename()
+        } else if (e.key === 'Escape') {
+            renamingSpaceId = null
+        }
+    }
+
+    function pickColor(spaceId, color) {
+        data.updateSpace(spaceId, { color })
+        colorPickerSpaceId = null
     }
     
     function handleClickOutside(event) {
@@ -849,6 +974,12 @@
         }
         if (spaceContextMenuId !== null && !event.target.closest('.space-context-menu-dropdown') && !event.target.closest('.space-item') && !contextMenuJustOpened) {
             spaceContextMenuId = null
+        }
+        if (colorPickerSpaceId !== null && !event.target.closest('.color-picker-dropdown') && !event.target.closest('.space-menu-item') && !event.target.closest('.space-context-menu-item')) {
+            colorPickerSpaceId = null
+        }
+        if (renamingSpaceId !== null && !event.target.closest('.space-title-rename') && !event.target.closest('.space-menu-item') && !event.target.closest('.space-context-menu-item')) {
+            commitRename()
         }
         if (urlBarExpanded && !event.target.closest('.url-bar-container')) {
             urlBarExpanded = false
@@ -989,6 +1120,7 @@
             if (activeTabElement) {
                 const tabsList = activeTabElement.closest('.tabs-list')
                 if (tabsList) {
+                    console.log('%c[TAB-DEBUG] TabSidebar scrolling active tab into view: ' + data.spaceMeta.activeTabId, 'color: #d946ef; font-weight: bold; font-size: 13px')
                     // Scroll the tab into view within its tabs list
                     activeTabElement.scrollIntoView({
                         behavior: 'smooth',
@@ -1166,6 +1298,7 @@
     }
     
     function handleTabMouseEnter(tab, event) {
+        if (tabDrag.active) return
         // Disable hovercards while spacer is visible (scrolling to add space)
         const anySpacerVisible = Object.values(tabsListSpacerVisible).some(v => v)
         if (anySpacerVisible) return
@@ -1287,16 +1420,15 @@
     
     function handleSpaceContextMenuAction(action, spaceId) {
         if (action === 'rename') {
-            // TODO: Implement rename functionality
-            console.log('Rename space:', spaceId)
+            startRename(spaceId)
         } else if (action === 'change-color') {
-            // TODO: Implement color change functionality
-            console.log('Change color for space:', spaceId)
+            colorPickerFromMenu = false
+            colorPickerSpaceId = spaceId
         } else if (action === 'change-icon') {
-            // TODO: Implement icon change functionality
             console.log('Change icon for space:', spaceId)
+        } else if (action === 'container') {
+            console.log('Container for space:', spaceId)
         } else if (action === 'delete') {
-            // TODO: Implement delete functionality
             console.log('Delete space:', spaceId)
         }
         
@@ -1575,7 +1707,7 @@
 <svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 <div class="sidebar-box" 
-     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible}
+     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
      class:multi-space-mode={multiSpaceMode}
@@ -1599,6 +1731,9 @@
             <button class="space-context-menu-item"
                     onmouseup={() => handleSpaceContextMenuAction('change-icon', spaceContextMenuId)}
                     role="menuitem">Change Icon</button>
+            <button class="space-context-menu-item"
+                    onmouseup={() => handleSpaceContextMenuAction('container', spaceContextMenuId)}
+                    role="menuitem">Container</button>
             <button class="space-context-menu-item delete"
                     onmouseup={() => handleSpaceContextMenuAction('delete', spaceContextMenuId)}
                     role="menuitem">Delete</button>
@@ -1616,7 +1751,7 @@
                 </button>
             {/if}
             {#if showUrl}
-                <UrlBar 
+                <UrlBar
                     url={data.docs[data.spaceMeta.activeTabId]?.url || ''}
                     tabId={data.spaceMeta.activeTabId}
                     expanded={urlBarExpanded}
@@ -1631,34 +1766,59 @@
                 />
             {/if}
             
-            <div class="section global-pins-section">
-                <div class="pinned-tabs-grid">
-                    <button class="pinned-tab all-apps-tab" 
-                            title="All Apps"
-                            onmousedown={(e) => { e.stopPropagation(); handleAppsToggle(); }}
-                            aria-label="Show all apps">
-
-                            <!-- <svg class="all-apps-icon" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
-                            </svg> -->
-                        <svg class="all-apps-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+            {#if isSearchModeActive}
+                <div class="section search-section" class:multi-space={multiSpaceMode}>
+                    <div class="tab-search-container">
+                        <svg class="tab-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
                         </svg>
-                    </button>
-                    <!-- NOTE: Tabs are also rendered in App.svelte (top bar) - keep hibernated class in sync there too -->
-                    {#each globallyPinnedTabs as tab}
-                        <button class="pinned-tab" class:hibernated={data.isTabHibernated(tab.id)}
-                                onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                                onmouseleave={handleTabMouseLeave}>
-                            <Favicon {tab} showButton={false} />
+                        <input type="text" class="tab-search-input" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) isSearchModeActive = false }} onkeydown={(e) => { if (e.key === 'Escape') { tabSearchQuery = ''; isSearchModeActive = false; searchInputRef?.blur(); } }} />
+                        <button class="tab-search-clear" onmousedown={() => { tabSearchQuery = ''; isSearchModeActive = false; }} aria-label="Close search">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                            </svg>
                         </button>
-                    {/each}
+                    </div>
                 </div>
-            </div>
+            {:else}
+                <div class="section global-pins-section">
+                    <div class="pinned-tabs-grid">
+                        <button class="pinned-tab search-toggle-tab"
+                                title="Search Tabs"
+                                onmousedown={(e) => { e.stopPropagation(); isSearchModeActive = true; setTimeout(() => searchInputRef?.focus(), 50); }}
+                                aria-label="Search tabs">
+                            <svg class="search-toggle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <button class="pinned-tab all-apps-tab"
+                                title="All Apps"
+                                onmousedown={(e) => { e.stopPropagation(); handleAppsToggle(); }}
+                                aria-label="Show all apps">
 
-            <div class="section">
-                <div class="spaces-container">
-                    <div class="spaces-list-wrapper">
+                                <!-- <svg class="all-apps-icon" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
+                                </svg> -->
+                            <svg class="all-apps-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                            </svg>
+                        </button>
+                        <!-- NOTE: Tabs are also rendered in App.svelte (top bar) - keep hibernated class in sync there too -->
+                        {#each globallyPinnedTabs as tab}
+                            <button class="pinned-tab" class:hibernated={data.isTabHibernated(tab.id)}
+                                    onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                                    onmouseleave={handleTabMouseLeave}>
+                                <Favicon {tab} showButton={false} />
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+            {/if}
+
+            {#if !tabSearchQuery}
+                <div class="section">
+                    <div class="spaces-container">
+                        <div class="spaces-list-wrapper">
                         <div class="spaces-list-fade-left" class:visible={spacesScrolledLeft}></div>
                         <div class="spaces-list" bind:this={spacesListRef} onscroll={handleSpacesScroll}>
                             {#each data.spaceMeta.spaceOrder as spaceId}
@@ -1693,58 +1853,107 @@
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div class="menu-scrim" onmousedown={() => newSpaceMenuOpen = false}></div>
                         {/if}
-                        <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
-                            <button class="new-space-menu-item"
-                                    onmouseup={() => handleNewSpaceMenuAction('new-space')}
-                                    role="menuitem">New Space</button>
-                            <button class="new-space-menu-item"
-                                    onmouseup={() => handleNewSpaceMenuAction('new-divider')}
-                                    role="menuitem">New Divider</button>
-                            <button class="new-space-menu-item"
-                                    onmouseup={() => handleNewSpaceMenuAction('new-folder')}
-                                    role="menuitem">New Folder</button>
+                            <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
+                                <button class="new-space-menu-item"
+                                        onmouseup={() => handleNewSpaceMenuAction('new-space')}
+                                        role="menuitem">New Space</button>
+                                <button class="new-space-menu-item"
+                                        onmouseup={() => handleNewSpaceMenuAction('new-divider')}
+                                        role="menuitem">New Divider</button>
+                                <button class="new-space-menu-item"
+                                        onmouseup={() => handleNewSpaceMenuAction('new-folder')}
+                                        role="menuitem">New Folder</button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            {/if}
 
             <div class="section flex-1">
-                <div class="tab-content-container" 
+                <div class="tab-content-container"
                      class:multi-space={multiSpaceMode}
                      class:rubber-banding={isRubberBanding}
                      class:closing={isClosingMultiSpace}
                      class:horizontal-scrolling={isHorizontalScrolling}
+                     class:searching={tabSearchQuery.length > 0}
                      bind:this={tabListRef}
                      onscroll={handleTabScroll}
                      onwheel={handleTabContentWheel}
                      onscrollend={handleTabContentScrollEnd}
-                     ondblclick={handleBackgroundDoubleClick}
+                     onmousedown={(e) => {
+                         if (multiSpaceMode && (e.target === tabListRef || e.target.closest('.tab-content-track') === e.target || e.target.closest('.tab-content-container') === e.target)) {
+                             exitMultiSpaceMode()
+                         }
+                     }}
+                     ondblclick={(e) => {
+                         if (!multiSpaceMode) {
+                             handleBackgroundDoubleClick()
+                         }
+                     }}
                      role="region"
                      aria-label="Tab content area - double-click to create new tab"
                      style=""
                     >
+                    {#if tabSearchQuery && !hasAnySearchResults}
+                        <div class="no-search-results">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <p>No tabs found for "{tabSearchQuery}"</p>
+                        </div>
+                    {/if}
                     <div class="tab-content-track" class:multi-space={multiSpaceMode}>
                         {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
-                            {#if multiSpaceMode && index > 0}
-                                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-                                <div class="lane-divider" 
-                                     onmousedown={handleLaneDividerMouseDown}
-                                     role="separator"></div>
-                            {/if}
-                            <div class="space-content" 
-                                 class:multi-space={multiSpaceMode}
-                                 data-space-id={spaceId}
-                                 style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}
-                                 onmouseenter={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = spaceId }}
-                                 onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
-                                 role="group"
-                                 aria-label="Space tabs">
+                            {#if spaceHasMatchingTabs(spaceId)}
+                                {#if multiSpaceMode && index > 0}
+                                    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                    <div class="lane-divider"
+                                         onmousedown={handleLaneDividerMouseDown}
+                                         role="separator"></div>
+                                {/if}
+                                <div class="space-content"
+                                     class:multi-space={multiSpaceMode}
+                                     data-space-id={spaceId}
+                                     style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}
+                                     onmouseenter={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = spaceId }}
+                                     onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
+                                     role="group"
+                                     aria-label="Space tabs">
                                 <div class="space-title-container">
-                                    <button class="space-title" 
-                                            class:active={data.spaceMeta.activeSpace === spaceId}
-                                            onmousedown={(e) => handleSpaceClick(e, spaceId)}>
-                                        {data.spaces[spaceId].name}
-                                    </button>
+                                    {#if renamingSpaceId === spaceId}
+                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                        <input class="space-title-rename"
+                                               bind:this={renameInputRef}
+                                               bind:value={renameInputValue}
+                                               onblur={commitRename}
+                                               onkeydown={handleRenameKeydown} />
+                                    {:else}
+                                        <button class="space-title" 
+                                                class:active={data.spaceMeta.activeSpace === spaceId}
+                                                onmousedown={(e) => handleSpaceClick(e, spaceId)}
+                                                oncontextmenu={(e) => e.preventDefault()}>
+                                            {#if data.spaces[spaceId]?.glyph}
+                                                <span class="space-title-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
+                                            {:else}
+                                                <span class="space-title-dot" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>
+                                            {/if}
+                                            {data.spaces[spaceId].name}
+                                        </button>
+                                    {/if}
+                                    {#if colorPickerSpaceId === spaceId}
+                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                        <div class="menu-scrim" onmousedown={() => colorPickerSpaceId = null}></div>
+                                        <div class="color-picker-dropdown" class:from-menu={colorPickerFromMenu}>
+                                            {#each spaceColors as c}
+                                                <button class="color-swatch" 
+                                                        class:active={data.spaces[spaceId]?.color === c.color}
+                                                        style="background-color: {c.color}"
+                                                        onmousedown={() => pickColor(spaceId, c.color)}
+                                                        aria-label={c.name}></button>
+                                            {/each}
+                                        </div>
+                                    {/if}
                                     <div class="space-menu">
                                         <button class="space-menu-button" 
                                                 onmousedown={(e) => { e.stopPropagation(); handleMenuToggle(spaceId); }}
@@ -1755,17 +1964,25 @@
                                         {/if}
                                         <div class="space-menu-dropdown" class:open={openMenuId === spaceId}>
                                             <button class="space-menu-item" 
+                                                    onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('rename', spaceId)}
                                                     role="menuitem">Rename</button>
                                             <button class="space-menu-item"
-                                                    onmouseup={() => handleMenuItemClick('change-icon', spaceId)}
-                                                    role="menuitem">Change icon</button>
-                                            <button class="space-menu-item"
+                                                    onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('change-color', spaceId)}
-                                                    role="menuitem">Change color</button>
+                                                    role="menuitem">Change Color</button>
                                             <button class="space-menu-item"
+                                                    onmousedown={(e) => e.preventDefault()}
+                                                    onmouseup={() => handleMenuItemClick('change-icon', spaceId)}
+                                                    role="menuitem">Change Icon</button>
+                                            <button class="space-menu-item"
+                                                    onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('container', spaceId)}
                                                     role="menuitem">Container</button>
+                                            <button class="space-menu-item delete"
+                                                    onmousedown={(e) => e.preventDefault()}
+                                                    onmouseup={() => handleMenuItemClick('delete', spaceId)}
+                                                    role="menuitem">Delete</button>
                                         </div>
                                     </div>
                                 </div>
@@ -1773,9 +1990,11 @@
                                 {#if data.spaces[spaceId].pinnedTabs?.length > 0}
                                     <div class="pinned-tabs-grid">
                                         {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
-                                            <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} onmousedown={() => activateTab(tab.id, spaceId)}>
-                                                <Favicon {tab} showButton={false} />
-                                            </button>
+                                            {#if tabMatchesSearch(tab)}
+                                                <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} onmousedown={() => activateTab(tab.id, spaceId)}>
+                                                    <Favicon {tab} showButton={false} />
+                                                </button>
+                                            {/if}
                                         {/each}
                                     </div>
                                 {/if}
@@ -1827,9 +2046,9 @@
                                     <div class="tabs-list" 
                                          onscroll={(e) => { handleTabsListScroll(e); handleTabsListScrollForSpacer(e, spaceId); }}
                                          onwheel={(e) => handleTabsListWheel(e, spaceId)}
-                                         style="transform: translateY({tabsListVerticalRubberBand[spaceId] || 0}px) translateZ(0)">
+                                         style={tabsListVerticalRubberBand[spaceId] ? `transform: translateY(${tabsListVerticalRubberBand[spaceId]}px)` : ''}>
                                         
-                                        {#if tabsListSpacerVisible[spaceId]}
+                                        {#if tabsListSpacerVisible[spaceId] && !tabSearchQuery}
                                             <div class="tabs-list-spacer" style="height: {tabsListSpacerHeight[spaceId] || 0}px"></div>
                                         {/if}
                                         
@@ -1841,51 +2060,56 @@
                                         
                                    {#each data.spaces[spaceId].tabs as tab, i (tab.id)}
                                         {#if tab.type === 'divider'}
-                                            <div class="tab-divider">
-                                                {#if tab.title}
-                                                    <span class="tab-divider-title">{tab.title}</span>
-                                                    <div class="tab-divider-line"></div>
-                                                {:else}
-                                                    <div class="tab-divider-line-only"></div>
-                                                {/if}
-                                            </div>
+                                            {#if !tabSearchQuery}
+                                                <div class="tab-divider">
+                                                    {#if tab.title}
+                                                        <span class="tab-divider-title">{tab.title}</span>
+                                                        <div class="tab-divider-line"></div>
+                                                    {:else}
+                                                        <div class="tab-divider-line-only"></div>
+                                                    {/if}
+                                                </div>
+                                            {/if}
                                         {:else}
-                                            <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={data.spaces[spaceId]?.activeTabsOrder?.[0] === tab.id && spaceId !== data.spaceMeta.activeSpace} data-tab-id={tab.id}
-                                                 role="listitem"
-                                                 onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                                                 onmouseleave={handleTabMouseLeave}
-                                                 oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) activateTab(tab.id, spaceId) }}>
-                                                    <Favicon {tab} showButton={false} />
-                                                    <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
-                                                </button>
-                                                
-                                                <button class="tab-close" aria-label="Close tab" 
-                                                        onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}
-                                                        onmouseenter={() => {
-                                                            closeButtonHovered = true
-                                                            if (closeButtonHoverTimer) clearTimeout(closeButtonHoverTimer)
-                                                            if (instantHovercardsMode) {
-                                                                closeButtonHoverTimer = setTimeout(() => {
-                                                                    closeButtonHoveredDelayed = true
-                                                                }, 300)
-                                                            } else {
-                                                                closeButtonHoveredDelayed = true
-                                                            }
-                                                        }}
-                                                        onmouseleave={() => {
-                                                            closeButtonHovered = false
-                                                            closeButtonHoveredDelayed = false
-                                                            if (closeButtonHoverTimer) {
-                                                                clearTimeout(closeButtonHoverTimer)
-                                                                closeButtonHoverTimer = null
-                                                            }
-                                                        }}>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                                                        </svg>
+                                            {#if tabMatchesSearch(tab)}
+                                                <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
+                                                     role="listitem"
+                                                     onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                                                     onmouseleave={handleTabMouseLeave}
+                                                     oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
+                                                    <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive && !multiSpaceMode) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
+                                                        onclick={(e) => { if (e.button === 0 && !didDragOccurred()) { if (multiSpaceMode) { activateTab(tab.id, spaceId) } else if (tabDrag.wasAlreadyActive) { activateTab(tab.id, spaceId) } } }}>
+                                                        <Favicon {tab} showButton={false} />
+                                                        <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
                                                     </button>
-                                            </div>
+                                                    
+                                                    <button class="tab-close" aria-label="Close tab"
+                                                            onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}
+                                                            onmouseenter={() => {
+                                                                closeButtonHovered = true
+                                                                if (closeButtonHoverTimer) clearTimeout(closeButtonHoverTimer)
+                                                                if (instantHovercardsMode) {
+                                                                    closeButtonHoverTimer = setTimeout(() => {
+                                                                        closeButtonHoveredDelayed = true
+                                                                    }, 300)
+                                                                } else {
+                                                                    closeButtonHoveredDelayed = true
+                                                                }
+                                                            }}
+                                                            onmouseleave={() => {
+                                                                closeButtonHovered = false
+                                                                closeButtonHoveredDelayed = false
+                                                                if (closeButtonHoverTimer) {
+                                                                    clearTimeout(closeButtonHoverTimer)
+                                                                    closeButtonHoverTimer = null
+                                                                }
+                                                            }}>
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                                            </svg>
+                                                        </button>
+                                                </div>
+                                            {/if}
                                         {/if}
                                     {/each}
                                     
@@ -1918,19 +2142,29 @@
                                         </div>
                                     </div><!-- -->
                                     
-                                    <!-- svelte-ignore a11y_no_static_element_interactions -->
-                                    <!-- Bottom spacer for scrolling and double-click to create new tab -->
-                                    <div class="tabs-list-bottom-spacer" ondblclick={async () => {
-                                        const newTab = await data.newTab(spaceId)
-                                        if (newTab) {
-                                            data.activateSpace(spaceId)
-                                            data.activate(newTab.id)
-                                        }
-                                    }}></div>
+                                    {#if !tabSearchQuery}
+                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                        <!-- Bottom spacer for scrolling and double-click to create new tab -->
+                                        <div class="tabs-list-bottom-spacer"
+                                             onmousedown={(e) => {
+                                                 if (multiSpaceMode) {
+                                                     exitMultiSpaceMode()
+                                                 }
+                                             }}
+                                             ondblclick={async (e) => {
+                                                e.stopPropagation()
+                                                const newTab = await data.newTab(spaceId)
+                                                if (newTab) {
+                                                    data.activateSpace(spaceId)
+                                                    data.activate(newTab.id)
+                                                }
+                                        }}></div>
+                                    {/if}
                                 </div>
-                                    <div class="tabs-list-fade-bottom" class:visible={tabsListScrolledBottom[spaceId]}></div>
+                                        <div class="tabs-list-fade-bottom" class:visible={tabsListScrolledBottom[spaceId]}></div>
+                                    </div>
                                 </div>
-                            </div>
+                            {/if}
                         {/each}
                     </div>
                 </div>
@@ -1955,16 +2189,23 @@
                 <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
                         {#each data.spaceMeta.closedTabs as tab}
-                            <button class="closed-tab-item" 
-                                    onmousedown={() => data.restoreClosedTab(tab.id)}
-                                    onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                                    onmouseleave={handleTabMouseLeave}>
-                                <Favicon {tab} showButton={false} />
-                                <div class="tab-text">
-                                    <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
-                                    <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
-                                </div>
-                            </button>
+                            {#if tabMatchesSearch(tab)}
+                                <button class="closed-tab-item"
+                                        onmousedown={() => data.restoreClosedTab(tab.id)}
+                                        onmouseenter={(e) => handleTabMouseEnter(tab, e)}
+                                        onmouseleave={handleTabMouseLeave}>
+                                    <Favicon {tab} showButton={false} />
+                                    <div class="tab-text">
+                                        <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
+                                        <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
+                                    </div>
+                                    <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                        </svg>
+                                    </div>
+                                </button>
+                            {/if}
                         {/each}
                     </div>
                 </div>
@@ -1987,7 +2228,7 @@
     </div>
 </div>
 
-{#if hoveredTab}
+{#if hoveredTab && !tabDrag.active}
     {#key hoveredTab.id}
         <div class="tab-hovercard-sidebar" 
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px; --hovercard-top: {hovercardPosition.y}px;">
@@ -2190,6 +2431,126 @@
         flex-shrink: 0;
     }
     
+    .search-section {
+        padding: 4px;
+        margin-bottom: 10px;
+        flex-shrink: 0;
+        height: 44px; /* Match pinned-tabs-grid height (36px tab + 8px padding) */
+        box-sizing: border-box;
+    }
+    
+    .search-section.multi-space {
+        width: 20vw;
+        min-width: 263px;
+        max-width: 600px;
+    }
+    
+    .no-search-results {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        color: rgba(255, 255, 255, 0.4);
+        text-align: center;
+        gap: 12px;
+        height: 100%;
+        width: 100%;
+    }
+    
+    .no-search-results svg {
+        width: 32px;
+        height: 32px;
+        opacity: 0.5;
+    }
+    
+    .no-search-results p {
+        font-size: 13px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        margin: 0;
+        word-break: break-word;
+    }
+    
+    .tab-search-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+        width: 100%;
+    }
+    
+    .tab-search-icon {
+        position: absolute;
+        left: 10px;
+        width: 14px;
+        height: 14px;
+        color: rgba(255, 255, 255, 0.3);
+        pointer-events: none;
+        transition: color 150ms ease;
+    }
+    
+    .tab-search-input {
+        width: 100%;
+        height: 36px; /* Match pinned-tab height */
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+        padding: 0 30px 0 30px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 13px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        outline: none;
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+        box-sizing: border-box;
+    }
+    
+    .tab-search-clear {
+        position: absolute;
+        right: 8px;
+        width: 20px;
+        height: 20px;
+            border-radius: 12px;
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.4);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 150ms ease;
+        padding: 0;
+    }
+    
+    .tab-search-clear:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.8);
+    }
+    
+    .tab-search-clear svg {
+        width: 14px;
+        height: 14px;
+    }
+    
+    .tab-search-input:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .tab-search-input:focus {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.15);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+    
+    .tab-search-input:focus + .tab-search-icon {
+        color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .tab-search-input::placeholder {
+        color: rgba(255, 255, 255, 0.3);
+        font-weight: 400;
+    }
+
     .global-pins-section {
         margin-bottom: 10px;
         flex-shrink: 0;
@@ -2216,9 +2577,9 @@
     .pinned-tab {
         width: 36px;
         height: 36px;
-        border-radius: 10px;
+        border-radius: 12px;
         /* background: rgb(255 255 255 / 7%); */
-        background: #ffffff0f;
+        background: rgb(255 255 255 / 6.5%);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -2301,8 +2662,8 @@
     }
     
     .space-item {
-        width: 24px;
-        height: 24px;
+        width: 22px;
+        height: 22px;
         border-radius: 100%;
         background: transparent;
         display: flex;
@@ -2343,8 +2704,8 @@
     }
     
     .space-glyph-default {
-        width: 11px;
-        height: 11px;
+        width: 12px;
+        height: 12px;
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.7);
         display: flex;
@@ -2357,9 +2718,9 @@
     }
     
     .new-space-button {
-        width: 20px;
-        height: 20px;
-        border-radius: 10px;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
         background: transparent;
         display: flex;
         align-items: center;
@@ -2390,9 +2751,9 @@
     .plus-icon {
         font-size: 16px;
         line-height: 1;
-        width: 14px;
-        height: 14px;
-        color: rgba(255, 255, 255, 0.3);
+        width: 16px;
+        height: 16px;
+        color: rgba(255, 255, 255, 0.6);
     }    
     .new-space-menu-dropdown {
         position: absolute;
@@ -2403,7 +2764,7 @@
         border-radius: 10px;
         padding: 4px 0;
         min-width: 120px;
-        z-index: 1000;
+        z-index: 10000;
         opacity: 0;
         visibility: hidden;
         transform: translateY(-4px);
@@ -2449,12 +2810,13 @@
         padding: 0 4px 0px 6px;
         margin-bottom: -4px;
         flex-shrink: 0;
+        position: relative;
     }
     
     .space-title {
         color: rgba(255, 255, 255, 0.6);
-        font-size: 11px;
-        font-weight: 500;
+        font-size: 12px;
+        font-weight: 600;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
@@ -2464,6 +2826,32 @@
         padding: 0;
         margin: 0;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .space-title-glyph {
+        font-size: 11px;
+        line-height: 1;
+        width: 11px;
+        height: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    :global(.space-title-glyph svg) {
+        width: 100%;
+        height: 100%;
+    }
+    
+    .space-title-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
     }
     
     .space-title:hover {
@@ -2471,8 +2859,64 @@
     }
     
     .space-title.active {
+        color: hsl(0 0% 87% / 1);
+        font-weight: 700;
+    }
+
+    .space-title-rename {
         color: white;
-        font-weight: 600;
+        font-size: 11px;
+        font-weight: 500;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        padding: 1px 4px;
+        margin: 0;
+        outline: none;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .color-picker-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        background: rgba(0, 0, 0, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 8px;
+        z-index: 10001;
+        backdrop-filter: blur(12px);
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 4px;
+        width: 140px;
+    }
+
+    .color-picker-dropdown.from-menu {
+        left: auto;
+        right: 0;
+    }
+
+    .color-swatch {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+        padding: 0;
+        transition: transform 150ms ease;
+    }
+
+    .color-swatch:hover {
+        transform: scale(1.2);
+    }
+
+    .color-swatch.active {
+        border-color: white;
     }
     
     .space-menu {
@@ -2488,7 +2932,7 @@
         font-size: 14px;
         line-height: 14px;
         padding: 4px;
-        border-radius: 10px;
+            border-radius: 12px;
         transition: all 150ms ease;
         opacity: 0;
     }
@@ -2511,7 +2955,7 @@
         border-radius: 10px;
         padding: 4px 0;
         min-width: 180px;
-        z-index: 1000;
+        z-index: 10000;
         opacity: 0;
         visibility: hidden;
         transform: translateY(-4px);
@@ -2527,12 +2971,14 @@
     }
     
     .space-menu-item {
-        padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
+        padding: 8px 14px;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: -0.008em;
+        line-height: 1;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
         cursor: pointer;
         transition: background 150ms ease;
         background: transparent;
@@ -2550,13 +2996,25 @@
         background: rgba(255, 255, 255, 0.15);
     }
 
-    .space-item.scrolled:not(.active):after {
-        border: 1px solid rgb(138 138 138);
-        display: block;
-        content: ' ';
-        width: 48%;
-        position: absolute;
-        bottom: 1px;
+    .space-menu-item.delete {
+        color: #ff6b6b;
+    }
+
+    .space-menu-item.delete:hover {
+        color: #ff4444;
+        background: rgba(255, 107, 107, 0.1);
+    }
+
+    .space-menu-item.delete:active {
+        background: rgba(255, 107, 107, 0.2);
+    }
+
+    .space-item.scrolled {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .space-item.active.scrolled {
+        background: rgba(255, 255, 255, 0.14);
     }
 
     /* Horizontal Tab Content */
@@ -2569,12 +3027,18 @@
         -ms-overflow-style: none;
         flex: 1;
         min-height: 0;
-        border-radius: 10px;
+        border-radius: 12px;
         width: calc(100% + 2px);
         transition: transform 0.1s ease-out;
         transform: translateZ(0);
         backface-visibility: hidden;
         contain: layout style;
+    }
+    
+    .tab-content-container.searching:not(.multi-space) {
+        overflow-x: hidden;
+        overflow-y: auto;
+        scroll-snap-type: none;
     }
     
     .tab-content-container.rubber-banding {
@@ -2605,6 +3069,13 @@
         gap: 20px;
     }
     
+    .tab-content-container.searching:not(.multi-space) .tab-content-track {
+        flex-direction: column;
+        height: auto;
+        gap: 12px;
+        padding-bottom: 20px;
+    }
+    
     .space-content {
         width: 100%;
         flex-shrink: 0;
@@ -2618,6 +3089,11 @@
         padding-top: 0;
         padding-right: 8px;
         position: relative;
+    }
+    
+    .tab-content-container.searching:not(.multi-space) .space-content {
+        height: auto;
+        max-height: calc(36px * 5 + 8px * 4 + 40px); /* 5 tabs + gaps + header */
     }
     
     .tab-content-track.multi-space {
@@ -2732,7 +3208,7 @@
     .app-tab {
         width: 36px;
         height: 36px;
-        border-radius: 10px;
+        border-radius: 12px;
         background: rgb(255 255 255 / 7%);
          background: #ffffff0f;
         display: flex;
@@ -2780,6 +3256,20 @@
     }
 
     .all-apps-tab:hover .all-apps-icon {
+        color: rgba(255, 255, 255, 0.7);
+    }
+    
+    .search-toggle-tab {
+        position: relative;
+    }
+    
+    .search-toggle-icon {
+        width: 16px;
+        height: 16px;
+        color: rgba(255, 255, 255, 0.3);
+    }
+    
+    .search-toggle-tab:hover .search-toggle-icon {
         color: rgba(255, 255, 255, 0.7);
     }
     
@@ -2855,8 +3345,12 @@
         margin-right: -8px; /* Offset scrollbar position */
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-        will-change: transform;
-        backface-visibility: hidden;
+    }
+    
+    .tab-content-container.searching:not(.multi-space) .tabs-list {
+        overscroll-behavior-y: auto;
+        overflow-y: auto;
+        padding-top: 0;
     }
     
     .tab-content-container.horizontal-scrolling .tabs-list {
@@ -2900,11 +3394,11 @@
         display: flex;
         align-items: center;
         gap: 4px;
-        border-radius: 10px;
+        border-radius: 12px;
         /* background: rgb(255 255 255 / 7%); */
-         background: #ffffff0f;
+         /* background: #ffffff0f; */
         transition: all 150ms ease;
-        border: 1px solid hsl(0deg 0% 100% / 2%);
+        border: 1px solid transparent;
         height: 36px;
         flex-shrink: 0;
         width: 100%;
@@ -2927,24 +3421,33 @@
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
         text-align: left;
-        border-radius: 10px;
+        border-radius: 12px;
         min-width: 0;
         overflow: hidden;
     }
     
     .tab-item-container:hover {
-        background-color: rgb(255 255 255 / 9%);
-        border: 1px solid hsl(0deg 0% 100% / 3%);
+        background-color: rgb(255 255 255 / 7%);
+        border: 1px solid hsl(0deg 0% 100% / 2%);
     }
     
     .tab-item-container.active {
-        background: rgb(255 255 255 / 14%);
-        border: 1px solid hsl(0deg 0% 100% / 4%);
+        background: #1c1c1c;
+        border: 1px solid hsl(0deg 0% 100% / 3%);
+        position: sticky;
+        top: 0;
+        bottom: 0;
+        z-index: 15;
+        box-shadow: 0 -8px 8px -2px black, 0 8px 8px -2px black;
     }
     
     .tab-item-container.active:hover {
-        background: rgb(255 255 255 / 17%);
-        border: 1px solid hsl(0deg 0% 100% / 5%);
+        background: #292929;
+        border: 1px solid hsl(0deg 0% 100% / 4%);
+    }
+    
+    .tab-item-container.tab-dragging {
+        opacity: 0.3;
     }
     
     :global(.favicon-wrapper) {
@@ -2957,9 +3460,9 @@
     }
     
     .tab-title {
-        color: #c3c3c3;
+        color: hsl(0 0% 61% / 1);
         font-size: 13px;
-        font-weight: 400;
+        font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         white-space: nowrap;
         overflow: hidden;
@@ -2976,11 +3479,11 @@
     
     .tab-item-container.active .tab-title {
         color: #e5e5e5;
-        text-shadow: 0 0 0.3px currentColor;
+        /* text-shadow: 0 0 0.3px currentColor; */
     }
     
     .tab-item-container:hover .tab-title {
-        color: #fff;
+        color: hsl(0 0% 85% / 1);
     }
     
     .tab-item-container.active :global(.favicon-wrapper) {
@@ -2994,11 +3497,12 @@
     /* Active tab in inactive space - bold text + opaque favicon, subtle border */
     .tab-item-container.space-active-tab {
         border: 1px solid hsl(0deg 0% 100% / 5.5%);
+            background: rgb(255 255 255 / 6%);
     }
     
     .tab-item-container.space-active-tab .tab-title {
-        color: #e5e5e5;
-        text-shadow: 0 0 0.3px currentColor;
+        color: rgb(255 255 255 / 75%);
+        /* text-shadow: 0 0 0.3px currentColor; */
     }
     
     .tab-item-container.space-active-tab :global(.favicon-wrapper) {
@@ -3081,7 +3585,7 @@
         align-items: center;
         gap: 10px;
         padding: 4px 6px 4px 8px;
-        border-radius: 10px;
+        border-radius: 12px;
         background: transparent;
         cursor: pointer;
         transition: all 150ms ease;
@@ -3105,7 +3609,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 10px;
+        border-radius: 12px;
         transition: all 150ms ease;
         flex-shrink: 0;
         margin-left: 6px;
@@ -3124,7 +3628,7 @@
     }
 
     .new-tab-button:hover {
-        background-color: rgb(255 255 255 / 9%);
+        background-color: rgb(255 255 255 / 7%);
         border: 1px solid hsl(0deg 0% 100% / 3%);
     }
     
@@ -3142,9 +3646,9 @@
     }
     
     .new-tab-text {
-        color: #c6c6c6;
+        color: hsl(0 0% 66% / 1);
         font-size: 13px;
-        font-weight: 400;
+        font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         white-space: nowrap;
         overflow: hidden;
@@ -3329,7 +3833,7 @@
         display: flex;
         flex-direction: column;
         width: 100%;
-        border-radius: 10px;
+        border-radius: 12px;
         background: transparent;
         border: 1px solid transparent;
 
@@ -3359,10 +3863,11 @@
         display: flex;
         align-items: center;
         gap: 4px;
-        border-radius: 10px;
-        background: #ffffff0f;
+        border-radius: 12px;
+        /* background: #ffffff0f; */
         transition: background-color 150ms ease;
-        border: 1px solid hsl(0deg 0% 100% / 2%);
+        border: 1px solid  transparent;
+        /* hsl(0deg 0% 100% / 2%); */
         height: 36px;
         flex-shrink: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -3380,7 +3885,7 @@
     }
     
     .tab-group.expanded {
-        border-radius: 10px 10px 0 0;
+        border-radius: 12px 12px 0 0;
         border: 1px solid transparent;
         background: #ffffff0f;
         margin-left: -1px;
@@ -3422,7 +3927,7 @@
         cursor: pointer;
         flex: 1;
         height: 36px;
-        border-radius: 10px;
+        border-radius: 12px;
         min-width: 0;
         overflow: hidden;
     }
@@ -3439,9 +3944,14 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        color: rgba(255, 255, 255, 0.4);
+        color: white;
+        opacity: 50%;
         position: relative;
         margin-left: 4px;
+    }
+
+    .tab-group-wrapper:hover .tab-group-favicon {
+        opacity: 85%;
     }
     
     .tab-group-favicon:first-child {
@@ -3460,7 +3970,7 @@
     }
     
     .tab-group-title {
-        color: #c3c3c3;
+        color: hsl(0 0% 50% / 1);
         font-size: 13px;
         font-weight: 600;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -3541,7 +4051,7 @@
     }
     
     .tab-group-wrapper:hover .tab-group-title {
-        color: #fff;
+        color: rgba(255, 255, 255, 0.8);
     }
     
     .tab-group-wrapper:hover .tab-group-favicon {
@@ -3566,6 +4076,7 @@
         /* bottom: 6px; */
         /* left: 17px; */
         width: calc(100% - 19px);
+        bottom: 1px;
     }
     
     .closed-tabs-header {
@@ -3574,7 +4085,7 @@
         justify-content: space-between;
         padding: 8px 12px;
         cursor: pointer;
-        border-radius: 10px;
+        border-radius: 12px;
         transition: all 50ms ease;
         background: rgba(0, 0, 0, 0.8);
         backdrop-filter: blur(15px);
@@ -3622,7 +4133,7 @@
         right: 0;
         background: rgba(0, 0, 0, 0.95);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px 10px 0 0;
+        border-radius: 13px 13px 0 0;
         border-bottom: none;
         backdrop-filter: blur(20px);
         box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
@@ -3680,7 +4191,7 @@
         align-items: center;
         gap: 10px;
         padding: 6px 8px;
-        border-radius: 10px;
+        border-radius: 12px;
         background: transparent;
         cursor: pointer;
         transition: all 150ms ease;
@@ -3709,7 +4220,7 @@
         gap: 2px;
         flex: 1;
         min-width: 0;
-        max-width: 180px;
+        overflow: hidden;
     }
     
     .closed-tab-item .tab-title {
@@ -3717,8 +4228,9 @@
         font-size: 12px;
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
         line-height: 1.2;
+        mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
+        -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
     }
     
     .closed-tab-item .tab-space {
@@ -3727,10 +4239,42 @@
         font-weight: 400;
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
         line-height: 1.2;
+        mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
+        -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
     }
     
+    .closed-tab-remove {
+        background: none;
+        border: none;
+        color: rgba(255, 255, 255, 0.3);
+        cursor: pointer;
+        font-size: 18px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 0;
+        height: 20px;
+        border-radius: 4px;
+        opacity: 0;
+        margin-right: 8px;
+        flex-shrink: 0;
+        overflow: hidden;
+        line-height: 1;
+        max-width: 28px;
+    }
+
+    .closed-tab-item:hover .closed-tab-remove {
+        opacity: 1;
+        width: 25px;
+        padding: 0 4px;
+    }
+
+    .closed-tab-remove:hover {
+        color: rgba(255, 255, 255, 0.9);
+    }
+
     .closed-tab-item:hover :global(.favicon-wrapper) {
         opacity: 0.6;
     }
@@ -3795,30 +4339,34 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
         padding: 4px 0;
-        width: 140px;
+        min-width: 180px;
         z-index: 10000;
         opacity: 0;
         visibility: hidden;
+        transform: translateY(-4px);
+        transition: all 150ms ease;
         backdrop-filter: blur(12px);
         overflow: visible;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
         pointer-events: auto;
     }
 
     .space-context-menu-dropdown.open {
         opacity: 1;
         visibility: visible;
+        transform: translateY(0);
     }
 
     .space-context-menu-item {
-        padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
+        padding: 8px 14px;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: -0.008em;
+        line-height: 1;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
         cursor: pointer;
-        transition: background 50ms ease;
+        transition: background 150ms ease;
         background: transparent;
         border: none;
         width: 100%;

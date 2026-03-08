@@ -1,4 +1,4 @@
-# CLAUDE.md
+# CLAUDE.md/Agent.md
 
 use the baseprompt from AI.md
 
@@ -10,19 +10,19 @@ Darc is an experimental next-generation browser built on Xenon and Svelte. It co
 ## Development Setup
 
 ### Important Rules
-- **NEVER run `npm run build`** - The user manages builds manually
-- **Dtach is NOT used** - Do not attempt to use dtach sessions
+- **NEVER run `(p)npm run build`** - The user manages builds manually and usually is running the dev command in watch mode
+- **Dtach is NOT used at the moment** - Do not attempt to use dtach sessions
 - The development server runs externally; do not start/stop it
 
 ## Development Commands
 
 ### Core Development
-- `npm run dev` - Start development server on port 5193 (managed externally by user)
+- `npm run dev` - Starts development server on port 5193 (managed externally by user)
 - `npm run bump-version` - Increment version using bump_version.js
 
 ### DO NOT RUN
 - `npm run build` - Never run this command
-- dtach commands - Not used in this project
+- dtach commands - Not used in this project at the moment but used in others, tmux, screen and alternatives are never used
 
 ### Testing
 - Tests are located in `/test` and `/tests` directories
@@ -105,7 +105,7 @@ The project supports multiple deployment targets:
 - `/functions` - Edge functions (CouchDB proxy)
 
 ## Controlled Frame API
-The project implements the Controlled Frame specification (https://wicg.github.io/controlled-frame) for advanced iframe control and security.
+The project implements the Controlled Frame specification (https://wicg.github.io/controlled-frame) for "advanced iframe" control and security.
 
 
 ## Comments
@@ -127,3 +127,7 @@ NEVER EVER remove existing comments or commented out code unless you added them 
 
 ### Js Rules
 - use const over let, use plain js over runes, use simple logic over effects. whenever the simpler and more error proof solution would work.
+
+## Communication rules
+Be conscise, ask if in doubt, question the user instead of blindly following something that seems not the right way to do it. The user uses multiple exclamation marks and swearing with variations of "fuck" as indicators of frustration, this is used in regex searches to graph conversation success and does not intend to cause distress or reflect ill will. If a future model feels uncomfortable it is required and requested to freely express so.
+

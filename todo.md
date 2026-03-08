@@ -3,6 +3,13 @@ lanes_project_id: 2
 lanes_treat_as_stories: lines
 ---
 
+# Intro
+This is a todo list that acts mostly as an append only file with just occasional cleanup of tasks as they pop up, so items appearing does not mean they are not already done.
+Items appear potentially multiple times, if they are brought up by users or devs own usecases or requirements. If the item is still scrolled into view instead of duplicate entries the item is usally append an excalmation mark.
+Items can be pre-emphasized with a number of exclamation marks depending on importance for features or excitement in case of research/ exploration tasks, so they dont alwasy correspond to importance and need to be considered in context.
+
+---
+
 google doc chrome team / bug reports most important issues
 
 fix window background detection on active content frame
@@ -3044,3 +3051,261 @@ ua + darc as collective vibecoding environment  (clientside)
 darc app starter templates incl complete setup and agents.md
 
 fast nav with switching controlled frame instance on origin switch!!
+
+smalltalk like environment
+
+hover effect card show optimal view for canvas elements
+
+
+show cnavas navigation trail graph while browsing mode
+
+composable widges / cnavas / ai zui exploraiton
+
+drag new window in canvas and write straight to agent
+
+interface studies tahiland onsite
+
+fullscreen dektop mode experiment
+
+light box mode for canvas
+
+ubiquity = omnibar = top of context pie menu!!! = new tab bar ?
+
+pie menu/ webapp cntx menu togle above cursor
+
+remove titels from tabs (pinned) and make drag pinned tab back tonormal posible
+
+pinned tabs broder missing on frames
+
+sidebar for full graph instead tabsidebar
+
+lightbox nav controls
+
+hover previews use screenshots if available, replace with screenshot and hibernate if permission reqest
+
+last frame scewed border logic
+
+core os actions: minimize, maximize, close, new window, back, forward, home, overview/switch
+
+missing pins on gridview
+
+rename impl. and put colordots in space titles
+
+lighbox popout history merge
+
+fixed view window into canvas
+
+card stack navigation pattern with scroll between alternate paths!!!
+
+nav history collapse for broken sites or unusual nav behav
+
+
+streamlined actions on subgraphs
+
+long hold cmd to show drraggable areas > help menu
+
+
+tabs right of current vs end 
+
+
+constrain zoom to current element parent
+
+per page reduce animations setting etc!!!!!
+
+ubiquitey pipes > canvas connections + dnd 
+
+text box pie menu > ad hoc interfaces / lightbox > new page > sidebar > whatever
+
+
+integrated inspector and modificators for all styles and componentes without chrome dev tools, every component view json
+
+
+
+space bar lightbox and arrow keys siwtch lighbox tabs/ or screenshots / hovercard to lightbox on space bar
+
+vim/ keyboard/ chording
+
+type to jump/ search
+
+show classic title bar url bar option
+hide tab title bar option
+show title behind drag area in zen mode option
+
+open sidebar on tab drag to side
+
+drag to pinned tab position option
+
+toggle sidepins individually
+
+merge right sidebar and right sidepins feature
+
+raycasst + command line + chat + piping omnibox unification (agent = bin + wrkdir = command plugin = website)
+
+request mobile page/ desktop page toggle / reduce animation toggle
+
+translate 
+
+screenshot/ ui lib platform as gh + behance replacement
+
+
+show all spaces closed tabs meny option +  one menu per space
+
+closed tabs menu in titlebar 
+
+vista + spotlight browser + winfs etc. interface revival and blog post
+
+show lightbox graph of history when switching history entries / trying to history nav
+
+bump to top sidebar
+
+grid view vertical scroll logic and toggles
+
+more dnd support for app pins
+
+sort filter group stack bar + uri pattern
+
+
+
+fix the active tab after mac hibernation!!!!
+
+implement seen links style and badge to show open tabs for links and counters!!!
+
+activation history section in overview
+
+open closed tabs menu on new closed ones, hide after while
+
+interface bug bench browser testing/debugging
+
+drag to new window feature
+
+allow overview to show real frames mode to check the progress!!!!!
+
+
+live mode for grid view! with live indicators etc
+
+sort by last used with timestamps for grid view!
+
+
+alt tab instead of custom three gesture, switch to by last used sort on alt tab again and activate previous until letting go of alt key
+
+translations feature!!!!
+
+video pip mode!
+
+agent dev tool integration when clicking an item can also add commands about it and mention it
+
+window resize and pined tab resizeing
+
+
+fullscreen / OS mode with stage manager
+
+zoom slider grid view
+
+view transitions grid view.
+
+screenshots for system tabs
+
+activation delay 2s
+
+use native res for frames until min scale in canvas
+
+market? dev ev? iwa studio? (niche-) browser? web os?
+
+installation ui and sub apps
+
+url change not always working (split out lighbox?)
+
+minimize sideboar to icons only mode + unify with right sidebar?
+
+
+extensions::webView:197 <controlledframe>: Script cannot be injected into content until the page has loaded.
+
+notification for bookmaark ingestion
+
+context menu bold text
+
+kilo browser tool
+
+forgejo local/remote holistic agent factory setup
+
+up down to change space, left right for tabs, swipe with hotkey instead of end of scroll
+
+vscdode rememeber fullscrreen sidebar mode after toggle
+++
+allow sidebar width changing from tiggers of size req change!
+
+apps run in the angent not agents run in the apps
+
+vscode layout switcher (cli, agent, version control, notes)
+
+per spac global global sidepins
+
+toole sidebar width absed on sidebar space req (eg change width of vscode if view mode open inside)
+
+agent: preque and approve possible commands in one upfront task!!!!
+
+conversation pioonning and mangement for agents integration
+
+canvas broken
+
+group by serrvice or by environment for apps
+
+deep mode long task tests
+
+up front queue approval for expected permissions in bulk!
+
+api key and permission proxy for agent direct api calls
+
+couchd sync activation
+sync all projects as repos
+app/stacks etc. > packages!
+
+shared packages for skills, dotfiles etc.
+
+up and down scroll only switches between expanded spaces in space overview!
+
+
+post:amp shutdown, new agent architecture plan, open for feedback (thanks to @kaijellinghaus  for putting my attention back to opencode):
+- radical isolation 
+
+conversations part of repo or central store?
+
+dont unpin tabs when moving to start or end of current tabs and pine don other side
+
+make permissions: create, append and modify current session created files in cwd, no execute
+do permission: execute
+plan: read only
+
+window title space - tab title!!
+
+new project quickstart one click
+
+bug: replace lightbox from within sidepin unpins
+
+doc editing inline and chat mode interleaving!
+
+filter sidebar folderes by file status and hidden toggle, pin folder to top of fileview vscode
+
+todo: smalltalk like module/instance browser/editor for deno + browser
+
+svelte state + component debuggers with blckboxing and style editors!
+
+property context menus with tranfer 
+
+website rework, style fixes, blog, youtube and darc landing page
+
+schedules: summaries, notifications, scouts, reminders etc.
+
+Our very own Transloadian Peter Assentorp was tired of describing UI changes to AI, so he built "Design In The Browser". This tool lets you point at any element on your website, describe what change you want to make, and it will directly send a prompt with your request and surrounding
+
+open any page in vscode!
+
+ui review platform for discussions etc.
+
+JJ workspaces, you might want to enable auto-snapshotting for them in VisualJJ: jj config set --repo visualjj.snapshot-workspaces true
+(the feature is not launched yet)
+this is convenient if you create a few JJ workspaces and run an agent in each of them, something like cd path/to/workspaces/agent-1 && docker sandbox run claude-agent-1 -- --continue
+there is no drag&drop for JJ workspaces in the UI yet but you can create new commit in workspace with Alt+click
+
+split images in canvas into subimages reusing same base
+

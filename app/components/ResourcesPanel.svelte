@@ -890,9 +890,14 @@
         width: 100%;
         background: none;
         border: none;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 11px;
-        padding: 6px 10px;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: -0.008em;
+        line-height: 1;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        padding: 8px 14px;
         text-align: left;
         cursor: pointer;
         transition: background-color 0.15s ease;
