@@ -3309,3 +3309,75 @@ there is no drag&drop for JJ workspaces in the UI yet but you can create new com
 
 split images in canvas into subimages reusing same base
 
+evey proces is an agent! (unfy long running and ad hoc execution and async)
+
+add console error handling to traffic lights
+
+open logs or network monitoring for traffic light clickts
+
+jj workspace snapshot support
+
+pastagang agent performance with adio voice agent
+
+lets just sell servers. aka zo computer
+
+
+terminal 
+
+auto move panes on hovering neighbours!!!!!!!!!!
+
+bring window to foreground on launch
+
+detect darc launch accidents + restore window positions
+
+
+vscode disable copilot and getting started screen.
+
+remove butotn space in fullscreen
+
+jupyter/ jupyther zsh notebooks
+
+ical extension vscode
+
+pink candy theme
+
+kylo vector and ft indexing of everything
+
+async cron researcher and feed compiler
+
+canvas mode with connected workflow engine and spacial reasoning computing, sidebar contextualisation and inlinks live mode, table and onenote modes in canvas. pan two finger default, vert scroll nudging but not forcing, naming and referencing like variables in notebook. jupyter / bash integration
+
+
+exporter plugin for any website: save export without exfiltration possibilty
+
+
+removing closed tabs history entry does not update hvoercard 
+
+default browser mode that is more traditional
+move to leaflet mode with the horizontal scrolling
+tile view clicks
+dont google  domains without https://
+
+the permission dialog appears on top of the permission dialog explanation in the installer
+sidepin indicators better visibilty if pin open or closed
+
+move plus to right
+pin icon instead of bookmark and pin icon on the top pins
+move new tab button alwasy to right make more prominent
+show total tab number of tabs at end of overfow list
+
+
+hiding the sidebar must have button
+have default show the nav toolbar
+
+hoversettings option reappear
+
+UI decision and reasoning reference and mindmap of all the features
+
+show packaged types of things that the browser can do
+
+hovercard view shortcut including historylist
+
+hotkey to toggle the scrollmodes to be less confusing and more solid without breaking! or use three finger disable mac gestures?
+
+
