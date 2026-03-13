@@ -4,6 +4,7 @@
 
 
 (For installation instructions, see [./INSTALL.md])
+If you are looking for a simple App, you probably want the launcher: https://github.com/Agent54/xe-darc-launcher/releases/download/latest/Darc.dmg
 
 (For installation instructions, see [./INSTALL.md])
 
