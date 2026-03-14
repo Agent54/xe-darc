@@ -1,5 +1,8 @@
 # xe-darc
 
+
+Note: consider this a research preview, do not use to log into any accounts except purely test accounts. Do not visit websites you dont trust. We  take no responsibility for damages.
+
 ![Screenshot 2025-06-03 at 21 29 59](https://github.com/user-attachments/assets/b9ae22fa-a370-4d88-bd84-aaac4e13a9f1)
 
 
