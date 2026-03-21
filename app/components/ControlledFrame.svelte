@@ -863,6 +863,8 @@ ${zoomControl}
 
 ${contextMenu}
 
+window.testit= true;
+
 
 // Track hovered anchor elements
 let currentHoveredAnchor = null;

@@ -63,6 +63,8 @@
         }
     }
 
+    console.log('test sd')
+
     let unused = $state(Object.keys(resourceTypes).map(id => ({
         id,
         type: id,

@@ -3381,3 +3381,36 @@ hovercard view shortcut including historylist
 hotkey to toggle the scrollmodes to be less confusing and more solid without breaking! or use three finger disable mac gestures?
 
 
+download, read later, snippets and screenshot foder as first level citicens for intelligence and background memories
+
+
+codex + claude cli subagents
+
+indicate background tab opens
+
+emulate mousetrap?
+
+ucan apple card UI concept!
+
+Looking for comments/ feedback on the security architecture for darc i draft:
+- all internal communication happens with unix sockets with filedescriptors in the app home dir including dev tool protocol
+- on installation the darc daemon sets up up a client server self signed cert for mTLS with a browser policy to use for internal connections, this sets up a trusted connection of daemon to the IWA context
+- on first connection users will not have an identity and are asked to create 
+
+
+enable gpt 5.4 pro!!!!
+
+claude design direction.
+
+
+audience: as narrow as possible and only one persona. 
+
+
+middle aged, web savy, value security and control but not paranoi
+
+value: the user agent that is on your side
+
+take unannounced laptop away after seeing the page or product and ask how they feel and what the product is about
+
+airfoil agency
+

@@ -35,5 +35,3 @@ services:
           path: ./pnpm-lock.yaml
         - action: rebuild
           path: ./Dockerfile
-    # volumes:
-    #   - /var/run/docker.sock:/var/run/docker.sock
