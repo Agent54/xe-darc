@@ -209,6 +209,10 @@
     "midi": [
       "self",
       "*"
+    ],
+    "xr-spatial-tracking": [
+      "self",
+      "*"
     ]
   }
 }

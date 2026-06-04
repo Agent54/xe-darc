@@ -529,6 +529,20 @@ export default {
             }
         }
     },
+    'xr-spatial-tracking': {
+        name: 'XR Spatial Tracking',
+        icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 0 0 3.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0 1 20.25 6v1.5m0 9V18A2.25 2.25 0 0 1 18 20.25h-1.5m-9 0H6A2.25 2.25 0 0 1 3.75 18v-1.5M3.75 7.5 12 12m0 0 8.25-4.5M12 12v8.25" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 12 3.75 16.5M12 12l8.25 4.5" opacity="0.6" />
+        </svg>`,
+        description: 'Spatial tracking for WebXR immersive experiences',
+        availability: async () => {
+            if (!navigator.xr) {
+                return { available: false, error: 'WebXR API not supported by browser' }
+            }
+            return { available: true, error: null }
+        }
+    },
     'device-use': {
         name: 'Your Device Use',
         icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
