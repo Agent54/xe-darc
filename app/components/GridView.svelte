@@ -275,37 +275,27 @@
 
   function handleBackgroundClick(event) {
     const target = event.target
-    const isBackgroundClick = (
-      target === gridContainer || 
-      target.classList.contains('spaces-vertical-container') ||
-      target.classList.contains('space-section') ||
-      target.classList.contains('space-grid') ||
-      target.classList.contains('empty-space') ||
-      target.classList.contains('empty-space-icon') ||
-      target.classList.contains('empty-space-title') ||
-      target.classList.contains('empty-space-subtitle') ||
-      (target.tagName === 'svg' && target.closest('.empty-space')) ||
-      (target.tagName === 'path' && target.closest('.empty-space'))
-    )
     
-    // Don't handle if clicking on tabs or other interactive elements
+    // Interactive elements: clicking these should NOT close the grid view
     const isInteractiveElement = (
       target.closest('.grid-frame') ||
       target.closest('.new-tab-button') ||
-      target.closest('.grid-top-bar') ||
+      target.closest('.grid-view-tab') ||
+      target.closest('.grid-scope-toggle') ||
+      target.closest('.grid-collapse-btn') ||
       target.closest('.grid-empty-view') ||
       target.closest('.grid-context-menu') ||
       target.closest('.grid-menu-scrim') ||
       target.closest('.grid-color-picker-dropdown') ||
       target.closest('.grid-rename-overlay') ||
-      target.closest('.space-group-header')
+      target.closest('.grid-instance-meta') ||
+      target.closest('.space-group-left')
     )
     
     if (gridContextMenuId || gridColorPickerSpaceId || gridRenamingSpaceId) return
+    if (isInteractiveElement) return
     
-    if (isBackgroundClick && !isInteractiveElement) {
-      onViewModeChange({fromTileMode: true})
-    }
+    onViewModeChange({fromTileMode: true})
   }
 </script>
 
@@ -340,10 +330,10 @@
     </button>
     {#if spaceScope === 'all'}
       <button class="grid-collapse-btn" onmousedown={() => { const next = new Set(spaceOrder); collapsedSpaces = next; saveCollapsedSpaces(next) }} title="Collapse All" aria-label="Collapse All" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8Zm3.646-2.146a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 1 1-.708.708L8.5 3.707V6.5a.5.5 0 0 1-1 0V3.707L5.354 5.854a.5.5 0 0 1-.708 0Zm0 4.292a.5.5 0 0 0 0 .708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 12.293V9.5a.5.5 0 0 0-1 0v2.793l-2.146-2.147a.5.5 0 0 0-.708 0Z" clip-rule="evenodd"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8ZM4.646 2.146a.5.5 0 0 1 .708 0L8 4.793l2.646-2.647a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 0-.708Zm0 11.708a.5.5 0 0 0 .708 0L8 11.207l2.646 2.647a.5.5 0 0 0 .708-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 0 0 0 .708Z" clip-rule="evenodd"/></svg>
       </button>
       <button class="grid-collapse-btn" onmousedown={() => { const next = new Set(); collapsedSpaces = next; saveCollapsedSpaces(next) }} title="Expand All" aria-label="Expand All" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8ZM4.646 2.146a.5.5 0 0 1 .708 0L8 4.793l2.646-2.647a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 0-.708Zm0 11.708a.5.5 0 0 0 .708 0L8 11.207l2.646 2.647a.5.5 0 0 0 .708-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 0 0 0 .708Z" clip-rule="evenodd"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8Zm3.646-2.146a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 1 1-.708.708L8.5 3.707V6.5a.5.5 0 0 1-1 0V3.707L5.354 5.854a.5.5 0 0 1-.708 0Zm0 4.292a.5.5 0 0 0 0 .708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 12.293V9.5a.5.5 0 0 0-1 0v2.793l-2.146-2.147a.5.5 0 0 0-.708 0Z" clip-rule="evenodd"/></svg>
       </button>
     {/if}
   </div>
@@ -413,7 +403,7 @@
               class:active={spaceId === activeSpaceId}
               style="--space-color: {space?.color || '#5b5b5b'}"
               data-space-id={spaceId}
-              onmousedown={(e) => { if (e.button === 0) toggleSpaceCollapsed(spaceId) }}
+              onmousedown={(e) => { if (e.button === 0 && e.target.closest('.space-group-left')) toggleSpaceCollapsed(spaceId) }}
               oncontextmenu={(e) => handleSpaceHeaderContext(e, spaceId)}
               type="button"
             >
@@ -873,7 +863,7 @@
     margin-bottom: 10px;
     background: none;
     border: none;
-    cursor: pointer;
+    cursor: default;
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
   }
 
@@ -884,6 +874,7 @@
     flex-shrink: 0;
     padding: 5px 14px 5px 8px;
     border-radius: 8px;
+    cursor: pointer;
     transition: background 150ms ease;
   }
 
@@ -903,6 +894,7 @@
     flex: 1;
     height: 1px;
     background: rgba(255, 255, 255, 0.07);
+    cursor: default;
   }
 
   .space-group-header:hover .space-group-line {

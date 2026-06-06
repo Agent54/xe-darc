@@ -757,7 +757,8 @@
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
     window.addEventListener('darc-key-from-frame', handleFrameKey)
     window.addEventListener('close-apps-overlay', () => { closeAppsOverlay() })
-    window.addEventListener('darc-zoom-out-at-max-internal', handleZoomOutAtMaxInternal)
+    // Disabled: zoom-out gestures should not toggle the overview grid view.
+    // window.addEventListener('darc-zoom-out-at-max-internal', handleZoomOutAtMaxInternal)
     window.addEventListener('darc-zoom-in', handleZoomIn)
 
     function openNewTab() {  
