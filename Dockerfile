@@ -29,4 +29,4 @@ ENV container=true
 
 COPY . /app
 # COPY .claude/claude.json /root/.claude.json
-CMD pnpm dev
+CMD ["pnpm", "dev"]
