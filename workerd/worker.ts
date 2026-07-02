@@ -25,8 +25,8 @@ interface ExportedHandler<Env = unknown> {
 //   type StreamTextOnFinishCallback,
 //   type ToolSet
 // } from "ai"
-import { anthropic } from "@ai-sdk/anthropic"; // createAnthropic
-// import { openai } from "@ai-sdk/openai";
+import { anthropic, createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 // import { processToolCalls } from "./utils"
 // import { tools, executions } from "./tools"
 // import { env } from "cloudflare:workers";
@@ -62,16 +62,34 @@ function addCorsHeaders(response: Response): Response {
 // claude-3-7-sonnet-20250219
 // claude-4-sonnet-20250514
 
+type ModelConfig = {
+  provider?: string;
+  model?: string;
+  baseURL?: string;
+  apiKey?: string;
+}
+
 // Function to get model instance only when needed
-function getModel(modelId: string = 'claude-4-sonnet-20250514') {
-  console.log('Using model:', modelId)
-  switch (modelId) {
-    case 'claude-4-sonnet-20250514':
-      return anthropic('claude-4-sonnet-20250514')
-    case 'claude-3-5-haiku-20241022':
-    default:
-      return anthropic('claude-4-sonnet-20250514')
+function getModel({
+  provider = 'anthropic',
+  model = 'claude-4-sonnet-20250514',
+  baseURL,
+  apiKey
+}: ModelConfig = {}) {
+  console.log('Using model:', { provider, model, baseURL })
+
+  if (provider === 'openai-compatible') {
+    const openai = createOpenAI({
+      apiKey,
+      baseURL
+    })
+
+    return openai(model)
   }
+
+  const anthropicProvider = apiKey ? createAnthropic({ apiKey }) : anthropic
+
+  return anthropicProvider(model)
 }
 
 // Cloudflare AI Gateway
@@ -117,7 +135,7 @@ function getModel(modelId: string = 'claude-4-sonnet-20250514') {
 //         // Use the model set by onMessage
 //         const modelToUse = '' // FIXME: hwo to get this from the user? his.selectedModel;
         
-//         const selectedModel = getModel(modelToUse)
+//         const selectedModel = getModel({ model: modelToUse })
 
 //         console.log('Using model:', {modelToUse, selectedModel})
         

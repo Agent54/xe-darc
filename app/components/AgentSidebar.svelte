@@ -319,6 +319,25 @@
 		localStorage.setItem('selectedModel', selectedModel)
 	}
 
+	function getSelectedProviderConfig(model = selectedModel) {
+		if (typeof localStorage === 'undefined') {
+			return { provider: 'anthropic', model }
+		}
+
+		const provider = localStorage.getItem('selectedAiProvider')
+
+		if (provider === 'openai-compatible') {
+			return {
+				provider,
+				model: localStorage.getItem('openaiCompatibleModel')?.trim() || model,
+				baseURL: localStorage.getItem('openaiCompatibleBaseUrl')?.trim() || '',
+				apiKey: localStorage.getItem('aiToken_openai-compatible')?.trim() || ''
+			}
+		}
+
+		return { provider: 'anthropic', model }
+	}
+
 	async function handleStreamingChunk(data, { type } = {}) {
 		try {
 			console.log('handleStreamingChunk called with data:', data)
@@ -967,6 +986,7 @@
 			userMessage,
 			selectedTarget,
 			selectedModel,
+			providerConfig: getSelectedProviderConfig(selectedModel),
 			timestamp: new Date().toISOString(),
 			status: 'queued', // queued, processing, completed
 			paused: false // Add paused state for individual items
@@ -1018,6 +1038,9 @@
 	}
 
 	async function processMessage(queueItem) {
+		const providerConfig = queueItem.providerConfig || getSelectedProviderConfig(queueItem.selectedModel)
+		const activeModel = providerConfig.model || queueItem.selectedModel
+
 		// Add user message to history
 		const messageId = queueItem.id
 		const userMessage = {
@@ -1025,7 +1048,7 @@
 			role: 'user',
 			content: queueItem.userMessage,
 			timestamp: queueItem.timestamp,
-			model: queueItem.selectedModel
+			model: activeModel
 		}
 		
 		chatHistory = [...chatHistory, userMessage]
@@ -1043,13 +1066,14 @@
 					init: {
 						body: JSON.stringify({
 							id: crypto.randomUUID(),
+							...providerConfig,
 							messages: [
 								{
 									id: crypto.randomUUID(),
 									createdAt: new Date().toISOString(),
 									role: 'user',
 									content: queueItem.userMessage,
-									model: queueItem.selectedModel,
+									model: activeModel,
 									parts: [{ type: 'text', text: 'user context: ' + JSON.stringify(contextMetadata) + '\n\n' }, { type: 'text', text: queueItem.userMessage }]
 								}
 							]
@@ -1542,17 +1566,20 @@
         }
 
 		// Construct the message payload with tool invocation result
-		console.log('Sending model to backend:', selectedModel)
+		const providerConfig = getSelectedProviderConfig(selectedModel)
+		const activeModel = providerConfig.model || selectedModel
+		console.log('Sending model to backend:', activeModel)
 		const messagePayload = {
 			id: crypto.randomUUID(),
-			model: selectedModel,
+			...providerConfig,
+			model: activeModel,
 			messages: [
 				{
 					id: userMessage.id,
 					createdAt: userMessage.timestamp,
 					role: 'user',
 					content: userMessage.content,
-					model: selectedModel,
+					model: activeModel,
 					parts: [{
 						type: 'text',
 						text: userMessage.content
@@ -1672,17 +1699,20 @@
 		}
 		
 		// Construct the message payload with tool invocation result
-		console.log('Sending model to backend:', selectedModel)
+		const providerConfig = getSelectedProviderConfig(selectedModel)
+		const activeModel = providerConfig.model || selectedModel
+		console.log('Sending model to backend:', activeModel)
 		const messagePayload = {
 			id: crypto.randomUUID(),
-			model: selectedModel,
+			...providerConfig,
+			model: activeModel,
 			messages: [
 				{
 					id: userMessage.id,
 					createdAt: userMessage.timestamp,
 					role: 'user',
 					content: userMessage.content,
-					model: selectedModel,
+					model: activeModel,
 					parts: [{
 						type: 'text',
 						text: userMessage.content

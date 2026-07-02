@@ -10,6 +10,8 @@
     let selectedAiProvider = $state('writer')
     let customSearchUrl = $state('')
     let customNewTabUrl = $state('')
+    let openaiCompatibleBaseUrl = $state('')
+    let openaiCompatibleModel = $state('')
     let syncServerUrl = $state('https://darc.cloudless.one')
     let syncServerToken = $state('')
     let exportDirectory = $state(null)
@@ -21,6 +23,7 @@
     let aiTokens = $state({
         gemini: '',
         openai: '',
+        'openai-compatible': '',
         anthropic: '',
         elevenlabs: ''
     })
@@ -89,6 +92,12 @@
             description: 'Cloud-based agent model',
             icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://openai.com&size=64'
         },
+        {
+            id: 'openai-compatible',
+            name: 'OpenAI-compatible',
+            description: 'Custom endpoint, model, and API key',
+            icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://openai.com&size=64'
+        },
         { 
             id: 'anthropic', 
             name: 'Anthropic Claude', 
@@ -115,6 +124,9 @@
     const enabledProviders = $derived.by(() => {
         return aiProviders.filter(provider => {
             if (provider.id === 'writer' || provider.id === 'disabled') return true
+            if (provider.id === 'openai-compatible') {
+                return aiTokens[provider.id]?.trim() && openaiCompatibleBaseUrl.trim() && openaiCompatibleModel.trim()
+            }
             return aiTokens[provider.id]?.trim()
         })
     })
@@ -438,6 +450,26 @@
         
         // If the currently selected provider's token is cleared, switch to writer
         if (selectedAiProvider === providerId && !token.trim()) {
+            selectedAiProvider = 'writer'
+            localStorage.setItem('selectedAiProvider', 'writer')
+        }
+    }
+
+    function handleOpenAICompatibleBaseUrlChange(url) {
+        openaiCompatibleBaseUrl = url
+        localStorage.setItem('openaiCompatibleBaseUrl', url)
+
+        if (selectedAiProvider === 'openai-compatible' && !url.trim()) {
+            selectedAiProvider = 'writer'
+            localStorage.setItem('selectedAiProvider', 'writer')
+        }
+    }
+
+    function handleOpenAICompatibleModelChange(model) {
+        openaiCompatibleModel = model
+        localStorage.setItem('openaiCompatibleModel', model)
+
+        if (selectedAiProvider === 'openai-compatible' && !model.trim()) {
             selectedAiProvider = 'writer'
             localStorage.setItem('selectedAiProvider', 'writer')
         }
@@ -869,9 +901,12 @@ To import this data back into DARC, use the import function in Settings.
         customNewTabUrl = ''
         syncServerUrl = 'https://darc.cloudless.one'
         syncServerToken = ''
+        openaiCompatibleBaseUrl = ''
+        openaiCompatibleModel = ''
         aiTokens = {
             gemini: '',
             openai: '',
+            'openai-compatible': '',
             anthropic: '',
             elevenlabs: ''
         }
@@ -881,6 +916,8 @@ To import this data back into DARC, use the import function in Settings.
         localStorage.removeItem('selectedAiProvider')
         localStorage.removeItem('customSearchUrl')
         localStorage.removeItem('customNewTabUrl')
+        localStorage.removeItem('openaiCompatibleBaseUrl')
+        localStorage.removeItem('openaiCompatibleModel')
         localStorage.removeItem('syncServerUrl')
         localStorage.removeItem('syncServerToken')
         
@@ -900,6 +937,8 @@ To import this data back into DARC, use the import function in Settings.
         const savedAiProvider = localStorage.getItem('selectedAiProvider')
         const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
         const savedCustomNewTabUrl = localStorage.getItem('customNewTabUrl')
+        const savedOpenAICompatibleBaseUrl = localStorage.getItem('openaiCompatibleBaseUrl')
+        const savedOpenAICompatibleModel = localStorage.getItem('openaiCompatibleModel')
         const savedSyncServerUrl = localStorage.getItem('syncServerUrl')
 
         if (savedSearchEngine) defaultSearchEngine = savedSearchEngine
@@ -907,6 +946,8 @@ To import this data back into DARC, use the import function in Settings.
         if (savedAiProvider) selectedAiProvider = savedAiProvider
         if (savedCustomSearchUrl) customSearchUrl = savedCustomSearchUrl
         if (savedCustomNewTabUrl) customNewTabUrl = savedCustomNewTabUrl
+        if (savedOpenAICompatibleBaseUrl) openaiCompatibleBaseUrl = savedOpenAICompatibleBaseUrl
+        if (savedOpenAICompatibleModel) openaiCompatibleModel = savedOpenAICompatibleModel
         if (savedSyncServerUrl) syncServerUrl = savedSyncServerUrl
         
         // Load AI tokens
@@ -972,11 +1013,27 @@ To import this data back into DARC, use the import function in Settings.
                                  onclick={(e) => e.stopPropagation()}
                                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
                                  role="presentation">
+                                {#if provider.id === 'openai-compatible'}
+                                    <input
+                                        type="url"
+                                        bind:value={openaiCompatibleBaseUrl}
+                                        oninput={(e) => handleOpenAICompatibleBaseUrlChange(e.target.value)}
+                                        placeholder="Base URL"
+                                        class="ai-token-input"
+                                    />
+                                    <input
+                                        type="text"
+                                        bind:value={openaiCompatibleModel}
+                                        oninput={(e) => handleOpenAICompatibleModelChange(e.target.value)}
+                                        placeholder="Model name"
+                                        class="ai-token-input"
+                                    />
+                                {/if}
                                 <input 
                                     type="password"
                                     bind:value={aiTokens[provider.id]}
                                     oninput={(e) => handleAiTokenChange(provider.id, e.target.value)}
-                                    placeholder="API Token"
+                                    placeholder={provider.id === 'openai-compatible' ? 'API Key' : 'API Token'}
                                     class="ai-token-input"
                                 />
                             </div>
@@ -1701,6 +1758,9 @@ To import this data back into DARC, use the import function in Settings.
 
     /* AI Token Input Styles */
     .token-input-section {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
         margin-top: 8px;
         width: 100%;
     }
