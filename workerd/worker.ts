@@ -88,8 +88,10 @@ function getModel({
   }
 
   const anthropicProvider = apiKey ? createAnthropic({ apiKey }) : anthropic
+  // guard: non-Anthropic ids (e.g. openai-o3 from the picker) would 400 against the Anthropic API
+  const anthropicModel = model.startsWith('claude') ? model : 'claude-4-sonnet-20250514'
 
-  return anthropicProvider(model)
+  return anthropicProvider(anthropicModel)
 }
 
 // Cloudflare AI Gateway
