@@ -111,6 +111,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Trigger Xe Launcher version update
+        run: |
+          gh api \
+            --method POST \
+            repos/Agent54/xe-launcher/actions/workflows/update-xe-computer.yml/dispatches \
+            --raw-field ref=int \
+            --raw-field "inputs[version]=${{ steps.version.outputs.version }}" \
+            --raw-field "inputs[tag]=${{ steps.version.outputs.version_tag }}" \
+            --raw-field "inputs[channel]=nightly" \
+            --raw-field "inputs[source_repository]=${{ github.repository }}" \
+            --raw-field "inputs[bundle_url]=https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version_tag }}/darc.swbn" \
+            --raw-field "inputs[update_manifest_url]=https://github.com/${{ github.repository }}/releases/download/iwa-manifest/iwa-updates.json"
+        env:
+          GH_TOKEN: ${{ secrets.XE_LAUNCHER_TOKEN }}
+
   promote:
     if: github.ref_name == 'main'
     runs-on: ubuntu-latest
