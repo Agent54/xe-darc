@@ -1,8 +1,8 @@
 {
-  "name": "Darc",
+  "name": "Xe Computer",
   "version": "0.0.11",
   "update_manifest_url": "https://github.com/Agent54/xe-darc/releases/download/iwa-manifest/iwa-updates.json",
-  "short_name": "Darc",
+  "short_name": "Xe Computer",
   "description": "A xenon browser",
   "categories": [
     "productivity"
@@ -19,7 +19,8 @@
   "icons": [
     {
       "src": "/photon_logo.png",
-      "sizes": "any"
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ],
   "screenshots": [
@@ -28,13 +29,13 @@
       "sizes": "1164x951",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Darc browser with stacked tabs"
+      "label": "Xe Computer with stacked tabs"
     },
     {
       "src": "/screenshot.png",
       "sizes": "1164x951",
       "type": "image/png",
-      "label": "Darc browser with stacked tabs"
+      "label": "Xe Computer with stacked tabs"
     }
   ],
   "launch_handler": {
@@ -44,12 +45,13 @@
     {
       "name": "New Window",
       "short_name": "New Window",
-      "description": "Create new darc window",
+      "description": "Create new Xe Computer window",
       "url": "/#new",
       "icons": [
         {
           "src": "/photon_logo.png",
-          "sizes": "192x192"
+          "sizes": "512x512",
+          "type": "image/png"
         }
       ]
     },
@@ -61,7 +63,8 @@
       "icons": [
         {
           "src": "/photon_logo.png",
-          "sizes": "192x192"
+          "sizes": "512x512",
+          "type": "image/png"
         }
       ]
     },
@@ -73,31 +76,34 @@
       "icons": [
         {
           "src": "/photon_logo.png",
-          "sizes": "192x192"
+          "sizes": "512x512",
+          "type": "image/png"
         }
       ]
     },
     {
       "name": "Next",
       "short_name": "Next",
-      "description": "Create new darc window",
+      "description": "Create new Xe Computer window",
       "url": "/#new",
       "icons": [
         {
           "src": "/photon_logo.png",
-          "sizes": "192x192"
+          "sizes": "512x512",
+          "type": "image/png"
         }
       ]
     },
     {
       "name": "Previous",
       "short_name": "Previous",
-      "description": "Create new darc window",
+      "description": "Create new Xe Computer window",
       "url": "/#new",
       "icons": [
         {
           "src": "/photon_logo.png",
-          "sizes": "192x192"
+          "sizes": "512x512",
+          "type": "image/png"
         }
       ]
     }
