@@ -86,15 +86,36 @@ jobs:
           git diff --cached --quiet || git commit -m "release: v${{ steps.version.outputs.version }}"
           git push origin int
 
-      - name: Create version tag and release
+      - name: Create or update version release
         run: |
-          git tag ${{ steps.version.outputs.version_tag }}
-          git push origin ${{ steps.version.outputs.version_tag }}
-          gh release create ${{ steps.version.outputs.version_tag }} \
-            --title "v${{ steps.version.outputs.version }}" \
-            --notes "v${{ steps.version.outputs.version }} from commit ${{ github.sha }}" \
-            --prerelease \
-            darc.swbn
+          TAG="${{ steps.version.outputs.version_tag }}"
+          HEAD_SHA=$(git rev-parse HEAD)
+          REMOTE_TAG_SHA=$(git ls-remote --tags origin "refs/tags/${TAG}" | cut -f1)
+
+          if [ -n "$REMOTE_TAG_SHA" ]; then
+            if [ "$REMOTE_TAG_SHA" != "$HEAD_SHA" ]; then
+              echo "::error::Tag ${TAG} already points to ${REMOTE_TAG_SHA}, expected ${HEAD_SHA}. Refusing to move an existing release tag."
+              exit 1
+            fi
+            echo "Reusing existing tag ${TAG} at ${HEAD_SHA}"
+          else
+            git tag "$TAG"
+            git push origin "refs/tags/${TAG}"
+          fi
+
+          if gh release view "$TAG" &>/dev/null; then
+            gh release upload "$TAG" --clobber darc.swbn
+            gh release edit "$TAG" \
+              --title "v${{ steps.version.outputs.version }}" \
+              --notes "v${{ steps.version.outputs.version }} from commit ${HEAD_SHA}" \
+              --prerelease
+          else
+            gh release create "$TAG" \
+              --title "v${{ steps.version.outputs.version }}" \
+              --notes "v${{ steps.version.outputs.version }} from commit ${HEAD_SHA}" \
+              --prerelease \
+              darc.swbn
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
