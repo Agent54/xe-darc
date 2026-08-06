@@ -115,7 +115,7 @@ jobs:
         run: |
           gh api \
             --method POST \
-            repos/Agent54/xe-launcher/actions/workflows/update-xe-computer.yml/dispatches \
+            repos/Agent54/xe-computer-launcher/actions/workflows/update-xe-computer.yml/dispatches \
             --raw-field ref=int \
             --raw-field "inputs[version]=${{ steps.version.outputs.version }}" \
             --raw-field "inputs[tag]=${{ steps.version.outputs.version_tag }}" \
