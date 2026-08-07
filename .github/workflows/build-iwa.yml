@@ -136,14 +136,9 @@ jobs:
         run: |
           gh api \
             --method POST \
-            repos/Agent54/xe-computer-launcher/actions/workflows/update-xe-computer.yml/dispatches \
+            repos/Agent54/xe-computer-launcher/actions/workflows/xe-computer-version-bump.yml/dispatches \
             --raw-field ref=int \
-            --raw-field "inputs[version]=${{ steps.version.outputs.version }}" \
-            --raw-field "inputs[tag]=${{ steps.version.outputs.version_tag }}" \
-            --raw-field "inputs[channel]=nightly" \
-            --raw-field "inputs[source_repository]=${{ github.repository }}" \
-            --raw-field "inputs[bundle_url]=https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version_tag }}/darc.swbn" \
-            --raw-field "inputs[update_manifest_url]=https://github.com/${{ github.repository }}/releases/download/iwa-manifest/iwa-updates.json"
+            --raw-field "inputs[version]=${{ steps.version.outputs.version }}"
         env:
           GH_TOKEN: ${{ secrets.XE_LAUNCHER_TOKEN }}
 
