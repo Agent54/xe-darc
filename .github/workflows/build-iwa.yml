@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: iwa-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     if: github.ref_name == 'int'
@@ -18,6 +22,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: int
+          fetch-depth: 0
+
+      - name: Refresh integration branch and tags
+        run: |
+          git fetch origin int --tags --force
+          git checkout -B int origin/int
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -39,32 +51,49 @@ jobs:
 
       - name: Bump version
         id: version
+        shell: bash
         run: |
           VERSION_INPUT="${{ github.event.inputs.version }}"
           if [ -n "$VERSION_INPUT" ]; then
-            export VERSION="$VERSION_INPUT"
+            VERSION="${VERSION_INPUT#v}"
+            VERSION="${VERSION#darc-v}"
+          else
+            LATEST_VERSION=""
+            while IFS= read -r TAG; do
+              if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+                LATEST_VERSION="${BASH_REMATCH[1]}"
+                break
+              fi
+            done < <(git tag --list 'v*' --sort=-version:refname)
+
+            if [ -z "$LATEST_VERSION" ]; then
+              LATEST_VERSION="0.0.0"
+            fi
+
+            IFS=. read -r VERSION_MAJOR VERSION_MINOR VERSION_PATCH <<< "$LATEST_VERSION"
+            VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.$((VERSION_PATCH + 1))"
           fi
 
+          VERSION_COMPONENT='(0|[1-9][0-9]{0,8})'
+          if [[ ! "$VERSION" =~ ^${VERSION_COMPONENT}\.${VERSION_COMPONENT}\.${VERSION_COMPONENT}$ ]]; then
+            echo "::error::Invalid release version: ${VERSION}"
+            exit 1
+          fi
+
+          VERSION_TAG="v${VERSION}"
+          if git show-ref --tags --verify --quiet "refs/tags/${VERSION_TAG}"; then
+            echo "::error::Release tag ${VERSION_TAG} already exists. Choose a new version or leave the version input empty."
+            exit 1
+          fi
+
+          export VERSION
           export CHANNEL="nightly"
-          export VERSION_TAG="placeholder"
+          export VERSION_TAG
           export REPO="${{ github.repository }}"
           node bump_version.js
 
-          ACTUAL_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('./package.json','utf8')).version")
-          echo "version=$ACTUAL_VERSION" >> $GITHUB_OUTPUT
-          echo "version_tag=v${ACTUAL_VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Fix iwa-updates.json download URL
-        run: |
-          node -e "
-            const fs = require('fs');
-            const m = JSON.parse(fs.readFileSync('./iwa-updates.json','utf-8'));
-            const v = '${{ steps.version.outputs.version }}';
-            const tag = '${{ steps.version.outputs.version_tag }}';
-            const entry = m.versions.find(e => e.version === v);
-            if (entry) entry.src = 'https://github.com/${{ github.repository }}/releases/download/' + tag + '/darc.swbn';
-            fs.writeFileSync('./iwa-updates.json', JSON.stringify(m, null, 2));
-          "
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
 
       # FIXME: use secret env var instead of file!
       - name: Write signing key
