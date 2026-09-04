@@ -75,6 +75,13 @@ function persistActiveSpaceForWindow(spaceId, windowId = window.darcWindowId) {
 
     const parsedWindowId = parseWindowId(windowId)
     if (!parsedWindowId) {
+        window.darcWindowIdPromise.then(resolvedWindowId => {
+            if (spaceMeta.activeSpace === spaceId) {
+                persistActiveSpaceForWindow(spaceId, resolvedWindowId)
+            }
+        }).catch(error => {
+            console.error('Failed to persist active space for window', error)
+        })
         return
     }
 
@@ -83,7 +90,9 @@ function persistActiveSpaceForWindow(spaceId, windowId = window.darcWindowId) {
         return
     }
 
-    localStorage.setItem(storageKey, spaceId)
+    if (localStorage.getItem(storageKey) !== spaceId) {
+        localStorage.setItem(storageKey, spaceId)
+    }
 }
 
 function getTabActiveHistoryStorageKey(spaceId, windowId = window.darcWindowId) {
@@ -187,7 +196,10 @@ function writeTabActiveHistoryEntries(spaceId, windowId = window.darcWindowId) {
         })
     }
 
-    localStorage.setItem(storageKey, JSON.stringify(entries))
+    const serializedEntries = JSON.stringify(entries)
+    if (localStorage.getItem(storageKey) !== serializedEntries) {
+        localStorage.setItem(storageKey, serializedEntries)
+    }
 }
 
 function persistTabActiveHistoryForSpace(spaceId) {
@@ -334,7 +346,7 @@ if (remote) {
 }
 
 const spaceMeta = $state({
-    activeSpace: null,
+    activeSpace: 'darc:space_default',
     activeSpacesOrder: [], // Track order of active spaces for previous space switching
     spaceOrder: [],
     closedTabs: [],
@@ -533,7 +545,8 @@ const refresh = throttle(async function (spaceId) {
     }
 
     console.log('setting active tab id b', { current : spaceMeta.activeTabId, title: docs[spaceMeta.activeTabId]?.title || '', activeTabIdExists, list :spaces[spaceMeta.activeSpace]?.activeTabsOrder })
-    if (spaceMeta.activeTabId && !activeTabIdExists && spaces[spaceMeta.activeSpace]?.activeTabsOrder?.length > 0) {
+    const shouldReconcileActiveTab = !spaceId || spaceId === spaceMeta.activeSpace
+    if (shouldReconcileActiveTab && spaceMeta.activeTabId && !activeTabIdExists && spaces[spaceMeta.activeSpace]?.activeTabsOrder?.length > 0) {
         removedActiveTabId(spaceMeta.activeTabId)
     }
 
@@ -541,6 +554,10 @@ const refresh = throttle(async function (spaceId) {
     spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
     
     if (initialLoad) {
+        if (!spaces[spaceMeta.activeSpace]) {
+            spaceMeta.activeSpace = spaceMeta.spaceOrder[0] || null
+        }
+
         if (spaceMeta.activeSpace && spaceMeta.activeSpacesOrder.length === 0) {
             spaceMeta.activeSpacesOrder = [spaceMeta.activeSpace]
         }
@@ -555,24 +572,26 @@ const refresh = throttle(async function (spaceId) {
             const lastActiveTabId = getLastActiveNonPinnedTabId(spaceMeta.activeSpace)
             if (lastActiveTabId) {
                 spaceMeta.activeTabId = lastActiveTabId
-                markTabActive(spaceMeta.activeSpace, lastActiveTabId, Date.now(), true)
+                markTabActive(spaceMeta.activeSpace, lastActiveTabId)
             }
         }
     }
+
+    await ensureSpaceHasTab(spaceMeta.activeSpace, { shouldFocus: true })
     
     initialLoad = false
     // console.timeEnd('updt')
 }, 200)
 
-function removedActiveTabId (previousActiveTabId) {
+function removedActiveTabId (previousActiveTabId, spaceId = spaceMeta.activeSpace, selectReplacement = spaceId === spaceMeta.activeSpace && spaceMeta.activeTabId === previousActiveTabId) {
     let previousIndex = 1
-    const activeSpace = spaces[spaceMeta.activeSpace]
+    const activeSpace = spaces[spaceId]
 
     if (!activeSpace) {
         return
     }
 
-    const activeHistory = getSpaceActiveHistoryEntries(spaceMeta.activeSpace)
+    const activeHistory = getSpaceActiveHistoryEntries(spaceId)
     if (activeHistory.length === 0) {
         return
     }
@@ -585,6 +604,11 @@ function removedActiveTabId (previousActiveTabId) {
         }
         return true
     })
+
+    if (!selectReplacement) {
+        persistTabActiveHistoryForSpace(spaceId)
+        return
+    }
 
     const nextEntry = activeSpace.activeTabsOrder[previousIndex - 1]
     const nextTabId = getTabIdFromActiveHistoryEntry(nextEntry)
@@ -599,9 +623,9 @@ function removedActiveTabId (previousActiveTabId) {
     
     spaceMeta.activeTabId = nextTabId
     if (nextTabId) {
-        markTabActive(spaceMeta.activeSpace, nextTabId, Date.now(), true)
+        markTabActive(spaceId, nextTabId, Date.now(), true)
     } else {
-        persistTabActiveHistoryForSpace(spaceMeta.activeSpace)
+        persistTabActiveHistoryForSpace(spaceId)
     }
 }
 
@@ -669,6 +693,23 @@ function activate(tabId) {
     return null
 }
 
+function ensureSpaceHasTab(spaceId, { shouldFocus = false } = {}) {
+    const space = spaces[spaceId]
+    if (!space) {
+        return null
+    }
+
+    const hasOpenTab = space.tabs?.some(tab => {
+        return tab.type === 'tab' && !tab.archive && !tab.preview && !tab.lightbox
+    })
+
+    if (hasOpenTab) {
+        return null
+    }
+
+    return data.newTab(spaceId, { shouldFocus })
+}
+
 function activateSpace(spaceId) {
     if (!spaces[spaceId]) {
         console.warn('activateSpace: space does not exist:', spaceId)
@@ -682,6 +723,7 @@ function activateSpace(spaceId) {
     
     spaceMeta.activeSpace = spaceId
     persistActiveSpaceForWindow(spaceId)
+    ensureSpaceHasTab(spaceId, { shouldFocus: true })
     
     return true
 }
@@ -697,11 +739,29 @@ function getPreviousActiveSpace() {
 function closeTab (spaceId, tabId) {
     const tab = docs[tabId]
 
+    if (!tab) {
+        return
+    }
+
     if (frames[tabId]) {
         frames[tabId].frame = null
     }
 
-    removedActiveTabId(tabId)
+    const space = spaces[spaceId]
+    if (space?.tabs) {
+        space.tabs = space.tabs.filter(openTab => openTab.id !== tabId)
+    }
+    const wasActive = spaceMeta.activeSpace === spaceId && spaceMeta.activeTabId === tabId
+    removedActiveTabId(tabId, spaceId, wasActive)
+
+    if (wasActive && !space?.tabs?.some(openTab => openTab.id === spaceMeta.activeTabId)) {
+        const nextTab = space?.tabs?.find(openTab => openTab.type === 'tab' && !openTab.archive && !openTab.preview && !openTab.lightbox)
+        if (nextTab) {
+            activate(nextTab.id)
+        }
+    }
+
+    ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
    
     db.bulkDocs([
         ...(previews[tabId]?.tabs.map(prev => {
@@ -771,68 +831,6 @@ const destroy = $effect.root(() => {
     // $effect(() => {
     //     console.log('--------',$state.snapshot(frames['darc:tab_a1f1673e-2811-40cb-a5f1-1c719723e244']).forceHibernated)
     // })
-    
-    $effect(() => {
-        if (!spaceMeta.activeSpace && Object.keys(spaces).length > 0) {
-            // Set the first space as active
-            // const firstSpaceId = Object.keys(spaces)[0]
-            spaceMeta.activeSpace = 'darc:space_default'
-
-           
-            // FIXME: // Set the first tab of that space as active
-            // const firstSpace = spaces[firstSpaceId]
-            // if (firstSpace?.tabs?.length > 0) {
-            //     spaceMeta.activeTab = firstSpace.tabs[0]
-            // }
-        }
-    })
-
-    // Save active space to localStorage whenever it changes
-    $effect(() => {
-        const activeSpace = spaceMeta.activeSpace
-        if (!activeSpace) {
-            return
-        }
-
-        window.darcWindowIdPromise
-            .then(windowId => {
-                const parsedWindowId = parseWindowId(windowId)
-                if (!parsedWindowId) {
-                    return
-                }
-
-                // Skip stale async writes if active space changed while waiting for window id.
-                if (spaceMeta.activeSpace !== activeSpace) {
-                    return
-                }
-
-                persistActiveSpaceForWindow(activeSpace, parsedWindowId)
-            })
-            .catch(error => {
-                console.error('Failed to persist active space for window', error)
-            })
-    })
-
-    $effect(() => {
-        const spaceId = spaceMeta.activeSpace
-        const activeHistory = spaceId && spaces[spaceId]?.activeTabsOrder
-
-        if (!spaceId || !activeHistory) {
-            return
-        }
-
-        window.darcWindowIdPromise
-            .then(windowId => {
-                if (spaceMeta.activeSpace !== spaceId) {
-                    return
-                }
-
-                writeTabActiveHistoryEntries(spaceId, windowId)
-            })
-            .catch(error => {
-                console.error('Failed to persist tab active history for window', error)
-            })
-    })
 
     return () => {
         // console.log('---- unsubscribing from changes feed ----')
@@ -996,7 +994,7 @@ function getTabLastActiveAt(tabId, spaceId = spaceMeta.activeSpace) {
     return frames[tabId]?.active || 0
 }
 
-export default {
+const data = {
     origins,
     spaceMeta,
     spaces,
@@ -1185,6 +1183,7 @@ export default {
 
     newSpace: () => {
         const _id = `darc:space_${crypto.randomUUID()}`
+        const name = 'Space ' + (Object.keys(spaces).length + 1)
         const space = {
             _id,
             spaceId: _id,
@@ -1192,10 +1191,12 @@ export default {
             order: Date.now(),
             created: Date.now(),
             color: projectColors[Object.keys(spaces).length % projectColors.length].color,
-            name: 'Space ' + (Object.keys(spaces).length + 1)
+            name
         }
 
+        spaces[_id] = { ...space, tabs: [], activeTabsOrder: [] }
         db.put(space)
+        data.newTab(_id)
 
         db.put({
             _id: `darc:activity_${crypto.randomUUID()}`,
@@ -1203,7 +1204,7 @@ export default {
             archive: 'history',
             action: 'space_create',
             spaceId: _id,
-            name: 'Space ' + (Object.keys(spaces).length + 1),
+            name,
             created: Date.now()
         })
     },
@@ -1213,6 +1214,8 @@ export default {
         spaceMeta.spaceOrder = spaceMeta.spaceOrder.filter(id => id !== spaceId)
         if (spaceMeta.activeSpace === spaceId) {
             spaceMeta.activeSpace = spaceMeta.spaceOrder[0] || null
+            persistActiveSpaceForWindow(spaceMeta.activeSpace)
+            ensureSpaceHasTab(spaceMeta.activeSpace, { shouldFocus: true })
         }
     },
 
@@ -2032,3 +2035,5 @@ export default {
         return null
     }
 }
+
+export default data

@@ -2272,7 +2272,7 @@
                         }}
                         onCloseTab={() => {
                             if (!hoveredTab?.id) return
-                            data.closeTab(hoveredTab.id)
+                            data.closeTab(hoveredTab.spaceId, hoveredTab.id)
                             hovercardUrlBarExpanded = false
                             hoveredTab = null
                             hovercardShowTime = null
