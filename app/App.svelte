@@ -480,10 +480,7 @@
         }
     }
 
-    // Save open sidebars to localStorage whenever they change (but only after initial load)
-    $effect(() => {
-        if (!sidebarStateLoaded) return // Don't save during initial load
-        
+    function persistOpenSidebars() {
         try {
             const sidebarArray = Array.from(openSidebars)
             localStorage.setItem('openSidebars', JSON.stringify(sidebarArray))
@@ -491,26 +488,12 @@
         } catch (error) {
             console.warn('Failed to save sidebar state:', error)
         }
-    })
-    
-    // Save custom pinned widths to localStorage (only when not resizing)
-    $effect(() => {
-        if (!sidebarStateLoaded || isResizingAnySidebar) return // Don't save during resize or initial load
-        
-        if (customLeftPinnedWidth !== null) {
-            localStorage.setItem('customLeftPinnedWidth', customLeftPinnedWidth.toString())
-        }
-        if (customRightPinnedWidth !== null) {
-            localStorage.setItem('customRightPinnedWidth', customRightPinnedWidth.toString())
-        }
-        if (customRightSidebarWidth !== null) {
-            localStorage.setItem('customRightSidebarWidth', customRightSidebarWidth.toString())
-        }
-        if (customTabSidebarWidth !== null) {
-            localStorage.setItem('customTabSidebarWidth', customTabSidebarWidth.toString())
-        }
+    }
+
+    function toggleTabSidebar() {
+        tabSidebarVisible = !tabSidebarVisible
         localStorage.setItem('tabSidebarVisible', tabSidebarVisible.toString())
-    })
+    }
 
     // Determine if sidebars are newly opened (but not when switching)
     // This effect is now handled by updateSidebarState() function to prevent timing conflicts
@@ -2166,6 +2149,7 @@
             openSidebars.clear()
             openSidebars.add(targetSidebar)
             openSidebars = new Set(openSidebars)
+            persistOpenSidebars()
             updateSidebarState()
             
             if (targetSidebar === 'resources') {
@@ -2212,6 +2196,7 @@
             openSidebars.add(sidebarName)
         }
         openSidebars = new Set(openSidebars)
+        persistOpenSidebars()
         updateSidebarState()
     }
 
@@ -2223,6 +2208,7 @@
 
         openSidebars.delete(sidebarName)
         openSidebars = new Set(openSidebars)
+        persistOpenSidebars()
         updateSidebarState()
         
         if (sidebarName === 'resources') {
@@ -2319,9 +2305,8 @@
             resizeAnimationFrame = null
         }
         
-        // Trigger persistence by updating the state (effect will save to localStorage)
-        if (customLeftPinnedWidth !== null) {
-            customLeftPinnedWidth = customLeftPinnedWidth // Force reactivity
+        if (customLeftPinnedWidth !== null && customLeftPinnedWidth !== resizeStartWidth) {
+            localStorage.setItem('customLeftPinnedWidth', customLeftPinnedWidth.toString())
         }
         
         // Clear the visible frame tracking
@@ -2368,9 +2353,8 @@
             resizeAnimationFrame = null
         }
         
-        // Trigger persistence by updating the state (effect will save to localStorage)
-        if (customRightPinnedWidth !== null) {
-            customRightPinnedWidth = customRightPinnedWidth // Force reactivity
+        if (customRightPinnedWidth !== null && customRightPinnedWidth !== resizeStartWidth) {
+            localStorage.setItem('customRightPinnedWidth', customRightPinnedWidth.toString())
         }
         
         // Clear the visible frame tracking
@@ -2417,9 +2401,8 @@
             resizeAnimationFrame = null
         }
         
-        // Trigger persistence by updating the state (effect will save to localStorage)
-        if (customRightSidebarWidth !== null) {
-            customRightSidebarWidth = customRightSidebarWidth // Force reactivity
+        if (customRightSidebarWidth !== null && customRightSidebarWidth !== resizeStartWidth) {
+            localStorage.setItem('customRightSidebarWidth', customRightSidebarWidth.toString())
         }
         
         // Clear the visible frame tracking
@@ -2449,6 +2432,8 @@
             tabSidebarHasDragged = true
         }
         
+        if (!tabSidebarHasDragged) return
+
         // Cancel any pending animation frame
         if (resizeAnimationFrame) {
             cancelAnimationFrame(resizeAnimationFrame)
@@ -2477,12 +2462,11 @@
         
         // If it was a click (not drag), toggle sidebar visibility
         if (wasClick) {
-            tabSidebarVisible = !tabSidebarVisible
+            toggleTabSidebar()
         }
         
-        // Trigger persistence by updating the state (effect will save to localStorage)
-        if (customTabSidebarWidth !== null) {
-            customTabSidebarWidth = customTabSidebarWidth // Force reactivity
+        if (tabSidebarHasDragged && customTabSidebarWidth !== null && customTabSidebarWidth !== resizeStartWidth) {
+            localStorage.setItem('customTabSidebarWidth', customTabSidebarWidth.toString())
         }
     }
 
@@ -2996,6 +2980,7 @@
             untrack(() => {
                 openSidebars.add('resources')
                 openSidebars = new Set(openSidebars)
+                persistOpenSidebars()
                 resourcesSidebarAutoOpened = true
             })
         }
@@ -3327,7 +3312,7 @@
                     title={tabSidebarVisible ? "Hide sidebar" : "Show sidebar"} 
                     aria-label={tabSidebarVisible ? "Hide sidebar" : "Show sidebar"}
                     class:active={tabSidebarVisible}
-                    onmousedown={() => { tabSidebarVisible = !tabSidebarVisible }}>
+                    onmousedown={toggleTabSidebar}>
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                     <rect x="3" y="3" width="18" height="18" rx="2" stroke-linecap="round" stroke-linejoin="round" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v18" />
