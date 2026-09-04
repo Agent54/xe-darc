@@ -154,6 +154,20 @@ import { mount } from 'svelte'
 import App from './App.svelte'
 import data from './data.svelte.js'
 
+const initialWindowSizeKey = 'initialWindowSizeApplied-v1'
+const appDisplayModes = ['standalone', 'window-controls-overlay', 'unframed']
+const isAppWindow = window.location.protocol === 'isolated-app:' || appDisplayModes.some(mode => {
+  return window.matchMedia(`(display-mode: ${mode})`).matches
+})
+
+if (isAppWindow && localStorage.getItem(initialWindowSizeKey) !== 'true') {
+  const targetWidth = Math.min(Math.round(window.outerWidth * 1.5), window.screen.availWidth)
+  const targetHeight = Math.min(Math.round(window.outerHeight * 1.5), window.screen.availHeight)
+
+  window.resizeTo(targetWidth, targetHeight)
+  localStorage.setItem(initialWindowSizeKey, 'true')
+}
+
 const app = mount(App, {
   target: document.getElementById('app'),
 })

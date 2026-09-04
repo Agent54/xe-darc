@@ -466,12 +466,10 @@
             if (savedTabSidebarWidth !== null) {
                 customTabSidebarWidth = parseInt(savedTabSidebarWidth, 10)
             }
-            
+
             const savedTabSidebarVisible = localStorage.getItem('tabSidebarVisible')
             if (savedTabSidebarVisible !== null) {
                 tabSidebarVisible = savedTabSidebarVisible === 'true'
-            } else {
-                tabSidebarVisible = true
             }
             
             // Mark sidebar state as loaded (whether we found saved state or not)
