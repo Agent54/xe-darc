@@ -29,7 +29,6 @@
     let tabListRef = $state(null)
     let spacesListRef = $state(null)
     let openMenuId = $state(null)
-    let newSpaceMenuOpen = $state(false)
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
     let closedTabsHideTimeout = null
@@ -117,14 +116,9 @@
         tabGroupExpanded = !tabGroupExpanded
     }
     
-    // Tabs list vertical rubberband scroll state (per space for visual state, global for accumulation)
-    let tabsListVerticalRubberBand = $state({}) // { [spaceId]: offset }
-    let tabsListVerticalAccumulated = 0 // global accumulated deltaY - resets on horizontal scroll
     let tabsListSpacerVisible = $state({}) // { [spaceId]: boolean }
-    let tabsListSpacerHeight = $state({}) // { [spaceId]: number } - current spacer height (0-250)
     let tabsListSeparatorAdded = $state({}) // { [spaceId]: boolean } - tracks if separator was added
-    let tabsListScrollStartPosition = 0 // global scrollTop when gesture started
-    let tabsListScrollGestureTimeout = null // global timeout id
+    const tabsListSpacerHeight = 36
     
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
@@ -228,10 +222,9 @@
             commitRename()
         }
         // Close dropdown menus when sidebar actually hides (after 340ms delay)
-        if (newSpaceMenuOpen || openMenuId !== null) {
+        if (openMenuId !== null) {
             if (menuCloseTimeout) clearTimeout(menuCloseTimeout)
             menuCloseTimeout = setTimeout(() => {
-                newSpaceMenuOpen = false
                 openMenuId = null
             }, 340)
         }
@@ -315,9 +308,6 @@
         horizontalScrollTimeout = setTimeout(() => {
             isHorizontalScrolling = false
         }, 150)
-        
-        // Reset vertical tabs list accumulation on horizontal scroll
-        tabsListVerticalAccumulated = 0
         
         // Block all scroll during closing animation
         if (isClosingMultiSpace) {
@@ -561,132 +551,6 @@
         document.removeEventListener('mouseup', handleLaneDividerMouseUp)
     }
     
-    // Tabs list vertical rubberband scroll handling
-    let tabsListSnapTimeouts = {}
-    
-    function handleTabsListWheel(event, spaceId) {
-        const tabsList = event.currentTarget
-        if (!tabsList || tabSearchQuery) return
-        
-
-        
-        const scrollTop = tabsList.scrollTop
-        
-        // Only handle vertical scroll down when at top
-        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
-        
-        const resistance = 0.05
-        const threshold = 18
-        const maxStretch = 25
-        const activationThreshold = 400
-        
-        // DEBUG: completely disable rubberband to test
-        // return
-        const maxSpacerHeight = 250
-        const maxStartPositionForActivation = 500
-        
-        // Track scroll gesture start position - only capture if not yet set and we're not already at top
-        if (tabsListScrollStartPosition === 0 && scrollTop > 5) {
-            tabsListScrollStartPosition = scrollTop
-        }
-        // Reset start position after gesture ends (no scroll events for 150ms)
-        if (tabsListScrollGestureTimeout) clearTimeout(tabsListScrollGestureTimeout)
-        tabsListScrollGestureTimeout = setTimeout(() => {
-            tabsListScrollStartPosition = 0
-            tabsListVerticalAccumulated = 0
-        }, 150)
-        
-        // If spacer is visible and growing, continue growing it (no rubberband, just grow)
-        if (tabsListSpacerVisible[spaceId]) {
-            // Ensure rubberband is disabled during expansion
-            if (tabsListVerticalRubberBand[spaceId]) {
-                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-            }
-            
-            const currentHeight = tabsListSpacerHeight[spaceId] || 0
-            if (currentHeight < maxSpacerHeight && scrollTop <= 5 && event.deltaY < 0) {
-                event.preventDefault()
-                const growAmount = Math.abs(event.deltaY)
-                tabsListSpacerHeight = {
-                    ...tabsListSpacerHeight,
-                    [spaceId]: Math.min(currentHeight + growAmount, maxSpacerHeight)
-                }
-            }
-            return
-        }
-        
-        // Only activate when nearly at top (within 20px)
-        if (scrollTop > 20) {
-            tabsListVerticalAccumulated = 0
-            return
-        }
-        
-        // console.log('tabsListScrollStartPosition', tabsListScrollStartPosition)
-        // console.log('distanceScrolled', Math.abs(tabsListScrollStartPosition - scrollTop))
-        // Don't activate rubberband if scroll started more than 500px from top
-        if (tabsListScrollStartPosition > maxStartPositionForActivation) {
-            return
-        }
-        
-       
-        // Don't activate if scrolled more than 400px during this gesture
-        const distanceScrolled = Math.abs(tabsListScrollStartPosition - scrollTop)
-        if (distanceScrolled > 400) {
-            tabsListVerticalAccumulated = 0
-            return
-        }
-        
-        // Check if scrolling up while at top (deltaY < 0 = scroll up gesture = pulling content down)
-        if (scrollTop <= 5 && event.deltaY < 0) {
-            // Accumulate vertical scroll before activating spring
-            tabsListVerticalAccumulated += Math.abs(event.deltaY)
-            
-            // console.log('[SPACER] accumulated:', tabsListVerticalAccumulated, 'threshold:', activationThreshold)
-            
-            // Only activate spring after threshold is met
-            if (tabsListVerticalAccumulated < activationThreshold) {
-                return
-            }
-            
-            event.preventDefault()
-            
-            const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
-            tabsListVerticalRubberBand = {
-                ...tabsListVerticalRubberBand,
-                [spaceId]: Math.min(currentOffset - event.deltaY * resistance, maxStretch)
-            }
-            
-            // If pulled far enough, break rubberband and start spacer
-            if ((tabsListVerticalRubberBand[spaceId] || 0) > threshold && !tabsListSpacerVisible[spaceId]) {
-                // Add separator at top if not already one
-                ensureSeparatorAtTop(spaceId)
-                
-                // Reset rubberband immediately and start spacer with initial height
-                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-                tabsListVerticalAccumulated = 0
-                tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: true }
-                tabsListSpacerHeight = { ...tabsListSpacerHeight, [spaceId]: 20 }
-                return
-            }
-            
-            scheduleTabsListSnapBack(spaceId)
-        } else if (scrollTop <= 0 && event.deltaY > 0 && (tabsListVerticalRubberBand[spaceId] || 0) > 0) {
-            // Scrolling down while rubber banding - reduce offset
-            const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
-            tabsListVerticalRubberBand = {
-                ...tabsListVerticalRubberBand,
-                [spaceId]: Math.max(0, currentOffset - event.deltaY * 0.15)
-            }
-            if ((tabsListVerticalRubberBand[spaceId] || 0) <= 0) {
-                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-                tabsListVerticalAccumulated = 0
-            }
-        } else {
-            // Reset when not at edge
-            tabsListVerticalAccumulated = 0
-        }
-    }
-    
     function ensureSeparatorAtTop(spaceId) {
         const space = data.spaces[spaceId]
         if (!space?.tabs?.length) return
@@ -703,41 +567,27 @@
         tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: true }
     }
     
-    function scheduleTabsListSnapBack(spaceId) {
-        if (tabsListSnapTimeouts[spaceId]) clearTimeout(tabsListSnapTimeouts[spaceId])
-        tabsListSnapTimeouts[spaceId] = setTimeout(() => {
-            snapBackTabsListRubberBand(spaceId)
-        }, 30)
-    }
-    
-    function snapBackTabsListRubberBand(spaceId) {
-        const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
-        if (currentOffset === 0) {
-            tabsListVerticalAccumulated = 0
-            return
+    function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
+        if (!spaceId || tabSearchQuery || tabsListSpacerVisible[spaceId]) return
+
+        const tabsList = tabListRef?.querySelector(`[data-space-id="${spaceId}"] .tabs-list`)
+        if (tabsList) {
+            tabsList.scrollTop = 0
         }
-        
-        const newOffset = currentOffset * 0.85
-        if (Math.abs(newOffset) < 0.5) {
-            tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-            tabsListVerticalAccumulated = 0
-        } else {
-            tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: newOffset }
-            requestAnimationFrame(() => snapBackTabsListRubberBand(spaceId))
-        }
+
+        ensureSeparatorAtTop(spaceId)
+        tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: true }
     }
-    
-    function handleTabsListScrollForSpacer(event, spaceId) {
+
+    function handleTabsListSpacerScroll(event, spaceId) {
         const tabsList = event.currentTarget
         if (!tabsList) return
         
         if (!tabsListSpacerVisible[spaceId]) return
-        
-        const spacerHeight = tabsListSpacerHeight[spaceId] || 0
         const scrollTop = tabsList.scrollTop
         
         // Remove spacer once it's fully scrolled out of view
-        if (scrollTop > spacerHeight + 30) {
+        if (scrollTop > tabsListSpacerHeight + 30) {
             tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: false }
             tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: false }
         }
@@ -969,9 +819,6 @@
         if (openMenuId !== null && !event.target.closest('.space-menu')) {
             openMenuId = null
         }
-        if (newSpaceMenuOpen && !event.target.closest('.new-space-menu')) {
-            newSpaceMenuOpen = false
-        }
         if (spaceContextMenuId !== null && !event.target.closest('.space-context-menu-dropdown') && !event.target.closest('.space-item') && !contextMenuJustOpened) {
             spaceContextMenuId = null
         }
@@ -993,23 +840,6 @@
     function handleMouseUpOutside(event) {
         if (spaceContextMenuId !== null && !event.target.closest('.space-context-menu-dropdown') && !contextMenuJustOpened) {
             spaceContextMenuId = null
-        }
-    }
-    
-    function handleNewSpaceMenuToggle() {
-        newSpaceMenuOpen = !newSpaceMenuOpen
-    }
-    
-    function handleNewSpaceMenuAction(action) {
-        newSpaceMenuOpen = false
-        
-        if (action === 'new-space') {
-            console.log('Creating new space...')
-            data.newSpace()
-        } else if (action === 'new-divider') {
-            data.newDivider()
-        } else if (action === 'new-folder') {
-            data.newFolder()
         }
     }
     
@@ -1299,10 +1129,6 @@
     
     function handleTabMouseEnter(tab, event) {
         if (tabDrag.active) return
-        // Disable hovercards while spacer is visible (scrolling to add space)
-        const anySpacerVisible = Object.values(tabsListSpacerVisible).some(v => v)
-        if (anySpacerVisible) return
-        
         // console.log('[DEBUG:HOVER] Tab mouse enter', {
         //     tabId: tab.id,
         //     tabTitle: tab.title,
@@ -1704,7 +1530,7 @@
 
 </script>
 
-<svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
+<svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 <div class="sidebar-box" 
      class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
@@ -1841,30 +1667,18 @@
                         </div>
                         <div class="spaces-list-fade-right" class:visible={spacesScrolledRight}></div>
                     </div>
-                    <div class="new-space-menu">
-                        <button class="new-space-button" 
-                                onmousedown={(e) => { e.stopPropagation(); handleNewSpaceMenuToggle(); }}
-                                aria-label="Create new space">
-                            <svg class="plus-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
-                            </svg>
-                        </button>
-                        {#if newSpaceMenuOpen}
-                            <!-- svelte-ignore a11y_no_static_element_interactions -->
-                            <div class="menu-scrim" onmousedown={() => newSpaceMenuOpen = false}></div>
-                        {/if}
-                            <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
-                                <button class="new-space-menu-item"
-                                        onmouseup={() => handleNewSpaceMenuAction('new-space')}
-                                        role="menuitem">New Space</button>
-                                <button class="new-space-menu-item"
-                                        onmouseup={() => handleNewSpaceMenuAction('new-divider')}
-                                        role="menuitem">New Divider</button>
-                                <button class="new-space-menu-item"
-                                        onmouseup={() => handleNewSpaceMenuAction('new-folder')}
-                                        role="menuitem">New Folder</button>
-                            </div>
-                        </div>
+                    <div class="add-spacer-control">
+                        <Tooltip text="Add spacer" position="top" delay={300}>
+                            <button class="add-spacer-button"
+                                    onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(); } }}
+                                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(); } }}
+                                    aria-label="Add spacer">
+                                <svg class="plus-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+                                </svg>
+                            </button>
+                        </Tooltip>
+                    </div>
                     </div>
                 </div>
             {/if}
@@ -2042,14 +1856,24 @@
                                 </div>
                                 
                                 <div class="tabs-list-container">
+                                    {#if !tabSearchQuery && !tabsListSpacerVisible[spaceId] && !tabsListScrolled[spaceId]}
+                                        <div class="add-spacer-insertion">
+                                            <Tooltip text="Add spacer" position="top" delay={300}>
+                                                <button class="add-spacer-preview"
+                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(spaceId); } }}
+                                                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
+                                                        aria-label="Add spacer">
+                                                    <span class="add-spacer-preview-line"></span>
+                                                </button>
+                                            </Tooltip>
+                                        </div>
+                                    {/if}
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list" 
-                                         onscroll={(e) => { handleTabsListScroll(e); handleTabsListScrollForSpacer(e, spaceId); }}
-                                         onwheel={(e) => handleTabsListWheel(e, spaceId)}
-                                         style={tabsListVerticalRubberBand[spaceId] ? `transform: translateY(${tabsListVerticalRubberBand[spaceId]}px)` : ''}>
+                                         onscroll={(e) => { handleTabsListScroll(e); handleTabsListSpacerScroll(e, spaceId); }}>
                                         
                                         {#if tabsListSpacerVisible[spaceId] && !tabSearchQuery}
-                                            <div class="tabs-list-spacer" style="height: {tabsListSpacerHeight[spaceId] || 0}px"></div>
+                                            <div class="tabs-list-spacer"></div>
                                         {/if}
                                         
                                         {#if tabsListSeparatorAdded[spaceId]}
@@ -2713,11 +2537,11 @@
         justify-content: center;
     }
     
-    .new-space-menu {
+    .add-spacer-control {
         position: relative;
     }
     
-    .new-space-button {
+    .add-spacer-button {
         width: 24px;
         height: 24px;
         border-radius: 12px;
@@ -2726,7 +2550,7 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 150ms ease;
+        transition: background-color 150ms ease, opacity 150ms ease;
         border: 1px solid transparent;
         opacity: 0;
         visibility: hidden;
@@ -2734,17 +2558,21 @@
         margin: 0;
     }
     
-    .spaces-container:hover .new-space-button {
+    .spaces-container:hover .add-spacer-button,
+    .add-spacer-button:focus-visible {
         opacity: 1;
         visibility: visible;
     }
     
-    .new-space-button:hover {
+    .add-spacer-button:hover,
+    .add-spacer-button:focus-visible {
         background: rgba(255, 255, 255, 0.1);
         opacity: 1;
+        outline: none;
     }
     
-    .new-space-button:hover .plus-icon {
+    .add-spacer-button:hover .plus-icon,
+    .add-spacer-button:focus-visible .plus-icon {
         color: rgba(255, 255, 255, 0.9);
     }
     
@@ -2754,53 +2582,6 @@
         width: 16px;
         height: 16px;
         color: rgba(255, 255, 255, 0.6);
-    }    
-    .new-space-menu-dropdown {
-        position: absolute;
-        top: 100%;
-        right: 0;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 4px 0;
-        min-width: 120px;
-        z-index: 10000;
-        opacity: 0;
-        visibility: hidden;
-        transform: translateY(-4px);
-        transition: all 150ms ease;
-        backdrop-filter: blur(12px);
-        overflow: hidden;
-    }
-    
-    .new-space-menu-dropdown.open {
-        opacity: 1;
-        visibility: visible;
-        transform: translateY(0);
-    }
-    
-    .new-space-menu-item {
-        padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
-        cursor: pointer;
-        transition: background 150ms ease;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-    }
-    
-    .new-space-menu-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-    
-    .new-space-menu-item:active {
-        background: rgba(255, 255, 255, 0.15);
     }
     
     .space-title-container {
@@ -3295,6 +3076,48 @@
         transform: translateZ(0);
         contain: layout style;
     }
+
+    .add-spacer-insertion {
+        position: absolute;
+        top: -8px;
+        left: 0;
+        right: 8px;
+        height: 16px;
+        z-index: 11;
+    }
+
+    .add-spacer-insertion :global(.tooltip-container) {
+        width: 100%;
+        height: 100%;
+    }
+
+    .add-spacer-preview {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+    }
+
+    .add-spacer-preview:focus-visible {
+        outline: none;
+    }
+
+    .add-spacer-preview-line {
+        width: 100%;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.22);
+        opacity: 0;
+        transition: opacity 150ms ease;
+    }
+
+    .add-spacer-preview:hover .add-spacer-preview-line,
+    .add-spacer-preview:focus-visible .add-spacer-preview-line {
+        opacity: 1;
+    }
     
     .tabs-list-fade-top {
         position: absolute;
@@ -3376,9 +3199,9 @@
     
     .tabs-list-spacer {
         flex-shrink: 0;
+        height: 36px;
         width: 100%;
         pointer-events: none;
-        will-change: height;
         contain: layout style;
     }
     
