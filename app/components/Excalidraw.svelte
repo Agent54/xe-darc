@@ -9,7 +9,7 @@
   import data from '../data.svelte.js'
   // import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 
-  let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs.filter(tab => !tab.pinned)) || []))
+  let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs.filter(tab => tab.type === 'tab' && !tab.pinned)) || []))
   
   function saveViewState(spaceId, scrollX, scrollY, zoom) {
     if (!spaceId) return

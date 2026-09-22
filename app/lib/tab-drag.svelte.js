@@ -200,7 +200,7 @@ function handleMouseMove(e) {
     if (topbarList) {
         const listRect = topbarList.getBoundingClientRect()
         if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top - 4 && my <= listRect.bottom + 4) {
-            const tabs = topbarList.querySelectorAll(':scope > .tab-container:not(.pinned-tab-container)')
+            const tabs = topbarList.querySelectorAll(':scope > .tab-container:not(.pinned-tab-container), :scope > .tab-divider-container')
             const hit = findClosestTab(tabs, mx, 'x')
             if (hit) {
                 if (isNoopDrop(tabs, hit)) { hideIndicator(); state.sidepinZone = null; return }
@@ -222,7 +222,7 @@ function handleMouseMove(e) {
             if (listRect.right <= sp.left || listRect.left >= sp.right) continue
         }
         if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top && my <= listRect.bottom) {
-            const tabs = list.querySelectorAll(':scope > .tab-item-container')
+            const tabs = list.querySelectorAll(':scope > .tab-item-container, :scope > .tab-divider-item')
             const hit = findClosestTab(tabs, my, 'y')
             if (hit) {
                 if (isNoopDrop(tabs, hit)) { hideIndicator(); state.sidepinZone = null; return }
@@ -418,7 +418,7 @@ function resolveDropTarget(mx, my, dragTabId) {
     if (topbarList) {
         const listRect = topbarList.getBoundingClientRect()
         if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top - 4 && my <= listRect.bottom + 4) {
-            const tabs = topbarList.querySelectorAll(':scope > .tab-container:not(.pinned-tab-container)')
+            const tabs = topbarList.querySelectorAll(':scope > .tab-container:not(.pinned-tab-container), :scope > .tab-divider-container')
             const hit = findClosestTab(tabs, mx, 'x')
             if (hit && !isNoopDrop(tabs, hit)) {
                 return buildDropInfo(tabs, hit, dragTabId, null) // null = same space (topbar is always active space)
@@ -436,7 +436,7 @@ function resolveDropTarget(mx, my, dragTabId) {
             if (listRect.right <= sp.left || listRect.left >= sp.right) continue
         }
         if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top && my <= listRect.bottom) {
-            const tabs = list.querySelectorAll(':scope > .tab-item-container')
+            const tabs = list.querySelectorAll(':scope > .tab-item-container, :scope > .tab-divider-item')
             const hit = findClosestTab(tabs, my, 'y')
             if (hit && !isNoopDrop(tabs, hit)) {
                 const spaceContent = list.closest('.space-content')

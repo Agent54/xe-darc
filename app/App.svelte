@@ -1173,7 +1173,7 @@
                         })
                     } else {
                         // If no specific active tab, scroll to the beginning of unpinned section
-                        const firstUnpinnedTab = unpinnedTabs[0]
+                        const firstUnpinnedTab = unpinnedTabs.find(tab => tab.type === 'tab')
                         const wrapper = data.frames[firstUnpinnedTab?.id]?.wrapper
                         if (wrapper) {
                             wrapper.scrollIntoView({ 
@@ -1808,7 +1808,7 @@
                 const hoveredTabElement = elementUnderCursor.closest('.tab-container')
                 if (hoveredTabElement) {
                     // Find the tab by checking all tab arrays (leftPinned, regular, rightPinned)
-                    const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => !tab.pinned), ...rightPinnedTabs]
+                    const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => tab.type === 'tab' && !tab.pinned), ...rightPinnedTabs]
                     const matchingTab = allTabs.find(tab => tabButtons[tab.id] === hoveredTabElement)
                     isStillHovering = matchingTab?.id === hoveredTab.id
                 }
@@ -3139,6 +3139,7 @@
     let leftPinnedTabs = $derived(tabs.filter(tab => (tab.pinned === true || tab.pinned === 'left')))
     let rightPinnedTabs = $derived(tabs.filter(tab => tab.pinned === 'right'))
     let unpinnedTabs = $derived(tabs.filter(tab => !tab.pinned))
+    let unpinnedTabCount = $derived(unpinnedTabs.filter(tab => tab.type === 'tab').length)
     let visibleLeftPinnedTabs = $derived(leftPinnedTabs.filter(t => !invisiblePins[t.id]))
     let visibleRightPinnedTabs = $derived(rightPinnedTabs.filter(t => !invisiblePins[t.id]))
     
@@ -3402,7 +3403,7 @@
                 {@const tab = data.docs[unpinned.id]}
                 {@const frameData = data.frames[tab.id]}
                 {#if tab.type === 'divider'}
-                    <li class="tab-divider-container">
+                    <li class="tab-divider-container" data-tab-id={tab.id}>
                         <div class="tab-divider-vertical"></div>
                     </li>
                 {:else}
@@ -4270,7 +4271,7 @@
                 } else {
                     const hoveredTabElement = elementUnderCursor?.closest('.tab-container')
                     if (hoveredTabElement) {
-                        const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => !tab.pinned), ...rightPinnedTabs]
+                        const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => tab.type === 'tab' && !tab.pinned), ...rightPinnedTabs]
                         const matchingTab = allTabs.find(tab => tabButtons[tab.id] === hoveredTabElement)
                         shouldKeepOpen = matchingTab?.id === hoveredTab?.id
                     }
@@ -4466,7 +4467,7 @@
             {@const tab = data.docs[unpinned.id]}
             {#key userModsHash}
                 {#if  tab.type !== 'divider'}
-                    <div class:tab-group={unpinnedTabs.length > 1} class:active={tab.id === data.spaceMeta.activeTabId || (data.docs[data.spaceMeta.activeTabId]?.pinned && tab.id === data.getLastActiveNonPinnedTabId())}>
+                    <div class:tab-group={unpinnedTabCount > 1} class:active={tab.id === data.spaceMeta.activeTabId || (data.docs[data.spaceMeta.activeTabId]?.pinned && tab.id === data.getLastActiveNonPinnedTabId())}>
                         {#key origin(tab.url)}
                             <div class="url-display visible">
                                 <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />

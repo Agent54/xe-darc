@@ -117,9 +117,6 @@
         tabGroupExpanded = !tabGroupExpanded
     }
     
-    let tabsListSpacerVisible = $state({}) // { [spaceId]: boolean }
-    let tabsListSeparatorAdded = $state({}) // { [spaceId]: boolean } - tracks if separator was added
-    
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
         if (hovercardUrlBarExpanded) return
@@ -552,32 +549,15 @@
         document.removeEventListener('mouseup', handleLaneDividerMouseUp)
     }
     
-    function ensureSeparatorAtTop(spaceId) {
-        const space = data.spaces[spaceId]
-        if (!space?.tabs?.length) return
-        
-        // Check if first tab is already a divider
-        const firstTab = space.tabs[0]
-        if (firstTab?.type === 'divider') {
-            // Already has a separator at top, just mark that we've ensured it
-            tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: false }
-            return
-        }
-        
-        // Add in-memory separator at beginning (we don't persist this)
-        tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: true }
-    }
-    
     function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
-        if (!spaceId || tabSearchQuery || tabsListSpacerVisible[spaceId]) return
+        if (!spaceId || tabSearchQuery || data.pendingDividers[spaceId] || data.spaces[spaceId]?.tabs?.[0]?.type === 'divider') return
 
         const tabsList = tabListRef?.querySelector(`[data-space-id="${spaceId}"] .tabs-list`)
         if (tabsList) {
             tabsList.scrollTop = 0
         }
 
-        ensureSeparatorAtTop(spaceId)
-        tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: true }
+        data.addPendingDivider(spaceId)
     }
 
     // Initialize spaces scroll fade state when spacesListRef is available or spaces change
@@ -658,7 +638,7 @@
                 }
             } else if (targetSpace?.tabs?.length > 0) {
                 // Fallback: activate the first tab in the space
-                const firstNonPinned = targetSpace.tabs.find(t => !t.pinned)
+                const firstNonPinned = targetSpace.tabs.find(t => t.type === 'tab' && !t.pinned)
                 if (firstNonPinned) {
                     data.activate(firstNonPinned.id)
                 }
@@ -1874,7 +1854,7 @@
                                 </div>
                                 
                                 <div class="tabs-list-container">
-                                    {#if !tabSearchQuery && !tabsListSpacerVisible[spaceId] && !tabsListScrolled[spaceId]}
+                                    {#if !tabSearchQuery && !data.pendingDividers[spaceId] && data.spaces[spaceId]?.tabs?.[0]?.type !== 'divider' && !tabsListScrolled[spaceId]}
                                         <div class="add-spacer-insertion">
                                             <Tooltip text="Add spacer" position="top" delay={300}>
                                                 <button class="add-spacer-preview"
@@ -1888,27 +1868,47 @@
                                     {/if}
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list" onscroll={handleTabsListScroll}>
-                                        
-                                        {#if tabsListSpacerVisible[spaceId] && !tabSearchQuery}
-                                            <div class="tabs-list-spacer"></div>
-                                        {/if}
-                                        
-                                        {#if tabsListSeparatorAdded[spaceId]}
+
+                                    {#if data.pendingDividers[spaceId] && !tabSearchQuery}
+                                        <div class="tab-divider-item pending-divider" data-tab-id={data.pendingDividerId}>
+                                            <div class="tab-divider-leading-space"></div>
                                             <div class="tab-divider">
                                                 <div class="tab-divider-line-only"></div>
+                                                <button class="tab-divider-remove"
+                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); data.removePendingDivider(spaceId); } }}
+                                                        aria-label="Remove divider"
+                                                        title="Remove divider">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                                    </svg>
+                                                </button>
                                             </div>
-                                        {/if}
-                                        
+                                        </div>
+                                    {/if}
+
                                    {#each data.spaces[spaceId].tabs as tab, i (tab.id)}
                                         {#if tab.type === 'divider'}
                                             {#if !tabSearchQuery}
-                                                <div class="tab-divider">
-                                                    {#if tab.title}
-                                                        <span class="tab-divider-title">{tab.title}</span>
-                                                        <div class="tab-divider-line"></div>
-                                                    {:else}
-                                                        <div class="tab-divider-line-only"></div>
+                                                <div class="tab-divider-item" data-tab-id={tab.id}>
+                                                    {#if i === 0}
+                                                        <div class="tab-divider-leading-space"></div>
                                                     {/if}
+                                                    <div class="tab-divider">
+                                                        {#if tab.title}
+                                                            <span class="tab-divider-title">{tab.title}</span>
+                                                            <div class="tab-divider-line"></div>
+                                                        {:else}
+                                                            <div class="tab-divider-line-only"></div>
+                                                        {/if}
+                                                        <button class="tab-divider-remove"
+                                                                onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); data.removeDivider(tab.id); } }}
+                                                                aria-label="Remove divider"
+                                                                title="Remove divider">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             {/if}
                                         {:else}
@@ -3258,14 +3258,6 @@
         background: rgba(255, 255, 255, 0.3);
     }
     
-    .tabs-list-spacer {
-        flex-shrink: 0;
-        height: 36px;
-        width: 100%;
-        pointer-events: none;
-        contain: layout style;
-    }
-    
     .tabs-list-bottom-spacer {
         flex-shrink: 0;
         /* Height allows last tab to scroll to top of tabs-list area */
@@ -3428,7 +3420,19 @@
         color: rgba(255, 255, 255, 0.9);
     }
     
+    .tab-divider-item {
+        position: relative;
+        flex-shrink: 0;
+        width: 100%;
+    }
+
+    .tab-divider-leading-space {
+        height: 36px;
+        width: 100%;
+    }
+
     .tab-divider {
+        position: relative;
         padding: 8px 8px 8px 8px;
         margin: 4px 0;
         display: flex;
@@ -3461,6 +3465,43 @@
         background: rgba(255, 255, 255, 0.1);
         width: 100%;
         margin: 0 8px;
+    }
+
+    .tab-divider-remove {
+        position: absolute;
+        top: 50%;
+        right: 6px;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 0;
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.88);
+        color: rgba(255, 255, 255, 0.45);
+        cursor: pointer;
+        opacity: 0;
+        transform: translateY(-50%);
+        transition: color 150ms ease, opacity 150ms ease, background-color 150ms ease;
+    }
+
+    .tab-divider-item:hover .tab-divider-remove,
+    .tab-divider-remove:focus-visible {
+        opacity: 1;
+    }
+
+    .tab-divider-remove:hover,
+    .tab-divider-remove:focus-visible {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.85);
+        outline: none;
+    }
+
+    .tab-divider-remove svg {
+        width: 14px;
+        height: 14px;
     }
     
     /* New Tab Button */
