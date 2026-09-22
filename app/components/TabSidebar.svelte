@@ -29,6 +29,7 @@
     let tabListRef = $state(null)
     let spacesListRef = $state(null)
     let openMenuId = $state(null)
+    let newSpaceMenuOpen = $state(false)
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
     let closedTabsHideTimeout = null
@@ -118,7 +119,6 @@
     
     let tabsListSpacerVisible = $state({}) // { [spaceId]: boolean }
     let tabsListSeparatorAdded = $state({}) // { [spaceId]: boolean } - tracks if separator was added
-    const tabsListSpacerHeight = 36
     
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
@@ -222,9 +222,10 @@
             commitRename()
         }
         // Close dropdown menus when sidebar actually hides (after 340ms delay)
-        if (openMenuId !== null) {
+        if (newSpaceMenuOpen || openMenuId !== null) {
             if (menuCloseTimeout) clearTimeout(menuCloseTimeout)
             menuCloseTimeout = setTimeout(() => {
+                newSpaceMenuOpen = false
                 openMenuId = null
             }, 340)
         }
@@ -579,21 +580,6 @@
         tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: true }
     }
 
-    function handleTabsListSpacerScroll(event, spaceId) {
-        const tabsList = event.currentTarget
-        if (!tabsList) return
-        
-        if (!tabsListSpacerVisible[spaceId]) return
-        const scrollTop = tabsList.scrollTop
-        
-        // Remove spacer once it's fully scrolled out of view
-        if (scrollTop > tabsListSpacerHeight + 30) {
-            tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: false }
-            tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: false }
-        }
-    }
-
-    
     // Initialize spaces scroll fade state when spacesListRef is available or spaces change
     $effect(() => {
         if (spacesListRef) {
@@ -819,6 +805,9 @@
         if (openMenuId !== null && !event.target.closest('.space-menu')) {
             openMenuId = null
         }
+        if (newSpaceMenuOpen && !event.target.closest('.new-space-menu')) {
+            newSpaceMenuOpen = false
+        }
         if (spaceContextMenuId !== null && !event.target.closest('.space-context-menu-dropdown') && !event.target.closest('.space-item') && !contextMenuJustOpened) {
             spaceContextMenuId = null
         }
@@ -840,6 +829,23 @@
     function handleMouseUpOutside(event) {
         if (spaceContextMenuId !== null && !event.target.closest('.space-context-menu-dropdown') && !contextMenuJustOpened) {
             spaceContextMenuId = null
+        }
+    }
+
+    function handleNewSpaceMenuToggle() {
+        newSpaceMenuOpen = !newSpaceMenuOpen
+    }
+
+    function handleNewSpaceMenuAction(action) {
+        newSpaceMenuOpen = false
+
+        if (action === 'new-space') {
+            console.log('Creating new space...')
+            data.newSpace()
+        } else if (action === 'new-divider') {
+            addTabsListSpacer()
+        } else if (action === 'new-folder') {
+            data.newFolder()
         }
     }
     
@@ -1530,7 +1536,7 @@
 
 </script>
 
-<svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
+<svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 <div class="sidebar-box" 
      class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
@@ -1667,17 +1673,29 @@
                         </div>
                         <div class="spaces-list-fade-right" class:visible={spacesScrolledRight}></div>
                     </div>
-                    <div class="add-spacer-control">
-                        <Tooltip text="Add spacer" position="top" delay={300}>
-                            <button class="add-spacer-button"
-                                    onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(); } }}
-                                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(); } }}
-                                    aria-label="Add spacer">
-                                <svg class="plus-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                    <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
-                                </svg>
-                            </button>
-                        </Tooltip>
+                    <div class="new-space-menu">
+                        <button class="new-space-button"
+                                onmousedown={(e) => { e.stopPropagation(); handleNewSpaceMenuToggle(); }}
+                                aria-label="Create new space">
+                            <svg class="plus-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+                            </svg>
+                        </button>
+                        {#if newSpaceMenuOpen}
+                            <!-- svelte-ignore a11y_no_static_element_interactions -->
+                            <div class="menu-scrim" onmousedown={() => newSpaceMenuOpen = false}></div>
+                        {/if}
+                        <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
+                            <button class="new-space-menu-item"
+                                    onmouseup={() => handleNewSpaceMenuAction('new-space')}
+                                    role="menuitem">New Space</button>
+                            <button class="new-space-menu-item"
+                                    onmouseup={() => handleNewSpaceMenuAction('new-divider')}
+                                    role="menuitem">New Divider</button>
+                            <button class="new-space-menu-item"
+                                    onmouseup={() => handleNewSpaceMenuAction('new-folder')}
+                                    role="menuitem">New Folder</button>
+                        </div>
                     </div>
                     </div>
                 </div>
@@ -1869,8 +1887,7 @@
                                         </div>
                                     {/if}
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
-                                    <div class="tabs-list" 
-                                         onscroll={(e) => { handleTabsListScroll(e); handleTabsListSpacerScroll(e, spaceId); }}>
+                                    <div class="tabs-list" onscroll={handleTabsListScroll}>
                                         
                                         {#if tabsListSpacerVisible[spaceId] && !tabSearchQuery}
                                             <div class="tabs-list-spacer"></div>
@@ -2537,11 +2554,11 @@
         justify-content: center;
     }
     
-    .add-spacer-control {
+    .new-space-menu {
         position: relative;
     }
     
-    .add-spacer-button {
+    .new-space-button {
         width: 24px;
         height: 24px;
         border-radius: 12px;
@@ -2550,7 +2567,7 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: background-color 150ms ease, opacity 150ms ease;
+        transition: all 150ms ease;
         border: 1px solid transparent;
         opacity: 0;
         visibility: hidden;
@@ -2558,21 +2575,17 @@
         margin: 0;
     }
     
-    .spaces-container:hover .add-spacer-button,
-    .add-spacer-button:focus-visible {
+    .spaces-container:hover .new-space-button {
         opacity: 1;
         visibility: visible;
     }
     
-    .add-spacer-button:hover,
-    .add-spacer-button:focus-visible {
+    .new-space-button:hover {
         background: rgba(255, 255, 255, 0.1);
         opacity: 1;
-        outline: none;
     }
     
-    .add-spacer-button:hover .plus-icon,
-    .add-spacer-button:focus-visible .plus-icon {
+    .new-space-button:hover .plus-icon {
         color: rgba(255, 255, 255, 0.9);
     }
     
@@ -2584,6 +2597,54 @@
         color: rgba(255, 255, 255, 0.6);
     }
     
+    .new-space-menu-dropdown {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        background: rgba(0, 0, 0, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 4px 0;
+        min-width: 120px;
+        z-index: 10000;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-4px);
+        transition: all 150ms ease;
+        backdrop-filter: blur(12px);
+        overflow: hidden;
+    }
+
+    .new-space-menu-dropdown.open {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
+
+    .new-space-menu-item {
+        padding: 6px 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: subpixel-antialiased;
+        text-rendering: optimizeLegibility;
+        cursor: pointer;
+        transition: background 150ms ease;
+        background: transparent;
+        border: none;
+        width: 100%;
+        text-align: left;
+    }
+
+    .new-space-menu-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .new-space-menu-item:active {
+        background: rgba(255, 255, 255, 0.15);
+    }
+
     .space-title-container {
         display: flex;
         align-items: center;

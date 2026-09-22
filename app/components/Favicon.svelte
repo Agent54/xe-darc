@@ -116,9 +116,8 @@
 
 {#snippet fallbackIcon()}
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" class="fallback-favicon w-4 h-4">
-        <path d="m12 7 5 5-5 5-5-5 5-5Z" />
-        <path d="M12 3.25v1.5M12 19.25v1.5M3.25 12h1.5M19.25 12h1.5" />
-        <circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="8.25" />
+        <path d="M3.75 12h16.5M12 3.75c2.15 2.25 3.25 5 3.25 8.25S14.15 18 12 20.25C9.85 18 8.75 15.25 8.75 12S9.85 6 12 3.75Z" />
     </svg>
 {/snippet}
 
