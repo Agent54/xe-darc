@@ -683,9 +683,6 @@
     function handleTabScroll(event) {
         if (!tabListRef) return
         
-        // Skip scroll handling during space switching to prevent unwanted tab activation
-        if (isSwitchingSpaces) return
-        
         // console.log('[DEBUG:SCROLL] Tab list scroll event', {
         //     scrollLeft: tabListRef.scrollLeft,
         //     scrollTop: event.target.scrollTop,
@@ -703,6 +700,9 @@
         
         if ( newIndex >= 0 && newIndex < data.spaceMeta.spaceOrder.length) {
             currentScrolledSpace = data.spaceMeta.spaceOrder[newIndex]
+
+            // Skip space activation during programmatic scrolling, but keep its highlight in sync
+            if (isSwitchingSpaces) return
     //         if (scrollActiveSpaceTimeout) {
     //             clearTimeout(scrollActiveSpaceTimeout)
     //         }
