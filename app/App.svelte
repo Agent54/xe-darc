@@ -25,6 +25,7 @@
     import { colors } from './lib/utils.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag, onDrop } from './lib/tab-drag.svelte.js'
+    const iwaVersion = __IWA_VERSION__
     window.darc = { data }
 
     // Proper detection of ControlledFrame API support
@@ -3789,7 +3790,10 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
         </svg>
         <div class="settings-menu hover-menu" class:menu-force-close={menuForceClose}>
-            <div class="settings-menu-header menu-header">Options</div>
+            <div class="settings-menu-header menu-header">
+                <span>Options</span>
+                <span class="settings-menu-version" title={`Darc IWA version ${iwaVersion}`}>v{iwaVersion}</span>
+            </div>
             
             <!-- TODO: theming supoort <div class="settings-menu-item menu-item" 
                  class:active={darkMode}

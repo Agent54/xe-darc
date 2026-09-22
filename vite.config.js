@@ -162,9 +162,24 @@ if (process.env.NODE_ENV === 'production') {
 
 console.log('Vite config loaded - Server port: 5194, DevTools proxy port: 9226');
 
+const iwaManifest = JSON.parse(
+  fs.readFileSync(
+    new URL('./public/.well-known/manifest.webmanifest', import.meta.url),
+    'utf-8'
+  )
+)
+const iwaVersion = iwaManifest.version
+
+if (typeof iwaVersion !== 'string' || iwaVersion.length === 0) {
+  throw new Error('IWA manifest is missing a version')
+}
+
 export default defineConfig({
   plugins,
-  define: { globals: 'window' },
+  define: {
+    globals: 'window',
+    __IWA_VERSION__: JSON.stringify(iwaVersion)
+  },
   handleHotUpdate({ file }) {
     console.log({file})
     if (file.endsWith('.md') || file.startWith('.')) {
