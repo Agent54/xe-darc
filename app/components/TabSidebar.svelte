@@ -102,7 +102,7 @@
         if (!space) return false;
         
         if (space.pinnedTabs?.some(tab => tabMatchesSearch(tab))) return true;
-        if (space.tabs?.some(tab => tab.type !== 'divider' && tabMatchesSearch(tab))) return true;
+        if (space.tabs?.some(tab => tab.type === 'tab' && tabMatchesSearch(tab))) return true;
         
         return false;
     }
@@ -1911,7 +1911,7 @@
                                                     </div>
                                                 </div>
                                             {/if}
-                                        {:else}
+                                        {:else if tab.type === 'tab'}
                                             {#if tabMatchesSearch(tab)}
                                                 <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
                                                      role="listitem"

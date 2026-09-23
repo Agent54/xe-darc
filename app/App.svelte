@@ -87,7 +87,7 @@
     const closed = $state({})
 
     // Get all tabs from the current active space
-    let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs?.filter(tab => tab._rev && !closed[tab._rev])) || []))
+    let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs?.filter(tab => tab.type !== 'shape' && tab._rev && !closed[tab._rev])) || []))
     let visibilityTimers = new Map()
     let hoveredTab = $state(null)
     let hoverTimeout = null

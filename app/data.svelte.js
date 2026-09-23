@@ -539,11 +539,12 @@ const refresh = throttle(async function (spaceId) {
 
             spaces[doc._id].activeTabsOrder ??= []
            
-        } else if (doc.type === 'tab' || doc.type === 'divider') {
+        } else if (doc.type === 'tab' || doc.type === 'divider' || doc.type === 'shape') {
             doc.id = doc._id // legacy compat, remove this later
             const isDivider = doc.type === 'divider'
+            const isShape = doc.type === 'shape'
 
-            if (!isDivider && !spaceMeta.activeTabId && doc.spaceId === spaceMeta.activeSpace) {
+            if (!isDivider && !isShape && !spaceMeta.activeTabId && doc.spaceId === spaceMeta.activeSpace) {
                 spaceMeta.activeTabId = doc.id
                 console.log('setting active tab id a', spaceMeta.activeTabId, '"' + (doc.title || doc.url || '') + '"')
             }
@@ -559,11 +560,11 @@ const refresh = throttle(async function (spaceId) {
 
             if (doc.archive) {
                 // console.log(doc)
-                if (!isDivider && doc.archive === 'closed') {
+                if (!isDivider && !isShape && doc.archive === 'closed') {
                     closedTabs.push(doc)
                 }
                 continue
-            } else if (isDivider) {
+            } else if (isDivider || isShape) {
                 newSpaceTabs[doc.spaceId].push(doc)
             } else {
                 if (doc.id === spaceMeta.activeTabId) {
@@ -704,7 +705,7 @@ live: true,
         docs[change.id] = change.doc
 
         // fixme: deep comp
-        for (const key of ['canvas', 'pinned', ...sortOrder]) { // force reload until using docs store
+        for (const key of ['canvas', 'element', 'files', 'pinned', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
                 if (change.doc.spaceId && change.doc.type !== 'space' && change.doc.type !== 'activity') {
                     console.log('refreshing', change.doc.spaceId)
@@ -1402,6 +1403,93 @@ const data = {
             db.put(tab)
         }
         return tab
+    },
+
+    updateCanvasShapes: (spaceId, elements, files = {}) => {
+        const space = spaces[spaceId]
+        if (!space) return
+
+        const changedShapes = []
+        const now = Date.now()
+
+        for (const [canvasOrder, element] of elements.entries()) {
+            if (docs[element.id]?.type === 'tab') {
+                continue
+            }
+
+            const storedShape = docs[element.id]?.type === 'shape'
+                ? docs[element.id]
+                : space.tabs?.find(item => item.id === element.id && item.type === 'shape')
+
+            const shapeFiles = { ...(storedShape?.files || {}) }
+            const file = element.fileId ? files[element.fileId] : null
+            const fileChanged = file && file.dataURL !== shapeFiles[element.fileId]?.dataURL
+            if (file) {
+                shapeFiles[element.fileId] = file
+            }
+
+            if (
+                storedShape?.element?.version === element.version &&
+                storedShape.element.versionNonce === element.versionNonce &&
+                storedShape.element.index === element.index &&
+                storedShape.canvasOrder === canvasOrder &&
+                !fileChanged
+            ) {
+                continue
+            }
+
+            const shape = {
+                ...storedShape,
+                _id: element.id,
+                id: element.id,
+                type: 'shape',
+                spaceId,
+                archive: null,
+                order: Number.MAX_SAFE_INTEGER,
+                canvasOrder,
+                element,
+                files: shapeFiles,
+                created: storedShape?.created || now,
+                modified: now
+            }
+
+            docs[shape.id] = shape
+            changedShapes.push(shape)
+        }
+
+        if (changedShapes.length === 0) return
+
+        const changedById = new Map(changedShapes.map(shape => [shape.id, shape]))
+        const nextTabs = (space.tabs || []).map(item => changedById.get(item.id) || item)
+        for (const shape of changedShapes) {
+            if (!nextTabs.some(item => item.id === shape.id)) {
+                nextTabs.push(shape)
+            }
+        }
+        space.tabs = nextTabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+
+        db.bulkDocs(changedShapes).then(results => {
+            results.forEach((result, index) => {
+                if (result.rev) {
+                    changedShapes[index]._rev = result.rev
+                    if (docs[result.id]?.type === 'shape') {
+                        docs[result.id]._rev = result.rev
+                    }
+                } else if (result.error === 'conflict' && docs[result.id]?.type === 'shape') {
+                    const latestShape = { ...docs[result.id] }
+                    db.get(result.id)
+                        .then(current => db.put({ ...latestShape, _rev: current._rev }))
+                        .then(retryResult => {
+                            if (docs[retryResult.id]?.type === 'shape') {
+                                docs[retryResult.id]._rev = retryResult.rev
+                            }
+                        })
+                        .catch(error => console.error('Failed to retry canvas shape save', error))
+                } else if (result.error) {
+                    console.error('Failed to save canvas shape', result)
+                }
+            })
+        }).catch(error => console.error('Failed to save canvas shapes', error))
     },
 
     updateTab: async (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url } = {}) => {

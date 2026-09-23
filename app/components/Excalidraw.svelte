@@ -33,40 +33,18 @@
     return null
   }
 
-  function loadSceneState(spaceId) {
-    if (!spaceId) return { elements: [], files: {} }
-
-    try {
-      const scene = JSON.parse(localStorage.getItem(`excalidraw-scene-${spaceId}`) || '{}')
-      return {
-        elements: Array.isArray(scene.elements) ? scene.elements : [],
-        files: scene.files && typeof scene.files === 'object' ? scene.files : {}
-      }
-    } catch (error) {
-      console.error('Failed to load canvas scene', error)
-      return { elements: [], files: {} }
-    }
-  }
-
-  function saveSceneState(spaceId, elements, files) {
-    if (!spaceId) return
-
-    const customElements = elements.filter(element => data.docs[element.id]?.type !== 'tab' && !element.isDeleted)
-
-    try {
-      localStorage.setItem(`excalidraw-scene-${spaceId}`, JSON.stringify({ elements: customElements, files }))
-    } catch (error) {
-      console.error('Failed to save canvas scene', error)
-    }
-  }
-
   const versions = new Map()
   const sceneChangeHandlers = new Map()
+
+  let shapes = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs
+    .filter(tab => tab.type === 'shape')
+    .sort((a, b) => (a.canvasOrder ?? 0) - (b.canvasOrder ?? 0))) || []))
+  let shapeFiles = $derived.by(() => Object.assign({}, ...shapes.map(shape => shape.files || {})))
 
   let elements = $derived.by(() => {
     const elems = {}
     const arrows = []
-    const savedScene = loadSceneState(data.spaceMeta.activeSpace)
+    const elementOrders = new Map()
     const tabWidth = 1000
     const tabHeight = 700  
     const columnSpacing = 80
@@ -99,6 +77,7 @@
       }
 
       versions.set(tab.id, canvasData?.version || 1)
+      elementOrders.set(tab.id, canvasData?.canvasOrder ?? index)
       
       elems[tab.id] = {
           "id": tab.id,
@@ -203,8 +182,12 @@
         elems[arrow.endBinding.elementId].x, elems[arrow.endBinding.elementId].y
       ])
     })
-    const customElements = savedScene.elements.filter(element => !elems[element.id])
-    return [...Object.values(elems), ...arrows, ...customElements] // convertToExcalidrawElements
+    const customElements = shapes.map(shape => {
+      elementOrders.set(shape.id, shape.canvasOrder)
+      return shape.element
+    }).filter(element => element && !elems[element.id])
+    return [...Object.values(elems), ...arrows, ...customElements]
+      .sort((a, b) => (elementOrders.get(a.id) ?? 0) - (elementOrders.get(b.id) ?? 0)) // convertToExcalidrawElements
   })
   
   let savedState
@@ -213,7 +196,7 @@
     "version": 2,
     "source": "isolated-app://kktqp5b4ad3rk7liu3s3svirby266incu7xsds2l56zwzm3op5aaaaac",
     elements,
-    "files": loadSceneState(data.spaceMeta.activeSpace).files,
+    "files": shapeFiles,
     appState: (() => {
       // Load saved view state from localStorage
       savedState = loadViewState(data.spaceMeta.activeSpace)
@@ -261,7 +244,7 @@
 
   function queueSceneChange(spaceId, elements, appState, files) {
     if (!sceneChangeHandlers.has(spaceId)) {
-      sceneChangeHandlers.set(spaceId, throttle(persistSceneChange, 1000))
+      sceneChangeHandlers.set(spaceId, throttle(persistSceneChange, 1000, { leading: false }))
     }
 
     sceneChangeHandlers.get(spaceId)(spaceId, elements, appState, files)
@@ -277,6 +260,9 @@
     const element = React.createElement(ExcalidrawReact, {
       initialData: excalidrawData,
       onChange: (elements, appState, files) => {
+        if (appState?.zoom?.value !== undefined) {
+          currentZoom = appState.zoom.value
+        }
         queueSceneChange(sceneSpaceId, elements, appState, files)
       },
       onPointerUpdate,
@@ -316,11 +302,6 @@
   })
 
   function persistSceneChange(spaceId, elements, appState, files) {
-    // Update zoom level for CSS custom property
-    if (spaceId === sceneSpaceId && appState?.zoom?.value !== undefined) {
-      currentZoom = appState.zoom.value
-    }
-
     // Save view state to localStorage
     if (appState?.scrollX !== undefined && appState?.scrollY !== undefined && appState?.zoom?.value !== undefined) {
       if (savedState?.scrollX !== appState.scrollX || savedState?.scrollY !== appState.scrollY || savedState?.zoom?.value !== appState.zoom.value) {
@@ -328,11 +309,11 @@
       }
     }
 
-    saveSceneState(spaceId, elements, files)
+    data.updateCanvasShapes(spaceId, elements, files)
 
-    for (const elem of elements) {
+    for (const [canvasOrder, elem] of elements.entries()) {
       if (elem.isDeleted) {
-        if (data.spaces[spaceId]?.tabs.some(tab => tab.id === elem.id)) {
+        if (data.docs[elem.id]?.type === 'tab' && data.spaces[spaceId]?.tabs.some(tab => tab.id === elem.id)) {
           data.closeTab(spaceId, elem.id)
         }
         continue
@@ -345,7 +326,7 @@
 
       const version = versions.get(elem.id)
       const canvasData = tab.canvas?.[spaceId]
-      if (version && (elem.version !== version || elem.index !== canvasData?.index)) {
+      if (version && (elem.version !== version || elem.index !== canvasData?.index || canvasOrder !== canvasData?.canvasOrder)) {
         data.updateTab(elem.id, { canvas: { [spaceId]: {
           x: elem.x,
           y: elem.y,
@@ -358,6 +339,7 @@
           version: elem.version,
           versionNonce: elem.versionNonce,
           updated: elem.updated,
+          canvasOrder,
           boundElements: elem.boundElements,
           locked: elem.locked
         } } })

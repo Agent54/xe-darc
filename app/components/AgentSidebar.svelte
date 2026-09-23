@@ -854,7 +854,7 @@
 				name: `Current Space [${currentSpaceName}]`,
 				type: 'current-space',
 				description: data.spaceMeta.activeSpace
-					? `${data.spaces[data.spaceMeta.activeSpace]?.tabs?.length || 0} tabs`
+					? `${data.spaces[data.spaceMeta.activeSpace]?.tabs?.filter(tab => tab.type === 'tab').length || 0} tabs`
 					: 'No active space'
 			},
 			{
@@ -894,7 +894,7 @@
 			context.currentSpace = {
 				id: data.spaceMeta.activeSpace,
 				name: activeSpace?.name || 'Unnamed Space',
-				tabs: activeSpace?.tabs?.map(tab => ({
+				tabs: activeSpace?.tabs?.filter(tab => tab.type === 'tab').map(tab => ({
 					id: tab.id,
 					url: tab.url,
 					title: tab.title || 'Untitled Tab'
@@ -904,8 +904,8 @@
 			context.allSpaces = Object.entries(data.spaces).map(([spaceId, space]) => ({
 				id: spaceId,
 				name: space.name || 'Unnamed Space',
-				tabCount: space.tabs?.length || 0,
-				tabs: space.tabs?.map(tab => ({
+				tabCount: space.tabs?.filter(tab => tab.type === 'tab').length || 0,
+				tabs: space.tabs?.filter(tab => tab.type === 'tab').map(tab => ({
 					id: tab.id,
 					url: tab.url,
 					title: tab.title || 'Untitled Tab'
