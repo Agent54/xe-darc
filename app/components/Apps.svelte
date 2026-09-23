@@ -18,7 +18,7 @@
         { id: 'a3', name: 'User Admin', iconUrl: '/embed-icons/github_gist.png', type: 'docker', category: 'Admin' },
         { id: 'a4', name: 'Postgres UI', iconUrl: '/embed-icons/replit.png', type: 'docker', category: 'Databases' },
         { id: 'a5', name: 'Redis Monitor', iconUrl: '/embed-icons/codepen.png', type: 'docker', category: 'Databases' },
-        { id: 'a6', name: 'Excalidraw', iconUrl: '/embed-icons/excalidraw.png', type: 'weblink', category: 'Design', partition: { name: 'Personal', color: '#f472b6' } },
+        { id: 'a6', catalogId: 'excalidraw', name: 'Excalidraw', iconUrl: '/embed-icons/excalidraw.png', type: 'weblink', category: 'Design', partition: { name: 'Personal', color: '#f472b6' } },
         { id: 'a7', name: 'Figma', iconUrl: '/embed-icons/figma.png', type: 'pwa', category: 'Design' },
         { id: 'a8', name: 'Tldraw', iconUrl: '/embed-icons/tldraw.png', type: 'static', category: 'Design' },
         { id: 'a9', name: 'Google Maps', iconUrl: '/embed-icons/google_maps.png', type: 'weblink', category: 'Utilities' },
@@ -275,7 +275,8 @@
 </div>
 
 <AddAppModal 
-    show={showAddAppModal} 
+    show={showAddAppModal}
+    installedApps={apps}
     onClose={closeAddAppModal} 
 />
 
