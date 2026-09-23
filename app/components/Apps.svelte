@@ -1,104 +1,198 @@
 <script>
+    import { onMount } from 'svelte'
     import AddAppModal from './AddAppModal.svelte'
-    
-    let { onClose = () => {} } = $props()
-    
-    const hoverState = $state({})
-    const collapsedSections = $state({})
-    let showAddAppModal = $state(false)
+    import data from '../data.svelte.js'
+    import { listComposeProjects } from '../lib/compose-api.js'
 
-    let apps = $state([
-        // Default section apps (no category or category: null)
-        { id: 'default1', name: 'Terminal', iconUrl: '/embed-icons/github_gist.png', type: 'pwa' },
-        { id: 'default2', name: 'Browser', iconUrl: '/embed-icons/observable.png', type: 'weblink' },
-        { id: 'default3', name: 'Files', iconUrl: '/embed-icons/felt.png', type: 'static' },
-        
-        { id: 'a1', name: 'Dashboard', iconUrl: '/embed-icons/observable.png', type: 'docker', category: 'Productivity', partition: { name: 'Work', color: '#a3e635' } },
-        { id: 'a2', name: 'Reports', iconUrl: '/embed-icons/google_slides.png', type: 'docker', category: 'Analytics', partition: { name: 'Finance', color: '#22d3ee' } },
-        { id: 'a3', name: 'User Admin', iconUrl: '/embed-icons/github_gist.png', type: 'docker', category: 'Admin' },
-        { id: 'a4', name: 'Postgres UI', iconUrl: '/embed-icons/replit.png', type: 'docker', category: 'Databases' },
-        { id: 'a5', name: 'Redis Monitor', iconUrl: '/embed-icons/codepen.png', type: 'docker', category: 'Databases' },
-        { id: 'a6', catalogId: 'excalidraw', name: 'Excalidraw', iconUrl: '/embed-icons/excalidraw.png', type: 'weblink', category: 'Design', partition: { name: 'Personal', color: '#f472b6' } },
-        { id: 'a7', name: 'Figma', iconUrl: '/embed-icons/figma.png', type: 'pwa', category: 'Design' },
-        { id: 'a8', name: 'Tldraw', iconUrl: '/embed-icons/tldraw.png', type: 'static', category: 'Design' },
-        { id: 'a9', name: 'Google Maps', iconUrl: '/embed-icons/google_maps.png', type: 'weblink', category: 'Utilities' },
-        { id: 'a10', name: 'Spotify', iconUrl: '/embed-icons/spotify.png', type: 'pwa', category: 'Media' },
-        { id: 'a11', name: 'Calendar', iconUrl: '/embed-icons/google_calendar.png', type: 'weblink', category: 'Productivity', partition: { name: 'Work', color: '#a3e635' } },
-        { id: 'a12', name: 'Vimeo', iconUrl: '/embed-icons/vimeo.png', type: 'weblink', category: 'Media' },
-        { id: 'a13', name: 'Val Town', iconUrl: '/embed-icons/val_town.png', type: 'weblink', category: 'Dev' },
-        { id: 'a14', name: 'Desmos', iconUrl: '/embed-icons/desmos.png', type: 'weblink', category: 'Math' },
-        { id: 'a15', name: 'Observable', iconUrl: '/embed-icons/observable.png', type: 'weblink', category: 'Dev' },
-        { id: 'a16', name: 'Notion', iconUrl: '/embed-icons/felt.png', type: 'pwa', category: 'Productivity', partition: { name: 'Personal', color: '#f472b6' } },
-        { id: 'a17', name: 'Slack', iconUrl: '/embed-icons/codesandbox.png', type: 'pwa', category: 'Productivity', partition: { name: 'Work', color: '#a3e635' } },
-        { id: 'a18', name: 'Discord', iconUrl: '/embed-icons/scratch.png', type: 'pwa', category: 'Productivity' },
-        { id: 'a19', name: 'Photoshop', iconUrl: '/embed-icons/figma.png', type: 'pwa', category: 'Design', partition: { name: 'Creative', color: '#fb7185' } },
-        { id: 'a20', name: 'Illustrator', iconUrl: '/embed-icons/tldraw.png', type: 'pwa', category: 'Design', partition: { name: 'Creative', color: '#fb7185' } },
-        { id: 'a21', name: 'Sketch', iconUrl: '/embed-icons/excalidraw.png', type: 'static', category: 'Design' },
-        { id: 'a22', name: 'Blender', iconUrl: '/embed-icons/felt.png', type: 'static', category: 'Design', partition: { name: 'Creative', color: '#fb7185' } },
-        { id: 'a23', name: 'YouTube', iconUrl: '/embed-icons/youtube.png', type: 'weblink', category: 'Media' },
-        { id: 'a24', name: 'Netflix', iconUrl: '/embed-icons/vimeo.png', type: 'pwa', category: 'Media', partition: { name: 'Personal', color: '#f472b6' } },
-        { id: 'a25', name: 'Twitch', iconUrl: '/embed-icons/spotify.png', type: 'weblink', category: 'Media' },
-        { id: 'a26', name: 'VS Code', iconUrl: '/embed-icons/github_gist.png', type: 'pwa', category: 'Dev', partition: { name: 'Work', color: '#a3e635' } },
-        { id: 'a27', name: 'GitHub Desktop', iconUrl: '/embed-icons/github_gist.png', type: 'pwa', category: 'Dev', partition: { name: 'Work', color: '#a3e635' } },
-        { id: 'a28', name: 'Postman', iconUrl: '/embed-icons/replit.png', type: 'pwa', category: 'Dev' },
-        { id: 'a29', name: 'Calculator', iconUrl: '/embed-icons/desmos.png', type: 'static', category: 'Utilities' },
-        { id: 'a30', name: 'Weather', iconUrl: '/embed-icons/google_maps.png', type: 'weblink', category: 'Utilities', partition: { name: 'Personal', color: '#f472b6' } },
-        // Apps without tags for layout verification
-        { id: 'a31', name: 'Calculator', iconUrl: '/embed-icons/desmos.png', type: null, category: 'Utilities' },
-        { id: 'a32', name: 'Notes', iconUrl: null, type: null, category: 'Utilities' },
-        { id: 'a33', name: 'TextEdit', iconUrl: null, type: null, category: 'Utilities' },
-        { id: 'a34', name: 'Mail', iconUrl: '/embed-icons/google_calendar.png', type: null, category: 'Productivity' },
-        { id: 'a35', name: 'Clock', iconUrl: null, type: null, category: 'Utilities' }
+    let { onClose = () => {} } = $props()
+
+    const collapsedSections = $state({ Examples: true })
+    let showAddAppModal = $state(false)
+    let composeApps = $state([])
+    let composeLoading = $state(true)
+    let composeError = $state('')
+    let loadController = null
+
+    let exampleApps = $state([
+        { id: 'example-dashboard', name: 'Dashboard', iconUrl: '/embed-icons/observable.png', type: 'docker', partition: { name: 'Work', color: '#a3e635' } },
+        { id: 'example-google-maps', name: 'Google Maps', iconUrl: '/embed-icons/google_maps.png', type: 'weblink', url: 'https://maps.google.com' },
+        { id: 'example-google-weather', name: 'Google Weather', iconUrl: '/embed-icons/google_maps.png', type: 'weblink', url: 'https://www.google.com/search?q=weather', partition: { name: 'Personal', color: '#f472b6' } },
+        { id: 'example-notes', name: 'Notes', iconUrl: null, type: null },
+        { id: 'example-clock', name: 'Clock', iconUrl: null, type: null },
+        { id: 'example-discord', name: 'Discord', iconUrl: '/embed-icons/scratch.png', type: 'pwa', url: 'https://discord.com/app' },
+        { id: 'example-slack', name: 'Slack', iconUrl: '/embed-icons/codesandbox.png', type: 'pwa', url: 'https://app.slack.com', partition: { name: 'Work', color: '#a3e635' } },
+        { id: 'example-blender', name: 'Blender', iconUrl: '/embed-icons/felt.png', type: 'static', partition: { name: 'Creative', color: '#fb7185' } }
     ])
 
-    const appsByCategory = $derived.by(() => {
-        const grouped = {}
-        for (const app of apps) {
-            if (!app.category) continue
-            const key = app.category
-            grouped[key] ??= []
-            grouped[key].push(app)
+    const rootApps = $derived(composeApps.filter(app => !app.section))
+    const composeSections = $derived.by(() => {
+        const sections = {}
+        for (const app of composeApps) {
+            if (!app.section) continue
+            sections[app.section] ??= []
+            sections[app.section].push(app)
         }
-        return grouped
+        return sections
     })
 
-    const serviceApps = $derived(apps.filter(app => app.composeService))
-    const defaultApps = $derived(apps.filter(app => !app.category))
+    onMount(() => {
+        loadComposeApps()
+        return () => loadController?.abort()
+    })
 
-    function showHover(appId) {
-        const existing = hoverState[appId]
-        if (existing?.timer) clearTimeout(existing.timer)
-        
-        const timer = setTimeout(() => {
-            hoverState[appId] = { timer: null, visible: true }
-        }, 500)
-        hoverState[appId] = { timer, visible: false }
+    function sectionForConfigPath(configPath) {
+        if (!configPath) return ''
+        const normalized = configPath.replaceAll('\\', '/')
+        const segments = normalized.split('/').filter(Boolean)
+        const marker = segments.lastIndexOf('stacks')
+        if (marker >= 0) return segments[marker + 1] && segments[marker + 1] !== segments.at(-1) ? segments[marker + 1] : ''
+        if (!normalized.startsWith('/')) return segments.length > 1 ? segments[0] : ''
+        return segments.length > 1 ? segments.at(-2) : ''
     }
 
-    function hideHover(appId) {
-        const existing = hoverState[appId]
-        if (existing?.timer) clearTimeout(existing.timer)
-        hoverState[appId] = { timer: null, visible: false }
+    function value(object, ...keys) {
+        for (const key of keys) {
+            if (object?.[key] !== undefined && object[key] !== null) return object[key]
+        }
+        return undefined
     }
 
-    function openApp(e, app) {
-        e.preventDefault()
-        console.log('open app', app)
+    function containerNumber(container) {
+        const labels = value(container, 'Labels', 'labels') || {}
+        const labelled = Number(labels['com.docker.compose.container-number'])
+        if (Number.isInteger(labelled) && labelled > 0) return labelled
+        const match = String(value(container, 'Name', 'name') || '').match(/[-_](\d+)$/)
+        return Number(match?.[1]) || 1
     }
 
-    function actionSettings(e, app) {
-        e.stopPropagation()
+    function publishedPort(container, port) {
+        const target = Number(value(port, 'target', 'TargetPort'))
+        const protocol = String(value(port, 'protocol', 'Protocol') || 'tcp').toLowerCase()
+        const publisher = (value(container, 'Publishers', 'publishers') || []).find(candidate =>
+            Number(value(candidate, 'TargetPort', 'targetPort', 'target')) === target &&
+            String(value(candidate, 'Protocol', 'protocol') || 'tcp').toLowerCase() === protocol
+        )
+        return Number(value(port, 'published', 'PublishedPort')) || Number(value(publisher, 'PublishedPort', 'publishedPort', 'published')) || 0
+    }
+
+    function servicePorts(service, containers) {
+        const configured = Array.isArray(service?.ports) ? service.ports.filter(port =>
+            String(value(port, 'protocol', 'Protocol') || 'tcp').toLowerCase() === 'tcp'
+        ) : []
+        if (configured.length) return configured
+
+        const ports = new Map()
+        for (const container of containers) {
+            for (const publisher of value(container, 'Publishers', 'publishers') || []) {
+                if (String(value(publisher, 'Protocol', 'protocol') || 'tcp').toLowerCase() !== 'tcp') continue
+                const target = Number(value(publisher, 'TargetPort', 'targetPort', 'target'))
+                const published = Number(value(publisher, 'PublishedPort', 'publishedPort', 'published'))
+                if (target > 0) ports.set(`${target}:${published}`, { target, published, protocol: 'tcp' })
+            }
+        }
+        return [...ports.values()]
+    }
+
+    function endpointsForService(project, serviceName, service, containers) {
+        const serviceContainers = containers.filter(container => value(container, 'Service', 'service') === serviceName)
+        const instances = serviceContainers.length ? serviceContainers : [{ Name: `${project}-${serviceName}-1` }]
+        const ports = servicePorts(service, instances)
+        const endpoints = []
+
+        for (const container of instances) {
+            const number = containerNumber(container)
+            const containerName = value(container, 'Name', 'name') || `${project}-${serviceName}-${number}`
+            const routeName = `${serviceName}_${project}${number > 1 ? `_${number}` : ''}`.toLowerCase()
+            for (const port of ports) {
+                const portName = String(value(port, 'name', 'Name') || '').trim()
+                const published = publishedPort(container, port)
+                const namedSelector = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(portName) ? portName.toLowerCase() : ''
+                const selector = namedSelector || published
+                if (!selector) continue
+                const portLabel = portName || String(value(port, 'target', 'TargetPort') || published)
+                endpoints.push({
+                    id: `${containerName}:${portLabel}:${published}`,
+                    label: `${containerName} · ${portLabel}`,
+                    container: containerName,
+                    port: portLabel,
+                    url: `http://${routeName}.${selector}.localhost`
+                })
+            }
+        }
+        return endpoints.filter((endpoint, index) => endpoints.findIndex(candidate => candidate.url === endpoint.url) === index)
+    }
+
+    function appsForVariant(variant) {
+        const services = variant.config?.services || {}
+        return Object.entries(services).map(([serviceName, service]) => {
+            const containers = variant.containers.filter(container => value(container, 'Service', 'service') === serviceName)
+            return {
+                id: `${variant.configFiles || variant.project}:${serviceName}`,
+                name: serviceName,
+                iconUrl: null,
+                type: 'docker',
+                section: sectionForConfigPath(variant.configPath),
+                project: variant.project,
+                status: containers[0] ? value(containers[0], 'State', 'state', 'Status', 'status') : variant.status,
+                endpoints: endpointsForService(variant.project, serviceName, service, variant.containers)
+            }
+        })
+    }
+
+    async function loadComposeApps() {
+        loadController?.abort()
+        const controller = new AbortController()
+        loadController = controller
+        composeLoading = true
+        composeError = ''
+        try {
+            const projects = await listComposeProjects({ signal: controller.signal })
+            composeApps = projects.flatMap(appsForVariant).sort((a, b) => a.name.localeCompare(b.name))
+        } catch (error) {
+            if (error?.name !== 'AbortError') composeError = error?.message || 'Compose apps could not be loaded'
+        } finally {
+            if (loadController === controller) {
+                loadController = null
+                composeLoading = false
+            }
+        }
+    }
+
+    async function openURL(event, url, title) {
+        event?.preventDefault()
+        event?.stopPropagation()
+        if (!url) return
+        await data.newTab(data.spaceMeta.activeSpace, { url, title, shouldFocus: true })
+    }
+
+    function openApp(event, app) {
+        openURL(event, app.endpoints?.[0]?.url || app.url, app.name)
+    }
+
+    function handleOpenKey(event, app) {
+        if (event.key === 'Enter' || event.key === ' ') openApp(event, app)
+    }
+
+    function actionSettings(event, app) {
+        event.stopPropagation()
         console.log('settings', app)
     }
 
-    function actionLogs(e, app) {
-        e.stopPropagation()
+    function actionLogs(event, app) {
+        event.stopPropagation()
         console.log('logs', app)
     }
 
-    function actionEdit(e, app) {
-        e.stopPropagation()
+    function actionEdit(event, app) {
+        event.stopPropagation()
         console.log('edit', app)
+    }
+
+    function handleActionKey(event, action, app) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            action(event, app)
+        }
     }
 
     function typeLabel(type) {
@@ -113,196 +207,244 @@
         collapsedSections[sectionName] = !collapsedSections[sectionName]
     }
 
-    function openAddAppModal() {
-        showAddAppModal = true
-    }
-
-    function closeAddAppModal() {
-        showAddAppModal = false
+    function toggleSectionKey(event, sectionName) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            toggleSection(sectionName)
+        }
     }
 
     function addApp({ type, app, checkout }) {
-        const fallbackName = checkout?.path?.split('/').at(-1) || app.url || 'App'
-        apps.push({
+        if (type === 'repo' && checkout) {
+            loadComposeApps()
+            return
+        }
+        exampleApps.push({
             id: crypto.randomUUID(),
-            catalogId: app.catalogId || undefined,
-            name: app.name || fallbackName,
+            name: app.name || app.url || 'App',
             iconUrl: app.iconUrl || null,
-            type: type === 'repo' ? 'docker' : 'weblink',
-            category: type === 'repo' ? 'Development' : 'Links',
-            url: app.url || undefined,
-            githubUrl: app.githubUrl || undefined,
-            checkoutPath: checkout?.path,
-            configPath: app.path || undefined
+            type: 'weblink',
+            url: app.url
         })
     }
 </script>
 
-{#snippet AppCard(app, showServiceTag = false)}
-    {@const hs = hoverState[app.id]}
-    <div
-        class="relative group rounded-xl border border-white/5 bg-black/20 hover:bg-white/8 transition-colors px-4 pt-4 pb-3 cursor-pointer w-38 h-38"
-        role="button"
-        tabindex="0"
-        onmouseenter={() => showHover(app.id)}
-        onmouseleave={() => hideHover(app.id)}
-        onmousedown={(e) => openApp(e, app)}
-        aria-label={`Open ${app.name}`}
+{#snippet SectionHeader(name, count)}
+    <button
+        type="button"
+        class="flex w-full items-center gap-2 mb-3 text-left cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
+        onmousedown={() => toggleSection(name)}
+        onkeydown={(event) => toggleSectionKey(event, name)}
+        aria-expanded={!collapsedSections[name]}
     >
-        <div class="flex flex-col items-center justify-center text-center gap-1 pt-3 pb-5 px-1">
-            {#if app.iconUrl}
-                <img src={app.iconUrl} alt="{app.name} icon" class="w-16 h-16 rounded-lg object-cover" />
-            {:else}
-                <div class="w-16 h-16 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center text-white/80 text-xl font-semibold">
-                    {(app.name || '?').trim().charAt(0).toUpperCase()}
-                </div>
+        <h3 class="text-white/80 text-sm font-semibold tracking-wide">{name}</h3>
+        <span class="text-white/40 text-xs">({count})</span>
+        <svg class="w-4 h-4 text-white/60 transition-transform {collapsedSections[name] ? '-rotate-90' : ''}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 16.5l-6-6h12l-6 6z"/>
+        </svg>
+        <span class="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent"></span>
+    </button>
+{/snippet}
+
+{#snippet AppCard(app)}
+    {@const defaultURL = app.endpoints?.[0]?.url || app.url}
+    <article class="app-card relative w-52 min-h-44 rounded-xl border border-white/8 bg-black/20 hover:bg-white/8 hover:border-white/14 transition-colors px-3 pt-3 pb-2">
+        <div class="min-h-7 flex flex-wrap content-start gap-1">
+            {#if app.endpoints?.length > 1}
+                {#each app.endpoints as endpoint}
+                    <button
+                        type="button"
+                        class="max-w-44 truncate rounded-md border border-emerald-300/20 bg-emerald-300/8 px-1.5 py-1 text-[9px] leading-none text-emerald-100/80 hover:border-emerald-300/45 hover:bg-emerald-300/14 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70 cursor-pointer"
+                        title={`Open ${endpoint.container} on ${endpoint.port}`}
+                        aria-label={`Open ${endpoint.container} on port ${endpoint.port}`}
+                        onmousedown={(event) => openURL(event, endpoint.url, app.name)}
+                    >
+                        {endpoint.label}
+                    </button>
+                {/each}
             {/if}
-            
-            <div class="text-white/90 text-sm font-medium truncate w-full px-2" title={app.name}>
-                {app.name}
-            </div>
         </div>
 
-        <div class="absolute bottom-1 left-1 right-1 flex items-center gap-1 z-10">
-            {#if typeLabel(app.type)}
-                <span class="px-1.5 py-1 rounded text-[10px] leading-none border border-white/20 bg-white/10 text-white/70 flex-shrink-0">
-                    {typeLabel(app.type)}
+        <button
+            type="button"
+            class="mx-auto flex w-full flex-col items-center justify-center gap-1 px-1 pb-7 pt-1 text-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:cursor-default"
+            onmousedown={(event) => openApp(event, app)}
+            onkeydown={(event) => handleOpenKey(event, app)}
+            aria-label={defaultURL ? `Open ${app.name}` : `${app.name} has no published ports`}
+            disabled={!defaultURL}
+        >
+            {#if app.iconUrl}
+                <img src={app.iconUrl} alt="" class="w-16 h-16 rounded-lg object-cover" />
+            {:else}
+                <span class="w-16 h-16 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center text-white/80 text-xl font-semibold">
+                    {(app.name || '?').trim().charAt(0).toUpperCase()}
                 </span>
             {/if}
-            {#if showServiceTag && app.composeService}
-                <span class="px-1.5 py-1 rounded text-[10px] leading-none border border-white/20 bg-white/10 text-white/70 flex-shrink-0">
-                    {app.composeService}
-                </span>
+            <span class="text-white/90 text-sm font-medium truncate w-full px-2" title={app.name}>{app.name}</span>
+        </button>
+
+        <div class="absolute bottom-2 left-2 right-2 flex items-center gap-1 overflow-hidden">
+            {#if typeLabel(app.type)}
+                <span class="px-1.5 py-1 rounded text-[10px] leading-none border border-white/20 bg-white/10 text-white/70 flex-shrink-0">{typeLabel(app.type)}</span>
+            {/if}
+            {#if app.project}
+                <span class="truncate px-1.5 py-1 rounded text-[10px] leading-none border border-white/15 bg-white/5 text-white/55" title={app.project}>{app.project}</span>
             {/if}
             {#if app.partition?.name}
-                <span 
-                    style="color:{app.partition.color};border-color:{app.partition.color}66"
-                    class="px-1.5 py-1 rounded text-[10px] leading-none border bg-white/10 flex-shrink-0"
-                >
-                    {app.partition.name}
-                </span>
+                <span
+                    class="shrink-0 rounded border bg-white/10 px-1.5 py-1 text-[10px] leading-none"
+                    style:color={app.partition.color}
+                    style:border-color={`${app.partition.color}66`}
+                >{app.partition.name}</span>
+            {/if}
+            {#if app.status}
+                <span class="ml-auto max-w-18 truncate text-[9px] text-white/35" title={app.status}>{app.status}</span>
             {/if}
         </div>
 
-        <div class="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:delay-500"
-            aria-hidden={!hs?.visible}
-        >
-            <button title="Settings" aria-label="Settings"
-                onmousedown={(e) => actionSettings(e, app)}
-                class="p-1.5 rounded-md bg-black/80 border border-white/20 text-white/80 hover:text-white hover:bg-black/90 transition-colors backdrop-blur-sm cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><path d="M11.78 2.25c-.29 0-.57.02-.85.05a.75.75 0 0 0-.64.85l.13 1.03a8.97 8.97 0 0 0-1.84 1.06l-.9-.51a.75.75 0 0 0-1.02.27c-.26.45-.48.92-.66 1.41a.75.75 0 0 0 .36.92l.9.52c-.12.59-.18 1.2-.18 1.82 0 .62.06 1.23.18 1.82l-.9.52a.75.75 0 0 0-.36.92c.18.49.4.96.66 1.41.2.34.64.46 1.02.27l.9-.51c.57.42 1.2.77 1.84 1.06l-.13 1.03a.75.75 0 0 0 .64.85c.28.03.56.05.85.05.29 0 .57-.02.85-.05a.75.75 0 0 0 .64-.85l-.13-1.03c.64-.29 1.27-.64 1.84-1.06l.9.51a.75.75 0 0 0 1.02-.27c.26-.45.48-.92.66-1.41a.75.75 0 0 0-.36-.92l-.9-.52c.12-.59.18-1.2.18-1.82 0-.62-.06-1.23-.18-1.82l.9-.52a.75.75 0 0 0 .36-.92 8 8 0 0 0-.66-1.41.75.75 0 0 0-1.02-.27l-.9.51a8.97 8.97 0 0 0-1.84-1.06l.13-1.03a.75.75 0 0 0-.64-.85 9.7 9.7 0 0 0-1.7 0Zm.22 5.5a3.25 3.25 0 1 1 0 6.5 3.25 3.25 0 0 1 0-6.5Z"/></svg>
+        <div class="app-card-actions absolute right-2 top-2 z-10 flex flex-col gap-1">
+            <button
+                type="button"
+                title="Settings"
+                aria-label={`Settings for ${app.name}`}
+                class="rounded-md border border-white/20 bg-black/80 p-1.5 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/90 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 cursor-pointer"
+                onmousedown={(event) => actionSettings(event, app)}
+                onkeydown={(event) => handleActionKey(event, actionSettings, app)}
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true"><path d="M11.78 2.25c-.29 0-.57.02-.85.05a.75.75 0 0 0-.64.85l.13 1.03a8.97 8.97 0 0 0-1.84 1.06l-.9-.51a.75.75 0 0 0-1.02.27c-.26.45-.48.92-.66 1.41a.75.75 0 0 0 .36.92l.9.52c-.12.59-.18 1.2-.18 1.82 0 .62.06 1.23.18 1.82l-.9.52a.75.75 0 0 0-.36.92c.18.49.4.96.66 1.41.2.34.64.46 1.02.27l.9-.51c.57.42 1.2.77 1.84 1.06l-.13 1.03a.75.75 0 0 0 .64.85c.28.03.56.05.85.05.29 0 .57-.02.85-.05a.75.75 0 0 0 .64-.85l-.13-1.03c.64-.29 1.27-.64 1.84-1.06l.9.51a.75.75 0 0 0 1.02-.27c.26-.45.48-.92.66-1.41a.75.75 0 0 0-.36-.92l-.9-.52c.12-.59.18-1.2.18-1.82 0-.62-.06-1.23-.18-1.82l.9-.52a.75.75 0 0 0 .36-.92 8 8 0 0 0-.66-1.41.75.75 0 0 0-1.02-.27l-.9.51a8.97 8.97 0 0 0-1.84-1.06l.13-1.03a.75.75 0 0 0-.64-.85 9.7 9.7 0 0 0-1.7 0Zm.22 5.5a3.25 3.25 0 1 1 0 6.5 3.25 3.25 0 0 1 0-6.5Z"/></svg>
             </button>
-            <button title="Logs" aria-label="Logs"
-                onmousedown={(e) => actionLogs(e, app)}
-                class="p-1.5 rounded-md bg-black/80 border border-white/20 text-white/80 hover:text-white hover:bg-black/90 transition-colors backdrop-blur-sm cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" /></svg>
+            <button
+                type="button"
+                title="Logs"
+                aria-label={`Logs for ${app.name}`}
+                class="rounded-md border border-white/20 bg-black/80 p-1.5 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/90 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 cursor-pointer"
+                onmousedown={(event) => actionLogs(event, app)}
+                onkeydown={(event) => handleActionKey(event, actionLogs, app)}
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" /></svg>
             </button>
-            <button title="Edit" aria-label="Edit"
-                onmousedown={(e) => actionEdit(e, app)}
-                class="p-1.5 rounded-md bg-black/80 border border-white/20 text-white/80 hover:text-white hover:bg-black/90 transition-colors backdrop-blur-sm cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><path d="M21.731 2.269a2.625 2.625 0 0 0-3.713 0l-1.157 1.157 3.713 3.713 1.157-1.157a2.625 2.625 0 0 0 0-3.713Z"/><path d="M3 21v-3.75a2.25 2.25 0 0 1 .659-1.591l9.75-9.75 3.713 3.713-9.75 9.75A2.25 2.25 0 0 1 6.75 21H3Z"/></svg>
+            <button
+                type="button"
+                title="Edit"
+                aria-label={`Edit ${app.name}`}
+                class="rounded-md border border-white/20 bg-black/80 p-1.5 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/90 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 cursor-pointer"
+                onmousedown={(event) => actionEdit(event, app)}
+                onkeydown={(event) => handleActionKey(event, actionEdit, app)}
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true"><path d="M21.731 2.269a2.625 2.625 0 0 0-3.713 0l-1.157 1.157 3.713 3.713 1.157-1.157a2.625 2.625 0 0 0 0-3.713Z"/><path d="M3 21v-3.75a2.25 2.25 0 0 1 .659-1.591l9.75-9.75 3.713 3.713-9.75 9.75A2.25 2.25 0 0 1 6.75 21H3Z"/></svg>
             </button>
         </div>
-    </div>
+    </article>
 {/snippet}
 
 <div class="absolute top-[-50px] left-1/2 transform -translate-x-1/2 flex items-center justify-between z-10" style="width: 100%;">
     <h2 class="text-white/90 text-2xl font-semibold ml-2 mt-[-10px]">
         Apps
-        
-        <button 
-            class="p-2 text-white/70 ml-4 relative t-[2px] hover:text-white/90 hover:bg-white/10 rounded-lg transition-colors z-20 cursor-pointer" 
-            onmousedown={openAddAppModal}
-            aria-label="Add App"
-            title="Add App"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
-            <path d="M12 4.5a.75.75 0 0 1 .75.75v6h6a.75.75 0 0 1 0 1.5h-6v6a.75.75 0 0 1-1.5 0v-6h-6a.75.75 0 0 1 0-1.5h6v-6A.75.75 0 0 1 12 4.5Z"/>
-            </svg>
+        <button class="p-2 text-white/70 ml-4 relative t-[2px] hover:text-white/90 hover:bg-white/10 rounded-lg transition-colors z-20 cursor-pointer" onmousedown={() => showAddAppModal = true} aria-label="Add App" title="Add App">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path d="M12 4.5a.75.75 0 0 1 .75.75v6h6a.75.75 0 0 1 0 1.5h-6v6a.75.75 0 0 1-1.5 0v-6h-6a.75.75 0 0 1 0-1.5h6v-6A.75.75 0 0 1 12 4.5Z"/></svg>
         </button>
-   
     </h2>
 
-    <button 
-        class="p-2 text-white/70 hover:text-white/90 mr-[-30px] mb-[-20px] opacity-50 hover:opacity-100 rounded-lg transition-colors cursor-pointer" 
-        onmousedown={onClose}
-        aria-label="Close Apps"
-        title="Close Apps"
-    >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
-            <path d="M6.225 4.811a1 1 0 0 0-1.414 1.414L10.586 12 4.81 17.775a1 1 0 1 0 1.414 1.414L12 13.414l5.775 5.775a1 1 0 0 0 1.414-1.414L13.414 12l5.775-5.775a1 1 0 0 0-1.414-1.414L12 10.586 6.225 4.81Z"/>
-        </svg>
+    <button class="p-2 text-white/70 hover:text-white/90 mr-[-30px] mb-[-20px] opacity-50 hover:opacity-100 rounded-lg transition-colors cursor-pointer" onmousedown={onClose} aria-label="Close Apps" title="Close Apps">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path d="M6.225 4.811a1 1 0 0 0-1.414 1.414L10.586 12 4.81 17.775a1 1 0 1 0 1.414 1.414L12 13.414l5.775 5.775a1 1 0 0 0 1.414-1.414L13.414 12l5.775-5.775a1 1 0 0 0-1.414-1.414L12 10.586 6.225 4.81Z"/></svg>
     </button>
 </div>
 
-
 <div class="w-full h-full px-6 pt-6 pb-4 select-none overflow-y-auto relative apps-content" style="transform: translateZ(0); will-change: scroll-position;">
-    <!-- Default section without header -->
-    {#if defaultApps.length > 0}
-        <section class="mb-6">
+    {#if composeLoading}
+        <div class="mb-8 rounded-xl border border-white/8 bg-black/15 px-4 py-5 text-sm text-white/50" aria-live="polite">Reading Compose projects…</div>
+    {:else if composeError}
+        <div class="mb-8 flex items-center justify-between gap-4 rounded-xl border border-orange-300/15 bg-orange-300/5 px-4 py-3">
+            <p class="text-sm text-orange-100/70">{composeError}</p>
+            <button type="button" class="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/75 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 cursor-pointer" onmousedown={loadComposeApps}>Try again</button>
+        </div>
+    {:else if composeApps.length === 0}
+        <div class="mb-8 rounded-xl border border-dashed border-white/12 bg-black/10 px-4 py-5">
+            <p class="text-sm font-medium text-white/70">No Compose services found</p>
+            <p class="mt-1 text-xs text-white/40">Add a repository with a Compose file to make its services appear here.</p>
+        </div>
+    {/if}
+
+    {#if rootApps.length > 0}
+        <section class="mb-7" aria-label="Root Compose services">
             <div class="flex flex-wrap gap-3">
-                {#each defaultApps as app}
-                    {@render AppCard(app, false)}
+                {#each rootApps as app (app.id)}
+                    {@render AppCard(app)}
                 {/each}
             </div>
         </section>
     {/if}
 
-    {#each Object.keys(appsByCategory).sort() as category, i}
-        <section class="{i > 0 || defaultApps.length > 0 ? 'mt-8' : ''} mb-6">
-            <div class="flex items-center gap-2 mb-3 cursor-pointer" role="button" tabindex="0" onmousedown={() => toggleSection(category)}>
-                <h3 class="text-white/80 text-sm font-semibold tracking-wide">{category}</h3>
-                <span class="text-white/40 text-xs">({appsByCategory[category].length})</span>
-                <svg class="w-4 h-4 text-white/60 transition-transform {collapsedSections[category] ? 'rotate-180' : ''}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 16.5l-6-6h12l-6 6z"/>
-                </svg>
-                <span class="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent"></span>
-            </div>
-            {#if !collapsedSections[category]}
+    {#each Object.keys(composeSections).sort() as section}
+        <section class="mt-7 mb-6">
+            {@render SectionHeader(section, composeSections[section].length)}
+            {#if !collapsedSections[section]}
                 <div class="flex flex-wrap gap-3">
-                    {#each appsByCategory[category] as app}
-                        {@render AppCard(app, true)}
+                    {#each composeSections[section] as app (app.id)}
+                        {@render AppCard(app)}
                     {/each}
                 </div>
             {/if}
         </section>
     {/each}
 
-    <!-- Services Section -->
-    {#if serviceApps.length > 0}
-        <section class="mt-8 mb-0">
-            <div class="flex items-center gap-2 mb-3 cursor-pointer" role="button" tabindex="0" onmousedown={() => toggleSection('Services')}>
-                <h3 class="text-white/80 text-sm font-semibold tracking-wide">Services</h3>
-                <span class="text-white/40 text-xs">({serviceApps.length})</span>
-                <svg class="w-4 h-4 text-white/60 transition-transform {collapsedSections['Services'] ? 'rotate-180' : ''}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 16.5l-6-6h12l-6 6z"/>
-                </svg>
-                <span class="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent"></span>
+    <section class="mt-7 mb-0">
+        {@render SectionHeader('Examples', exampleApps.length)}
+        {#if !collapsedSections.Examples}
+            <div class="flex flex-wrap gap-3">
+                {#each exampleApps as app (app.id)}
+                    {@render AppCard(app)}
+                {/each}
             </div>
-            {#if !collapsedSections['Services']}
-                <div class="flex flex-wrap gap-3">
-                    {#each serviceApps as app}
-                        {@render AppCard(app, false)}
-                    {/each}
-                </div>
-            {/if}
-        </section>
-    {/if}
+        {/if}
+    </section>
 </div>
 
-<AddAppModal 
+<AddAppModal
     show={showAddAppModal}
-    installedApps={apps}
+    installedApps={[...composeApps, ...exampleApps]}
     onAdd={addApp}
-    onClose={closeAddAppModal} 
+    onClose={() => showAddAppModal = false}
 />
 
 <style>
+    .app-card-actions {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 200ms;
+    }
+
+    .app-card:hover .app-card-actions {
+        opacity: 1;
+        pointer-events: auto;
+        transition-delay: 500ms;
+    }
+
+    .app-card:focus-within .app-card-actions {
+        opacity: 1;
+        pointer-events: auto;
+        transition-delay: 0ms;
+    }
+
+    @media (hover: none) {
+        .app-card-actions {
+            opacity: 1;
+            pointer-events: auto;
+            transition: none;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .app-card-actions {
+            transition: none;
+        }
+    }
+
     .apps-content {
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
     }
-    
+
     .apps-content::-webkit-scrollbar {
         width: 6px;
     }
