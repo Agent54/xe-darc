@@ -33,11 +33,40 @@
     return null
   }
 
+  function loadSceneState(spaceId) {
+    if (!spaceId) return { elements: [], files: {} }
+
+    try {
+      const scene = JSON.parse(localStorage.getItem(`excalidraw-scene-${spaceId}`) || '{}')
+      return {
+        elements: Array.isArray(scene.elements) ? scene.elements : [],
+        files: scene.files && typeof scene.files === 'object' ? scene.files : {}
+      }
+    } catch (error) {
+      console.error('Failed to load canvas scene', error)
+      return { elements: [], files: {} }
+    }
+  }
+
+  function saveSceneState(spaceId, elements, files) {
+    if (!spaceId) return
+
+    const customElements = elements.filter(element => data.docs[element.id]?.type !== 'tab' && !element.isDeleted)
+
+    try {
+      localStorage.setItem(`excalidraw-scene-${spaceId}`, JSON.stringify({ elements: customElements, files }))
+    } catch (error) {
+      console.error('Failed to save canvas scene', error)
+    }
+  }
+
   const versions = new Map()
+  const sceneChangeHandlers = new Map()
 
   let elements = $derived.by(() => {
     const elems = {}
     const arrows = []
+    const savedScene = loadSceneState(data.spaceMeta.activeSpace)
     const tabWidth = 1000
     const tabHeight = 700  
     const columnSpacing = 80
@@ -69,7 +98,7 @@
         data.updateTab(tab.id, { canvas: { [data.spaceMeta.activeSpace]: { x, y, width, height } } })
       }
 
-      versions.set(tab.id, 1)
+      versions.set(tab.id, canvasData?.version || 1)
       
       elems[tab.id] = {
           "id": tab.id,
@@ -79,7 +108,7 @@
           "y": y,
           "width": width || tabWidth,
           "height": height || tabHeight,
-          "angle": tab.angle || 0,
+          "angle": canvasData?.angle ?? tab.angle ?? 0,
           
           "strokeColor": "none",
           "backgroundColor": "none",
@@ -88,20 +117,20 @@
           "strokeStyle": "solid",
           "roughness": 0,
           "opacity": 100,
-          "groupIds": [],
-          "frameId": null,
-          "index": "a2",
+          "groupIds": canvasData?.groupIds || [],
+          "frameId": canvasData?.frameId || null,
+          "index": canvasData?.index,
           "roundness": {
               "type": 3
           },
           "seed": 1218149059,
-          "version": 1,
-          "versionNonce": 1873698765,
+          "version": canvasData?.version || 1,
+          "versionNonce": canvasData?.versionNonce || 1873698765,
           "isDeleted": tab.closed,
-          "boundElements": null,
-          "updated": tab.modified || Date.now(),
+          "boundElements": canvasData?.boundElements || null,
+          "updated": canvasData?.updated || tab.modified || Date.now(),
           "link": tab.url,
-          "locked": false
+          "locked": canvasData?.locked || false
       }
 
       if (tab.opener) {
@@ -174,7 +203,8 @@
         elems[arrow.endBinding.elementId].x, elems[arrow.endBinding.elementId].y
       ])
     })
-    return [...Object.values(elems), ...(arrows)] // convertToExcalidrawElements
+    const customElements = savedScene.elements.filter(element => !elems[element.id])
+    return [...Object.values(elems), ...arrows, ...customElements] // convertToExcalidrawElements
   })
   
   let savedState
@@ -183,7 +213,7 @@
     "version": 2,
     "source": "isolated-app://kktqp5b4ad3rk7liu3s3svirby266incu7xsds2l56zwzm3op5aaaaac",
     elements,
-    "files": {},
+    "files": loadSceneState(data.spaceMeta.activeSpace).files,
     appState: (() => {
       // Load saved view state from localStorage
       savedState = loadViewState(data.spaceMeta.activeSpace)
@@ -226,9 +256,19 @@
   let container
   let root
   let excalidrawAPI = $state(null)
+  let sceneSpaceId = data.spaceMeta.activeSpace
   let currentZoom = $derived(excalidrawData?.appState?.zoom?.value || 0.35)
 
+  function queueSceneChange(spaceId, elements, appState, files) {
+    if (!sceneChangeHandlers.has(spaceId)) {
+      sceneChangeHandlers.set(spaceId, throttle(persistSceneChange, 1000))
+    }
+
+    sceneChangeHandlers.get(spaceId)(spaceId, elements, appState, files)
+  }
+
   $effect(() => {
+    sceneSpaceId = data.spaceMeta.activeSpace
     excalidrawAPI?.updateScene(excalidrawData)
   })
   
@@ -236,38 +276,9 @@
     root = ReactDOM.createRoot(container)
     const element = React.createElement(ExcalidrawReact, {
       initialData: excalidrawData,
-      onChange: throttle((elements, appState, files) => {
-        // Update zoom level for CSS custom property
-        if (appState?.zoom?.value !== undefined) {
-          currentZoom = appState.zoom.value
-        }
-        
-        // Save view state to localStorage
-        if (appState?.scrollX !== undefined && appState?.scrollY !== undefined && appState?.zoom?.value !== undefined) {
-          if (savedState?.scrollX !== appState.scrollX || savedState?.scrollY !== appState.scrollY || savedState?.zoom?.value !== appState.zoom.value) {
-            saveViewState(data.spaceMeta.activeSpace, appState.scrollX, appState.scrollY, appState.zoom.value)
-          }
-        }
-
-        for (const elem of elements) {
-          if (elem.isDeleted) {
-            data.closeTab(data.spaceMeta.activeSpace, elem.id)
-            continue
-          }
-          const version = versions.get(elem.id)
-          if (version && elem.version !== version) {
-            const elemCanvData = data.docs[elem.id]?.canvas?.[data.spaceMeta.activeSpace]
-            if (!elemCanvData || elemCanvData.x !== elem.x || elemCanvData.y !== elem.y || elemCanvData.width !== elem.width || elemCanvData.height !== elem.height) {
-              data.updateTab(elem.id, { canvas: { [data.spaceMeta.activeSpace]: { x: elem.x, y: elem.y, width: elem.width, height: elem.height } } })
-            } else {
-              versions.set(elem.id, elem.version)
-            }
-          }
-        }
-
-        onChange(elements, appState, files)
-        console.log('onChange', elements, appState)
-      }, 1000),
+      onChange: (elements, appState, files) => {
+        queueSceneChange(sceneSpaceId, elements, appState, files)
+      },
       onPointerUpdate,
       excalidrawAPI: (api) => {
         if (excalidrawAPI === null) {
@@ -291,7 +302,7 @@
             console.log('no link', element)
             return null
         }
-        
+
         return React.createElement(FrameWrapper, {
           element,
           controlledFrameSupported,
@@ -303,6 +314,58 @@
     })
     root.render(element)
   })
+
+  function persistSceneChange(spaceId, elements, appState, files) {
+    // Update zoom level for CSS custom property
+    if (spaceId === sceneSpaceId && appState?.zoom?.value !== undefined) {
+      currentZoom = appState.zoom.value
+    }
+
+    // Save view state to localStorage
+    if (appState?.scrollX !== undefined && appState?.scrollY !== undefined && appState?.zoom?.value !== undefined) {
+      if (savedState?.scrollX !== appState.scrollX || savedState?.scrollY !== appState.scrollY || savedState?.zoom?.value !== appState.zoom.value) {
+        saveViewState(spaceId, appState.scrollX, appState.scrollY, appState.zoom.value)
+      }
+    }
+
+    saveSceneState(spaceId, elements, files)
+
+    for (const elem of elements) {
+      if (elem.isDeleted) {
+        if (data.spaces[spaceId]?.tabs.some(tab => tab.id === elem.id)) {
+          data.closeTab(spaceId, elem.id)
+        }
+        continue
+      }
+
+      const tab = data.docs[elem.id]
+      if (tab?.type !== 'tab' || tab.spaceId !== spaceId) {
+        continue
+      }
+
+      const version = versions.get(elem.id)
+      const canvasData = tab.canvas?.[spaceId]
+      if (version && (elem.version !== version || elem.index !== canvasData?.index)) {
+        data.updateTab(elem.id, { canvas: { [spaceId]: {
+          x: elem.x,
+          y: elem.y,
+          width: elem.width,
+          height: elem.height,
+          angle: elem.angle,
+          groupIds: elem.groupIds,
+          frameId: elem.frameId,
+          index: elem.index,
+          version: elem.version,
+          versionNonce: elem.versionNonce,
+          updated: elem.updated,
+          boundElements: elem.boundElements,
+          locked: elem.locked
+        } } })
+      }
+    }
+
+    onChange(elements, appState, files)
+  }
 
   let loaded = $state(false)
   setTimeout(() => {
