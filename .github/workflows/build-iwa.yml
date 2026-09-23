@@ -2,6 +2,9 @@ name: Build and Release IWA
 
 # TODO: alpha channel  = main, nightly channel = int
 on:
+  push:
+    branches:
+      - int
   workflow_dispatch:
     inputs:
       version:
