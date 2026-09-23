@@ -7,7 +7,7 @@
     const collapsedSections = $state({})
     let showAddAppModal = $state(false)
 
-    const apps = [
+    let apps = $state([
         // Default section apps (no category or category: null)
         { id: 'default1', name: 'Terminal', iconUrl: '/embed-icons/github_gist.png', type: 'pwa' },
         { id: 'default2', name: 'Browser', iconUrl: '/embed-icons/observable.png', type: 'weblink' },
@@ -49,7 +49,7 @@
         { id: 'a33', name: 'TextEdit', iconUrl: null, type: null, category: 'Utilities' },
         { id: 'a34', name: 'Mail', iconUrl: '/embed-icons/google_calendar.png', type: null, category: 'Productivity' },
         { id: 'a35', name: 'Clock', iconUrl: null, type: null, category: 'Utilities' }
-    ]
+    ])
 
     const appsByCategory = $derived.by(() => {
         const grouped = {}
@@ -119,6 +119,22 @@
 
     function closeAddAppModal() {
         showAddAppModal = false
+    }
+
+    function addApp({ type, app, checkout }) {
+        const fallbackName = checkout?.path?.split('/').at(-1) || app.url || 'App'
+        apps.push({
+            id: crypto.randomUUID(),
+            catalogId: app.catalogId || undefined,
+            name: app.name || fallbackName,
+            iconUrl: app.iconUrl || null,
+            type: type === 'repo' ? 'docker' : 'weblink',
+            category: type === 'repo' ? 'Development' : 'Links',
+            url: app.url || undefined,
+            githubUrl: app.githubUrl || undefined,
+            checkoutPath: checkout?.path,
+            configPath: app.path || undefined
+        })
     }
 </script>
 
@@ -277,6 +293,7 @@
 <AddAppModal 
     show={showAddAppModal}
     installedApps={apps}
+    onAdd={addApp}
     onClose={closeAddAppModal} 
 />
 

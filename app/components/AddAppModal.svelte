@@ -1,5 +1,7 @@
 <script>
-    let { show = false, installedApps = [], onClose = () => {} } = $props()
+    import { checkoutRepository } from '../lib/compose-api.js'
+
+    let { show = false, installedApps = [], onAdd = () => {}, onClose = () => {} } = $props()
     
     let activeTab = $state('catalog')
     let appFormData = $state({
@@ -12,9 +14,11 @@
         // URL tab specific
         url: '',
         // Repo tab specific
+        catalogId: '',
         githubUrl: '',
         branch: 'main',
         githubToken: '',
+        checkoutPath: '',
         pathType: 'compose',
         path: ''
     })
@@ -22,6 +26,9 @@
     let showPartitionDropdown = $state(false)
     let activeTooltip = $state(null)
     let installedSection = $state('closed')
+    let submissionState = $state('idle')
+    let submitError = $state('')
+    let checkoutController = null
     
     const availablePartitions = [
         { id: 'current', name: 'Current Space Partition', description: 'Default partition for this workspace' },
@@ -34,15 +41,19 @@
 
     function switchTab(tab) {
         activeTab = tab
+        submitError = ''
     }
 
     function selectCatalogApp(app) {
         Object.assign(appFormData, {
+            catalogId: app.id || '',
             name: app.name || '',
             iconUrl: app.iconUrl || '',
             url: '',
             githubUrl: '',
             branch: app.branch || 'main',
+            githubToken: '',
+            checkoutPath: app.checkoutPath || '',
             pathType: app.pathType || 'compose',
             path: app.path || ''
         })
@@ -67,14 +78,56 @@
         installedSection = installedSection === 'closed' ? 'open' : 'closed'
     }
 
-    function submitApp() {
-        console.log('Submit app:', appFormData)
-        onClose()
+    async function submitApp() {
+        if (submissionState === 'submitting') {
+            return
+        }
+        submitError = ''
+
+        const { githubToken, ...settings } = appFormData
+        const app = {
+            ...settings,
+            dataPartitions: [...appFormData.dataPartitions]
+        }
+        if (activeTab !== 'repo') {
+            onAdd({ type: activeTab, app })
+            handleClose()
+            return
+        }
+
+        submissionState = 'submitting'
+        const controller = new AbortController()
+        checkoutController = controller
+        try {
+            const checkout = await checkoutRepository({
+                url: app.githubUrl,
+                path: app.checkoutPath,
+                branch: app.branch,
+                token: githubToken,
+                signal: controller.signal
+            })
+            onAdd({ type: 'repo', app, checkout })
+            handleClose()
+        } catch (error) {
+            if (error?.name !== 'AbortError') {
+                submitError = error?.message || 'Repository checkout failed'
+            }
+        } finally {
+            if (checkoutController === controller) {
+                checkoutController = null
+                submissionState = 'idle'
+            }
+        }
     }
 
     function handleClose() {
+        checkoutController?.abort()
+        checkoutController = null
+        submissionState = 'idle'
+        submitError = ''
         // Reset form
         Object.assign(appFormData, {
+            catalogId: '',
             name: '',
             iconUrl: '',
             pinToAppPins: false,
@@ -85,6 +138,7 @@
             githubUrl: '',
             branch: 'main',
             githubToken: '',
+            checkoutPath: '',
             pathType: 'compose',
             path: ''
         })
@@ -334,7 +388,7 @@
                             
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label for="github-url" class="block text-sm font-medium text-white/70 mb-2">GitHub URL (required)</label>
+                                    <label for="github-url" class="block text-sm font-medium text-white/70 mb-2">Repository URL (required)</label>
                                     <input 
                                         id="github-url"
                                         type="url" 
@@ -345,26 +399,41 @@
                                 </div>
                                 
                                 <div>
-                                    <label for="branch" class="block text-sm font-medium text-white/70 mb-2">Branch</label>
+                                    <label for="checkout-path" class="block text-sm font-medium text-white/70 mb-2">Parent folder (optional)</label>
                                     <input 
-                                        id="branch"
+                                        id="checkout-path"
                                         type="text" 
+                                        bind:value={appFormData.checkoutPath}
+                                        placeholder="development/tools"
+                                        class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
+                                    />
+                                    <p class="mt-1 text-xs text-white/45">Up to three folders beneath stacks. The repository name is appended automatically.</p>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <label for="branch" class="block text-sm font-medium text-white/70 mb-2">Branch</label>
+                                    <input
+                                        id="branch"
+                                        type="text"
                                         bind:value={appFormData.branch}
                                         placeholder="main"
                                         class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
                                     />
                                 </div>
-                            </div>
-                            
-                            <div>
-                                <label for="github-token" class="block text-sm font-medium text-white/70 mb-2">GitHub Token</label>
-                                <input 
-                                    id="github-token"
-                                    type="password" 
-                                    bind:value={appFormData.githubToken}
-                                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
-                                />
+
+                                <div>
+                                    <label for="github-token" class="block text-sm font-medium text-white/70 mb-2">GitHub Token</label>
+                                    <input
+                                        id="github-token"
+                                        type="password"
+                                        bind:value={appFormData.githubToken}
+                                        placeholder="Optional for private repositories"
+                                        autocomplete="off"
+                                        class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
+                                    />
+                                </div>
                             </div>
                             
                             <div class="space-y-4">
@@ -435,7 +504,12 @@
             </div>
 
             <!-- Footer -->
-            <div class="flex items-center justify-end gap-3 p-6 border-t border-white/10 flex-shrink-0">
+            <div class="flex items-center gap-3 p-6 border-t border-white/10 flex-shrink-0">
+                <div class="min-w-0 flex-1" aria-live="polite">
+                    {#if submitError}
+                        <p class="text-sm text-orange-300" role="alert">{submitError}</p>
+                    {/if}
+                </div>
                 <button 
                     class="px-4 py-2 text-sm font-medium text-white/70 hover:text-white/90 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                     onmousedown={handleClose}
@@ -445,9 +519,9 @@
                 <button 
                     class="px-6 py-2 text-sm font-medium bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none cursor-pointer"
                     onmousedown={submitApp}
-                    disabled={activeTab === 'catalog' || activeTab === 'url' && !appFormData.url || activeTab === 'repo' && !appFormData.githubUrl}
+                    disabled={submissionState === 'submitting' || activeTab === 'catalog' || activeTab === 'url' && !appFormData.url || activeTab === 'repo' && !appFormData.githubUrl}
                 >
-                    Add App
+                    {submissionState === 'submitting' ? 'Cloning…' : 'Add App'}
                 </button>
             </div>
         </div>
