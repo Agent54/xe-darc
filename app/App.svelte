@@ -4904,9 +4904,6 @@
         display: flex;
         align-items: center;
         padding: 0 16px;
-        border-radius: 8px;
-        background: rgb(50 50 50 / 85%);
-        box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
     }
 
     .divider-drag-preview-line {

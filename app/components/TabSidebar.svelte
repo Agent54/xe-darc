@@ -2329,10 +2329,10 @@
     
     .tab-search-icon {
         position: absolute;
-        left: 12px;
-        width: 15px;
-        height: 15px;
-        color: #a5aab4;
+        left: 11px;
+        width: 14px;
+        height: 14px;
+        color: rgba(255, 255, 255, 0.46);
         pointer-events: none;
         transition: color 150ms ease;
     }
@@ -2340,30 +2340,31 @@
     .tab-search-input {
         width: 100%;
         height: 36px; /* Match pinned-tab height */
-        background: #202226;
-        border: 1px solid transparent;
-        border-radius: 10px;
-        padding: 0 38px 0 36px;
-        color: #f3f4f6;
-        caret-color: #f3f4f6;
-        font-size: 14px;
-        font-weight: 550;
-        letter-spacing: -0.015em;
+        background: rgba(255, 255, 255, 0.06);
+        border: 0;
+        border-radius: 11px;
+        padding: 0 32px;
+        color: rgba(255, 255, 255, 0.84);
+        caret-color: rgba(255, 255, 255, 0.84);
+        font-size: 13.5px;
+        font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        appearance: none;
         outline: none;
-        transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+        box-shadow: none;
+        transition: background-color 150ms ease;
         box-sizing: border-box;
     }
     
     .tab-search-clear {
         position: absolute;
-        right: 6px;
-        width: 24px;
-        height: 24px;
+        right: 7px;
+        width: 22px;
+        height: 22px;
         border-radius: 7px;
-        background: rgba(255, 255, 255, 0.07);
+        background: transparent;
         border: none;
-        color: #b7bcc6;
+        color: rgba(255, 255, 255, 0.44);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -2373,37 +2374,35 @@
     }
     
     .tab-search-clear:hover {
-        background: rgba(255, 255, 255, 0.15);
-        color: #f3f4f6;
+        color: rgba(255, 255, 255, 0.75);
     }
 
     .tab-search-clear:focus-visible {
-        outline: 2px solid #a5aab4;
-        outline-offset: 2px;
+        outline: none;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.84);
     }
     
     .tab-search-clear svg {
-        width: 14px;
-        height: 14px;
+        width: 13px;
+        height: 13px;
     }
     
     .tab-search-input:hover {
-        background: #282a2f;
+        background: rgba(255, 255, 255, 0.08);
     }
     
     .tab-search-input:focus {
-        background: #282a2f;
-        border-color: rgba(255, 255, 255, 0.24);
-        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.1);
     }
     
     .tab-search-container:focus-within .tab-search-icon {
-        color: #d8dce4;
+        color: rgba(255, 255, 255, 0.66);
     }
     
     .tab-search-input::placeholder {
-        color: #a5aab4;
-        font-weight: 500;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 450;
     }
 
     @media (prefers-reduced-motion: reduce) {
