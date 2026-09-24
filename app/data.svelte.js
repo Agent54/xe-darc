@@ -279,6 +279,122 @@ let lastForceHibernateTime = 0
 const previews = $state({})
 const settings = $state({})
 const ui = $state({ viewMode: 'default' })
+const desiredCanvasShapes = new Map()
+const canvasShapeSaveTasks = new Map()
+
+function compareCanvasShapes(first, second) {
+    if (!second) return 1
+
+    const firstVersion = first?.element?.version || 0
+    const secondVersion = second?.element?.version || 0
+    if (firstVersion !== secondVersion) {
+        return firstVersion - secondVersion
+    }
+
+    const firstNonce = first?.element?.versionNonce ?? Number.MAX_SAFE_INTEGER
+    const secondNonce = second?.element?.versionNonce ?? Number.MAX_SAFE_INTEGER
+    if (firstNonce !== secondNonce) {
+        return secondNonce - firstNonce
+    }
+
+    const firstUpdated = first?.element?.updated || 0
+    const secondUpdated = second?.element?.updated || 0
+    if (firstUpdated !== secondUpdated) {
+        return firstUpdated - secondUpdated
+    }
+
+    return (first?.modified || 0) - (second?.modified || 0)
+}
+
+function applyCanvasShape(shape) {
+    if (shape?.type !== 'shape') return
+
+    docs[shape.id] = shape
+
+    const space = spaces[shape.spaceId]
+    if (!space) return
+
+    const shapeIndex = space.tabs?.findIndex(item => item.id === shape.id) ?? -1
+    if (shapeIndex === -1) {
+        space.tabs = [...(space.tabs || []), shape].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    } else {
+        space.tabs[shapeIndex] = shape
+    }
+}
+
+async function persistCanvasShape(shapeId) {
+    while (desiredCanvasShapes.has(shapeId)) {
+        const shape = desiredCanvasShapes.get(shapeId)
+        if (shape?.type !== 'shape') {
+            desiredCanvasShapes.delete(shapeId)
+            return
+        }
+
+        let currentShape = null
+
+        try {
+            currentShape = await db.get(shapeId)
+        } catch (error) {
+            if (error.status !== 404) {
+                throw error
+            }
+        }
+
+        if (currentShape && currentShape.type !== 'shape') {
+            desiredCanvasShapes.delete(shapeId)
+            return
+        }
+
+        if (currentShape && compareCanvasShapes(shape, currentShape) < 0) {
+            if (desiredCanvasShapes.get(shapeId) === shape) {
+                desiredCanvasShapes.delete(shapeId)
+            }
+            applyCanvasShape(currentShape)
+            continue
+        }
+
+        try {
+            const result = await db.put({
+                ...shape,
+                ...(currentShape?._rev ? { _rev: currentShape._rev } : {})
+            })
+
+            if (docs[shapeId]?.type === 'shape') {
+                docs[shapeId]._rev = result.rev
+            }
+
+            if (desiredCanvasShapes.get(shapeId) === shape) {
+                desiredCanvasShapes.delete(shapeId)
+            }
+        } catch (error) {
+            if (error.status !== 409) {
+                throw error
+            }
+        }
+    }
+}
+
+function queueCanvasShapeSave(shape) {
+    if (shape?.type !== 'shape') return
+
+    const desiredShape = desiredCanvasShapes.get(shape.id)
+    if (!desiredShape || compareCanvasShapes(shape, desiredShape) >= 0) {
+        desiredCanvasShapes.set(shape.id, shape)
+    }
+
+    if (canvasShapeSaveTasks.has(shape.id)) return
+
+    const saveTask = persistCanvasShape(shape.id)
+        .catch(error => console.error('Failed to save canvas shape', error))
+        .finally(() => {
+            canvasShapeSaveTasks.delete(shape.id)
+            if (desiredCanvasShapes.has(shape.id)) {
+                queueCanvasShapeSave(desiredCanvasShapes.get(shape.id))
+            }
+        })
+
+    canvasShapeSaveTasks.set(shape.id, saveTask)
+}
 
 // LED indicator states for all frames - using timestamps to avoid events
 const ledIndicators = $state({
@@ -701,6 +817,18 @@ live: true,
 
     const oldDoc = docs[change.id]?._rev ? docs[change.id] : null
     changes = [change, ...changes]
+
+    if (change.doc.type === 'shape') {
+        const desiredShape = desiredCanvasShapes.get(change.id)
+        if (desiredShape && compareCanvasShapes(desiredShape, change.doc) > 0) {
+            desiredShape._rev = change.doc._rev
+            if (docs[change.id]?.type === 'shape') {
+                docs[change.id]._rev = change.doc._rev
+            }
+            return
+        }
+    }
+
     if (editingId !== change.id) {
         docs[change.id] = change.doc
 
@@ -1416,9 +1544,11 @@ const data = {
                 continue
             }
 
-            const storedShape = docs[element.id]?.type === 'shape'
-                ? docs[element.id]
-                : space.tabs?.find(item => item.id === element.id && item.type === 'shape')
+            const storedShape = desiredCanvasShapes.get(element.id) || (
+                docs[element.id]?.type === 'shape'
+                    ? docs[element.id]
+                    : space.tabs?.find(item => item.id === element.id && item.type === 'shape')
+            )
 
             const shapeFiles = { ...(storedShape?.files || {}) }
             const file = element.fileId ? files[element.fileId] : null
@@ -1467,28 +1597,7 @@ const data = {
         }
         space.tabs = nextTabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
-        db.bulkDocs(changedShapes).then(results => {
-            results.forEach((result, index) => {
-                if (result.rev) {
-                    changedShapes[index]._rev = result.rev
-                    if (docs[result.id]?.type === 'shape') {
-                        docs[result.id]._rev = result.rev
-                    }
-                } else if (result.error === 'conflict' && docs[result.id]?.type === 'shape') {
-                    const latestShape = { ...docs[result.id] }
-                    db.get(result.id)
-                        .then(current => db.put({ ...latestShape, _rev: current._rev }))
-                        .then(retryResult => {
-                            if (docs[retryResult.id]?.type === 'shape') {
-                                docs[retryResult.id]._rev = retryResult.rev
-                            }
-                        })
-                        .catch(error => console.error('Failed to retry canvas shape save', error))
-                } else if (result.error) {
-                    console.error('Failed to save canvas shape', result)
-                }
-            })
-        }).catch(error => console.error('Failed to save canvas shapes', error))
+        changedShapes.forEach(queueCanvasShapeSave)
     },
 
     updateTab: async (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url } = {}) => {

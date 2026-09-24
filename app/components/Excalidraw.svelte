@@ -244,7 +244,7 @@
 
   function queueSceneChange(spaceId, elements, appState, files) {
     if (!sceneChangeHandlers.has(spaceId)) {
-      sceneChangeHandlers.set(spaceId, throttle(persistSceneChange, 1000, { leading: false }))
+      sceneChangeHandlers.set(spaceId, throttle(persistSceneChange, 250, { leading: false }))
     }
 
     sceneChangeHandlers.get(spaceId)(spaceId, elements, appState, files)
@@ -406,8 +406,9 @@
         transition: opacity 0.2s ease-in-out 0.1s;
     }
 
-    :global(.excalidraw__embeddable-container) {
-      border-radius: var(--embeddable-radius, 8px); 
+    :global(.excalidraw__embeddable-container__inner) {
+      box-sizing: border-box;
+      border-radius: var(--embeddable-radius, 8px);
       border: 1px solid #bababa;
     }
 
