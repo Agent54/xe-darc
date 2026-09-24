@@ -760,6 +760,14 @@
         }
     }
 
+    function showNewTabMenu(isInline = false) {
+        if (isInline && inlineNewTabButtonElement) {
+            const rect = inlineNewTabButtonElement.getBoundingClientRect()
+            newTabMenuPosition = { left: rect.left }
+        }
+        newTabMenuVisible = true
+    }
+
     function handleNewTabButtonMouseEnter(isInline = false) {
         // Cancel any pending close when mouse enters button
         if (newTabMenuLeaveTimeout) {
@@ -771,11 +779,7 @@
         }
         const delay = 800
         newTabMenuHoverTimeout = setTimeout(() => {
-            if (isInline && inlineNewTabButtonElement) {
-                const rect = inlineNewTabButtonElement.getBoundingClientRect()
-                newTabMenuPosition = { left: rect.left }
-            }
-            newTabMenuVisible = true
+            showNewTabMenu(isInline)
         }, delay)
     }
     
@@ -822,11 +826,7 @@
             clearTimeout(newTabMenuHoverTimeout)
             newTabMenuHoverTimeout = null
         }
-        if (isInline && inlineNewTabButtonElement) {
-            const rect = inlineNewTabButtonElement.getBoundingClientRect()
-            newTabMenuPosition = { left: rect.left + rect.width / 2 }
-        }
-        newTabMenuVisible = true
+        showNewTabMenu(isInline)
     }
 
     async function handleNewFromClipboard() {
@@ -1413,7 +1413,19 @@
     }
 
     onDrop((event) => {
-        if (event.type === 'sidepin') {
+        if (event.type === 'remove-divider') {
+            if (event.dividerId === data.pendingDividerId) {
+                data.removePendingDivider(event.sourceSpaceId)
+            } else {
+                data.removeDivider(event.dividerId)
+            }
+        } else if (event.type === 'move-divider') {
+            data.moveDivider(event.tabId, event.sourceSpaceId, {
+                beforeTabId: event.beforeTabId,
+                afterTabId: event.afterTabId,
+                targetSpaceId: event.targetSpaceId
+            })
+        } else if (event.type === 'sidepin') {
             const tab = data.docs[event.tabId]
             if (!tab) return
             const side = event.side
@@ -4807,7 +4819,7 @@
     "></div>
 {/if}
 
-{#if tabDrag.active && data.docs[tabDrag.tabId]}
+{#if tabDrag.active && tabDrag.dragType === 'tab' && data.docs[tabDrag.tabId]}
     {@const dragTab = data.docs[tabDrag.tabId]}
     <div class="tab-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px; height: {tabDrag.previewHeight}px;">
         <div class="favicon-wrapper">
@@ -4815,6 +4827,19 @@
         </div>
         <span class="tab-drag-preview-title">{dragTab.title || dragTab.url || 'Untitled'}</span>
     </div>
+{/if}
+
+{#if tabDrag.active && tabDrag.dragType === 'divider'}
+    <div class="divider-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px; height: {tabDrag.previewHeight}px;">
+        <div class="divider-drag-preview-line"></div>
+    </div>
+    {#if tabDrag.deleteZone}
+        <div class="divider-drag-trash" style="left: {tabDrag.mouseX + 14}px; top: {tabDrag.mouseY + 12}px;" aria-label="Release to delete spacer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14H6L5 6m5 4v7m4-7v7" />
+            </svg>
+        </div>
+    {/if}
 {/if}
 
 {#if tabDrag.active && tabDrag.sidepinZone && !tabDrag.indicator.visible}
@@ -4870,6 +4895,43 @@
         border-radius: 8px;
         box-sizing: border-box;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+
+    .divider-drag-preview {
+        position: fixed;
+        z-index: 99999;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        border-radius: 8px;
+        background: rgb(50 50 50 / 85%);
+        box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
+    }
+
+    .divider-drag-preview-line {
+        width: 100%;
+        height: 1px;
+        background: rgb(255 255 255 / 50%);
+    }
+
+    .divider-drag-trash {
+        position: fixed;
+        z-index: 100000;
+        width: 24px;
+        height: 24px;
+        display: grid;
+        place-items: center;
+        border-radius: 7px;
+        background: rgb(50 50 50);
+        color: rgb(235 235 235);
+        box-shadow: 0 2px 10px rgb(0 0 0 / 40%);
+        pointer-events: none;
+    }
+
+    .divider-drag-trash svg {
+        width: 15px;
+        height: 15px;
     }
 
     .tab-drag-preview-title {

@@ -1353,6 +1353,7 @@ const data = {
         const _id = `darc:tab_${crypto.randomUUID()}`
         const fillsPendingDivider = pendingDividers[spaceId] && !preview && !lightbox && !pinned
         const committedDivider = fillsPendingDivider ? commitPendingDivider(spaceId, { persist: false }) : null
+        const firstItem = spaces[spaceId]?.tabs?.[0]
 
         const tab = {
             _id,
@@ -1362,7 +1363,7 @@ const data = {
             favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64` : undefined,
             url: url || 'about:newtab',
             title: url ? title : 'New Tab',
-            order: committedDivider ? committedDivider.order - 1 : Date.now(),
+            order: !pinned && !preview && !lightbox && firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
             opener,
             preview: !!preview,
             archive: preview ? 'preview' : undefined,
@@ -1376,9 +1377,7 @@ const data = {
 
         if (!preview && !lightbox) {
             spaces[spaceId].tabs.push(tab)
-            if (committedDivider) {
-                spaces[spaceId].tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-            }
+            spaces[spaceId].tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         }
         
         docs[tab._id] = tab
@@ -1901,6 +1900,14 @@ const data = {
 
     closeTab,
 
+    moveDivider: (dividerId, sourceSpaceId, options) => {
+        const divider = dividerId === pendingDividerId
+            ? commitPendingDivider(sourceSpaceId, { persist: false })
+            : docs[dividerId]
+        if (divider?.type !== 'divider') return
+        data.moveTab(divider.id, options)
+    },
+
     moveTab: (tabId, { beforeTabId, afterTabId, targetSpaceId }) => {
         const tab = docs[tabId]
         if (!tab) return
@@ -1918,7 +1925,8 @@ const data = {
             committedDivider = commitPendingDivider(destSpaceId, { persist: false })
             resolvedAfterTabId = committedDivider?.id || null
         } else if (resolvedBeforeTabId === pendingDividerId) {
-            resolvedBeforeTabId = null
+            committedDivider = commitPendingDivider(destSpaceId, { persist: false })
+            resolvedBeforeTabId = committedDivider?.id || null
         }
 
         // Calculate new order

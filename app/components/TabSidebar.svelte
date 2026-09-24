@@ -1584,7 +1584,7 @@
                         <svg class="tab-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
                         </svg>
-                        <input type="text" class="tab-search-input" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) isSearchModeActive = false }} onkeydown={(e) => { if (e.key === 'Escape') { tabSearchQuery = ''; isSearchModeActive = false; searchInputRef?.blur(); } }} />
+                        <input type="text" class="tab-search-input" aria-label="Search tabs" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) isSearchModeActive = false }} onkeydown={(e) => { if (e.key === 'Escape') { tabSearchQuery = ''; isSearchModeActive = false; searchInputRef?.blur(); } }} />
                         <button class="tab-search-clear" onmousedown={() => { tabSearchQuery = ''; isSearchModeActive = false; }} aria-label="Close search">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                 <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
@@ -1870,7 +1870,11 @@
                                     <div class="tabs-list" onscroll={handleTabsListScroll}>
 
                                     {#if data.pendingDividers[spaceId] && !tabSearchQuery}
-                                        <div class="tab-divider-item pending-divider" data-tab-id={data.pendingDividerId}>
+                                        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                        <div class="tab-divider-item pending-divider" class:tab-dragging={tabDrag.active && tabDrag.tabId === data.pendingDividerId && tabDrag.sourceSpaceId === spaceId} data-tab-id={data.pendingDividerId}
+                                             role="listitem"
+                                             onmousedown={(e) => { if (e.button === 0) startTabDrag(data.pendingDividerId, e.currentTarget, 'sidebar', spaceId, e, false, null, 'divider') }}
+                                             oncontextmenu={(e) => handleTabContextMenu(e, { id: data.pendingDividerId, type: 'divider', spaceId }, -1)}>
                                             <div class="tab-divider-leading-space"></div>
                                             <div class="tab-divider">
                                                 <div class="tab-divider-line-only"></div>
@@ -1889,7 +1893,11 @@
                                    {#each data.spaces[spaceId].tabs as tab, i (tab.id)}
                                         {#if tab.type === 'divider'}
                                             {#if !tabSearchQuery}
-                                                <div class="tab-divider-item" data-tab-id={tab.id}>
+                                                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                                <div class="tab-divider-item" class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
+                                                     role="listitem"
+                                                     onmousedown={(e) => { if (e.button === 0) startTabDrag(tab.id, e.currentTarget, 'sidebar', spaceId, e, false, null, 'divider') }}
+                                                     oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
                                                     {#if i === 0}
                                                         <div class="tab-divider-leading-space"></div>
                                                     {/if}
@@ -2321,10 +2329,10 @@
     
     .tab-search-icon {
         position: absolute;
-        left: 10px;
-        width: 14px;
-        height: 14px;
-        color: rgba(255, 255, 255, 0.3);
+        left: 12px;
+        width: 15px;
+        height: 15px;
+        color: #a5aab4;
         pointer-events: none;
         transition: color 150ms ease;
     }
@@ -2332,39 +2340,46 @@
     .tab-search-input {
         width: 100%;
         height: 36px; /* Match pinned-tab height */
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 12px;
-        padding: 0 30px 0 30px;
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 13px;
+        background: #202226;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        padding: 0 38px 0 36px;
+        color: #f3f4f6;
+        caret-color: #f3f4f6;
+        font-size: 14px;
+        font-weight: 550;
+        letter-spacing: -0.015em;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         outline: none;
-        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+        transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
         box-sizing: border-box;
     }
     
     .tab-search-clear {
         position: absolute;
-        right: 8px;
-        width: 20px;
-        height: 20px;
-            border-radius: 12px;
-        background: transparent;
+        right: 6px;
+        width: 24px;
+        height: 24px;
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.07);
         border: none;
-        color: rgba(255, 255, 255, 0.4);
+        color: #b7bcc6;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 150ms ease;
+        transition: background-color 150ms ease, color 150ms ease;
         padding: 0;
     }
     
     .tab-search-clear:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.8);
+        background: rgba(255, 255, 255, 0.15);
+        color: #f3f4f6;
+    }
+
+    .tab-search-clear:focus-visible {
+        outline: 2px solid #a5aab4;
+        outline-offset: 2px;
     }
     
     .tab-search-clear svg {
@@ -2373,23 +2388,30 @@
     }
     
     .tab-search-input:hover {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(255, 255, 255, 0.1);
+        background: #282a2f;
     }
     
     .tab-search-input:focus {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.15);
-        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05);
+        background: #282a2f;
+        border-color: rgba(255, 255, 255, 0.24);
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
     }
     
-    .tab-search-input:focus + .tab-search-icon {
-        color: rgba(255, 255, 255, 0.6);
+    .tab-search-container:focus-within .tab-search-icon {
+        color: #d8dce4;
     }
     
     .tab-search-input::placeholder {
-        color: rgba(255, 255, 255, 0.3);
-        font-weight: 400;
+        color: #a5aab4;
+        font-weight: 500;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .tab-search-icon,
+        .tab-search-input,
+        .tab-search-clear {
+            transition: none;
+        }
     }
 
     .global-pins-section {
@@ -3424,6 +3446,11 @@
         position: relative;
         flex-shrink: 0;
         width: 100%;
+        cursor: grab;
+    }
+
+    .tab-divider-item.tab-dragging {
+        opacity: 0.3;
     }
 
     .tab-divider-leading-space {
