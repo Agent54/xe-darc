@@ -109,10 +109,12 @@ let pending = null
 let activateRafId = null
 let didDrag = false
 let dropCallback = null
+let dividerDropTarget = null
 
 function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActive, pinnedSide, dragType = 'tab') {
     if (e.button !== 0) return
-    pending = { tabId, tabEl, sourceZone, sourceSpaceId, startX: e.clientX, startY: e.clientY, pinnedSide: pinnedSide || null, dragType }
+    dividerDropTarget = null
+    pending = { tabId, tabEl, tabRect: tabEl.getBoundingClientRect(), sourceZone, sourceSpaceId, startX: e.clientX, startY: e.clientY, pinnedSide: pinnedSide || null, dragType }
     state.pending = true
     state.wasAlreadyActive = wasAlreadyActive
     didDrag = false
@@ -136,7 +138,7 @@ function handleMouseMove(e) {
                 clearTimeout(activateRafId)
                 activateRafId = null
             }
-            const tabRect = pending.tabEl.getBoundingClientRect()
+            const tabRect = pending.tabRect
             didDrag = true
             state.active = true
             state.pending = false
@@ -171,6 +173,7 @@ function handleMouseMove(e) {
     state.mouseY = my
 
     state.deleteZone = false
+    dividerDropTarget = null
 
     // Try pinned tab containers first (left fixed, right fixed, and right inline in topbar)
     if (state.dragType !== 'divider') {
@@ -233,11 +236,22 @@ function handleMouseMove(e) {
             const hit = findClosestTab(tabs, my, 'y')
             if (hit) {
                 if (isNoopDrop(tabs, hit)) { hideIndicator(); state.sidepinZone = null; return }
+                if (state.dragType === 'divider') {
+                    const targetSpaceId = list.closest('.space-content')?.getAttribute('data-space-id') || null
+                    dividerDropTarget = buildDropInfo(tabs, hit, state.tabId, targetSpaceId)
+                }
                 showIndicator(tabs, hit.index, hit.after, 'y')
                 state.sidepinZone = null
                 return
             }
             // Empty list or mouse past all tabs — show indicator at list top/after last tab
+            if (state.dragType === 'divider') {
+                dividerDropTarget = {
+                    beforeTabId: null,
+                    afterTabId: null,
+                    targetSpaceId: list.closest('.space-content')?.getAttribute('data-space-id') || null
+                }
+            }
             showIndicatorInList(list, tabs)
             state.sidepinZone = null
             return
@@ -286,12 +300,17 @@ function handleMouseMove(e) {
 }
 
 function isNoopDrop(tabs, hit) {
-    const dragEl = state.tabEl
     const i = hit.index
-    if (hit.el === dragEl) return true
-    if (hit.after && i + 1 < tabs.length && tabs[i + 1] === dragEl) return true
-    if (!hit.after && i - 1 >= 0 && tabs[i - 1] === dragEl) return true
+    if (isDraggedElement(hit.el)) return true
+    if (hit.after && i + 1 < tabs.length && isDraggedElement(tabs[i + 1])) return true
+    if (!hit.after && i - 1 >= 0 && isDraggedElement(tabs[i - 1])) return true
     return false
+}
+
+function isDraggedElement(el) {
+    if (el === state.tabEl) return true
+    if (state.dragType !== 'divider' || getTabId(el) !== state.tabId) return false
+    return el.closest?.('.space-content')?.getAttribute('data-space-id') === state.sourceSpaceId
 }
 
 // Find which tab the mouse is closest to, returns { el, index, after }
@@ -410,7 +429,9 @@ function handleMouseUp(event, cancelled = false) {
             dropCallback({ type: 'sidepin', tabId: state.tabId, side: state.sidepinZone })
         } else if (state.indicator.visible) {
             // Determine drop target from indicator position
-            const drop = resolveDropTarget(state.mouseX, state.mouseY, state.tabId)
+            const drop = state.dragType === 'divider'
+                ? dividerDropTarget
+                : resolveDropTarget(state.mouseX, state.mouseY, state.tabId)
             if (drop) {
                 dropCallback({ type: state.dragType === 'divider' ? 'move-divider' : 'reorder', tabId: state.tabId, sourceSpaceId: state.sourceSpaceId, ...drop })
             }
@@ -429,6 +450,7 @@ function handleMouseUp(event, cancelled = false) {
     state.sidepinZone = null
     pending = null
     activateRafId = null
+    dividerDropTarget = null
 }
 
 // Resolve the drop target: which space, and the tab IDs of neighbors for order calculation

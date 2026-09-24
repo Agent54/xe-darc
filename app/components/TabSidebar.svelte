@@ -1858,7 +1858,7 @@
                                         <div class="add-spacer-insertion">
                                             <Tooltip text="Add spacer" position="top" delay={300}>
                                                 <button class="add-spacer-preview"
-                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(spaceId); } }}
+                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(spaceId); startTabDrag(data.pendingDividerId, e.currentTarget, 'sidebar', spaceId, e, false, null, 'divider') } }}
                                                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
                                                         aria-label="Add spacer">
                                                     <span class="add-spacer-preview-line"></span>
