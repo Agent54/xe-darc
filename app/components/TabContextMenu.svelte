@@ -121,11 +121,7 @@
     }
 
     function removeDividerFromMenu(divider) {
-        if (divider.id === data.pendingDividerId) {
-            data.removePendingDivider(divider.spaceId)
-        } else {
-            data.removeDivider(divider.id)
-        }
+        data.removeDivider(divider.id)
         onHide()
     }
     

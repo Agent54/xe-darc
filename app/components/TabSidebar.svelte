@@ -550,14 +550,14 @@
     }
     
     function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
-        if (!spaceId || tabSearchQuery || data.pendingDividers[spaceId] || data.spaces[spaceId]?.tabs?.[0]?.type === 'divider') return
+        if (!spaceId || tabSearchQuery || data.spaces[spaceId]?.tabs?.[0]?.type === 'divider') return
 
         const tabsList = tabListRef?.querySelector(`[data-space-id="${spaceId}"] .tabs-list`)
         if (tabsList) {
             tabsList.scrollTop = 0
         }
 
-        data.addPendingDivider(spaceId)
+        data.addDivider(spaceId)
     }
 
     // Initialize spaces scroll fade state when spacesListRef is available or spaces change
@@ -1854,11 +1854,11 @@
                                 </div>
                                 
                                 <div class="tabs-list-container">
-                                    {#if !tabSearchQuery && !data.pendingDividers[spaceId] && data.spaces[spaceId]?.tabs?.[0]?.type !== 'divider' && !tabsListScrolled[spaceId]}
+                                    {#if !tabSearchQuery && data.spaces[spaceId]?.tabs?.[0]?.type !== 'divider' && !tabsListScrolled[spaceId]}
                                         <div class="add-spacer-insertion">
                                             <Tooltip text="Add spacer" position="top" delay={300}>
                                                 <button class="add-spacer-preview"
-                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(spaceId); startTabDrag(data.pendingDividerId, e.currentTarget, 'sidebar', spaceId, e, false, null, 'divider') } }}
+                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(spaceId) } }}
                                                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
                                                         aria-label="Add spacer">
                                                     <span class="add-spacer-preview-line"></span>
@@ -1869,27 +1869,6 @@
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list" onscroll={handleTabsListScroll}>
 
-                                    {#if data.pendingDividers[spaceId] && !tabSearchQuery}
-                                        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-                                        <div class="tab-divider-item pending-divider" class:tab-dragging={tabDrag.active && tabDrag.tabId === data.pendingDividerId && tabDrag.sourceSpaceId === spaceId} data-tab-id={data.pendingDividerId}
-                                             role="listitem"
-                                             onmousedown={(e) => { if (e.button === 0) startTabDrag(data.pendingDividerId, e.currentTarget, 'sidebar', spaceId, e, false, null, 'divider') }}
-                                             oncontextmenu={(e) => handleTabContextMenu(e, { id: data.pendingDividerId, type: 'divider', spaceId }, -1)}>
-                                            <div class="tab-divider-leading-space"></div>
-                                            <div class="tab-divider">
-                                                <div class="tab-divider-line-only"></div>
-                                                <button class="tab-divider-remove"
-                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); data.removePendingDivider(spaceId); } }}
-                                                        aria-label="Remove divider"
-                                                        title="Remove divider">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    {/if}
-
                                    {#each data.spaces[spaceId].tabs as tab, i (tab.id)}
                                         {#if tab.type === 'divider'}
                                             {#if !tabSearchQuery}
@@ -1898,9 +1877,6 @@
                                                      role="listitem"
                                                      onmousedown={(e) => { if (e.button === 0) startTabDrag(tab.id, e.currentTarget, 'sidebar', spaceId, e, false, null, 'divider') }}
                                                      oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                    {#if i === 0}
-                                                        <div class="tab-divider-leading-space"></div>
-                                                    {/if}
                                                     <div class="tab-divider">
                                                         {#if tab.title}
                                                             <span class="tab-divider-title">{tab.title}</span>
@@ -3452,7 +3428,9 @@
         opacity: 0.3;
     }
 
-    .tab-divider-leading-space {
+    .tabs-list > .tab-divider-item:first-child::before {
+        content: '';
+        display: block;
         height: 36px;
         width: 100%;
     }

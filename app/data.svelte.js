@@ -404,13 +404,11 @@ const ledIndicators = $state({
     permissionRequest: 0
 })
 
-// Sidebar spacer drafts live only for this app session until a tab fills their leading slot.
-const pendingDividers = $state({})
-const pendingDividerId = 'darc:pending-divider'
+const dividerCreationTasks = new Map()
 
-function createDivider(spaceId, { persist = true } = {}) {
+function createDivider(spaceId) {
     const space = spaces[spaceId]
-    if (!space) return null
+    if (!space || space.tabs?.[0]?.type === 'divider') return null
 
     space.tabs ??= []
     const firstItem = space.tabs[0]
@@ -428,24 +426,12 @@ function createDivider(spaceId, { persist = true } = {}) {
     space.tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     docs[_id] = divider
 
-    if (persist) {
-        db.put(divider).then(result => {
-            if (result.rev) {
-                divider._rev = result.rev
-            }
-        }).catch(error => console.error('Failed to create divider:', error))
-    }
+    const creation = db.put({ ...divider }).then(result => {
+        divider._rev = result.rev
+    }).catch(error => console.error('Failed to create divider:', error))
+    dividerCreationTasks.set(_id, creation)
+    creation.then(() => dividerCreationTasks.delete(_id))
 
-    return divider
-}
-
-function commitPendingDivider(spaceId, options) {
-    if (!pendingDividers[spaceId]) return null
-
-    const divider = createDivider(spaceId, options)
-    if (divider) {
-        delete pendingDividers[spaceId]
-    }
     return divider
 }
 
@@ -707,9 +693,6 @@ const refresh = throttle(async function (spaceId) {
     // Assign new tabs arrays to spaces (prevents flicker by avoiding intermediate empty state)
     for (const spaceId of Object.keys(newSpaceTabs)) {
         spaces[spaceId].tabs = newSpaceTabs[spaceId].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        if (spaces[spaceId].tabs[0]?.type === 'divider') {
-            delete pendingDividers[spaceId]
-        }
     }
 
     console.log('setting active tab id b', { current : spaceMeta.activeTabId, title: docs[spaceMeta.activeTabId]?.title || '', activeTabIdExists, list :spaces[spaceMeta.activeSpace]?.activeTabsOrder })
@@ -1178,8 +1161,6 @@ const data = {
     origins,
     spaceMeta,
     spaces,
-    pendingDividers,
-    pendingDividerId,
     activity,
     getAttachmentUrl,
     resources,
@@ -1393,7 +1374,6 @@ const data = {
 
     deleteSpace: (spaceId) => {
         delete spaces[spaceId]
-        delete pendingDividers[spaceId]
         spaceMeta.spaceOrder = spaceMeta.spaceOrder.filter(id => id !== spaceId)
         if (spaceMeta.activeSpace === spaceId) {
             spaceMeta.activeSpace = spaceMeta.spaceOrder[0] || null
@@ -1451,14 +1431,7 @@ const data = {
         // })
     },
 
-    addPendingDivider: (spaceId) => {
-        if (!spaces[spaceId] || spaces[spaceId].tabs?.[0]?.type === 'divider') return
-        pendingDividers[spaceId] = true
-    },
-
-    removePendingDivider: (spaceId) => {
-        delete pendingDividers[spaceId]
-    },
+    addDivider: createDivider,
 
     removeDivider: (dividerId) => {
         const divider = docs[dividerId]
@@ -1469,18 +1442,19 @@ const data = {
             space.tabs = space.tabs.filter(item => item.id !== dividerId)
         }
 
-        db.put({
-            ...divider,
+        const persistRemoval = () => db.put({
+            ...(docs[dividerId] || divider),
             archive: 'deleted',
             modified: Date.now()
-        }).catch(error => console.error('Failed to remove divider:', error))
+        })
+        const creation = dividerCreationTasks.get(dividerId)
+        const removal = creation ? creation.then(persistRemoval) : persistRemoval()
+        removal.catch(error => console.error('Failed to remove divider:', error))
     },
     
     newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned } = {}) => {
         // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
-        const fillsPendingDivider = pendingDividers[spaceId] && !preview && !lightbox && !pinned
-        const committedDivider = fillsPendingDivider ? commitPendingDivider(spaceId, { persist: false }) : null
         const firstItem = spaces[spaceId]?.tabs?.[0]
 
         const tab = {
@@ -1521,14 +1495,7 @@ const data = {
             activate(_id)
         }
 
-        if (committedDivider) {
-            db.bulkDocs([committedDivider, tab]).then(([dividerResult, tabResult]) => {
-                if (dividerResult?.rev) committedDivider._rev = dividerResult.rev
-                if (tabResult?.rev) tab._rev = tabResult.rev
-            }).catch(error => console.error('Failed to create tab and divider:', error))
-        } else {
-            db.put(tab)
-        }
+        db.put(tab)
         return tab
     },
 
@@ -2009,38 +1976,23 @@ const data = {
 
     closeTab,
 
-    moveDivider: (dividerId, sourceSpaceId, options) => {
-        const divider = dividerId === pendingDividerId
-            ? commitPendingDivider(sourceSpaceId, { persist: false })
-            : docs[dividerId]
-        if (divider?.type !== 'divider') return
-        data.moveTab(divider.id, options)
-    },
-
     moveTab: (tabId, { beforeTabId, afterTabId, targetSpaceId }) => {
-        const tab = docs[tabId]
-        if (!tab) return
+        const tabDoc = docs[tabId]
+        if (!tabDoc) return
 
-        const sourceSpaceId = tab.spaceId
+        const sourceSpaceId = tabDoc.spaceId
+        const tab = spaces[sourceSpaceId]?.tabs?.find(item => item.id === tabId) || tabDoc
+        if (tab !== tabDoc) {
+            Object.assign(tab, tabDoc)
+            docs[tabId] = tab
+        }
         const destSpaceId = targetSpaceId || sourceSpaceId
         const isSpaceMove = destSpaceId !== sourceSpaceId
 
-        let resolvedBeforeTabId = beforeTabId
-        let resolvedAfterTabId = afterTabId
-        let committedDivider = null
-
-        // The synthetic divider participates in hit testing but is not a database document yet.
-        if (resolvedAfterTabId === pendingDividerId) {
-            committedDivider = commitPendingDivider(destSpaceId, { persist: false })
-            resolvedAfterTabId = committedDivider?.id || null
-        } else if (resolvedBeforeTabId === pendingDividerId) {
-            committedDivider = commitPendingDivider(destSpaceId, { persist: false })
-            resolvedBeforeTabId = committedDivider?.id || null
-        }
-
         // Calculate new order
-        const beforeTab = resolvedBeforeTabId ? docs[resolvedBeforeTabId] : null
-        const afterTab = resolvedAfterTabId ? docs[resolvedAfterTabId] : null
+        const targetItems = spaces[destSpaceId]?.tabs
+        const beforeTab = beforeTabId ? targetItems?.find(item => item.id === beforeTabId) || docs[beforeTabId] : null
+        const afterTab = afterTabId ? targetItems?.find(item => item.id === afterTabId) || docs[afterTabId] : null
         let newOrder
         if (beforeTab && afterTab) {
             newOrder = (beforeTab.order + afterTab.order) / 2
@@ -2110,12 +2062,8 @@ const data = {
 
         // Prevent change feed from triggering a redundant refresh
         editingId = tabId
-        const persistMove = committedDivider
-            ? db.bulkDocs([committedDivider, { ...tab }]).then(([dividerResult, tabResult]) => {
-                if (dividerResult?.rev) committedDivider._rev = dividerResult.rev
-                return tabResult
-            })
-            : db.put({ ...tab })
+        const creation = dividerCreationTasks.get(tabId)
+        const persistMove = creation ? creation.then(() => db.put({ ...tab })) : db.put({ ...tab })
 
         persistMove.then((res) => {
             editingId = null

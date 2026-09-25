@@ -1414,17 +1414,7 @@
 
     onDrop((event) => {
         if (event.type === 'remove-divider') {
-            if (event.dividerId === data.pendingDividerId) {
-                data.removePendingDivider(event.sourceSpaceId)
-            } else {
-                data.removeDivider(event.dividerId)
-            }
-        } else if (event.type === 'move-divider') {
-            data.moveDivider(event.tabId, event.sourceSpaceId, {
-                beforeTabId: event.beforeTabId,
-                afterTabId: event.afterTabId,
-                targetSpaceId: event.targetSpaceId
-            })
+            data.removeDivider(event.dividerId)
         } else if (event.type === 'sidepin') {
             const tab = data.docs[event.tabId]
             if (!tab) return
