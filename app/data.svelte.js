@@ -1803,8 +1803,20 @@ const data = {
     },
 
     permissionRequest: (tabId, event) => {
+        if (typeof event?.permission !== 'string' || !event.permission.trim()) {
+            console.warn('Permission request has no permission type', event)
+            return { granted: false }
+        }
+
+        let origin
+        try {
+            origin = new URL(event.url).origin
+        } catch {
+            console.warn('Permission request has no valid URL', event)
+            return { granted: false }
+        }
+
         let permission = permissions[event.permission]
-        const origin = new URL(event.url).origin
 
         if (!permission) {
             console.warn(`Unknown permission type: ${event.permission}`)
@@ -1835,7 +1847,10 @@ const data = {
         const granted = permission.origins[origin].permission === 'always' || permission.origins[origin].permission === 'ephemeral'
 
         if (granted) {
-            permission.origins[origin].requests.at(-1).timestamp = Date.now()
+            const latestRequest = permission.origins[origin].requests.at(-1)
+            if (latestRequest) {
+                latestRequest.timestamp = Date.now()
+            }
             return { granted }
         }
 
@@ -1965,12 +1980,14 @@ const data = {
             return false
         }
 
-        const latestRequest = permissionObj.origins[origin].requests.at(-1)
-        if (latestRequest.status === 'requested') {
-            latestRequest.status = 'granted'
-            latestRequest.unseen = false
-            latestRequest.needsReload = true
-            latestRequest.timestamp = Date.now()
+        const pendingRequests = permissionObj.origins[origin].requests.filter(request => request.status === 'requested')
+        if (pendingRequests.length > 0) {
+            for (const request of pendingRequests) {
+                request.status = 'granted'
+                request.unseen = false
+                request.needsReload = true
+                request.timestamp = Date.now()
+            }
             
             if (permission === 'always') {
                 permissionObj.origins[origin].permission = 'always'
@@ -1989,14 +2006,16 @@ const data = {
             return false
         }
 
-        // Find the latest request for this permission type and origin
-        const latestRequest = permissionObj.origins[origin].requests.at(-1)
-        if (latestRequest.status === 'requested') {
+        // Find the pending requests for this permission type and origin
+        const pendingRequests = permissionObj.origins[origin].requests.filter(request => request.status === 'requested')
+        if (pendingRequests.length > 0) {
             // Update the request status
-            latestRequest.status = 'denied'
-            latestRequest.unseen = false
-            latestRequest.needsReload = true
-            latestRequest.timestamp = Date.now()
+            for (const request of pendingRequests) {
+                request.status = 'denied'
+                request.unseen = false
+                request.needsReload = true
+                request.timestamp = Date.now()
+            }
             
             // Set the permission to denied for this origin
             permissionObj.origins[origin].permission = 'denied'
@@ -2007,17 +2026,20 @@ const data = {
         return false
     },
 
-    ignorePermission: (permissionType, origin) => {
+    ignorePermission: (permissionType, origin, requestId) => {
         const permissionObj = permissions[permissionType]
         if (!permissionObj?.origins?.[origin]?.requests?.length) {
             return false
         }
 
-        const latestRequest = permissionObj.origins[origin].requests.at(-1)
-        if (latestRequest.status === 'requested') {
-            latestRequest.status = 'ignored'
-            latestRequest.unseen = false
-            latestRequest.timestamp = Date.now()
+        const requests = permissionObj.origins[origin].requests
+        const request = requestId
+            ? requests.find(item => item.requestId === requestId)
+            : requests.findLast(item => item.status === 'requested')
+        if (request?.status === 'requested') {
+            request.status = 'ignored'
+            request.unseen = false
+            request.timestamp = Date.now()
             
             return true
         }

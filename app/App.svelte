@@ -284,6 +284,7 @@
     let userMods = $state([])
     
     let resourcesSidebarAutoOpened = $state(false)
+    const observedPermissionRequests = new Set()
     
     // let isEditingUrl = $state(false)
     // let editingUrlValue = $state('')
@@ -2972,7 +2973,11 @@
                     if (request.unseen && 
                         request.windowId === window.darcWindowId && 
                         request.status === 'requested') {
-                        unseenResourcesForThisWindow.push(request)
+                        const requestKey = request.requestId || request
+                        if (!observedPermissionRequests.has(requestKey)) {
+                            observedPermissionRequests.add(requestKey)
+                            unseenResourcesForThisWindow.push(request)
+                        }
                     }
                 })
             })

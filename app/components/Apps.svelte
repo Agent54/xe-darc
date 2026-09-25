@@ -2,7 +2,7 @@
     import { onMount } from 'svelte'
     import AddAppModal from './AddAppModal.svelte'
     import data from '../data.svelte.js'
-    import { listComposeProjects } from '../lib/compose-api.js'
+    import { getComposeAppPorts, listComposeProjects } from '../lib/compose-api.js'
 
     let { onClose = () => {} } = $props()
 
@@ -93,7 +93,7 @@
         return [...ports.values()]
     }
 
-    function endpointsForService(project, serviceName, service, containers) {
+    function endpointsForService(project, serviceName, service, containers, httpsPort) {
         const serviceContainers = containers.filter(container => value(container, 'Service', 'service') === serviceName)
         const instances = serviceContainers.length ? serviceContainers : [{ Name: `${project}-${serviceName}-1` }]
         const ports = servicePorts(service, instances)
@@ -106,23 +106,26 @@
             for (const port of ports) {
                 const portName = String(value(port, 'name', 'Name') || '').trim()
                 const published = publishedPort(container, port)
+                if (!Number.isInteger(published) || published < 1 || published > 65535) continue
                 const namedSelector = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(portName) ? portName.toLowerCase() : ''
-                const selector = namedSelector || published
-                if (!selector) continue
+                const uniqueName = namedSelector && ports.filter(candidate =>
+                    String(value(candidate, 'name', 'Name') || '').trim().toLowerCase() === namedSelector
+                ).length === 1
+                const aliasSelector = uniqueName ? `n${namedSelector}` : `p${published}`
                 const portLabel = portName || String(value(port, 'target', 'TargetPort') || published)
                 endpoints.push({
                     id: `${containerName}:${portLabel}:${published}`,
                     label: `${containerName} · ${portLabel}`,
                     container: containerName,
                     port: portLabel,
-                    url: `http://${routeName}.${selector}.localhost`
+                    url: `https://${routeName}--${aliasSelector}.app.localhost${httpsPort === 443 ? '' : `:${httpsPort}`}`
                 })
             }
         }
         return endpoints.filter((endpoint, index) => endpoints.findIndex(candidate => candidate.url === endpoint.url) === index)
     }
 
-    function appsForVariant(variant) {
+    function appsForVariant(variant, httpsPort) {
         const services = variant.config?.services || {}
         return Object.entries(services).map(([serviceName, service]) => {
             const containers = variant.containers.filter(container => value(container, 'Service', 'service') === serviceName)
@@ -134,7 +137,7 @@
                 section: sectionForConfigPath(variant.configPath),
                 project: variant.project,
                 status: containers[0] ? value(containers[0], 'State', 'state', 'Status', 'status') : variant.status,
-                endpoints: endpointsForService(variant.project, serviceName, service, variant.containers)
+                endpoints: endpointsForService(variant.project, serviceName, service, variant.containers, httpsPort)
             }
         })
     }
@@ -146,8 +149,9 @@
         composeLoading = true
         composeError = ''
         try {
+            const { https } = await getComposeAppPorts({ signal: controller.signal })
             const projects = await listComposeProjects({ signal: controller.signal })
-            composeApps = projects.flatMap(appsForVariant).sort((a, b) => a.name.localeCompare(b.name))
+            composeApps = projects.flatMap(project => appsForVariant(project, https)).sort((a, b) => a.name.localeCompare(b.name))
         } catch (error) {
             if (error?.name !== 'AbortError') composeError = error?.message || 'Compose apps could not be loaded'
         } finally {

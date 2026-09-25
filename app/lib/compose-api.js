@@ -1,7 +1,70 @@
-const composeAPIOrigin = 'http://127.0.0.1:8094'
+const composeAPIOrigins = ['https://compose-ui.localhost', 'https://compose-ui.localhost:5194']
+let composeConnection = null
+
+async function checkComposeOrigin(origin, signal) {
+    const response = await fetch(`${origin}/v1.24/app-ports`, { signal })
+    if (!response.ok) throw new Error(`Compose API returned ${response.status} at ${origin}`)
+    const ports = await response.json()
+    if (ports?.https !== Number(new URL(origin).port || 443) || !ports.publicHttpReady) {
+        throw new Error(`Compose HTTPS port is unavailable at ${origin}`)
+    }
+    return { origin, ports }
+}
+
+async function getComposeConnection(signal) {
+    if (composeConnection) return composeConnection
+    let lastError
+    for (const origin of composeAPIOrigins) {
+        try {
+            composeConnection = await checkComposeOrigin(origin, signal)
+            return composeConnection
+        } catch (error) {
+            if (signal?.aborted) throw error
+            lastError = error
+        }
+    }
+    try {
+        // The private listener only supplies the selected port when a custom pair is configured.
+        const response = await fetch('http://127.0.0.1:8094/v1.24/app-ports', { signal })
+        if (!response.ok) throw new Error(`Compose port discovery returned ${response.status}`)
+        const ports = await response.json()
+        if (!Number.isInteger(ports?.https) || ports.https < 1 || ports.https > 65535) {
+            throw new Error('Compose port discovery returned an invalid HTTPS port')
+        }
+        const origin = `https://compose-ui.localhost${ports.https === 443 ? '' : `:${ports.https}`}`
+        composeConnection = await checkComposeOrigin(origin, signal)
+        return composeConnection
+    } catch (error) {
+        if (signal?.aborted) throw error
+        lastError = error
+    }
+    throw new Error(`Xe Launcher Compose API is unavailable over HTTPS: ${lastError?.message || 'connection failed'}`)
+}
+
+export async function getComposeAppPorts({ signal } = {}) {
+    if (composeConnection) {
+        try {
+            composeConnection = await checkComposeOrigin(composeConnection.origin, signal)
+        } catch (error) {
+            if (signal?.aborted) throw error
+            composeConnection = null
+        }
+    }
+    return (await getComposeConnection(signal)).ports
+}
+
+async function composeFetch(path, options = {}) {
+    const { origin } = await getComposeConnection(options.signal)
+    try {
+        return await fetch(`${origin}${path}`, options)
+    } catch (error) {
+        if (!options.signal?.aborted) composeConnection = null
+        throw error
+    }
+}
 
 async function composeRequest(path, { signal } = {}) {
-    const response = await fetch(`${composeAPIOrigin}${path}`, { signal })
+    const response = await composeFetch(path, { signal })
     const text = await response.text()
     let result = null
     try {
@@ -84,7 +147,7 @@ export async function checkoutRepository({ url, path, branch, token, signal }) {
         payload.token = token.trim()
     }
 
-    const response = await fetch(`${composeAPIOrigin}/v1.24/repos/checkout`, {
+    const response = await composeFetch('/v1.24/repos/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
