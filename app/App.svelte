@@ -4820,9 +4820,11 @@
 {/if}
 
 {#if tabDrag.active && tabDrag.dragType === 'divider'}
-    <div class="divider-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px; height: {tabDrag.previewHeight}px;">
-        <div class="divider-drag-preview-line"></div>
-    </div>
+    {#if !tabDrag.indicator.visible}
+        <div class="divider-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px; height: {tabDrag.previewHeight}px;">
+            <div class="divider-drag-preview-line"></div>
+        </div>
+    {/if}
     {#if tabDrag.deleteZone}
         <div class="divider-drag-trash" style="left: {tabDrag.mouseX + 14}px; top: {tabDrag.mouseY + 12}px;" aria-label="Release to delete spacer">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
