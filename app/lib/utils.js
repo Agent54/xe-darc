@@ -2,9 +2,20 @@ export function throttle (func, window = 100, { leading = true } = {}) {
   let lastCall = 0
   let timeoutId = null
   let pendingArgs = null
+  let pendingThis = null
   let hasPendingCall = false
 
-  return function (...args) {
+  function invokePending () {
+    if (!hasPendingCall) return
+
+    lastCall = Date.now()
+    func.apply(pendingThis, pendingArgs)
+    hasPendingCall = false
+    pendingArgs = null
+    pendingThis = null
+  }
+
+  function throttled (...args) {
     // console.log('throttle', {leading, window})
     const now = Date.now()
     
@@ -19,21 +30,37 @@ export function throttle (func, window = 100, { leading = true } = {}) {
     
     // Store the latest call arguments
     pendingArgs = args
+    pendingThis = this
     hasPendingCall = true
     
     // If no timeout is set, schedule the trailing call
     if (!timeoutId) {
       timeoutId = setTimeout(() => {
-        if (hasPendingCall) {
-          lastCall = Date.now()
-          func.apply(this, pendingArgs)
-        }
+        invokePending()
         timeoutId = null
-        hasPendingCall = false
-        pendingArgs = null
       }, window - (now - lastCall))
     }
   }
+
+  throttled.flush = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    invokePending()
+  }
+
+  throttled.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    hasPendingCall = false
+    pendingArgs = null
+    pendingThis = null
+  }
+
+  return throttled
 }
 
 export function origin(url) {

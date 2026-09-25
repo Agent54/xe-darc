@@ -250,12 +250,29 @@
     sceneChangeHandlers.get(spaceId)(spaceId, elements, appState, files)
   }
 
+  function flushSceneChanges(spaceId) {
+    if (spaceId) {
+      sceneChangeHandlers.get(spaceId)?.flush()
+      return
+    }
+
+    sceneChangeHandlers.forEach(handler => handler.flush())
+  }
+
   $effect(() => {
-    sceneSpaceId = data.spaceMeta.activeSpace
+    const activeSpaceId = data.spaceMeta.activeSpace
+    if (sceneSpaceId && sceneSpaceId !== activeSpaceId) {
+      flushSceneChanges(sceneSpaceId)
+    }
+    sceneSpaceId = activeSpaceId
     excalidrawAPI?.updateScene(excalidrawData)
   })
   
   onMount(() => {
+    const flushOnPageExit = () => flushSceneChanges()
+    window.addEventListener('pagehide', flushOnPageExit)
+    window.addEventListener('beforeunload', flushOnPageExit)
+
     root = ReactDOM.createRoot(container)
     const element = React.createElement(ExcalidrawReact, {
       initialData: excalidrawData,
@@ -265,7 +282,14 @@
         }
         queueSceneChange(sceneSpaceId, elements, appState, files)
       },
-      onPointerUpdate,
+      onPointerUpdate: (payload) => {
+        onPointerUpdate(payload)
+        if (payload.button === 'up') {
+          const pointerSpaceId = sceneSpaceId
+          flushSceneChanges(pointerSpaceId)
+          queueMicrotask(() => flushSceneChanges(pointerSpaceId))
+        }
+      },
       excalidrawAPI: (api) => {
         if (excalidrawAPI === null) {
           excalidrawAPI = api
@@ -299,6 +323,12 @@
       }
     })
     root.render(element)
+
+    return () => {
+      flushSceneChanges()
+      window.removeEventListener('pagehide', flushOnPageExit)
+      window.removeEventListener('beforeunload', flushOnPageExit)
+    }
   })
 
   function persistSceneChange(spaceId, elements, appState, files) {
@@ -355,6 +385,8 @@
   }, 100)
 
   function detach () {
+    flushSceneChanges()
+
     if (root) {
         root.unmount()
     }

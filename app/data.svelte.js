@@ -281,6 +281,8 @@ const settings = $state({})
 const ui = $state({ viewMode: 'default' })
 const desiredCanvasShapes = new Map()
 const canvasShapeSaveTasks = new Map()
+const desiredTabUpdates = new Map()
+const tabUpdateSaveTasks = new Map()
 
 function compareCanvasShapes(first, second) {
     if (!second) return 1
@@ -394,6 +396,89 @@ function queueCanvasShapeSave(shape) {
         })
 
     canvasShapeSaveTasks.set(shape.id, saveTask)
+}
+
+function applyTabUpdate(tabId, update) {
+    const tab = docs[tabId]
+    if (tab?.type !== 'tab') return false
+
+    Object.assign(tab, update)
+
+    const spaceTab = spaces[tab.spaceId]?.tabs?.find(item => item.id === tabId)
+    if (spaceTab && spaceTab !== tab && spaceTab.type === 'tab') {
+        Object.assign(spaceTab, update)
+    }
+
+    return true
+}
+
+async function persistTabUpdate(tabId) {
+    while (desiredTabUpdates.has(tabId)) {
+        const update = desiredTabUpdates.get(tabId)
+        let currentTab
+
+        try {
+            currentTab = await db.get(tabId)
+        } catch (error) {
+            if (error.status === 404) {
+                desiredTabUpdates.delete(tabId)
+                return
+            }
+            throw error
+        }
+
+        if (currentTab.type !== 'tab') {
+            desiredTabUpdates.delete(tabId)
+            return
+        }
+
+        try {
+            const result = await db.put({
+                ...currentTab,
+                ...update,
+                _rev: currentTab._rev
+            })
+
+            if (docs[tabId]?.type === 'tab') {
+                docs[tabId]._rev = result.rev
+            }
+
+            if (desiredTabUpdates.get(tabId) === update) {
+                desiredTabUpdates.delete(tabId)
+            }
+        } catch (error) {
+            if (error.status !== 409) {
+                throw error
+            }
+        }
+    }
+}
+
+function queueTabUpdate(tabId, update) {
+    if (docs[tabId]?.type !== 'tab') return Promise.resolve()
+
+    const desiredUpdate = {
+        ...(desiredTabUpdates.get(tabId) || {}),
+        ...update
+    }
+    desiredTabUpdates.set(tabId, desiredUpdate)
+    applyTabUpdate(tabId, update)
+
+    if (tabUpdateSaveTasks.has(tabId)) {
+        return tabUpdateSaveTasks.get(tabId)
+    }
+
+    const saveTask = persistTabUpdate(tabId)
+        .catch(error => console.error('Failed to save tab update', error))
+        .finally(() => {
+            tabUpdateSaveTasks.delete(tabId)
+            if (desiredTabUpdates.has(tabId)) {
+                queueTabUpdate(tabId, {})
+            }
+        })
+
+    tabUpdateSaveTasks.set(tabId, saveTask)
+    return saveTask
 }
 
 // LED indicator states for all frames - using timestamps to avoid events
@@ -803,11 +888,19 @@ live: true,
 
     if (change.doc.type === 'shape') {
         const desiredShape = desiredCanvasShapes.get(change.id)
-        if (desiredShape && compareCanvasShapes(desiredShape, change.doc) > 0) {
-            desiredShape._rev = change.doc._rev
-            if (docs[change.id]?.type === 'shape') {
-                docs[change.id]._rev = change.doc._rev
-            }
+        const localShape = desiredShape || (oldDoc?.type === 'shape' ? oldDoc : null)
+        if (localShape && compareCanvasShapes(localShape, change.doc) > 0) {
+            const repairedShape = { ...localShape, _rev: change.doc._rev }
+            applyCanvasShape(repairedShape)
+            queueCanvasShapeSave(repairedShape)
+            return
+        }
+    }
+
+    if (change.doc.type === 'tab') {
+        const desiredUpdate = desiredTabUpdates.get(change.id)
+        if (desiredUpdate) {
+            applyTabUpdate(change.id, { ...change.doc, ...desiredUpdate })
             return
         }
     }
@@ -1569,6 +1662,7 @@ const data = {
 
     updateTab: async (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url } = {}) => {
         const tab = docs[tabId]
+        if (tab?.type !== 'tab') return
        
         let newProps = {}
         if (canvas) {
@@ -1636,10 +1730,7 @@ const data = {
         }
 
         if (Object.keys(newProps).length > 0) {
-            await db.put({
-                    ...tab,
-                    ...newProps
-                })
+            await queueTabUpdate(tabId, newProps)
         }
     },
 
