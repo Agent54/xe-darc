@@ -173,8 +173,10 @@
         openURL(event, app.endpoints?.[0]?.url || app.url, app.name)
     }
 
-    function handleOpenKey(event, app) {
-        if (event.key === 'Enter' || event.key === ' ') openApp(event, app)
+    function handleOpenKey(event, app, url = app.endpoints?.[0]?.url || app.url) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            openURL(event, url, app.name)
+        }
     }
 
     function actionSettings(event, app) {
@@ -205,6 +207,20 @@
         if (type === 'pwa') return 'PWA'
         if (type === 'static') return 'Static'
         return 'Link'
+    }
+
+    function statusColor(status) {
+        const state = String(status).toLowerCase()
+        if (/\b(unhealthy|dead|failed|error)\b/.test(state)) {
+            return '#f87171'
+        }
+        if (/\b(starting|restarting|paused|removing)\b/.test(state)) {
+            return '#fbbf24'
+        }
+        if (/\b(running|up|healthy)\b/.test(state)) {
+            return '#34d399'
+        }
+        return '#94a3b8'
     }
 
     function toggleSection(sectionName) {
@@ -253,25 +269,42 @@
 {#snippet AppCard(app)}
     {@const defaultURL = app.endpoints?.[0]?.url || app.url}
     <article class="app-card relative w-52 min-h-44 rounded-xl border border-white/8 bg-black/20 hover:bg-white/8 hover:border-white/14 transition-colors px-3 pt-3 pb-2">
-        <div class="min-h-7 flex flex-wrap content-start gap-1">
-            {#if app.endpoints?.length > 1}
+        {#if app.status}
+            <button
+                type="button"
+                class="app-status absolute left-1.5 top-1.5 z-20 flex h-5 w-5 items-center justify-center rounded cursor-help focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                aria-label={`Status for ${app.name}`}
+                aria-describedby={`app-status-${encodeURIComponent(app.id)}`}
+            >
+                <span class="h-2 w-2 rounded-full ring-1 ring-black/30" style:background-color={statusColor(app.status)} aria-hidden="true"></span>
+                <span
+                    id={`app-status-${encodeURIComponent(app.id)}`}
+                    role="tooltip"
+                    class="app-status-tooltip pointer-events-none absolute left-0 top-full mt-1 w-max max-w-44 rounded-md border border-white/15 bg-black/95 px-2 py-1.5 text-left text-xs leading-4 text-white/90 shadow-lg"
+                >{app.status}</span>
+            </button>
+        {/if}
+
+        {#if app.endpoints?.length}
+            <div class="app-card-hover-detail app-port-links absolute left-2 right-10 z-10 flex max-h-24 flex-col items-start gap-1 overflow-y-auto {app.status ? 'top-7' : 'top-2'}">
                 {#each app.endpoints as endpoint}
                     <button
                         type="button"
-                        class="max-w-44 truncate rounded-md border border-emerald-300/20 bg-emerald-300/8 px-1.5 py-1 text-[9px] leading-none text-emerald-100/80 hover:border-emerald-300/45 hover:bg-emerald-300/14 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70 cursor-pointer"
+                        class="max-w-full shrink-0 truncate rounded-md border border-emerald-300/20 bg-black/90 px-1.5 py-1 text-[9px] leading-none text-emerald-100/80 hover:border-emerald-300/45 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300/70 cursor-pointer"
                         title={`Open ${endpoint.container} on ${endpoint.port}`}
                         aria-label={`Open ${endpoint.container} on port ${endpoint.port}`}
                         onmousedown={(event) => openURL(event, endpoint.url, app.name)}
+                        onkeydown={(event) => handleOpenKey(event, app, endpoint.url)}
                     >
                         {endpoint.label}
                     </button>
                 {/each}
-            {/if}
-        </div>
+            </div>
+        {/if}
 
         <button
             type="button"
-            class="mx-auto flex w-full flex-col items-center justify-center gap-1 px-1 pb-7 pt-1 text-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:cursor-default"
+            class="mx-auto flex w-full flex-col items-center justify-center gap-1 px-1 pb-7 pt-8 text-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:cursor-default"
             onmousedown={(event) => openApp(event, app)}
             onkeydown={(event) => handleOpenKey(event, app)}
             aria-label={defaultURL ? `Open ${app.name}` : `${app.name} has no published ports`}
@@ -292,7 +325,7 @@
                 <span class="px-1.5 py-1 rounded text-[10px] leading-none border border-white/20 bg-white/10 text-white/70 flex-shrink-0">{typeLabel(app.type)}</span>
             {/if}
             {#if app.project}
-                <span class="truncate px-1.5 py-1 rounded text-[10px] leading-none border border-white/15 bg-white/5 text-white/55" title={app.project}>{app.project}</span>
+                <span class="app-card-hover-detail truncate px-1.5 py-1 rounded text-[10px] leading-none border border-white/15 bg-white/5 text-white/55" title={app.project}>{app.project}</span>
             {/if}
             {#if app.partition?.name}
                 <span
@@ -300,9 +333,6 @@
                     style:color={app.partition.color}
                     style:border-color={`${app.partition.color}66`}
                 >{app.partition.name}</span>
-            {/if}
-            {#if app.status}
-                <span class="ml-auto max-w-18 truncate text-[9px] text-white/35" title={app.status}>{app.status}</span>
             {/if}
         </div>
 
@@ -412,22 +442,45 @@
 />
 
 <style>
-    .app-card-actions {
+    .app-card-actions,
+    .app-card-hover-detail {
         opacity: 0;
         pointer-events: none;
         transition: opacity 200ms;
     }
 
-    .app-card:hover .app-card-actions {
+    .app-card:hover .app-card-actions,
+    .app-card:hover .app-card-hover-detail {
         opacity: 1;
         pointer-events: auto;
+    }
+
+    .app-card:hover .app-card-actions {
         transition-delay: 500ms;
     }
 
-    .app-card:focus-within .app-card-actions {
+    .app-card:focus-within .app-card-actions,
+    .app-card:focus-within .app-card-hover-detail {
         opacity: 1;
         pointer-events: auto;
         transition-delay: 0ms;
+    }
+
+    .app-status-tooltip {
+        visibility: hidden;
+        opacity: 0;
+        transition: opacity 120ms;
+    }
+
+    .app-status:hover .app-status-tooltip,
+    .app-status:focus-visible .app-status-tooltip {
+        visibility: visible;
+        opacity: 1;
+    }
+
+    .app-port-links {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
     }
 
     @media (hover: none) {
@@ -439,7 +492,9 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .app-card-actions {
+        .app-card-actions,
+        .app-card-hover-detail,
+        .app-status-tooltip {
             transition: none;
         }
     }
