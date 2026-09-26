@@ -305,7 +305,7 @@
 
         <button
             type="button"
-            class="mx-auto flex w-full flex-col items-center justify-center gap-1 px-1 pb-7 pt-8 text-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:cursor-default"
+            class="mx-auto flex w-full flex-col items-center justify-center gap-1 px-1 pb-7 pt-8 text-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 cursor-pointer disabled:cursor-default"
             onmousedown={(event) => openApp(event, app)}
             onkeydown={(event) => handleOpenKey(event, app)}
             aria-label={defaultURL ? `Open ${app.name}` : `${app.name} has no published ports`}

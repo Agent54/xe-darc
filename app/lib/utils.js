@@ -63,6 +63,52 @@ export function throttle (func, window = 100, { leading = true } = {}) {
   return throttled
 }
 
+export function debounce (func, wait = 100) {
+  let timeoutId = null
+  let pendingArgs = null
+  let pendingThis = null
+
+  function invokePending () {
+    if (!pendingArgs) return
+
+    const args = pendingArgs
+    const context = pendingThis
+    pendingArgs = null
+    pendingThis = null
+    func.apply(context, args)
+  }
+
+  function debounced (...args) {
+    pendingArgs = args
+    pendingThis = this
+
+    if (timeoutId) clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => {
+      timeoutId = null
+      invokePending()
+    }, wait)
+  }
+
+  debounced.flush = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    invokePending()
+  }
+
+  debounced.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    pendingArgs = null
+    pendingThis = null
+  }
+
+  return debounced
+}
+
 export function origin(url) {
   if (url?.startsWith('about:')) {
     return 'about'

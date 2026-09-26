@@ -5,7 +5,7 @@
   import { Excalidraw as ExcalidrawReact } from '@excalidraw/excalidraw'
   import '@excalidraw/excalidraw/index.css'
   import FrameWrapper from './ReactFrameWrapper.js'
-  import { throttle } from '../lib/utils'
+  import { debounce } from '../lib/utils'
   import data from '../data.svelte.js'
   // import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 
@@ -240,17 +240,29 @@
   let root
   let excalidrawAPI = $state(null)
   let sceneSpaceId = data.spaceMeta.activeSpace
+  let pointerIsDown = false
   let currentZoom = $derived(excalidrawData?.appState?.zoom?.value || 0.35)
+
+  function persistSceneWhenIdle(spaceId, elements, appState, files) {
+    if (pointerIsDown) {
+      sceneChangeHandlers.get(spaceId)?.(spaceId, elements, appState, files)
+      return
+    }
+
+    persistSceneChange(spaceId, elements, appState, files)
+  }
 
   function queueSceneChange(spaceId, elements, appState, files) {
     if (!sceneChangeHandlers.has(spaceId)) {
-      sceneChangeHandlers.set(spaceId, throttle(persistSceneChange, 250, { leading: false }))
+      sceneChangeHandlers.set(spaceId, debounce(persistSceneWhenIdle, 250))
     }
 
     sceneChangeHandlers.get(spaceId)(spaceId, elements, appState, files)
   }
 
-  function flushSceneChanges(spaceId) {
+  function flushSceneChanges(spaceId, force = false) {
+    if (force) pointerIsDown = false
+
     if (spaceId) {
       sceneChangeHandlers.get(spaceId)?.flush()
       return
@@ -262,14 +274,14 @@
   $effect(() => {
     const activeSpaceId = data.spaceMeta.activeSpace
     if (sceneSpaceId && sceneSpaceId !== activeSpaceId) {
-      flushSceneChanges(sceneSpaceId)
+      flushSceneChanges(sceneSpaceId, true)
     }
     sceneSpaceId = activeSpaceId
     excalidrawAPI?.updateScene(excalidrawData)
   })
   
   onMount(() => {
-    const flushOnPageExit = () => flushSceneChanges()
+    const flushOnPageExit = () => flushSceneChanges(null, true)
     window.addEventListener('pagehide', flushOnPageExit)
     window.addEventListener('beforeunload', flushOnPageExit)
 
@@ -283,6 +295,7 @@
         queueSceneChange(sceneSpaceId, elements, appState, files)
       },
       onPointerUpdate: (payload) => {
+        pointerIsDown = payload.button === 'down'
         onPointerUpdate(payload)
         if (payload.button === 'up') {
           const pointerSpaceId = sceneSpaceId
@@ -325,7 +338,7 @@
     root.render(element)
 
     return () => {
-      flushSceneChanges()
+      flushSceneChanges(null, true)
       window.removeEventListener('pagehide', flushOnPageExit)
       window.removeEventListener('beforeunload', flushOnPageExit)
     }
@@ -385,7 +398,7 @@
   }, 100)
 
   function detach () {
-    flushSceneChanges()
+    flushSceneChanges(null, true)
 
     if (root) {
         root.unmount()
