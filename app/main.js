@@ -154,6 +154,47 @@ import { mount } from 'svelte'
 import App from './App.svelte'
 import data from './data.svelte.js'
 
+const initialWindowSizeKey = 'initialWindowSizeApplied-v1'
+const initialWindowPositionKey = 'initialWindowPositionApplied-v1'
+const appDisplayModes = ['standalone', 'window-controls-overlay', 'unframed']
+const isAppWindow = window.location.protocol === 'isolated-app:' || appDisplayModes.some(mode => {
+  return window.matchMedia(`(display-mode: ${mode})`).matches
+})
+
+const initialWindowSizeApplied = localStorage.getItem(initialWindowSizeKey) === 'true'
+const initialWindowPositionApplied = localStorage.getItem(initialWindowPositionKey) === 'true'
+
+if (isAppWindow && (!initialWindowSizeApplied || !initialWindowPositionApplied)) {
+  const targetWidth = initialWindowSizeApplied
+    ? window.outerWidth
+    : Math.min(Math.round(window.outerWidth * 1.5), window.screen.availWidth)
+  const targetHeight = initialWindowSizeApplied
+    ? window.outerHeight
+    : Math.min(Math.round(window.outerHeight * 1.5), window.screen.availHeight)
+  const targetX = (window.screen.availLeft ?? 0) + Math.round((window.screen.availWidth - targetWidth) / 2)
+  const targetY = (window.screen.availTop ?? 0) + Math.round((window.screen.availHeight - targetHeight) / 2)
+  const shouldResize = !initialWindowSizeApplied
+  const shouldCenter = shouldResize || !initialWindowPositionApplied
+
+  // Record the one-time setup before requesting bounds changes. Native app shims can
+  // report adjusted bounds, so verifying the exact result caused this to run again
+  // on every launch and override the shim's restored user position.
+  if (shouldResize) {
+    localStorage.setItem(initialWindowSizeKey, 'true')
+  }
+  if (!initialWindowPositionApplied) {
+    localStorage.setItem(initialWindowPositionKey, 'true')
+  }
+
+  if (shouldResize) {
+    window.resizeTo(targetWidth, targetHeight)
+  }
+
+  if (shouldCenter) {
+    window.moveTo(targetX, targetY)
+  }
+}
+
 const app = mount(App, {
   target: document.getElementById('app'),
 })

@@ -7,7 +7,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:5194:5194"
+      - name: web
+        target: 5194
+        published: "5194"
+        host_ip: "127.0.0.1"
+        protocol: tcp
+        app_protocol: https
       - "127.0.0.1:8787:8787"
       # - name: main
       #   target: 8086

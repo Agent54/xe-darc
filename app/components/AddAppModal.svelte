@@ -1,5 +1,7 @@
 <script>
-    let { show = false, onClose = () => {} } = $props()
+    import { checkoutRepository } from '../lib/compose-api.js'
+
+    let { show = false, installedApps = [], onAdd = () => {}, onClose = () => {} } = $props()
     
     let activeTab = $state('catalog')
     let appFormData = $state({
@@ -12,15 +14,21 @@
         // URL tab specific
         url: '',
         // Repo tab specific
+        catalogId: '',
         githubUrl: '',
         branch: 'main',
         githubToken: '',
+        checkoutPath: '',
         pathType: 'compose',
         path: ''
     })
     
     let showPartitionDropdown = $state(false)
     let activeTooltip = $state(null)
+    let installedSection = $state('closed')
+    let submissionState = $state('idle')
+    let submitError = $state('')
+    let checkoutController = null
     
     const availablePartitions = [
         { id: 'current', name: 'Current Space Partition', description: 'Default partition for this workspace' },
@@ -33,27 +41,93 @@
 
     function switchTab(tab) {
         activeTab = tab
+        submitError = ''
     }
 
     function selectCatalogApp(app) {
-        // Don't prefill name or icon URL, let them come from manifest
-        // Switch to appropriate tab based on app type
+        Object.assign(appFormData, {
+            catalogId: app.id || '',
+            name: app.name || '',
+            iconUrl: app.iconUrl || '',
+            url: '',
+            githubUrl: '',
+            branch: app.branch || 'main',
+            githubToken: '',
+            checkoutPath: app.checkoutPath || '',
+            pathType: app.pathType || 'compose',
+            path: app.path || ''
+        })
+
         if (app.type === 'docker') {
             activeTab = 'repo'
+            appFormData.githubUrl = app.githubUrl || ''
         } else {
             activeTab = 'url'
             appFormData.url = app.url || ''
         }
     }
 
-    function submitApp() {
-        console.log('Submit app:', appFormData)
-        onClose()
+    function selectCatalogAppWithKeyboard(event, app) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            selectCatalogApp(app)
+        }
+    }
+
+    function toggleInstalledSection() {
+        installedSection = installedSection === 'closed' ? 'open' : 'closed'
+    }
+
+    async function submitApp() {
+        if (submissionState === 'submitting') {
+            return
+        }
+        submitError = ''
+
+        const { githubToken, ...settings } = appFormData
+        const app = {
+            ...settings,
+            dataPartitions: [...appFormData.dataPartitions]
+        }
+        if (activeTab !== 'repo') {
+            onAdd({ type: activeTab, app })
+            handleClose()
+            return
+        }
+
+        submissionState = 'submitting'
+        const controller = new AbortController()
+        checkoutController = controller
+        try {
+            const checkout = await checkoutRepository({
+                url: app.githubUrl,
+                path: app.checkoutPath,
+                branch: app.branch,
+                token: githubToken,
+                signal: controller.signal
+            })
+            onAdd({ type: 'repo', app, checkout })
+            handleClose()
+        } catch (error) {
+            if (error?.name !== 'AbortError') {
+                submitError = error?.message || 'Repository checkout failed'
+            }
+        } finally {
+            if (checkoutController === controller) {
+                checkoutController = null
+                submissionState = 'idle'
+            }
+        }
     }
 
     function handleClose() {
+        checkoutController?.abort()
+        checkoutController = null
+        submissionState = 'idle'
+        submitError = ''
         // Reset form
         Object.assign(appFormData, {
+            catalogId: '',
             name: '',
             iconUrl: '',
             pinToAppPins: false,
@@ -64,10 +138,12 @@
             githubUrl: '',
             branch: 'main',
             githubToken: '',
+            checkoutPath: '',
             pathType: 'compose',
             path: ''
         })
         activeTab = 'catalog'
+        installedSection = 'closed'
         onClose()
     }
 
@@ -107,22 +183,87 @@
         activeTooltip = null
     }
 
-    // Catalog apps data
     const catalogApps = [
-        { id: 'cat1', name: 'VS Code', iconUrl: '/embed-icons/github_gist.png', type: 'url', url: 'https://vscode.dev' },
-        { id: 'cat2', name: 'Figma', iconUrl: '/embed-icons/figma.png', type: 'url', url: 'https://figma.com' },
-        { id: 'cat3', name: 'Excalidraw', iconUrl: '/embed-icons/excalidraw.png', type: 'url', url: 'https://excalidraw.com' },
-        { id: 'cat4', name: 'Notion', iconUrl: '/embed-icons/felt.png', type: 'url', url: 'https://notion.so' },
-        { id: 'cat5', name: 'Postgres', iconUrl: '/embed-icons/replit.png', type: 'docker', description: 'PostgreSQL database with pgAdmin' },
-        { id: 'cat6', name: 'Redis', iconUrl: '/embed-icons/codepen.png', type: 'docker', description: 'Redis cache with RedisInsight' },
-        { id: 'cat7', name: 'MongoDB', iconUrl: '/embed-icons/codesandbox.png', type: 'docker', description: 'MongoDB with Mongo Express' },
-        { id: 'cat8', name: 'Jupyter', iconUrl: '/embed-icons/observable.png', type: 'docker', description: 'Jupyter notebook server' },
-        { id: 'cat9', name: 'Grafana', iconUrl: '/embed-icons/desmos.png', type: 'docker', description: 'Analytics & monitoring platform' },
-        { id: 'cat10', name: 'Nextcloud', iconUrl: '/embed-icons/google_calendar.png', type: 'docker', description: 'Self-hosted cloud storage' },
-        { id: 'cat11', name: 'GitLab', iconUrl: '/embed-icons/github_gist.png', type: 'docker', description: 'Self-hosted Git repository' },
-        { id: 'cat12', name: 'Miro', iconUrl: '/embed-icons/tldraw.png', type: 'url', url: 'https://miro.com' }
+        {
+            id: 'excalidraw',
+            name: 'Excalidraw',
+            iconUrl: '/embed-icons/excalidraw.png',
+            type: 'url',
+            url: 'https://excalidraw.com',
+            description: 'Sketch diagrams and whiteboards in a shared canvas.'
+        },
+        {
+            id: 'darc-code',
+            name: 'Darc Code',
+            iconUrl: '/embed-icons/github_gist.png',
+            type: 'docker',
+            githubUrl: 'https://github.com/Agent54/darc-code',
+            branch: 'int',
+            pathType: 'compose',
+            path: 'docker-compose.yaml',
+            description: 'A VS Code fork packaged as a Docker workspace.'
+        },
+        {
+            id: 'darc-dev',
+            name: 'darc-dev',
+            iconUrl: '/photon_logo.png',
+            type: 'docker',
+            githubUrl: 'https://github.com/Agent54/xe-darc',
+            branch: 'main',
+            pathType: 'compose',
+            path: 'docker-compose.yaml',
+            description: 'Develop Darc inside a self-hosted Darc workspace.'
+        }
     ]
+
+    function normalizeCatalogValue(value) {
+        return value?.trim().toLowerCase().replace(/\.git$/, '').replace(/\/$/, '') || ''
+    }
+
+    function isCatalogAppInstalled(catalogApp) {
+        const catalogValues = new Set([
+            catalogApp.id,
+            catalogApp.name,
+            catalogApp.url,
+            catalogApp.githubUrl
+        ].map(normalizeCatalogValue).filter(Boolean))
+
+        return installedApps.some(app => [
+            app.catalogId,
+            app.name,
+            app.url,
+            app.githubUrl
+        ].some(value => catalogValues.has(normalizeCatalogValue(value))))
+    }
+
+    const availableCatalogApps = $derived(catalogApps.filter(app => !isCatalogAppInstalled(app)))
+    const installedCatalogApps = $derived(catalogApps.filter(isCatalogAppInstalled))
 </script>
+
+{#snippet CatalogCard(app, installed = false)}
+    <button
+        type="button"
+        class="group relative h-40 rounded-xl border p-4 text-left transition-colors {installed ? 'cursor-default border-white/8 bg-white/3 opacity-65' : 'cursor-pointer border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400/70'}"
+        onmousedown={() => !installed && selectCatalogApp(app)}
+        onkeydown={(event) => !installed && selectCatalogAppWithKeyboard(event, app)}
+        disabled={installed}
+        aria-label={installed ? `${app.name} is already installed` : `Configure ${app.name}`}
+    >
+        <span class="flex h-full flex-col items-center gap-3">
+            <img src={app.iconUrl} alt="" class="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+            <span class="flex w-full flex-1 flex-col justify-center">
+                <span class="text-center text-sm font-medium text-white/90">{app.name}</span>
+                <span class="mt-3 line-clamp-2 min-h-8 text-left text-xs leading-4 text-white/60">
+                    {app.description}
+                </span>
+            </span>
+        </span>
+
+        <span class="absolute right-2 top-2 rounded border px-2 py-1 text-xs {installed ? 'border-white/15 bg-white/8 text-white/55' : app.type === 'docker' ? 'border-blue-500/50 bg-blue-500/20 text-blue-300' : 'border-green-500/50 bg-green-500/20 text-green-300'}">
+            {installed ? 'Installed' : app.type === 'docker' ? 'Docker' : 'URL'}
+        </span>
+    </button>
+{/snippet}
 
 {#if show}
     <div 
@@ -176,36 +317,46 @@
                 {#if activeTab === 'catalog'}
                     <!-- Catalog Tab -->
                     <div class="space-y-6">
-                        <p class="text-white/70 text-sm">Choose from our curated collection of apps</p>
+                        <p class="text-sm text-white/70">Choose an app to configure before adding it.</p>
                         
                         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {#each catalogApps as app}
-                                <div 
-                                    class="group relative p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all cursor-pointer hover:border-white/20 h-40"
-                                    onmousedown={() => selectCatalogApp(app)}
-                                    role="button"
-                                    tabindex="0"
-                                    aria-label="Select {app.name}"
-                                >
-                                    <div class="flex flex-col items-center space-y-3 h-full">
-                                        <img src={app.iconUrl} alt="{app.name} icon" class="w-12 h-12 rounded-lg flex-shrink-0" />
-                                        <div class="flex-1 flex flex-col justify-center w-full">
-                                            <h3 class="font-medium text-white/90 text-sm text-center">{app.name}</h3>
-                                            <div class="text-white/60 text-xs mt-3 text-left leading-4 overflow-y-auto max-h-8 min-h-8 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-                                                {app.description || ''}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Badge -->
-                                    <div class="absolute top-2 right-2">
-                                        <span class="px-2 py-1 rounded text-xs border {app.type === 'docker' ? 'border-blue-500/50 bg-blue-500/20 text-blue-300' : 'border-green-500/50 bg-green-500/20 text-green-300'}">
-                                            {app.type === 'docker' ? 'Docker' : 'URL'}
-                                        </span>
-                                    </div>
-                                </div>
+                            {#each availableCatalogApps as app}
+                                {@render CatalogCard(app)}
                             {/each}
                         </div>
+
+                        {#if installedCatalogApps.length > 0}
+                            <section class="border-t border-white/10 pt-4">
+                                <button
+                                    type="button"
+                                    class="flex w-full cursor-pointer items-center gap-2 rounded-lg py-2 text-left text-white/70 transition-colors hover:text-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400/70"
+                                    onmousedown={toggleInstalledSection}
+                                    onkeydown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault()
+                                            toggleInstalledSection()
+                                        }
+                                    }}
+                                    aria-expanded={installedSection === 'open'}
+                                    aria-controls="installed-catalog-apps"
+                                >
+                                    <svg class="h-4 w-4 transition-transform {installedSection === 'open' ? 'rotate-0' : '-rotate-90'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                        <path d="M12 16.5l-6-6h12l-6 6z"/>
+                                    </svg>
+                                    <span class="text-sm font-medium">Already installed</span>
+                                    <span class="text-xs text-white/40">({installedCatalogApps.length})</span>
+                                    <span class="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent"></span>
+                                </button>
+
+                                {#if installedSection === 'open'}
+                                    <div id="installed-catalog-apps" class="mt-3 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                                        {#each installedCatalogApps as app}
+                                            {@render CatalogCard(app, true)}
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </section>
+                        {/if}
                     </div>
                 {:else if activeTab === 'url'}
                     <!-- URL Tab -->
@@ -237,7 +388,7 @@
                             
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label for="github-url" class="block text-sm font-medium text-white/70 mb-2">GitHub URL (required)</label>
+                                    <label for="github-url" class="block text-sm font-medium text-white/70 mb-2">Repository URL (required)</label>
                                     <input 
                                         id="github-url"
                                         type="url" 
@@ -248,26 +399,41 @@
                                 </div>
                                 
                                 <div>
-                                    <label for="branch" class="block text-sm font-medium text-white/70 mb-2">Branch</label>
+                                    <label for="checkout-path" class="block text-sm font-medium text-white/70 mb-2">Parent folder (optional)</label>
                                     <input 
-                                        id="branch"
+                                        id="checkout-path"
                                         type="text" 
+                                        bind:value={appFormData.checkoutPath}
+                                        placeholder="development/tools"
+                                        class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
+                                    />
+                                    <p class="mt-1 text-xs text-white/45">Up to three folders beneath stacks. The repository name is appended automatically.</p>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <label for="branch" class="block text-sm font-medium text-white/70 mb-2">Branch</label>
+                                    <input
+                                        id="branch"
+                                        type="text"
                                         bind:value={appFormData.branch}
                                         placeholder="main"
                                         class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
                                     />
                                 </div>
-                            </div>
-                            
-                            <div>
-                                <label for="github-token" class="block text-sm font-medium text-white/70 mb-2">GitHub Token</label>
-                                <input 
-                                    id="github-token"
-                                    type="password" 
-                                    bind:value={appFormData.githubToken}
-                                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
-                                />
+
+                                <div>
+                                    <label for="github-token" class="block text-sm font-medium text-white/70 mb-2">GitHub Token</label>
+                                    <input
+                                        id="github-token"
+                                        type="password"
+                                        bind:value={appFormData.githubToken}
+                                        placeholder="Optional for private repositories"
+                                        autocomplete="off"
+                                        class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
+                                    />
+                                </div>
                             </div>
                             
                             <div class="space-y-4">
@@ -338,7 +504,12 @@
             </div>
 
             <!-- Footer -->
-            <div class="flex items-center justify-end gap-3 p-6 border-t border-white/10 flex-shrink-0">
+            <div class="flex items-center gap-3 p-6 border-t border-white/10 flex-shrink-0">
+                <div class="min-w-0 flex-1" aria-live="polite">
+                    {#if submitError}
+                        <p class="text-sm text-orange-300" role="alert">{submitError}</p>
+                    {/if}
+                </div>
                 <button 
                     class="px-4 py-2 text-sm font-medium text-white/70 hover:text-white/90 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                     onmousedown={handleClose}
@@ -348,9 +519,9 @@
                 <button 
                     class="px-6 py-2 text-sm font-medium bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none cursor-pointer"
                     onmousedown={submitApp}
-                    disabled={activeTab === 'url' && !appFormData.url || activeTab === 'repo' && !appFormData.githubUrl}
+                    disabled={submissionState === 'submitting' || activeTab === 'catalog' || activeTab === 'url' && !appFormData.url || activeTab === 'repo' && !appFormData.githubUrl}
                 >
-                    Add App
+                    {submissionState === 'submitting' ? 'Cloning…' : 'Add App'}
                 </button>
             </div>
         </div>

@@ -102,7 +102,7 @@
         if (!space) return false;
         
         if (space.pinnedTabs?.some(tab => tabMatchesSearch(tab))) return true;
-        if (space.tabs?.some(tab => tab.type !== 'divider' && tabMatchesSearch(tab))) return true;
+        if (space.tabs?.some(tab => tab.type === 'tab' && tabMatchesSearch(tab))) return true;
         
         return false;
     }
@@ -116,15 +116,6 @@
     function handleTabGroupToggle() {
         tabGroupExpanded = !tabGroupExpanded
     }
-    
-    // Tabs list vertical rubberband scroll state (per space for visual state, global for accumulation)
-    let tabsListVerticalRubberBand = $state({}) // { [spaceId]: offset }
-    let tabsListVerticalAccumulated = 0 // global accumulated deltaY - resets on horizontal scroll
-    let tabsListSpacerVisible = $state({}) // { [spaceId]: boolean }
-    let tabsListSpacerHeight = $state({}) // { [spaceId]: number } - current spacer height (0-250)
-    let tabsListSeparatorAdded = $state({}) // { [spaceId]: boolean } - tracks if separator was added
-    let tabsListScrollStartPosition = 0 // global scrollTop when gesture started
-    let tabsListScrollGestureTimeout = null // global timeout id
     
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
@@ -315,9 +306,6 @@
         horizontalScrollTimeout = setTimeout(() => {
             isHorizontalScrolling = false
         }, 150)
-        
-        // Reset vertical tabs list accumulation on horizontal scroll
-        tabsListVerticalAccumulated = 0
         
         // Block all scroll during closing animation
         if (isClosingMultiSpace) {
@@ -561,189 +549,17 @@
         document.removeEventListener('mouseup', handleLaneDividerMouseUp)
     }
     
-    // Tabs list vertical rubberband scroll handling
-    let tabsListSnapTimeouts = {}
-    
-    function handleTabsListWheel(event, spaceId) {
-        const tabsList = event.currentTarget
-        if (!tabsList || tabSearchQuery) return
-        
+    function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
+        if (!spaceId || tabSearchQuery || data.spaces[spaceId]?.tabs?.[0]?.type === 'divider') return
 
-        
-        const scrollTop = tabsList.scrollTop
-        
-        // Only handle vertical scroll down when at top
-        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
-        
-        const resistance = 0.05
-        const threshold = 18
-        const maxStretch = 25
-        const activationThreshold = 400
-        
-        // DEBUG: completely disable rubberband to test
-        // return
-        const maxSpacerHeight = 250
-        const maxStartPositionForActivation = 500
-        
-        // Track scroll gesture start position - only capture if not yet set and we're not already at top
-        if (tabsListScrollStartPosition === 0 && scrollTop > 5) {
-            tabsListScrollStartPosition = scrollTop
+        const tabsList = tabListRef?.querySelector(`[data-space-id="${spaceId}"] .tabs-list`)
+        if (tabsList) {
+            tabsList.scrollTop = 0
         }
-        // Reset start position after gesture ends (no scroll events for 150ms)
-        if (tabsListScrollGestureTimeout) clearTimeout(tabsListScrollGestureTimeout)
-        tabsListScrollGestureTimeout = setTimeout(() => {
-            tabsListScrollStartPosition = 0
-            tabsListVerticalAccumulated = 0
-        }, 150)
-        
-        // If spacer is visible and growing, continue growing it (no rubberband, just grow)
-        if (tabsListSpacerVisible[spaceId]) {
-            // Ensure rubberband is disabled during expansion
-            if (tabsListVerticalRubberBand[spaceId]) {
-                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-            }
-            
-            const currentHeight = tabsListSpacerHeight[spaceId] || 0
-            if (currentHeight < maxSpacerHeight && scrollTop <= 5 && event.deltaY < 0) {
-                event.preventDefault()
-                const growAmount = Math.abs(event.deltaY)
-                tabsListSpacerHeight = {
-                    ...tabsListSpacerHeight,
-                    [spaceId]: Math.min(currentHeight + growAmount, maxSpacerHeight)
-                }
-            }
-            return
-        }
-        
-        // Only activate when nearly at top (within 20px)
-        if (scrollTop > 20) {
-            tabsListVerticalAccumulated = 0
-            return
-        }
-        
-        // console.log('tabsListScrollStartPosition', tabsListScrollStartPosition)
-        // console.log('distanceScrolled', Math.abs(tabsListScrollStartPosition - scrollTop))
-        // Don't activate rubberband if scroll started more than 500px from top
-        if (tabsListScrollStartPosition > maxStartPositionForActivation) {
-            return
-        }
-        
-       
-        // Don't activate if scrolled more than 400px during this gesture
-        const distanceScrolled = Math.abs(tabsListScrollStartPosition - scrollTop)
-        if (distanceScrolled > 400) {
-            tabsListVerticalAccumulated = 0
-            return
-        }
-        
-        // Check if scrolling up while at top (deltaY < 0 = scroll up gesture = pulling content down)
-        if (scrollTop <= 5 && event.deltaY < 0) {
-            // Accumulate vertical scroll before activating spring
-            tabsListVerticalAccumulated += Math.abs(event.deltaY)
-            
-            // console.log('[SPACER] accumulated:', tabsListVerticalAccumulated, 'threshold:', activationThreshold)
-            
-            // Only activate spring after threshold is met
-            if (tabsListVerticalAccumulated < activationThreshold) {
-                return
-            }
-            
-            event.preventDefault()
-            
-            const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
-            tabsListVerticalRubberBand = {
-                ...tabsListVerticalRubberBand,
-                [spaceId]: Math.min(currentOffset - event.deltaY * resistance, maxStretch)
-            }
-            
-            // If pulled far enough, break rubberband and start spacer
-            if ((tabsListVerticalRubberBand[spaceId] || 0) > threshold && !tabsListSpacerVisible[spaceId]) {
-                // Add separator at top if not already one
-                ensureSeparatorAtTop(spaceId)
-                
-                // Reset rubberband immediately and start spacer with initial height
-                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-                tabsListVerticalAccumulated = 0
-                tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: true }
-                tabsListSpacerHeight = { ...tabsListSpacerHeight, [spaceId]: 20 }
-                return
-            }
-            
-            scheduleTabsListSnapBack(spaceId)
-        } else if (scrollTop <= 0 && event.deltaY > 0 && (tabsListVerticalRubberBand[spaceId] || 0) > 0) {
-            // Scrolling down while rubber banding - reduce offset
-            const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
-            tabsListVerticalRubberBand = {
-                ...tabsListVerticalRubberBand,
-                [spaceId]: Math.max(0, currentOffset - event.deltaY * 0.15)
-            }
-            if ((tabsListVerticalRubberBand[spaceId] || 0) <= 0) {
-                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-                tabsListVerticalAccumulated = 0
-            }
-        } else {
-            // Reset when not at edge
-            tabsListVerticalAccumulated = 0
-        }
-    }
-    
-    function ensureSeparatorAtTop(spaceId) {
-        const space = data.spaces[spaceId]
-        if (!space?.tabs?.length) return
-        
-        // Check if first tab is already a divider
-        const firstTab = space.tabs[0]
-        if (firstTab?.type === 'divider') {
-            // Already has a separator at top, just mark that we've ensured it
-            tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: false }
-            return
-        }
-        
-        // Add in-memory separator at beginning (we don't persist this)
-        tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: true }
-    }
-    
-    function scheduleTabsListSnapBack(spaceId) {
-        if (tabsListSnapTimeouts[spaceId]) clearTimeout(tabsListSnapTimeouts[spaceId])
-        tabsListSnapTimeouts[spaceId] = setTimeout(() => {
-            snapBackTabsListRubberBand(spaceId)
-        }, 30)
-    }
-    
-    function snapBackTabsListRubberBand(spaceId) {
-        const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
-        if (currentOffset === 0) {
-            tabsListVerticalAccumulated = 0
-            return
-        }
-        
-        const newOffset = currentOffset * 0.85
-        if (Math.abs(newOffset) < 0.5) {
-            tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-            tabsListVerticalAccumulated = 0
-        } else {
-            tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: newOffset }
-            requestAnimationFrame(() => snapBackTabsListRubberBand(spaceId))
-        }
-    }
-    
-    function handleTabsListScrollForSpacer(event, spaceId) {
-        const tabsList = event.currentTarget
-        if (!tabsList) return
-        
-        if (!tabsListSpacerVisible[spaceId]) return
-        
-        const spacerHeight = tabsListSpacerHeight[spaceId] || 0
-        const scrollTop = tabsList.scrollTop
-        
-        // Remove spacer once it's fully scrolled out of view
-        if (scrollTop > spacerHeight + 30) {
-            tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: false }
-            tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: false }
-        }
+
+        data.addDivider(spaceId)
     }
 
-    
     // Initialize spaces scroll fade state when spacesListRef is available or spaces change
     $effect(() => {
         if (spacesListRef) {
@@ -822,7 +638,7 @@
                 }
             } else if (targetSpace?.tabs?.length > 0) {
                 // Fallback: activate the first tab in the space
-                const firstNonPinned = targetSpace.tabs.find(t => !t.pinned)
+                const firstNonPinned = targetSpace.tabs.find(t => t.type === 'tab' && !t.pinned)
                 if (firstNonPinned) {
                     data.activate(firstNonPinned.id)
                 }
@@ -867,9 +683,6 @@
     function handleTabScroll(event) {
         if (!tabListRef) return
         
-        // Skip scroll handling during space switching to prevent unwanted tab activation
-        if (isSwitchingSpaces) return
-        
         // console.log('[DEBUG:SCROLL] Tab list scroll event', {
         //     scrollLeft: tabListRef.scrollLeft,
         //     scrollTop: event.target.scrollTop,
@@ -887,6 +700,9 @@
         
         if ( newIndex >= 0 && newIndex < data.spaceMeta.spaceOrder.length) {
             currentScrolledSpace = data.spaceMeta.spaceOrder[newIndex]
+
+            // Skip space activation during programmatic scrolling, but keep its highlight in sync
+            if (isSwitchingSpaces) return
     //         if (scrollActiveSpaceTimeout) {
     //             clearTimeout(scrollActiveSpaceTimeout)
     //         }
@@ -995,19 +811,19 @@
             spaceContextMenuId = null
         }
     }
-    
+
     function handleNewSpaceMenuToggle() {
         newSpaceMenuOpen = !newSpaceMenuOpen
     }
-    
+
     function handleNewSpaceMenuAction(action) {
         newSpaceMenuOpen = false
-        
+
         if (action === 'new-space') {
             console.log('Creating new space...')
             data.newSpace()
         } else if (action === 'new-divider') {
-            data.newDivider()
+            addTabsListSpacer()
         } else if (action === 'new-folder') {
             data.newFolder()
         }
@@ -1299,10 +1115,6 @@
     
     function handleTabMouseEnter(tab, event) {
         if (tabDrag.active) return
-        // Disable hovercards while spacer is visible (scrolling to add space)
-        const anySpacerVisible = Object.values(tabsListSpacerVisible).some(v => v)
-        if (anySpacerVisible) return
-        
         // console.log('[DEBUG:HOVER] Tab mouse enter', {
         //     tabId: tab.id,
         //     tabTitle: tab.title,
@@ -1772,7 +1584,7 @@
                         <svg class="tab-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
                         </svg>
-                        <input type="text" class="tab-search-input" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) isSearchModeActive = false }} onkeydown={(e) => { if (e.key === 'Escape') { tabSearchQuery = ''; isSearchModeActive = false; searchInputRef?.blur(); } }} />
+                        <input type="text" class="tab-search-input" aria-label="Search tabs" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) isSearchModeActive = false }} onkeydown={(e) => { if (e.key === 'Escape') { tabSearchQuery = ''; isSearchModeActive = false; searchInputRef?.blur(); } }} />
                         <button class="tab-search-clear" onmousedown={() => { tabSearchQuery = ''; isSearchModeActive = false; }} aria-label="Close search">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                 <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
@@ -1842,7 +1654,7 @@
                         <div class="spaces-list-fade-right" class:visible={spacesScrolledRight}></div>
                     </div>
                     <div class="new-space-menu">
-                        <button class="new-space-button" 
+                        <button class="new-space-button"
                                 onmousedown={(e) => { e.stopPropagation(); handleNewSpaceMenuToggle(); }}
                                 aria-label="Create new space">
                             <svg class="plus-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -1853,18 +1665,18 @@
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div class="menu-scrim" onmousedown={() => newSpaceMenuOpen = false}></div>
                         {/if}
-                            <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
-                                <button class="new-space-menu-item"
-                                        onmouseup={() => handleNewSpaceMenuAction('new-space')}
-                                        role="menuitem">New Space</button>
-                                <button class="new-space-menu-item"
-                                        onmouseup={() => handleNewSpaceMenuAction('new-divider')}
-                                        role="menuitem">New Divider</button>
-                                <button class="new-space-menu-item"
-                                        onmouseup={() => handleNewSpaceMenuAction('new-folder')}
-                                        role="menuitem">New Folder</button>
-                            </div>
+                        <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
+                            <button class="new-space-menu-item"
+                                    onmouseup={() => handleNewSpaceMenuAction('new-space')}
+                                    role="menuitem">New Space</button>
+                            <button class="new-space-menu-item"
+                                    onmouseup={() => handleNewSpaceMenuAction('new-divider')}
+                                    role="menuitem">New Divider</button>
+                            <button class="new-space-menu-item"
+                                    onmouseup={() => handleNewSpaceMenuAction('new-folder')}
+                                    role="menuitem">New Folder</button>
                         </div>
+                    </div>
                     </div>
                 </div>
             {/if}
@@ -2042,35 +1854,48 @@
                                 </div>
                                 
                                 <div class="tabs-list-container">
+                                    {#if !tabSearchQuery && data.spaces[spaceId]?.tabs?.[0]?.type !== 'divider' && !tabsListScrolled[spaceId]}
+                                        <div class="add-spacer-insertion">
+                                            <Tooltip text="Add spacer" position="top" delay={300}>
+                                                <button class="add-spacer-preview"
+                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(spaceId) } }}
+                                                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
+                                                        aria-label="Add spacer">
+                                                    <span class="add-spacer-preview-line"></span>
+                                                </button>
+                                            </Tooltip>
+                                        </div>
+                                    {/if}
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
-                                    <div class="tabs-list" 
-                                         onscroll={(e) => { handleTabsListScroll(e); handleTabsListScrollForSpacer(e, spaceId); }}
-                                         onwheel={(e) => handleTabsListWheel(e, spaceId)}
-                                         style={tabsListVerticalRubberBand[spaceId] ? `transform: translateY(${tabsListVerticalRubberBand[spaceId]}px)` : ''}>
-                                        
-                                        {#if tabsListSpacerVisible[spaceId] && !tabSearchQuery}
-                                            <div class="tabs-list-spacer" style="height: {tabsListSpacerHeight[spaceId] || 0}px"></div>
-                                        {/if}
-                                        
-                                        {#if tabsListSeparatorAdded[spaceId]}
-                                            <div class="tab-divider">
-                                                <div class="tab-divider-line-only"></div>
-                                            </div>
-                                        {/if}
-                                        
+                                    <div class="tabs-list" onscroll={handleTabsListScroll}>
+
                                    {#each data.spaces[spaceId].tabs as tab, i (tab.id)}
                                         {#if tab.type === 'divider'}
                                             {#if !tabSearchQuery}
-                                                <div class="tab-divider">
-                                                    {#if tab.title}
-                                                        <span class="tab-divider-title">{tab.title}</span>
-                                                        <div class="tab-divider-line"></div>
-                                                    {:else}
-                                                        <div class="tab-divider-line-only"></div>
-                                                    {/if}
+                                                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                                <div class="tab-divider-item" class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
+                                                     role="listitem"
+                                                     onmousedown={(e) => { if (e.button === 0) startTabDrag(tab.id, e.currentTarget, 'sidebar', spaceId, e, false, null, 'divider') }}
+                                                     oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
+                                                    <div class="tab-divider">
+                                                        {#if tab.title}
+                                                            <span class="tab-divider-title">{tab.title}</span>
+                                                            <div class="tab-divider-line"></div>
+                                                        {:else}
+                                                            <div class="tab-divider-line-only"></div>
+                                                        {/if}
+                                                        <button class="tab-divider-remove"
+                                                                onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); data.removeDivider(tab.id); } }}
+                                                                aria-label="Remove divider"
+                                                                title="Remove divider">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             {/if}
-                                        {:else}
+                                        {:else if tab.type === 'tab'}
                                             {#if tabMatchesSearch(tab)}
                                                 <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
                                                      role="listitem"
@@ -2272,7 +2097,7 @@
                         }}
                         onCloseTab={() => {
                             if (!hoveredTab?.id) return
-                            data.closeTab(hoveredTab.id)
+                            data.closeTab(hoveredTab.spaceId, hoveredTab.id)
                             hovercardUrlBarExpanded = false
                             hoveredTab = null
                             hovercardShowTime = null
@@ -2480,10 +2305,10 @@
     
     .tab-search-icon {
         position: absolute;
-        left: 10px;
+        left: 11px;
         width: 14px;
         height: 14px;
-        color: rgba(255, 255, 255, 0.3);
+        color: rgba(255, 255, 255, 0.46);
         pointer-events: none;
         transition: color 150ms ease;
     }
@@ -2491,64 +2316,77 @@
     .tab-search-input {
         width: 100%;
         height: 36px; /* Match pinned-tab height */
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 12px;
-        padding: 0 30px 0 30px;
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 13px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 0;
+        border-radius: 11px;
+        padding: 0 32px;
+        color: rgba(255, 255, 255, 0.84);
+        caret-color: rgba(255, 255, 255, 0.84);
+        font-size: 13.5px;
+        font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        appearance: none;
         outline: none;
-        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+        box-shadow: none;
+        transition: background-color 150ms ease;
         box-sizing: border-box;
     }
     
     .tab-search-clear {
         position: absolute;
-        right: 8px;
-        width: 20px;
-        height: 20px;
-            border-radius: 12px;
+        right: 7px;
+        width: 22px;
+        height: 22px;
+        border-radius: 7px;
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.4);
+        color: rgba(255, 255, 255, 0.44);
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 150ms ease;
+        transition: background-color 150ms ease, color 150ms ease;
         padding: 0;
     }
     
     .tab-search-clear:hover {
+        color: rgba(255, 255, 255, 0.75);
+    }
+
+    .tab-search-clear:focus-visible {
+        outline: none;
         background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.8);
+        color: rgba(255, 255, 255, 0.84);
     }
     
     .tab-search-clear svg {
-        width: 14px;
-        height: 14px;
+        width: 13px;
+        height: 13px;
     }
     
     .tab-search-input:hover {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.08);
     }
     
     .tab-search-input:focus {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.15);
-        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.1);
     }
     
-    .tab-search-input:focus + .tab-search-icon {
-        color: rgba(255, 255, 255, 0.6);
+    .tab-search-container:focus-within .tab-search-icon {
+        color: rgba(255, 255, 255, 0.66);
     }
     
     .tab-search-input::placeholder {
-        color: rgba(255, 255, 255, 0.3);
-        font-weight: 400;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 450;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .tab-search-icon,
+        .tab-search-input,
+        .tab-search-clear {
+            transition: none;
+        }
     }
 
     .global-pins-section {
@@ -2754,7 +2592,8 @@
         width: 16px;
         height: 16px;
         color: rgba(255, 255, 255, 0.6);
-    }    
+    }
+    
     .new-space-menu-dropdown {
         position: absolute;
         top: 100%;
@@ -2772,13 +2611,13 @@
         backdrop-filter: blur(12px);
         overflow: hidden;
     }
-    
+
     .new-space-menu-dropdown.open {
         opacity: 1;
         visibility: visible;
         transform: translateY(0);
     }
-    
+
     .new-space-menu-item {
         padding: 6px 12px;
         color: rgba(255, 255, 255, 0.8);
@@ -2793,16 +2632,16 @@
         width: 100%;
         text-align: left;
     }
-    
+
     .new-space-menu-item:hover {
         background: rgba(255, 255, 255, 0.1);
         color: rgba(255, 255, 255, 0.95);
     }
-    
+
     .new-space-menu-item:active {
         background: rgba(255, 255, 255, 0.15);
     }
-    
+
     .space-title-container {
         display: flex;
         align-items: center;
@@ -3295,6 +3134,48 @@
         transform: translateZ(0);
         contain: layout style;
     }
+
+    .add-spacer-insertion {
+        position: absolute;
+        top: -8px;
+        left: 0;
+        right: 8px;
+        height: 16px;
+        z-index: 11;
+    }
+
+    .add-spacer-insertion :global(.tooltip-container) {
+        width: 100%;
+        height: 100%;
+    }
+
+    .add-spacer-preview {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+    }
+
+    .add-spacer-preview:focus-visible {
+        outline: none;
+    }
+
+    .add-spacer-preview-line {
+        width: 100%;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.22);
+        opacity: 0;
+        transition: opacity 150ms ease;
+    }
+
+    .add-spacer-preview:hover .add-spacer-preview-line,
+    .add-spacer-preview:focus-visible .add-spacer-preview-line {
+        opacity: 1;
+    }
     
     .tabs-list-fade-top {
         position: absolute;
@@ -3372,14 +3253,6 @@
 
     .tabs-list::-webkit-scrollbar-thumb:hover {
         background: rgba(255, 255, 255, 0.3);
-    }
-    
-    .tabs-list-spacer {
-        flex-shrink: 0;
-        width: 100%;
-        pointer-events: none;
-        will-change: height;
-        contain: layout style;
     }
     
     .tabs-list-bottom-spacer {
@@ -3544,7 +3417,26 @@
         color: rgba(255, 255, 255, 0.9);
     }
     
+    .tab-divider-item {
+        position: relative;
+        flex-shrink: 0;
+        width: 100%;
+        cursor: grab;
+    }
+
+    .tab-divider-item.tab-dragging {
+        opacity: 0.3;
+    }
+
+    .tabs-list > .tab-divider-item:first-child::before {
+        content: '';
+        display: block;
+        height: 36px;
+        width: 100%;
+    }
+
     .tab-divider {
+        position: relative;
         padding: 8px 8px 8px 8px;
         margin: 4px 0;
         display: flex;
@@ -3577,6 +3469,43 @@
         background: rgba(255, 255, 255, 0.1);
         width: 100%;
         margin: 0 8px;
+    }
+
+    .tab-divider-remove {
+        position: absolute;
+        top: 50%;
+        right: 6px;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 0;
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.88);
+        color: rgba(255, 255, 255, 0.45);
+        cursor: pointer;
+        opacity: 0;
+        transform: translateY(-50%);
+        transition: color 150ms ease, opacity 150ms ease, background-color 150ms ease;
+    }
+
+    .tab-divider-item:hover .tab-divider-remove,
+    .tab-divider-remove:focus-visible {
+        opacity: 1;
+    }
+
+    .tab-divider-remove:hover,
+    .tab-divider-remove:focus-visible {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.85);
+        outline: none;
+    }
+
+    .tab-divider-remove svg {
+        width: 14px;
+        height: 14px;
     }
     
     /* New Tab Button */

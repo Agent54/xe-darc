@@ -5,11 +5,11 @@
   import { Excalidraw as ExcalidrawReact } from '@excalidraw/excalidraw'
   import '@excalidraw/excalidraw/index.css'
   import FrameWrapper from './ReactFrameWrapper.js'
-  import { throttle } from '../lib/utils'
+  import { debounce } from '../lib/utils'
   import data from '../data.svelte.js'
   // import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 
-  let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs.filter(tab => !tab.pinned)) || []))
+  let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs.filter(tab => tab.type === 'tab' && !tab.pinned)) || []))
   
   function saveViewState(spaceId, scrollX, scrollY, zoom) {
     if (!spaceId) return
@@ -34,10 +34,17 @@
   }
 
   const versions = new Map()
+  const sceneChangeHandlers = new Map()
+
+  let shapes = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs
+    .filter(tab => tab.type === 'shape')
+    .sort((a, b) => (a.canvasOrder ?? 0) - (b.canvasOrder ?? 0))) || []))
+  let shapeFiles = $derived.by(() => Object.assign({}, ...shapes.map(shape => shape.files || {})))
 
   let elements = $derived.by(() => {
     const elems = {}
     const arrows = []
+    const elementOrders = new Map()
     const tabWidth = 1000
     const tabHeight = 700  
     const columnSpacing = 80
@@ -69,7 +76,8 @@
         data.updateTab(tab.id, { canvas: { [data.spaceMeta.activeSpace]: { x, y, width, height } } })
       }
 
-      versions.set(tab.id, 1)
+      versions.set(tab.id, canvasData?.version || 1)
+      elementOrders.set(tab.id, canvasData?.canvasOrder ?? index)
       
       elems[tab.id] = {
           "id": tab.id,
@@ -79,7 +87,7 @@
           "y": y,
           "width": width || tabWidth,
           "height": height || tabHeight,
-          "angle": tab.angle || 0,
+          "angle": canvasData?.angle ?? tab.angle ?? 0,
           
           "strokeColor": "none",
           "backgroundColor": "none",
@@ -88,20 +96,20 @@
           "strokeStyle": "solid",
           "roughness": 0,
           "opacity": 100,
-          "groupIds": [],
-          "frameId": null,
-          "index": "a2",
+          "groupIds": canvasData?.groupIds || [],
+          "frameId": canvasData?.frameId || null,
+          "index": canvasData?.index,
           "roundness": {
               "type": 3
           },
           "seed": 1218149059,
-          "version": 1,
-          "versionNonce": 1873698765,
+          "version": canvasData?.version || 1,
+          "versionNonce": canvasData?.versionNonce || 1873698765,
           "isDeleted": tab.closed,
-          "boundElements": null,
-          "updated": tab.modified || Date.now(),
+          "boundElements": canvasData?.boundElements || null,
+          "updated": canvasData?.updated || tab.modified || Date.now(),
           "link": tab.url,
-          "locked": false
+          "locked": canvasData?.locked || false
       }
 
       if (tab.opener) {
@@ -174,7 +182,12 @@
         elems[arrow.endBinding.elementId].x, elems[arrow.endBinding.elementId].y
       ])
     })
-    return [...Object.values(elems), ...(arrows)] // convertToExcalidrawElements
+    const customElements = shapes.map(shape => {
+      elementOrders.set(shape.id, shape.canvasOrder)
+      return shape.element
+    }).filter(element => element && !elems[element.id])
+    return [...Object.values(elems), ...arrows, ...customElements]
+      .sort((a, b) => (elementOrders.get(a.id) ?? 0) - (elementOrders.get(b.id) ?? 0)) // convertToExcalidrawElements
   })
   
   let savedState
@@ -183,7 +196,7 @@
     "version": 2,
     "source": "isolated-app://kktqp5b4ad3rk7liu3s3svirby266incu7xsds2l56zwzm3op5aaaaac",
     elements,
-    "files": {},
+    "files": shapeFiles,
     appState: (() => {
       // Load saved view state from localStorage
       savedState = loadViewState(data.spaceMeta.activeSpace)
@@ -226,49 +239,70 @@
   let container
   let root
   let excalidrawAPI = $state(null)
+  let sceneSpaceId = data.spaceMeta.activeSpace
+  let pointerIsDown = false
   let currentZoom = $derived(excalidrawData?.appState?.zoom?.value || 0.35)
 
+  function persistSceneWhenIdle(spaceId, elements, appState, files) {
+    if (pointerIsDown) {
+      sceneChangeHandlers.get(spaceId)?.(spaceId, elements, appState, files)
+      return
+    }
+
+    persistSceneChange(spaceId, elements, appState, files)
+  }
+
+  function queueSceneChange(spaceId, elements, appState, files) {
+    if (!sceneChangeHandlers.has(spaceId)) {
+      sceneChangeHandlers.set(spaceId, debounce(persistSceneWhenIdle, 250))
+    }
+
+    sceneChangeHandlers.get(spaceId)(spaceId, elements, appState, files)
+  }
+
+  function flushSceneChanges(spaceId, force = false) {
+    if (force) pointerIsDown = false
+
+    if (spaceId) {
+      sceneChangeHandlers.get(spaceId)?.flush()
+      return
+    }
+
+    sceneChangeHandlers.forEach(handler => handler.flush())
+  }
+
   $effect(() => {
+    const activeSpaceId = data.spaceMeta.activeSpace
+    if (sceneSpaceId && sceneSpaceId !== activeSpaceId) {
+      flushSceneChanges(sceneSpaceId, true)
+    }
+    sceneSpaceId = activeSpaceId
     excalidrawAPI?.updateScene(excalidrawData)
   })
   
   onMount(() => {
+    const flushOnPageExit = () => flushSceneChanges(null, true)
+    window.addEventListener('pagehide', flushOnPageExit)
+    window.addEventListener('beforeunload', flushOnPageExit)
+
     root = ReactDOM.createRoot(container)
     const element = React.createElement(ExcalidrawReact, {
       initialData: excalidrawData,
-      onChange: throttle((elements, appState, files) => {
-        // Update zoom level for CSS custom property
+      onChange: (elements, appState, files) => {
         if (appState?.zoom?.value !== undefined) {
           currentZoom = appState.zoom.value
         }
-        
-        // Save view state to localStorage
-        if (appState?.scrollX !== undefined && appState?.scrollY !== undefined && appState?.zoom?.value !== undefined) {
-          if (savedState?.scrollX !== appState.scrollX || savedState?.scrollY !== appState.scrollY || savedState?.zoom?.value !== appState.zoom.value) {
-            saveViewState(data.spaceMeta.activeSpace, appState.scrollX, appState.scrollY, appState.zoom.value)
-          }
+        queueSceneChange(sceneSpaceId, elements, appState, files)
+      },
+      onPointerUpdate: (payload) => {
+        pointerIsDown = payload.button === 'down'
+        onPointerUpdate(payload)
+        if (payload.button === 'up') {
+          const pointerSpaceId = sceneSpaceId
+          flushSceneChanges(pointerSpaceId)
+          queueMicrotask(() => flushSceneChanges(pointerSpaceId))
         }
-
-        for (const elem of elements) {
-          if (elem.isDeleted) {
-            data.closeTab(data.spaceMeta.activeSpace, elem.id)
-            continue
-          }
-          const version = versions.get(elem.id)
-          if (version && elem.version !== version) {
-            const elemCanvData = data.docs[elem.id]?.canvas?.[data.spaceMeta.activeSpace]
-            if (!elemCanvData || elemCanvData.x !== elem.x || elemCanvData.y !== elem.y || elemCanvData.width !== elem.width || elemCanvData.height !== elem.height) {
-              data.updateTab(elem.id, { canvas: { [data.spaceMeta.activeSpace]: { x: elem.x, y: elem.y, width: elem.width, height: elem.height } } })
-            } else {
-              versions.set(elem.id, elem.version)
-            }
-          }
-        }
-
-        onChange(elements, appState, files)
-        console.log('onChange', elements, appState)
-      }, 1000),
-      onPointerUpdate,
+      },
       excalidrawAPI: (api) => {
         if (excalidrawAPI === null) {
           excalidrawAPI = api
@@ -291,7 +325,7 @@
             console.log('no link', element)
             return null
         }
-        
+
         return React.createElement(FrameWrapper, {
           element,
           controlledFrameSupported,
@@ -302,7 +336,61 @@
       }
     })
     root.render(element)
+
+    return () => {
+      flushSceneChanges(null, true)
+      window.removeEventListener('pagehide', flushOnPageExit)
+      window.removeEventListener('beforeunload', flushOnPageExit)
+    }
   })
+
+  function persistSceneChange(spaceId, elements, appState, files) {
+    // Save view state to localStorage
+    if (appState?.scrollX !== undefined && appState?.scrollY !== undefined && appState?.zoom?.value !== undefined) {
+      if (savedState?.scrollX !== appState.scrollX || savedState?.scrollY !== appState.scrollY || savedState?.zoom?.value !== appState.zoom.value) {
+        saveViewState(spaceId, appState.scrollX, appState.scrollY, appState.zoom.value)
+      }
+    }
+
+    data.updateCanvasShapes(spaceId, elements, files)
+
+    for (const [canvasOrder, elem] of elements.entries()) {
+      if (elem.isDeleted) {
+        if (data.docs[elem.id]?.type === 'tab' && data.spaces[spaceId]?.tabs.some(tab => tab.id === elem.id)) {
+          data.closeTab(spaceId, elem.id)
+        }
+        continue
+      }
+
+      const tab = data.docs[elem.id]
+      if (tab?.type !== 'tab' || tab.spaceId !== spaceId) {
+        continue
+      }
+
+      const version = versions.get(elem.id)
+      const canvasData = tab.canvas?.[spaceId]
+      if (version && (elem.version !== version || elem.index !== canvasData?.index || canvasOrder !== canvasData?.canvasOrder)) {
+        data.updateTab(elem.id, { canvas: { [spaceId]: {
+          x: elem.x,
+          y: elem.y,
+          width: elem.width,
+          height: elem.height,
+          angle: elem.angle,
+          groupIds: elem.groupIds,
+          frameId: elem.frameId,
+          index: elem.index,
+          version: elem.version,
+          versionNonce: elem.versionNonce,
+          updated: elem.updated,
+          canvasOrder,
+          boundElements: elem.boundElements,
+          locked: elem.locked
+        } } })
+      }
+    }
+
+    onChange(elements, appState, files)
+  }
 
   let loaded = $state(false)
   setTimeout(() => {
@@ -310,6 +398,8 @@
   }, 100)
 
   function detach () {
+    flushSceneChanges(null, true)
+
     if (root) {
         root.unmount()
     }
@@ -361,8 +451,9 @@
         transition: opacity 0.2s ease-in-out 0.1s;
     }
 
-    :global(.excalidraw__embeddable-container) {
-      border-radius: var(--embeddable-radius, 8px); 
+    :global(.excalidraw__embeddable-container__inner) {
+      box-sizing: border-box;
+      border-radius: var(--embeddable-radius, 8px);
       border: 1px solid #bababa;
     }
 
