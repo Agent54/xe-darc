@@ -281,8 +281,32 @@ const settings = $state({})
 const ui = $state({ viewMode: 'default' })
 const desiredCanvasShapes = new Map()
 const canvasShapeSaveTasks = new Map()
+const canvasShapeStates = new Map()
 const desiredTabUpdates = new Map()
 const tabUpdateSaveTasks = new Map()
+
+function getCanvasShapeState(element, canvasOrder, files = {}) {
+    return {
+        version: element?.version,
+        versionNonce: element?.versionNonce,
+        index: element?.index,
+        canvasOrder,
+        fileDataURL: element?.fileId ? files[element.fileId]?.dataURL : null
+    }
+}
+
+function rememberCanvasShapeState(shape) {
+    if (shape?.type !== 'shape' || !shape.element) return
+    canvasShapeStates.set(shape.id, getCanvasShapeState(shape.element, shape.canvasOrder, shape.files))
+}
+
+function canvasShapeStateMatches(first, second) {
+    return first?.version === second?.version &&
+        first?.versionNonce === second?.versionNonce &&
+        first?.index === second?.index &&
+        first?.canvasOrder === second?.canvasOrder &&
+        first?.fileDataURL === second?.fileDataURL
+}
 
 function compareCanvasShapes(first, second) {
     if (!second) return 1
@@ -311,6 +335,7 @@ function compareCanvasShapes(first, second) {
 function applyCanvasShape(shape) {
     if (shape?.type !== 'shape') return
 
+    rememberCanvasShapeState(shape)
     docs[shape.id] = shape
 
     const space = spaces[shape.spaceId]
@@ -731,6 +756,10 @@ const refresh = throttle(async function (spaceId) {
             const isDivider = doc.type === 'divider'
             const isShape = doc.type === 'shape'
 
+            if (initialLoad && isShape) {
+                rememberCanvasShapeState(doc)
+            }
+
             if (!isDivider && !isShape && !spaceMeta.activeTabId && doc.spaceId === spaceMeta.activeSpace) {
                 spaceMeta.activeTabId = doc.id
                 console.log('setting active tab id a', spaceMeta.activeTabId, '"' + (doc.title || doc.url || '') + '"')
@@ -895,6 +924,7 @@ live: true,
             queueCanvasShapeSave(repairedShape)
             return
         }
+        rememberCanvasShapeState(change.doc)
     }
 
     if (change.doc.type === 'tab') {
@@ -1617,13 +1647,15 @@ const data = {
                 shapeFiles[element.fileId] = file
             }
 
-            if (
-                storedShape?.element?.version === element.version &&
-                storedShape.element.versionNonce === element.versionNonce &&
-                storedShape.element.index === element.index &&
-                storedShape.canvasOrder === canvasOrder &&
-                !fileChanged
-            ) {
+            const shapeState = getCanvasShapeState(element, canvasOrder, shapeFiles)
+            const storedState = canvasShapeStates.get(element.id) || (
+                storedShape?.element
+                    ? getCanvasShapeState(storedShape.element, storedShape.canvasOrder, storedShape.files)
+                    : null
+            )
+            canvasShapeStates.set(element.id, shapeState)
+
+            if (canvasShapeStateMatches(storedState, shapeState) && !fileChanged) {
                 continue
             }
 
