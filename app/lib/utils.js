@@ -63,11 +63,6 @@ export function throttle (func, window = 100, { leading = true } = {}) {
   return throttled
 }
 
-export function cloneJson (value) {
-  if (value == null) return value
-  return JSON.parse(JSON.stringify(value))
-}
-
 export function origin(url) {
   if (url?.startsWith('about:')) {
     return 'about'
