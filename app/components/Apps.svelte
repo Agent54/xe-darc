@@ -167,6 +167,7 @@
         event?.stopPropagation()
         if (!url) return
         await data.newTab(data.spaceMeta.activeSpace, { url, title, shouldFocus: true })
+        onClose()
     }
 
     function openApp(event, app) {
