@@ -2,7 +2,7 @@ import PouchDB from 'pouchdb-browser'
 import findPlugin from 'pouchdb-find'
 import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
-import { throttle, origin } from './lib/utils.js'
+import { cloneJson, throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
@@ -1636,7 +1636,7 @@ const data = {
                 archive: null,
                 order: Number.MAX_SAFE_INTEGER,
                 canvasOrder,
-                element,
+                element: cloneJson(element),
                 files: shapeFiles,
                 created: storedShape?.created || now,
                 modified: now

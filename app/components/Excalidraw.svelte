@@ -5,7 +5,7 @@
   import { Excalidraw as ExcalidrawReact } from '@excalidraw/excalidraw'
   import '@excalidraw/excalidraw/index.css'
   import FrameWrapper from './ReactFrameWrapper.js'
-  import { throttle } from '../lib/utils'
+  import { cloneJson, throttle } from '../lib/utils'
   import data from '../data.svelte.js'
   // import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 
@@ -184,7 +184,7 @@
     })
     const customElements = shapes.map(shape => {
       elementOrders.set(shape.id, shape.canvasOrder)
-      return shape.element
+      return cloneJson(shape.element)
     }).filter(element => element && !elems[element.id])
     return [...Object.values(elems), ...arrows, ...customElements]
       .sort((a, b) => (elementOrders.get(a.id) ?? 0) - (elementOrders.get(b.id) ?? 0)) // convertToExcalidrawElements
