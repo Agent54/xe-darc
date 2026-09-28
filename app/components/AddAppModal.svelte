@@ -1,4 +1,6 @@
 <script>
+    import { onMount } from 'svelte'
+    import { loadAppCatalog } from '../lib/app-catalog.js'
     import { checkoutRepository } from '../lib/compose-api.js'
 
     let { show = false, installedApps = [], onAdd = () => {}, onClose = () => {} } = $props()
@@ -29,6 +31,42 @@
     let submissionState = $state('idle')
     let submitError = $state('')
     let checkoutController = null
+    let catalogApps = $state([])
+    let catalogState = $state('loading')
+    let catalogError = $state('')
+    let catalogController = null
+
+    onMount(() => {
+        loadCatalog()
+        return () => {
+            catalogController?.abort()
+            checkoutController?.abort()
+        }
+    })
+
+    async function loadCatalog() {
+        catalogController?.abort()
+        const controller = new AbortController()
+        catalogController = controller
+        catalogState = 'loading'
+        catalogError = ''
+        try {
+            const apps = await loadAppCatalog({ signal: controller.signal })
+            if (catalogController === controller && !controller.signal.aborted) {
+                catalogApps = apps
+                catalogState = 'ready'
+            }
+        } catch (error) {
+            if (catalogController === controller && !controller.signal.aborted) {
+                catalogError = error?.message || 'The app catalog could not be loaded.'
+                catalogState = 'error'
+            }
+        } finally {
+            if (catalogController === controller) {
+                catalogController = null
+            }
+        }
+    }
     
     const availablePartitions = [
         { id: 'current', name: 'Current Space Partition', description: 'Default partition for this workspace' },
@@ -40,6 +78,9 @@
     ]
 
     function switchTab(tab) {
+        if (tab === 'catalog' && activeTab !== 'catalog') {
+            loadCatalog()
+        }
         activeTab = tab
         submitError = ''
     }
@@ -121,6 +162,8 @@
     }
 
     function handleClose() {
+        catalogController?.abort()
+        catalogController = null
         checkoutController?.abort()
         checkoutController = null
         submissionState = 'idle'
@@ -183,39 +226,6 @@
         activeTooltip = null
     }
 
-    const catalogApps = [
-        {
-            id: 'excalidraw',
-            name: 'Excalidraw',
-            iconUrl: '/embed-icons/excalidraw.png',
-            type: 'url',
-            url: 'https://excalidraw.com',
-            description: 'Sketch diagrams and whiteboards in a shared canvas.'
-        },
-        {
-            id: 'darc-code',
-            name: 'Darc Code',
-            iconUrl: '/embed-icons/github_gist.png',
-            type: 'docker',
-            githubUrl: 'https://github.com/Agent54/darc-code',
-            branch: 'int',
-            pathType: 'compose',
-            path: 'docker-compose.yaml',
-            description: 'A VS Code fork packaged as a Docker workspace.'
-        },
-        {
-            id: 'darc-dev',
-            name: 'darc-dev',
-            iconUrl: '/photon_logo.png',
-            type: 'docker',
-            githubUrl: 'https://github.com/Agent54/xe-darc',
-            branch: 'main',
-            pathType: 'compose',
-            path: 'docker-compose.yaml',
-            description: 'Develop Darc inside a self-hosted Darc workspace.'
-        }
-    ]
-
     function normalizeCatalogValue(value) {
         return value?.trim().toLowerCase().replace(/\.git$/, '').replace(/\/$/, '') || ''
     }
@@ -238,6 +248,11 @@
 
     const availableCatalogApps = $derived(catalogApps.filter(app => !isCatalogAppInstalled(app)))
     const installedCatalogApps = $derived(catalogApps.filter(isCatalogAppInstalled))
+    const catalogCategories = $derived([...new Set(availableCatalogApps.map(app => app.category))])
+
+    function categoryName(category) {
+        return category.split('-').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')
+    }
 </script>
 
 {#snippet CatalogCard(app, installed = false)}
@@ -319,13 +334,43 @@
                     <div class="space-y-6">
                         <p class="text-sm text-white/70">Choose an app to configure before adding it.</p>
                         
-                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {#each availableCatalogApps as app}
-                                {@render CatalogCard(app)}
-                            {/each}
-                        </div>
+                        {#if catalogState === 'loading'}
+                            <p class="text-sm text-white/50" role="status">Loading app catalog…</p>
+                        {:else if catalogState === 'error'}
+                            <div class="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                                <p class="text-sm text-white/70" role="alert">{catalogError}</p>
+                                <button
+                                    type="button"
+                                    class="shrink-0 cursor-pointer rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/75 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                    onmousedown={loadCatalog}
+                                    onkeydown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault()
+                                            loadCatalog()
+                                        }
+                                    }}
+                                >Try again</button>
+                            </div>
+                        {:else if catalogApps.length === 0}
+                            <p class="text-sm text-white/50" role="status">No apps are available in the catalog yet.</p>
+                        {:else if availableCatalogApps.length === 0}
+                            <p class="text-sm text-white/50" role="status">All catalog apps are already installed.</p>
+                        {/if}
 
-                        {#if installedCatalogApps.length > 0}
+                        {#if catalogState === 'ready'}
+                            {#each catalogCategories as category (category)}
+                                <section aria-label={categoryName(category)}>
+                                    <h3 class="mb-3 text-sm font-medium text-white/70">{categoryName(category)}</h3>
+                                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                        {#each availableCatalogApps.filter(app => app.category === category) as app (app.id)}
+                                            {@render CatalogCard(app)}
+                                        {/each}
+                                    </div>
+                                </section>
+                            {/each}
+                        {/if}
+
+                        {#if catalogState === 'ready' && installedCatalogApps.length > 0}
                             <section class="border-t border-white/10 pt-4">
                                 <button
                                     type="button"

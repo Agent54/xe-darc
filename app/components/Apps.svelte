@@ -435,12 +435,14 @@
     </section>
 </div>
 
-<AddAppModal
-    show={showAddAppModal}
-    installedApps={[...composeApps, ...exampleApps]}
-    onAdd={addApp}
-    onClose={() => showAddAppModal = false}
-/>
+{#if showAddAppModal}
+    <AddAppModal
+        show={showAddAppModal}
+        installedApps={[...composeApps, ...exampleApps]}
+        onAdd={addApp}
+        onClose={() => showAddAppModal = false}
+    />
+{/if}
 
 <style>
     .app-card-actions,
