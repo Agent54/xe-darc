@@ -1,46 +1,31 @@
+import { jsonSchemaToType } from '@ark/json-schema'
+
 const catalogAPI = 'https://api.github.com/repos/agent54/xe-appstore'
 const catalogAssets = 'https://raw.githubusercontent.com/agent54/xe-appstore/main/'
 const servicePath = /^catalog\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([a-z0-9]+(?:-[a-z0-9]+)*)\.json$/
 const serviceCache = new Map()
+let cachedSchema = null
 
-function isWebURL(value) {
-    try {
-        const url = new URL(value)
-        return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password
-    } catch {
-        return false
-    }
-}
-
-export function parseCatalogService(service, path, revision = '') {
+export function parseCatalogService(service, path, revision, serviceType) {
     const match = path.match(servicePath)
-    const requiredFields = ['id', 'name', 'description', 'iconUrl', 'type']
-    if (!match || !service || requiredFields.some(field => typeof service[field] !== 'string' || !service[field].trim()) || service.id !== match[2]) {
+    if (!match) {
         throw new Error(`Invalid catalog service: ${path}`)
     }
-    const assetIcon = /^assets\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+$/.test(service.iconUrl)
-    if (!assetIcon && !isWebURL(service.iconUrl)) {
-        throw new Error(`Invalid catalog icon: ${path}`)
+    let validatedService
+    try {
+        validatedService = serviceType.assert(service)
+    } catch (error) {
+        throw new Error(`Invalid catalog service: ${path}: ${error.message}`, { cause: error })
     }
-    if (service.type === 'url') {
-        if (!isWebURL(service.url)) {
-            throw new Error(`Invalid catalog URL: ${path}`)
-        }
-    } else if (service.type === 'docker') {
-        if (!isWebURL(service.githubUrl) || !/^https:\/\/github\.com\/[^/\s?#]+\/[^/\s?#]+\/?$/.test(service.githubUrl) ||
-            typeof service.branch !== 'string' || !service.branch.trim() ||
-            !['compose', 'dockerfile'].includes(service.pathType) ||
-            typeof service.path !== 'string' || !service.path.trim() || service.path.startsWith('/') || service.path.split('/').includes('..') ||
-            (service.checkoutPath !== undefined && (typeof service.checkoutPath !== 'string' || !service.checkoutPath.trim()))) {
-            throw new Error(`Invalid catalog repository settings: ${path}`)
-        }
-    } else {
-        throw new Error(`Unsupported catalog service type: ${path}`)
+    if (validatedService.id !== match[2]) {
+        throw new Error(`Catalog service ID does not match filename: ${path}`)
     }
     return {
-        ...service,
+        ...validatedService,
         category: match[1],
-        iconUrl: assetIcon ? `${catalogAssets}${service.iconUrl}?v=${encodeURIComponent(revision)}` : service.iconUrl
+        iconUrl: validatedService.iconUrl.startsWith('assets/')
+            ? `${catalogAssets}${validatedService.iconUrl}?v=${encodeURIComponent(revision)}`
+            : validatedService.iconUrl
     }
 }
 
@@ -78,6 +63,15 @@ export async function loadAppCatalog({ signal } = {}) {
     if (!Array.isArray(tree?.tree) || tree.truncated) {
         throw new Error('GitHub returned an incomplete app catalog.')
     }
+    const schemaEntry = tree.tree.find(entry => entry.type === 'blob' && entry.path === 'catalog.schema.json')
+    if (!schemaEntry?.sha) {
+        throw new Error('GitHub returned an app catalog without its schema.')
+    }
+    if (cachedSchema?.sha !== schemaEntry.sha) {
+        const schema = await catalogRequest(`/git/blobs/${encodeURIComponent(schemaEntry.sha)}`, requestSignal, true)
+        cachedSchema = { sha: schemaEntry.sha, serviceType: jsonSchemaToType(schema) }
+    }
+    const serviceType = cachedSchema.serviceType
     const files = tree.tree.filter(entry => entry.type === 'blob' && servicePath.test(entry.path))
     const apps = new Array(files.length)
     let nextFile = 0
@@ -90,7 +84,7 @@ export async function loadAppCatalog({ signal } = {}) {
             if (!service) {
                 service = await catalogRequest(`/git/blobs/${encodeURIComponent(file.sha)}`, requestSignal, true)
             }
-            apps[index] = parseCatalogService(service, file.path, tree.sha)
+            apps[index] = parseCatalogService(service, file.path, tree.sha, serviceType)
             serviceCache.set(file.sha, service)
         }
     }

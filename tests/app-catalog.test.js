@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { jsonSchemaToType } from '@ark/json-schema'
 import { loadAppCatalog, parseCatalogService } from '../app/lib/app-catalog.js'
 
 const webApp = {
@@ -21,14 +22,53 @@ const dockerApp = {
     path: 'docker-compose.yaml',
     checkoutPath: 'development/workspace'
 }
+const common = {
+    id: { type: 'string' },
+    name: { type: 'string' },
+    description: { type: 'string' },
+    iconUrl: { type: 'string', pattern: '^(?:assets/[A-Za-z0-9_-]+\\.png|https://)' }
+}
+const serviceSchema = {
+    oneOf: [
+        {
+            type: 'object', additionalProperties: false,
+            properties: { ...common, type: { const: 'url' }, url: { type: 'string', pattern: '^https?://' } },
+            required: ['id', 'name', 'description', 'iconUrl', 'type', 'url']
+        },
+        {
+            type: 'object', additionalProperties: false,
+            properties: {
+                ...common,
+                type: { const: 'docker' },
+                githubUrl: { type: 'string', pattern: '^https://github\\.com/' },
+                branch: { type: 'string' },
+                pathType: { enum: ['compose', 'dockerfile', 'static'] },
+                path: { type: 'string', pattern: '^(?!\\.\\.)[^\\\\]+$' },
+                checkoutPath: { type: 'string' }
+            },
+            required: ['id', 'name', 'description', 'iconUrl', 'type', 'githubUrl', 'branch', 'pathType', 'path']
+        }
+    ]
+}
+const serviceType = jsonSchemaToType(serviceSchema)
 
 function json(value, options) {
     return new Response(JSON.stringify(value), options)
 }
 
+function tree(entries, options = {}) {
+    return json({
+        sha: options.sha || 'test-snapshot',
+        truncated: options.truncated || false,
+        tree: [{ type: 'blob', path: 'catalog.schema.json', sha: options.schemaSHA || 'test-schema' }, ...entries]
+    })
+}
+
 async function withFetch(mock, run) {
     const original = globalThis.fetch
-    globalThis.fetch = mock
+    globalThis.fetch = (url, options) => url.endsWith('/git/blobs/test-schema')
+        ? Promise.resolve(json(serviceSchema))
+        : mock(url, options)
     try {
         await run()
     } finally {
@@ -38,15 +78,15 @@ async function withFetch(mock, run) {
 
 Deno.test('loads category files from a single GitHub snapshot and preserves checkout settings', async () => {
     const requests = []
-    await withFetch(async (url, options) => {
+    await withFetch((url, options) => {
         requests.push({ url, options })
         if (url.endsWith('/git/trees/main?recursive=1')) {
-            return json({ sha: 'snapshot-1', truncated: false, tree: [
+            return tree([
                 { type: 'blob', path: 'README.md', sha: 'readme' },
                 { type: 'blob', path: 'catalog/development/workspace.json', sha: 'workspace-1' },
                 { type: 'blob', path: 'catalog/design/sketch.json', sha: 'sketch-1' },
                 { type: 'tree', path: 'catalog/design', sha: 'folder' }
-            ] })
+            ], { sha: 'snapshot-1' })
         }
         if (url.endsWith('/git/blobs/sketch-1')) {
             return json(webApp)
@@ -72,7 +112,7 @@ Deno.test('loads category files from a single GitHub snapshot and preserves chec
 Deno.test('reopening discovers additions, edits, moves and deletions while reusing unchanged blobs', async () => {
     let opening = 0
     const blobRequests = []
-    await withFetch(async url => {
+    await withFetch(url => {
         if (url.endsWith('/git/trees/main?recursive=1')) {
             opening++
             const files = opening === 1
@@ -80,9 +120,9 @@ Deno.test('reopening discovers additions, edits, moves and deletions while reusi
                 : opening === 2
                 ? [['design', 'sketch', 'refresh-sketch-2'], ['tools', 'workspace', 'refresh-workspace-1'], ['design', 'new-app', 'refresh-new-1']]
                 : [['design', 'sketch', 'refresh-sketch-2']]
-            return json({ sha: `refresh-${opening}`, truncated: false, tree: files.map(([category, id, sha]) => ({
+            return tree(files.map(([category, id, sha]) => ({
                 type: 'blob', path: `catalog/${category}/${id}.json`, sha
-            })) })
+            })), { sha: `refresh-${opening}` })
         }
         blobRequests.push(url)
         if (url.endsWith('refresh-sketch-1')) {
@@ -113,47 +153,83 @@ Deno.test('reopening discovers additions, edits, moves and deletions while reusi
 })
 
 Deno.test('empty catalog returns no services', async () => {
-    await withFetch(async () => json({ tree: [], truncated: false }), async () => {
+    await withFetch(() => tree([]), async () => {
         assert.deepEqual(await loadAppCatalog(), [])
     })
 })
 
+Deno.test('a schema edit revalidates unchanged cached service blobs', async () => {
+    let opening = 0
+    let serviceFetches = 0
+    await withFetch(url => {
+        if (url.endsWith('/git/trees/main?recursive=1')) {
+            opening++
+            return tree([{ type: 'blob', path: 'catalog/design/sketch.json', sha: 'schema-change-sketch' }], {
+                schemaSHA: opening === 1 ? 'schema-change-1' : 'schema-change-2'
+            })
+        }
+        if (url.endsWith('/git/blobs/schema-change-1')) {
+            return json(serviceSchema)
+        }
+        if (url.endsWith('/git/blobs/schema-change-2')) {
+            const restricted = structuredClone(serviceSchema)
+            restricted.oneOf[0].properties.url.pattern = '^https://another\\.example$'
+            return json(restricted)
+        }
+        if (url.endsWith('/git/blobs/schema-change-sketch')) {
+            serviceFetches++
+            return json(webApp)
+        }
+        throw new Error(`Unexpected request: ${url}`)
+    }, async () => {
+        assert.equal((await loadAppCatalog())[0].id, 'sketch')
+        await assert.rejects(loadAppCatalog(), /Invalid catalog service/)
+        assert.equal(serviceFetches, 1)
+    })
+})
+
+Deno.test('a catalog without its schema cannot load', async () => {
+    await withFetch(() => json({ tree: [], truncated: false }), async () => {
+        await assert.rejects(loadAppCatalog(), /without its schema/)
+    })
+})
+
 Deno.test('rejects truncated trees instead of showing a partial catalog', async () => {
-    await withFetch(async () => json({ tree: [], truncated: true }), async () => {
+    await withFetch(() => tree([], { truncated: true }), async () => {
         await assert.rejects(loadAppCatalog(), /incomplete app catalog/)
     })
 })
 
 Deno.test('invalid service files fail loading rather than entering the catalog', async () => {
-    await withFetch(async url => url.includes('/git/trees/')
-        ? json({ tree: [{ type: 'blob', path: 'catalog/design/sketch.json', sha: 'invalid-service' }] })
+    await withFetch(url => url.includes('/git/trees/')
+        ? tree([{ type: 'blob', path: 'catalog/design/sketch.json', sha: 'invalid-service' }])
         : json({ ...webApp, url: 'javascript:alert(1)' }), async () => {
-        await assert.rejects(loadAppCatalog(), /Invalid catalog URL/)
+        await assert.rejects(loadAppCatalog(), /Invalid catalog service/)
     })
 })
 
 Deno.test('duplicate IDs across categories are rejected', async () => {
-    await withFetch(async url => url.includes('/git/trees/')
-        ? json({ tree: [
+    await withFetch(url => url.includes('/git/trees/')
+        ? tree([
             { type: 'blob', path: 'catalog/design/sketch.json', sha: 'duplicate-sketch' },
             { type: 'blob', path: 'catalog/tools/sketch.json', sha: 'duplicate-sketch' }
-        ] })
+        ])
         : json(webApp), async () => {
         await assert.rejects(loadAppCatalog(), /Duplicate app catalog ID/)
     })
 })
 
 Deno.test('reports GitHub rate limits with the reset time', async () => {
-    await withFetch(async () => json({ message: 'rate limited' }, { status: 403, headers: { 'x-ratelimit-reset': '1800000000' } }), async () => {
+    await withFetch(() => json({ message: 'rate limited' }, { status: 403, headers: { 'x-ratelimit-reset': '1800000000' } }), async () => {
         await assert.rejects(loadAppCatalog(), /GitHub is limiting catalog requests\. Try again after/)
     })
 })
 
 Deno.test('reports unavailable repository and malformed responses', async () => {
-    await withFetch(async () => json({}, { status: 404 }), async () => {
+    await withFetch(() => json({}, { status: 404 }), async () => {
         await assert.rejects(loadAppCatalog(), /catalog is unavailable on GitHub/)
     })
-    await withFetch(async () => new Response('not json'), async () => {
+    await withFetch(() => new Response('not json'), async () => {
         await assert.rejects(loadAppCatalog(), /invalid catalog JSON/)
     })
 })
@@ -168,12 +244,14 @@ Deno.test('aborts in-flight catalog loading when the view closes', async () => {
     })
 })
 
-Deno.test('parser derives categories from folders and rejects invalid configuration', () => {
-    const app = parseCatalogService({ ...webApp, category: 'ignored' }, 'catalog/design/sketch.json')
+Deno.test('parser derives categories from folders and validates with the supplied ArkType schema', () => {
+    const parse = (service, path = 'catalog/design/sketch.json') => parseCatalogService(service, path, 'test-revision', serviceType)
+    const app = parse(webApp)
     assert.equal(app.category, 'design')
-    assert.throws(() => parseCatalogService(webApp, 'catalog/design/wrong-id.json'), /Invalid catalog service/)
-    assert.throws(() => parseCatalogService({ ...webApp, iconUrl: 'assets/../secret.png' }, 'catalog/design/sketch.json'), /Invalid catalog icon/)
-    assert.throws(() => parseCatalogService({ ...dockerApp, branch: 5 }, 'catalog/development/workspace.json'), /Invalid catalog repository settings/)
-    assert.throws(() => parseCatalogService({ ...dockerApp, path: '../compose.yaml' }, 'catalog/development/workspace.json'), /Invalid catalog repository settings/)
-    assert.throws(() => parseCatalogService({ ...webApp, type: 'unknown' }, 'catalog/design/sketch.json'), /Unsupported catalog service type/)
+    assert.throws(() => parse(webApp, 'catalog/design/wrong-id.json'), /ID does not match filename/)
+    assert.throws(() => parse({ ...webApp, iconUrl: 'assets/../secret.png' }), /Invalid catalog service/)
+    assert.throws(() => parse({ ...dockerApp, branch: 5 }, 'catalog/development/workspace.json'), /Invalid catalog service/)
+    assert.throws(() => parse({ ...dockerApp, path: '../compose.yaml' }, 'catalog/development/workspace.json'), /Invalid catalog service/)
+    assert.throws(() => parse({ ...webApp, type: 'unknown' }), /Invalid catalog service/)
+    assert.throws(() => parse({ ...webApp, category: 'ignored' }), /Invalid catalog service/)
 })
