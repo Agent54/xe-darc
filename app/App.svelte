@@ -211,6 +211,8 @@
     let focusModeHovered = $state(false)
     let focusModeHideTimeout = null
     let showAppsOverlay = $state(false)
+    let appsOverlayHasOpened = $state(false)
+    let appsView = $state(null)
     let contentAreaScrimActive = $state(false)
     let hasLeftToggle = $state(false)
     let darkMode = $state(true)
@@ -2479,7 +2481,9 @@
 
     function openAppsOverlay() {
         appsOverlayZenModeWasActive = focusModeEnabled
+        appsOverlayHasOpened = true
         showAppsOverlay = true
+        appsView?.refresh()
         if (!focusModeEnabled) {
             toggleFocusMode()
         }
@@ -2487,6 +2491,7 @@
 
     function closeAppsOverlay() {
         showAppsOverlay = false
+        appsView?.close()
         if (!appsOverlayZenModeWasActive && focusModeEnabled) {
             toggleFocusMode()
         }
@@ -4792,15 +4797,16 @@
     </div>
 {/if}
 
-{#if showAppsOverlay}
-    <div class="apps-overlay" 
+{#if appsOverlayHasOpened}
+    <div class="apps-overlay"
+         hidden={!showAppsOverlay}
          style="--left-pinned-width: {leftPinnedWidth}px; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px; --sidebar-width: {rightSidebarWidth}px;"
          role="dialog" 
          aria-label="All Apps"
          tabindex="-1"
          onmousedown={(e) => { if (e.target === e.currentTarget) closeAppsOverlay() }}>
         <div class="apps-overlay-content">
-            <Apps onClose={() => closeAppsOverlay()} />
+            <Apps bind:this={appsView} onClose={() => closeAppsOverlay()} />
         </div>
     </div>
 {/if}
@@ -5106,6 +5112,10 @@
         align-items: center;
         justify-content: center;
         padding: 80px 60px 20px 60px;
+    }
+
+    .apps-overlay[hidden] {
+        display: none;
     }
 
     .apps-overlay-content {

@@ -9,8 +9,9 @@
     const collapsedSections = $state({ Examples: true })
     let showAddAppModal = $state(false)
     let composeApps = $state([])
-    let composeLoading = $state(true)
+    let composeState = $state('loading')
     let composeError = $state('')
+    let hasComposeSnapshot = false
     let loadController = null
 
     let exampleApps = $state([
@@ -36,9 +37,15 @@
     })
 
     onMount(() => {
-        loadComposeApps()
+        refresh()
         return () => loadController?.abort()
     })
+
+    export function close() {
+        loadController?.abort()
+        loadController = null
+        showAddAppModal = false
+    }
 
     function sectionForConfigPath(configPath) {
         if (!configPath) return ''
@@ -142,22 +149,28 @@
         })
     }
 
-    async function loadComposeApps() {
+    export async function refresh() {
         loadController?.abort()
         const controller = new AbortController()
         loadController = controller
-        composeLoading = true
+        composeState = hasComposeSnapshot ? 'refreshing' : 'loading'
         composeError = ''
         try {
             const { https } = await getComposeAppPorts({ signal: controller.signal })
             const projects = await listComposeProjects({ signal: controller.signal })
-            composeApps = projects.flatMap(project => appsForVariant(project, https)).sort((a, b) => a.name.localeCompare(b.name))
+            if (loadController === controller && !controller.signal.aborted) {
+                composeApps = projects.flatMap(project => appsForVariant(project, https)).sort((a, b) => a.name.localeCompare(b.name))
+                hasComposeSnapshot = true
+                composeState = 'ready'
+            }
         } catch (error) {
-            if (error?.name !== 'AbortError') composeError = error?.message || 'Compose apps could not be loaded'
+            if (loadController === controller && !controller.signal.aborted) {
+                composeError = error?.message || 'Compose apps could not be loaded'
+                composeState = 'error'
+            }
         } finally {
             if (loadController === controller) {
                 loadController = null
-                composeLoading = false
             }
         }
     }
@@ -237,7 +250,7 @@
 
     function addApp({ type, app, checkout }) {
         if (type === 'repo' && checkout) {
-            loadComposeApps()
+            refresh()
             return
         }
         exampleApps.push({
@@ -386,12 +399,12 @@
 </div>
 
 <div class="w-full h-full px-6 pt-6 pb-4 select-none overflow-y-auto relative apps-content" style="transform: translateZ(0); will-change: scroll-position;">
-    {#if composeLoading}
+    {#if composeState === 'loading'}
         <div class="mb-8 rounded-xl border border-white/8 bg-black/15 px-4 py-5 text-sm text-white/50" aria-live="polite">Reading Compose projects…</div>
     {:else if composeError}
         <div class="mb-8 flex items-center justify-between gap-4 rounded-xl border border-orange-300/15 bg-orange-300/5 px-4 py-3">
             <p class="text-sm text-orange-100/70">{composeError}</p>
-            <button type="button" class="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/75 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 cursor-pointer" onmousedown={loadComposeApps}>Try again</button>
+            <button type="button" class="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/75 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 cursor-pointer" onmousedown={refresh}>Try again</button>
         </div>
     {:else if composeApps.length === 0}
         <div class="mb-8 rounded-xl border border-dashed border-white/12 bg-black/10 px-4 py-5">
@@ -410,7 +423,7 @@
         </section>
     {/if}
 
-    {#each Object.keys(composeSections).sort() as section}
+    {#each Object.keys(composeSections).sort() as section (section)}
         <section class="mt-7 mb-6">
             {@render SectionHeader(section, composeSections[section].length)}
             {#if !collapsedSections[section]}
