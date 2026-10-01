@@ -195,7 +195,7 @@
           ...space,
           leftPinnedTabs: tabs.filter(tab => tab.pinned === true || tab.pinned === 'left'),
           rightPinnedTabs: tabs.filter(tab => tab.pinned === 'right'),
-          unpinnedTabs: tabs.filter(tab => !tab.pinned)
+          unpinnedTabs: tabs.filter(tab => tab.type === 'tab' && !tab.pinned)
         }
       }
     }

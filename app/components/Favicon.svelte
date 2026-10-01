@@ -3,6 +3,21 @@
     import data from '../data.svelte.js'
     
     let { tab, security = null, showButton = true, size = 'normal' } = $props()
+    let failedFaviconSrc = $state(null)
+
+    function getFaviconSrc(favicon) {
+        if (!favicon?.startsWith?.('http')) return favicon
+
+        try {
+            const faviconUrl = new URL(favicon)
+            if (faviconUrl.hostname.endsWith('.gstatic.com') && faviconUrl.pathname === '/faviconV2') {
+                faviconUrl.searchParams.set('drop_404_icon', 'true')
+                return faviconUrl.toString()
+            }
+        } catch {}
+
+        return favicon
+    }
     
     // Use reactive doc data for url/favicon, falling back to prop
     const reactiveTab = $derived({
@@ -64,7 +79,7 @@
                         const faviconDomain = new URL(faviconUrlParam).hostname
                         const currentDomain = new URL(url).hostname
                         if (faviconDomain !== currentDomain) {
-                            return { type: 'globe' }
+                            return { type: 'fallback' }
                         }
                     }
                 } catch {}
@@ -73,15 +88,21 @@
             if (favicon.startsWith('<svg') || favicon.includes('viewBox')) {
                 return { type: 'svg', markup: favicon }
             } else if (favicon.startsWith('http') || favicon.startsWith('data:')) {
-                return { type: 'image', src: favicon }
+                const src = getFaviconSrc(favicon)
+                return src === failedFaviconSrc
+                    ? { type: 'fallback' }
+                    : { type: 'image', src }
             } else {
                 return { type: 'svg', markup: favicon }
             }
         }
         
-        // Default globe icon
-        return { type: 'globe' }
+        return { type: 'fallback' }
     })
+
+    function handleFaviconError(src) {
+        failedFaviconSrc = src
+    }
 </script>
 
 {#snippet newTabIcon()}
@@ -93,9 +114,10 @@
     </svg>
 {/snippet}
 
-{#snippet globeIcon()}
-    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" class="w-4 h-4">
-        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+{#snippet fallbackIcon()}
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" class="fallback-favicon w-4 h-4">
+        <circle cx="12" cy="12" r="8.25" />
+        <path d="M3.75 12h16.5M12 3.75c2.15 2.25 3.25 5 3.25 8.25S14.15 18 12 20.25C9.85 18 8.75 15.25 8.75 12S9.85 6 12 3.75Z" />
     </svg>
 {/snippet}
 
@@ -108,13 +130,13 @@
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
         {:else if faviconContent.type === 'image'}
-            <img src={faviconContent.src} alt="favicon" class="favicon" draggable="false" />
+            <img src={faviconContent.src} alt="" class="favicon" draggable="false" onerror={() => handleFaviconError(faviconContent.src)} />
         {:else if faviconContent.type === 'svg'}
             {@html faviconContent.markup}
         {:else if faviconContent.type === 'newTab'}
             {@render newTabIcon()}
         {:else}
-            {@render globeIcon()}
+            {@render fallbackIcon()}
         {/if}
     </span>
 {:else}
@@ -122,13 +144,13 @@
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
         {:else if faviconContent.type === 'image'}
-            <img src={faviconContent.src} alt="favicon" class="favicon" draggable="false" />
+            <img src={faviconContent.src} alt="" class="favicon" draggable="false" onerror={() => handleFaviconError(faviconContent.src)} />
         {:else if faviconContent.type === 'svg'}
             {@html faviconContent.markup}
         {:else if faviconContent.type === 'newTab'}
             {@render newTabIcon()}
         {:else}
-            {@render globeIcon()}
+            {@render fallbackIcon()}
         {/if}
     </span>
 {/if}

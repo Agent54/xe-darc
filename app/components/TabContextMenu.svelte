@@ -119,6 +119,11 @@
         }
         onHide()
     }
+
+    function removeDividerFromMenu(divider) {
+        data.removeDivider(divider.id)
+        onHide()
+    }
     
     async function takeScreenshot(tab) {
         if (tab) {
@@ -148,6 +153,18 @@
          onclick={(e) => e.stopPropagation()}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
          oncontextmenu={(e) => e.preventDefault()}>
+        {#if menu.tab.type === 'divider'}
+            <div class="context-menu-item" role="menuitem" tabindex="0"
+                    onmouseup={() => removeDividerFromMenu(menu.tab)}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeDividerFromMenu(menu.tab) } }}>
+                <span class="context-menu-icon">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14H6L5 6m5 4v7m4-7v7" />
+                    </svg>
+                </span>
+                <span>Remove spacer</span>
+            </div>
+        {:else}
         <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
@@ -374,6 +391,7 @@
             </span>
             <span>Close Tab</span>
         </div>
+        {/if}
     </div>
 {/if}
 

@@ -1,10 +1,11 @@
 authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
 keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
 subjectAltName = @alt_names
     
 [alt_names]
 DNS.1 = %%DOMAIN%%
-DNS.2 = localhost
+DNS.2 = %%ROUTED_DOMAIN%%
 DNS.3 = wandervogel7.local
 IP.1 = 192.168.31.196

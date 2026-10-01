@@ -43,6 +43,7 @@
         { id: 'unused', title: 'Unused' },
         { id: 'archived', title: 'Archived' }
     ]
+    const unknownPermissionIcon = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519a3 3 0 1 1 5.242 2.962c-.8.64-1.621 1.24-1.621 2.269v.75m-1.5 3h.008v.008H12V16.5Z" /></svg>'
 
     // Track collapsed state for each section
     let collapsedSections = $state({
@@ -78,47 +79,49 @@
     let openAcceptDropdown = $state(null)
     
     // Resource action handlers
-    function acceptResource(resourceId, permission = 'once', event = null) {
+    function closeWhenRequestsResolved() {
+        if (!autoOpened) return
+
+        const hasPendingRequests = Object.values(data.permissions).some(permission =>
+            Object.values(permission.origins || {}).some(origin =>
+                (origin.requests || []).some(request =>
+                    request.windowId === window.darcWindowId && request.status === 'requested'
+                )
+            )
+        )
+        if (!hasPendingRequests) {
+            onClose()
+        }
+    }
+
+    function acceptResource(resource, permission = 'once', event = null) {
         if (event) {
             event.stopPropagation()
             event.preventDefault()
         }
         
-        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
-        if (!currentUrl) {
-            console.warn('No current URL found for permission request')
-            return
-        }
-        
-        const origin = new URL(currentUrl).origin
-        const success = data.allowPermission(resourceId, origin, permission)
+        const origin = new URL(resource.url).origin
+        const success = data.allowPermission(resource.type, origin, permission)
         
         if (success) {
-            console.log('Accept resource:', resourceId, 'with permission:', permission, 'for origin:', origin)
+            console.log('Accept resource:', resource.type, 'with permission:', permission, 'for origin:', origin)
+            closeWhenRequestsResolved()
         } else {
-            console.warn('Failed to accept resource:', resourceId)
+            console.warn('Failed to accept resource:', resource.type)
         }
         
         openAcceptDropdown = null
     }
     
-    function denyResource(resourceId) {
-        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
-        if (!currentUrl) {
-            console.warn('No current URL found for permission request')
-            return
-        }
-        
-        const origin = new URL(currentUrl).origin
-        const success = data.denyPermission(resourceId, origin)
+    function denyResource(resource) {
+        const origin = new URL(resource.url).origin
+        const success = data.denyPermission(resource.type, origin)
         
         if (success) {
-            console.log('Deny resource:', resourceId, 'for origin:', origin)
-            if (autoOpened) {
-                onClose()
-            }
+            console.log('Deny resource:', resource.type, 'for origin:', origin)
+            closeWhenRequestsResolved()
         } else {
-            console.warn('Failed to deny resource:', resourceId)
+            console.warn('Failed to deny resource:', resource.type)
         }
     }
     
@@ -127,31 +130,23 @@
         // TODO: Implement actual mocking logic
     }
     
-    function ignoreResource(resourceId) {
-        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
-        if (!currentUrl) {
-            console.warn('No current URL found for permission request')
-            return
-        }
-        
-        const origin = new URL(currentUrl).origin
-        const success = data.ignorePermission(resourceId, origin)
+    function ignoreResource(resource) {
+        const origin = new URL(resource.url).origin
+        const success = data.ignorePermission(resource.type, origin, resource.requestId)
         
         if (success) {
-            console.log('Ignore resource:', resourceId, 'for origin:', origin)
-            if (autoOpened) {
-                onClose()
-            }
+            console.log('Ignore resource:', resource.type, 'for origin:', origin)
+            closeWhenRequestsResolved()
         } else {
-            console.warn('Failed to ignore resource:', resourceId)
+            console.warn('Failed to ignore resource:', resource.type)
         }
     }
     
     
-    function toggleAcceptDropdown(resourceId, event) {
+    function toggleAcceptDropdown(requestId, event) {
         event.stopPropagation()
         event.preventDefault()
-        openAcceptDropdown = openAcceptDropdown === resourceId ? null : resourceId
+        openAcceptDropdown = openAcceptDropdown === requestId ? null : requestId
     }
     
     // Close dropdown when clicking outside
@@ -209,25 +204,22 @@
         const usedResourceTypes = new Set()
 
         const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
-        if (!currentUrl && scope === 'origin') {
-            return {
-                requested,
-                used,
-                mocked,
-                blocked,
-                unused: unused.filter(unusedResource => !usedResourceTypes.has(unusedResource.type)),
-                archived
-            }
-        }
-        const origin = new URL(currentUrl).origin // scope === 'origin' ? origin(tab.url) : null
+        const currentOrigin = currentUrl ? new URL(currentUrl).origin : null // scope === 'origin' ? origin(tab.url) : null
 
         Object.entries(data.permissions).forEach(([resourceType, permission]) => {
-            if (scope === 'origin') {
-                const request = permission.origins?.[origin]?.requests?.at(-1)
-                if (request?.status === 'requested') {
-                    requested.push(request)
-                    usedResourceTypes.add(resourceType)
-                } else if (request?.status === 'granted') {
+            Object.values(permission.origins || {}).forEach(origin => {
+                const requests = origin.requests || []
+                requests.forEach(request => {
+                    if (request.status === 'requested' && request.windowId === window.darcWindowId) {
+                        requested.push(request)
+                        usedResourceTypes.add(resourceType)
+                    }
+                })
+            })
+
+            if (scope === 'origin' && currentOrigin) {
+                const request = permission.origins?.[currentOrigin]?.requests?.at(-1)
+                if (request?.status === 'granted') {
                     used.push(request)
                     usedResourceTypes.add(resourceType)
                 } else if (request?.status === 'denied') {
@@ -240,9 +232,8 @@
                     archived.push(request)
                     usedResourceTypes.add(resourceType)
                 }
-            } else {
+            } else if (scope !== 'origin') {
                 console.warn('permission scopes other than origin not implemented')
-                return
             }
         })
 
@@ -290,8 +281,9 @@
                     </button>
                     {#if !collapsedSections[section.id]}
                         <div class="resource-cards">
-                            {#each resourceData[section.id] as resource (resource.id)}
-                                {@const resourceType = resourceTypes[resource.type] || { name: resource.type, icon: '❓', description: 'Unknown resource type' }}
+                            {#each resourceData[section.id] as resource}
+                                {@const knownType = Object.hasOwn(resourceTypes, resource.type) ? resourceTypes[resource.type] : null}
+                                {@const resourceType = knownType?.icon ? knownType : { name: knownType?.name || resource.type || 'Unknown permission', icon: unknownPermissionIcon, description: knownType?.description || 'Permission requested by this page' }}
                                 <div class="resource-card" class:unseen={resource.unseen}>
                                     <div class="resource-header">
                                         <span class="resource-icon">{@html resourceType.icon}</span>
@@ -386,6 +378,10 @@
                                     {#if section.id === 'requested'}
                                         <div class="resource-request-info">
                                             <div class="requester-info">
+                                                <span class="requester-label">Origin:</span>
+                                                <span class="requester-name">{new URL(resource.url).origin}</span>
+                                            </div>
+                                            <div class="requester-info">
                                                 <span class="requester-label">Requested by:</span>
                                                 <span class="requester-name">{resource.requester || new URL(resource.url).origin}</span>
                                             </div>
@@ -404,22 +400,22 @@
                                         </div>
                                         <div class="resource-actions">
                                             <div class="accept-dropdown">
-                                                <button class="accept-btn main" onmousedown={() => acceptResource(resource.type)}>Allow</button>
-                                                <button class="accept-btn dropdown" aria-label="Accept options" onmousedown={(event) => toggleAcceptDropdown(resource.type, event)}>
+                                                <button class="accept-btn main" onmousedown={() => acceptResource(resource)}>Allow</button>
+                                                <button class="accept-btn dropdown" aria-label="Accept options" onmousedown={(event) => toggleAcceptDropdown(resource.requestId, event)}>
                                                     <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
                                                         <path d="M2 3L4 5L6 3" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
                                                     </svg>
                                                 </button>
-                                                {#if openAcceptDropdown === resource.type}
+                                                {#if openAcceptDropdown === resource.requestId}
                                                     <div class="dropdown-menu" role="menu" tabindex="-1" onmousedown={(event) => { event.stopPropagation(); event.preventDefault(); }} onkeydown={(event) => event.stopPropagation()}>
-                                                        <button onmouseup={(event) => acceptResource(resource.type, 'always', event)}>Always allow (default)</button>
-                                                        <button onmouseup={(event) => acceptResource(resource.type, 'until-app-close', event)}>Allow until closing app</button>
+                                                        <button onmouseup={(event) => acceptResource(resource, 'always', event)}>Always allow (default)</button>
+                                                        <button onmouseup={(event) => acceptResource(resource, 'until-app-close', event)}>Allow until closing app</button>
                                                     </div>
                                                 {/if}
                                             </div>
-                                            <button class="action-btn deny" onmousedown={() => denyResource(resource.type)}>Deny</button>
+                                            <button class="action-btn deny" onmousedown={() => denyResource(resource)}>Deny</button>
                                             <button class="action-btn mock" onmousedown={() => mockResource(resource.type)}>Mock</button>
-                                            <button class="action-btn ignore" onmousedown={() => ignoreResource(resource.type)}>Ignore</button>
+                                            <button class="action-btn ignore" onmousedown={() => ignoreResource(resource)}>Ignore</button>
                                         </div>
                                     {/if}
                                 </div>
