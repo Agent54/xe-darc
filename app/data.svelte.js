@@ -75,6 +75,13 @@ function persistActiveSpaceForWindow(spaceId, windowId = window.darcWindowId) {
 
     const parsedWindowId = parseWindowId(windowId)
     if (!parsedWindowId) {
+        window.darcWindowIdPromise.then(resolvedWindowId => {
+            if (spaceMeta.activeSpace === spaceId) {
+                persistActiveSpaceForWindow(spaceId, resolvedWindowId)
+            }
+        }).catch(error => {
+            console.error('Failed to persist active space for window', error)
+        })
         return
     }
 
@@ -83,7 +90,9 @@ function persistActiveSpaceForWindow(spaceId, windowId = window.darcWindowId) {
         return
     }
 
-    localStorage.setItem(storageKey, spaceId)
+    if (localStorage.getItem(storageKey) !== spaceId) {
+        localStorage.setItem(storageKey, spaceId)
+    }
 }
 
 function getTabActiveHistoryStorageKey(spaceId, windowId = window.darcWindowId) {
@@ -187,7 +196,10 @@ function writeTabActiveHistoryEntries(spaceId, windowId = window.darcWindowId) {
         })
     }
 
-    localStorage.setItem(storageKey, JSON.stringify(entries))
+    const serializedEntries = JSON.stringify(entries)
+    if (localStorage.getItem(storageKey) !== serializedEntries) {
+        localStorage.setItem(storageKey, serializedEntries)
+    }
 }
 
 function persistTabActiveHistoryForSpace(spaceId) {
@@ -267,6 +279,232 @@ let lastForceHibernateTime = 0
 const previews = $state({})
 const settings = $state({})
 const ui = $state({ viewMode: 'default' })
+const desiredCanvasShapes = new Map()
+const canvasShapeSaveTasks = new Map()
+const canvasShapeStates = new Map()
+const desiredTabUpdates = new Map()
+const tabUpdateSaveTasks = new Map()
+
+function getCanvasShapeState(element, canvasOrder, files = {}) {
+    return {
+        version: element?.version,
+        versionNonce: element?.versionNonce,
+        index: element?.index,
+        canvasOrder,
+        fileDataURL: element?.fileId ? files[element.fileId]?.dataURL : null
+    }
+}
+
+function rememberCanvasShapeState(shape) {
+    if (shape?.type !== 'shape' || !shape.element) return
+    canvasShapeStates.set(shape.id, getCanvasShapeState(shape.element, shape.canvasOrder, shape.files))
+}
+
+function canvasShapeStateMatches(first, second) {
+    return first?.version === second?.version &&
+        first?.versionNonce === second?.versionNonce &&
+        first?.index === second?.index &&
+        first?.canvasOrder === second?.canvasOrder &&
+        first?.fileDataURL === second?.fileDataURL
+}
+
+function compareCanvasShapes(first, second) {
+    if (!second) return 1
+
+    const firstVersion = first?.element?.version || 0
+    const secondVersion = second?.element?.version || 0
+    if (firstVersion !== secondVersion) {
+        return firstVersion - secondVersion
+    }
+
+    const firstNonce = first?.element?.versionNonce ?? Number.MAX_SAFE_INTEGER
+    const secondNonce = second?.element?.versionNonce ?? Number.MAX_SAFE_INTEGER
+    if (firstNonce !== secondNonce) {
+        return secondNonce - firstNonce
+    }
+
+    const firstUpdated = first?.element?.updated || 0
+    const secondUpdated = second?.element?.updated || 0
+    if (firstUpdated !== secondUpdated) {
+        return firstUpdated - secondUpdated
+    }
+
+    return (first?.modified || 0) - (second?.modified || 0)
+}
+
+function applyCanvasShape(shape) {
+    if (shape?.type !== 'shape') return
+
+    rememberCanvasShapeState(shape)
+    docs[shape.id] = shape
+
+    const space = spaces[shape.spaceId]
+    if (!space) return
+
+    const shapeIndex = space.tabs?.findIndex(item => item.id === shape.id) ?? -1
+    if (shapeIndex === -1) {
+        space.tabs = [...(space.tabs || []), shape].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    } else {
+        space.tabs[shapeIndex] = shape
+    }
+}
+
+async function persistCanvasShape(shapeId) {
+    while (desiredCanvasShapes.has(shapeId)) {
+        const shape = desiredCanvasShapes.get(shapeId)
+        if (shape?.type !== 'shape') {
+            desiredCanvasShapes.delete(shapeId)
+            return
+        }
+
+        let currentShape = null
+
+        try {
+            currentShape = await db.get(shapeId)
+        } catch (error) {
+            if (error.status !== 404) {
+                throw error
+            }
+        }
+
+        if (currentShape && currentShape.type !== 'shape') {
+            desiredCanvasShapes.delete(shapeId)
+            return
+        }
+
+        if (currentShape && compareCanvasShapes(shape, currentShape) < 0) {
+            if (desiredCanvasShapes.get(shapeId) === shape) {
+                desiredCanvasShapes.delete(shapeId)
+            }
+            applyCanvasShape(currentShape)
+            continue
+        }
+
+        try {
+            const result = await db.put({
+                ...shape,
+                ...(currentShape?._rev ? { _rev: currentShape._rev } : {})
+            })
+
+            if (docs[shapeId]?.type === 'shape') {
+                docs[shapeId]._rev = result.rev
+            }
+
+            if (desiredCanvasShapes.get(shapeId) === shape) {
+                desiredCanvasShapes.delete(shapeId)
+            }
+        } catch (error) {
+            if (error.status !== 409) {
+                throw error
+            }
+        }
+    }
+}
+
+function queueCanvasShapeSave(shape) {
+    if (shape?.type !== 'shape') return
+
+    const desiredShape = desiredCanvasShapes.get(shape.id)
+    if (!desiredShape || compareCanvasShapes(shape, desiredShape) >= 0) {
+        desiredCanvasShapes.set(shape.id, shape)
+    }
+
+    if (canvasShapeSaveTasks.has(shape.id)) return
+
+    const saveTask = persistCanvasShape(shape.id)
+        .catch(error => console.error('Failed to save canvas shape', error))
+        .finally(() => {
+            canvasShapeSaveTasks.delete(shape.id)
+            if (desiredCanvasShapes.has(shape.id)) {
+                queueCanvasShapeSave(desiredCanvasShapes.get(shape.id))
+            }
+        })
+
+    canvasShapeSaveTasks.set(shape.id, saveTask)
+}
+
+function applyTabUpdate(tabId, update) {
+    const tab = docs[tabId]
+    if (tab?.type !== 'tab') return false
+
+    Object.assign(tab, update)
+
+    const spaceTab = spaces[tab.spaceId]?.tabs?.find(item => item.id === tabId)
+    if (spaceTab && spaceTab !== tab && spaceTab.type === 'tab') {
+        Object.assign(spaceTab, update)
+    }
+
+    return true
+}
+
+async function persistTabUpdate(tabId) {
+    while (desiredTabUpdates.has(tabId)) {
+        const update = desiredTabUpdates.get(tabId)
+        let currentTab
+
+        try {
+            currentTab = await db.get(tabId)
+        } catch (error) {
+            if (error.status === 404) {
+                desiredTabUpdates.delete(tabId)
+                return
+            }
+            throw error
+        }
+
+        if (currentTab.type !== 'tab') {
+            desiredTabUpdates.delete(tabId)
+            return
+        }
+
+        try {
+            const result = await db.put({
+                ...currentTab,
+                ...update,
+                _rev: currentTab._rev
+            })
+
+            if (docs[tabId]?.type === 'tab') {
+                docs[tabId]._rev = result.rev
+            }
+
+            if (desiredTabUpdates.get(tabId) === update) {
+                desiredTabUpdates.delete(tabId)
+            }
+        } catch (error) {
+            if (error.status !== 409) {
+                throw error
+            }
+        }
+    }
+}
+
+function queueTabUpdate(tabId, update) {
+    if (docs[tabId]?.type !== 'tab') return Promise.resolve()
+
+    const desiredUpdate = {
+        ...(desiredTabUpdates.get(tabId) || {}),
+        ...update
+    }
+    desiredTabUpdates.set(tabId, desiredUpdate)
+    applyTabUpdate(tabId, update)
+
+    if (tabUpdateSaveTasks.has(tabId)) {
+        return tabUpdateSaveTasks.get(tabId)
+    }
+
+    const saveTask = persistTabUpdate(tabId)
+        .catch(error => console.error('Failed to save tab update', error))
+        .finally(() => {
+            tabUpdateSaveTasks.delete(tabId)
+            if (desiredTabUpdates.has(tabId)) {
+                queueTabUpdate(tabId, {})
+            }
+        })
+
+    tabUpdateSaveTasks.set(tabId, saveTask)
+    return saveTask
+}
 
 // LED indicator states for all frames - using timestamps to avoid events
 const ledIndicators = $state({
@@ -275,6 +513,37 @@ const ledIndicators = $state({
     mockedActivation: 0,
     permissionRequest: 0
 })
+
+const dividerCreationTasks = new Map()
+
+function createDivider(spaceId) {
+    const space = spaces[spaceId]
+    if (!space || space.tabs?.[0]?.type === 'divider') return null
+
+    space.tabs ??= []
+    const firstItem = space.tabs[0]
+    const _id = `darc:divider_${crypto.randomUUID()}`
+    const divider = {
+        _id,
+        id: _id,
+        type: 'divider',
+        spaceId,
+        order: firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
+        created: Date.now()
+    }
+
+    space.tabs.push(divider)
+    space.tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    docs[_id] = divider
+
+    const creation = db.put({ ...divider }).then(result => {
+        divider._rev = result.rev
+    }).catch(error => console.error('Failed to create divider:', error))
+    dividerCreationTasks.set(_id, creation)
+    creation.then(() => dividerCreationTasks.delete(_id))
+
+    return divider
+}
 
 db.bulkDocs(bootstrap).then(async (res) => {
     db.createIndex({
@@ -334,7 +603,7 @@ if (remote) {
 }
 
 const spaceMeta = $state({
-    activeSpace: null,
+    activeSpace: 'darc:space_default',
     activeSpacesOrder: [], // Track order of active spaces for previous space switching
     spaceOrder: [],
     closedTabs: [],
@@ -482,10 +751,16 @@ const refresh = throttle(async function (spaceId) {
 
             spaces[doc._id].activeTabsOrder ??= []
            
-        } else if (doc.type === 'tab') {
+        } else if (doc.type === 'tab' || doc.type === 'divider' || doc.type === 'shape') {
             doc.id = doc._id // legacy compat, remove this later
+            const isDivider = doc.type === 'divider'
+            const isShape = doc.type === 'shape'
 
-            if (!spaceMeta.activeTabId && doc.spaceId === spaceMeta.activeSpace) {
+            if (initialLoad && isShape) {
+                rememberCanvasShapeState(doc)
+            }
+
+            if (!isDivider && !isShape && !spaceMeta.activeTabId && doc.spaceId === spaceMeta.activeSpace) {
                 spaceMeta.activeTabId = doc.id
                 console.log('setting active tab id a', spaceMeta.activeTabId, '"' + (doc.title || doc.url || '') + '"')
             }
@@ -501,10 +776,12 @@ const refresh = throttle(async function (spaceId) {
 
             if (doc.archive) {
                 // console.log(doc)
-                if (doc.archive === 'closed') {
+                if (!isDivider && !isShape && doc.archive === 'closed') {
                     closedTabs.push(doc)
                 }
                 continue
+            } else if (isDivider || isShape) {
+                newSpaceTabs[doc.spaceId].push(doc)
             } else {
                 if (doc.id === spaceMeta.activeTabId) {
                     activeTabIdExists = true
@@ -529,11 +806,12 @@ const refresh = throttle(async function (spaceId) {
 
     // Assign new tabs arrays to spaces (prevents flicker by avoiding intermediate empty state)
     for (const spaceId of Object.keys(newSpaceTabs)) {
-        spaces[spaceId].tabs = newSpaceTabs[spaceId]
+        spaces[spaceId].tabs = newSpaceTabs[spaceId].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     }
 
     console.log('setting active tab id b', { current : spaceMeta.activeTabId, title: docs[spaceMeta.activeTabId]?.title || '', activeTabIdExists, list :spaces[spaceMeta.activeSpace]?.activeTabsOrder })
-    if (spaceMeta.activeTabId && !activeTabIdExists && spaces[spaceMeta.activeSpace]?.activeTabsOrder?.length > 0) {
+    const shouldReconcileActiveTab = !spaceId || spaceId === spaceMeta.activeSpace
+    if (shouldReconcileActiveTab && spaceMeta.activeTabId && !activeTabIdExists && spaces[spaceMeta.activeSpace]?.activeTabsOrder?.length > 0) {
         removedActiveTabId(spaceMeta.activeTabId)
     }
 
@@ -541,6 +819,10 @@ const refresh = throttle(async function (spaceId) {
     spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
     
     if (initialLoad) {
+        if (!spaces[spaceMeta.activeSpace]) {
+            spaceMeta.activeSpace = spaceMeta.spaceOrder[0] || null
+        }
+
         if (spaceMeta.activeSpace && spaceMeta.activeSpacesOrder.length === 0) {
             spaceMeta.activeSpacesOrder = [spaceMeta.activeSpace]
         }
@@ -555,24 +837,26 @@ const refresh = throttle(async function (spaceId) {
             const lastActiveTabId = getLastActiveNonPinnedTabId(spaceMeta.activeSpace)
             if (lastActiveTabId) {
                 spaceMeta.activeTabId = lastActiveTabId
-                markTabActive(spaceMeta.activeSpace, lastActiveTabId, Date.now(), true)
+                markTabActive(spaceMeta.activeSpace, lastActiveTabId)
             }
         }
     }
+
+    await ensureSpaceHasTab(spaceMeta.activeSpace, { shouldFocus: true })
     
     initialLoad = false
     // console.timeEnd('updt')
 }, 200)
 
-function removedActiveTabId (previousActiveTabId) {
+function removedActiveTabId (previousActiveTabId, spaceId = spaceMeta.activeSpace, selectReplacement = spaceId === spaceMeta.activeSpace && spaceMeta.activeTabId === previousActiveTabId) {
     let previousIndex = 1
-    const activeSpace = spaces[spaceMeta.activeSpace]
+    const activeSpace = spaces[spaceId]
 
     if (!activeSpace) {
         return
     }
 
-    const activeHistory = getSpaceActiveHistoryEntries(spaceMeta.activeSpace)
+    const activeHistory = getSpaceActiveHistoryEntries(spaceId)
     if (activeHistory.length === 0) {
         return
     }
@@ -585,6 +869,11 @@ function removedActiveTabId (previousActiveTabId) {
         }
         return true
     })
+
+    if (!selectReplacement) {
+        persistTabActiveHistoryForSpace(spaceId)
+        return
+    }
 
     const nextEntry = activeSpace.activeTabsOrder[previousIndex - 1]
     const nextTabId = getTabIdFromActiveHistoryEntry(nextEntry)
@@ -599,9 +888,9 @@ function removedActiveTabId (previousActiveTabId) {
     
     spaceMeta.activeTabId = nextTabId
     if (nextTabId) {
-        markTabActive(spaceMeta.activeSpace, nextTabId, Date.now(), true)
+        markTabActive(spaceId, nextTabId, Date.now(), true)
     } else {
-        persistTabActiveHistoryForSpace(spaceMeta.activeSpace)
+        persistTabActiveHistoryForSpace(spaceId)
     }
 }
 
@@ -625,11 +914,32 @@ live: true,
 
     const oldDoc = docs[change.id]?._rev ? docs[change.id] : null
     changes = [change, ...changes]
+
+    if (change.doc.type === 'shape') {
+        const desiredShape = desiredCanvasShapes.get(change.id)
+        const localShape = desiredShape || (oldDoc?.type === 'shape' ? oldDoc : null)
+        if (localShape && compareCanvasShapes(localShape, change.doc) > 0) {
+            const repairedShape = { ...localShape, _rev: change.doc._rev }
+            applyCanvasShape(repairedShape)
+            queueCanvasShapeSave(repairedShape)
+            return
+        }
+        rememberCanvasShapeState(change.doc)
+    }
+
+    if (change.doc.type === 'tab') {
+        const desiredUpdate = desiredTabUpdates.get(change.id)
+        if (desiredUpdate) {
+            applyTabUpdate(change.id, { ...change.doc, ...desiredUpdate })
+            return
+        }
+    }
+
     if (editingId !== change.id) {
         docs[change.id] = change.doc
 
         // fixme: deep comp
-        for (const key of ['canvas', 'pinned', ...sortOrder]) { // force reload until using docs store
+        for (const key of ['canvas', 'element', 'files', 'pinned', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
                 if (change.doc.spaceId && change.doc.type !== 'space' && change.doc.type !== 'activity') {
                     console.log('refreshing', change.doc.spaceId)
@@ -669,6 +979,23 @@ function activate(tabId) {
     return null
 }
 
+function ensureSpaceHasTab(spaceId, { shouldFocus = false } = {}) {
+    const space = spaces[spaceId]
+    if (!space) {
+        return null
+    }
+
+    const hasOpenTab = space.tabs?.some(tab => {
+        return tab.type === 'tab' && !tab.archive && !tab.preview && !tab.lightbox
+    })
+
+    if (hasOpenTab) {
+        return null
+    }
+
+    return data.newTab(spaceId, { shouldFocus })
+}
+
 function activateSpace(spaceId) {
     if (!spaces[spaceId]) {
         console.warn('activateSpace: space does not exist:', spaceId)
@@ -682,6 +1009,7 @@ function activateSpace(spaceId) {
     
     spaceMeta.activeSpace = spaceId
     persistActiveSpaceForWindow(spaceId)
+    ensureSpaceHasTab(spaceId, { shouldFocus: true })
     
     return true
 }
@@ -697,11 +1025,29 @@ function getPreviousActiveSpace() {
 function closeTab (spaceId, tabId) {
     const tab = docs[tabId]
 
+    if (!tab) {
+        return
+    }
+
     if (frames[tabId]) {
         frames[tabId].frame = null
     }
 
-    removedActiveTabId(tabId)
+    const space = spaces[spaceId]
+    if (space?.tabs) {
+        space.tabs = space.tabs.filter(openTab => openTab.id !== tabId)
+    }
+    const wasActive = spaceMeta.activeSpace === spaceId && spaceMeta.activeTabId === tabId
+    removedActiveTabId(tabId, spaceId, wasActive)
+
+    if (wasActive && !space?.tabs?.some(openTab => openTab.id === spaceMeta.activeTabId)) {
+        const nextTab = space?.tabs?.find(openTab => openTab.type === 'tab' && !openTab.archive && !openTab.preview && !openTab.lightbox)
+        if (nextTab) {
+            activate(nextTab.id)
+        }
+    }
+
+    ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
    
     db.bulkDocs([
         ...(previews[tabId]?.tabs.map(prev => {
@@ -771,68 +1117,6 @@ const destroy = $effect.root(() => {
     // $effect(() => {
     //     console.log('--------',$state.snapshot(frames['darc:tab_a1f1673e-2811-40cb-a5f1-1c719723e244']).forceHibernated)
     // })
-    
-    $effect(() => {
-        if (!spaceMeta.activeSpace && Object.keys(spaces).length > 0) {
-            // Set the first space as active
-            // const firstSpaceId = Object.keys(spaces)[0]
-            spaceMeta.activeSpace = 'darc:space_default'
-
-           
-            // FIXME: // Set the first tab of that space as active
-            // const firstSpace = spaces[firstSpaceId]
-            // if (firstSpace?.tabs?.length > 0) {
-            //     spaceMeta.activeTab = firstSpace.tabs[0]
-            // }
-        }
-    })
-
-    // Save active space to localStorage whenever it changes
-    $effect(() => {
-        const activeSpace = spaceMeta.activeSpace
-        if (!activeSpace) {
-            return
-        }
-
-        window.darcWindowIdPromise
-            .then(windowId => {
-                const parsedWindowId = parseWindowId(windowId)
-                if (!parsedWindowId) {
-                    return
-                }
-
-                // Skip stale async writes if active space changed while waiting for window id.
-                if (spaceMeta.activeSpace !== activeSpace) {
-                    return
-                }
-
-                persistActiveSpaceForWindow(activeSpace, parsedWindowId)
-            })
-            .catch(error => {
-                console.error('Failed to persist active space for window', error)
-            })
-    })
-
-    $effect(() => {
-        const spaceId = spaceMeta.activeSpace
-        const activeHistory = spaceId && spaces[spaceId]?.activeTabsOrder
-
-        if (!spaceId || !activeHistory) {
-            return
-        }
-
-        window.darcWindowIdPromise
-            .then(windowId => {
-                if (spaceMeta.activeSpace !== spaceId) {
-                    return
-                }
-
-                writeTabActiveHistoryEntries(spaceId, windowId)
-            })
-            .catch(error => {
-                console.error('Failed to persist tab active history for window', error)
-            })
-    })
 
     return () => {
         // console.log('---- unsubscribing from changes feed ----')
@@ -996,7 +1280,7 @@ function getTabLastActiveAt(tabId, spaceId = spaceMeta.activeSpace) {
     return frames[tabId]?.active || 0
 }
 
-export default {
+const data = {
     origins,
     spaceMeta,
     spaces,
@@ -1185,6 +1469,7 @@ export default {
 
     newSpace: () => {
         const _id = `darc:space_${crypto.randomUUID()}`
+        const name = 'Space ' + (Object.keys(spaces).length + 1)
         const space = {
             _id,
             spaceId: _id,
@@ -1192,10 +1477,12 @@ export default {
             order: Date.now(),
             created: Date.now(),
             color: projectColors[Object.keys(spaces).length % projectColors.length].color,
-            name: 'Space ' + (Object.keys(spaces).length + 1)
+            name
         }
 
+        spaces[_id] = { ...space, tabs: [], activeTabsOrder: [] }
         db.put(space)
+        data.newTab(_id)
 
         db.put({
             _id: `darc:activity_${crypto.randomUUID()}`,
@@ -1203,7 +1490,7 @@ export default {
             archive: 'history',
             action: 'space_create',
             spaceId: _id,
-            name: 'Space ' + (Object.keys(spaces).length + 1),
+            name,
             created: Date.now()
         })
     },
@@ -1213,6 +1500,8 @@ export default {
         spaceMeta.spaceOrder = spaceMeta.spaceOrder.filter(id => id !== spaceId)
         if (spaceMeta.activeSpace === spaceId) {
             spaceMeta.activeSpace = spaceMeta.spaceOrder[0] || null
+            persistActiveSpaceForWindow(spaceMeta.activeSpace)
+            ensureSpaceHasTab(spaceMeta.activeSpace, { shouldFocus: true })
         }
     },
 
@@ -1264,10 +1553,32 @@ export default {
         //     created: Date.now()
         // })
     },
+
+    addDivider: createDivider,
+
+    removeDivider: (dividerId) => {
+        const divider = docs[dividerId]
+        if (!divider || divider.type !== 'divider') return
+
+        const space = spaces[divider.spaceId]
+        if (space?.tabs) {
+            space.tabs = space.tabs.filter(item => item.id !== dividerId)
+        }
+
+        const persistRemoval = () => db.put({
+            ...(docs[dividerId] || divider),
+            archive: 'deleted',
+            modified: Date.now()
+        })
+        const creation = dividerCreationTasks.get(dividerId)
+        const removal = creation ? creation.then(persistRemoval) : persistRemoval()
+        removal.catch(error => console.error('Failed to remove divider:', error))
+    },
     
     newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned } = {}) => {
         // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
+        const firstItem = spaces[spaceId]?.tabs?.[0]
 
         const tab = {
             _id,
@@ -1277,7 +1588,7 @@ export default {
             favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64` : undefined,
             url: url || 'about:newtab',
             title: url ? title : 'New Tab',
-            order: Date.now(),
+            order: !pinned && !preview && !lightbox && firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
             opener,
             preview: !!preview,
             archive: preview ? 'preview' : undefined,
@@ -1291,6 +1602,7 @@ export default {
 
         if (!preview && !lightbox) {
             spaces[spaceId].tabs.push(tab)
+            spaces[spaceId].tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         }
         
         docs[tab._id] = tab
@@ -1310,8 +1622,79 @@ export default {
         return tab
     },
 
+    updateCanvasShapes: (spaceId, elements, files = {}) => {
+        const space = spaces[spaceId]
+        if (!space) return
+
+        const changedShapes = []
+        const now = Date.now()
+
+        for (const [canvasOrder, element] of elements.entries()) {
+            if (docs[element.id]?.type === 'tab') {
+                continue
+            }
+
+            const storedShape = desiredCanvasShapes.get(element.id) || (
+                docs[element.id]?.type === 'shape'
+                    ? docs[element.id]
+                    : space.tabs?.find(item => item.id === element.id && item.type === 'shape')
+            )
+
+            const shapeFiles = { ...(storedShape?.files || {}) }
+            const file = element.fileId ? files[element.fileId] : null
+            const fileChanged = file && file.dataURL !== shapeFiles[element.fileId]?.dataURL
+            if (file) {
+                shapeFiles[element.fileId] = file
+            }
+
+            const shapeState = getCanvasShapeState(element, canvasOrder, shapeFiles)
+            const storedState = canvasShapeStates.get(element.id) || (
+                storedShape?.element
+                    ? getCanvasShapeState(storedShape.element, storedShape.canvasOrder, storedShape.files)
+                    : null
+            )
+            canvasShapeStates.set(element.id, shapeState)
+
+            if (canvasShapeStateMatches(storedState, shapeState) && !fileChanged) {
+                continue
+            }
+
+            const shape = {
+                ...storedShape,
+                _id: element.id,
+                id: element.id,
+                type: 'shape',
+                spaceId,
+                archive: null,
+                order: Number.MAX_SAFE_INTEGER,
+                canvasOrder,
+                element,
+                files: shapeFiles,
+                created: storedShape?.created || now,
+                modified: now
+            }
+
+            docs[shape.id] = shape
+            changedShapes.push(shape)
+        }
+
+        if (changedShapes.length === 0) return
+
+        const changedById = new Map(changedShapes.map(shape => [shape.id, shape]))
+        const nextTabs = (space.tabs || []).map(item => changedById.get(item.id) || item)
+        for (const shape of changedShapes) {
+            if (!nextTabs.some(item => item.id === shape.id)) {
+                nextTabs.push(shape)
+            }
+        }
+        space.tabs = nextTabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+
+        changedShapes.forEach(queueCanvasShapeSave)
+    },
+
     updateTab: async (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url } = {}) => {
         const tab = docs[tabId]
+        if (tab?.type !== 'tab') return
        
         let newProps = {}
         if (canvas) {
@@ -1379,10 +1762,7 @@ export default {
         }
 
         if (Object.keys(newProps).length > 0) {
-            await db.put({
-                    ...tab,
-                    ...newProps
-                })
+            await queueTabUpdate(tabId, newProps)
         }
     },
 
@@ -1455,8 +1835,20 @@ export default {
     },
 
     permissionRequest: (tabId, event) => {
+        if (typeof event?.permission !== 'string' || !event.permission.trim()) {
+            console.warn('Permission request has no permission type', event)
+            return { granted: false }
+        }
+
+        let origin
+        try {
+            origin = new URL(event.url).origin
+        } catch {
+            console.warn('Permission request has no valid URL', event)
+            return { granted: false }
+        }
+
         let permission = permissions[event.permission]
-        const origin = new URL(event.url).origin
 
         if (!permission) {
             console.warn(`Unknown permission type: ${event.permission}`)
@@ -1487,7 +1879,10 @@ export default {
         const granted = permission.origins[origin].permission === 'always' || permission.origins[origin].permission === 'ephemeral'
 
         if (granted) {
-            permission.origins[origin].requests.at(-1).timestamp = Date.now()
+            const latestRequest = permission.origins[origin].requests.at(-1)
+            if (latestRequest) {
+                latestRequest.timestamp = Date.now()
+            }
             return { granted }
         }
 
@@ -1617,12 +2012,14 @@ export default {
             return false
         }
 
-        const latestRequest = permissionObj.origins[origin].requests.at(-1)
-        if (latestRequest.status === 'requested') {
-            latestRequest.status = 'granted'
-            latestRequest.unseen = false
-            latestRequest.needsReload = true
-            latestRequest.timestamp = Date.now()
+        const pendingRequests = permissionObj.origins[origin].requests.filter(request => request.status === 'requested')
+        if (pendingRequests.length > 0) {
+            for (const request of pendingRequests) {
+                request.status = 'granted'
+                request.unseen = false
+                request.needsReload = true
+                request.timestamp = Date.now()
+            }
             
             if (permission === 'always') {
                 permissionObj.origins[origin].permission = 'always'
@@ -1641,14 +2038,16 @@ export default {
             return false
         }
 
-        // Find the latest request for this permission type and origin
-        const latestRequest = permissionObj.origins[origin].requests.at(-1)
-        if (latestRequest.status === 'requested') {
+        // Find the pending requests for this permission type and origin
+        const pendingRequests = permissionObj.origins[origin].requests.filter(request => request.status === 'requested')
+        if (pendingRequests.length > 0) {
             // Update the request status
-            latestRequest.status = 'denied'
-            latestRequest.unseen = false
-            latestRequest.needsReload = true
-            latestRequest.timestamp = Date.now()
+            for (const request of pendingRequests) {
+                request.status = 'denied'
+                request.unseen = false
+                request.needsReload = true
+                request.timestamp = Date.now()
+            }
             
             // Set the permission to denied for this origin
             permissionObj.origins[origin].permission = 'denied'
@@ -1659,17 +2058,20 @@ export default {
         return false
     },
 
-    ignorePermission: (permissionType, origin) => {
+    ignorePermission: (permissionType, origin, requestId) => {
         const permissionObj = permissions[permissionType]
         if (!permissionObj?.origins?.[origin]?.requests?.length) {
             return false
         }
 
-        const latestRequest = permissionObj.origins[origin].requests.at(-1)
-        if (latestRequest.status === 'requested') {
-            latestRequest.status = 'ignored'
-            latestRequest.unseen = false
-            latestRequest.timestamp = Date.now()
+        const requests = permissionObj.origins[origin].requests
+        const request = requestId
+            ? requests.find(item => item.requestId === requestId)
+            : requests.findLast(item => item.status === 'requested')
+        if (request?.status === 'requested') {
+            request.status = 'ignored'
+            request.unseen = false
+            request.timestamp = Date.now()
             
             return true
         }
@@ -1720,16 +2122,22 @@ export default {
     closeTab,
 
     moveTab: (tabId, { beforeTabId, afterTabId, targetSpaceId }) => {
-        const tab = docs[tabId]
-        if (!tab) return
+        const tabDoc = docs[tabId]
+        if (!tabDoc) return
 
-        const sourceSpaceId = tab.spaceId
+        const sourceSpaceId = tabDoc.spaceId
+        const tab = spaces[sourceSpaceId]?.tabs?.find(item => item.id === tabId) || tabDoc
+        if (tab !== tabDoc) {
+            Object.assign(tab, tabDoc)
+            docs[tabId] = tab
+        }
         const destSpaceId = targetSpaceId || sourceSpaceId
         const isSpaceMove = destSpaceId !== sourceSpaceId
 
         // Calculate new order
-        const beforeTab = beforeTabId ? docs[beforeTabId] : null
-        const afterTab = afterTabId ? docs[afterTabId] : null
+        const targetItems = spaces[destSpaceId]?.tabs
+        const beforeTab = beforeTabId ? targetItems?.find(item => item.id === beforeTabId) || docs[beforeTabId] : null
+        const afterTab = afterTabId ? targetItems?.find(item => item.id === afterTabId) || docs[afterTabId] : null
         let newOrder
         if (beforeTab && afterTab) {
             newOrder = (beforeTab.order + afterTab.order) / 2
@@ -1780,7 +2188,7 @@ export default {
             // Same-space: sort in-place, never remove the item
             const spaceTabs = spaces[sourceSpaceId]?.tabs
             if (spaceTabs) {
-                spaceTabs.sort((a, b) => (a.order || 0) - (b.order || 0))
+                spaceTabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             }
         }
 
@@ -1799,9 +2207,12 @@ export default {
 
         // Prevent change feed from triggering a redundant refresh
         editingId = tabId
-        db.put({ ...tab }).then((res) => {
+        const creation = dividerCreationTasks.get(tabId)
+        const persistMove = creation ? creation.then(() => db.put({ ...tab })) : db.put({ ...tab })
+
+        persistMove.then((res) => {
             editingId = null
-            if (res.rev) tab._rev = res.rev
+            if (res?.rev) tab._rev = res.rev
         }).catch(() => {
             editingId = null
         })
@@ -1893,7 +2304,7 @@ export default {
                 }
             }
             if (!activated && newSpace?.tabs?.length > 0) {
-                const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+                const firstNonPinned = newSpace.tabs.find(t => t.type === 'tab' && !t.pinned)
                 if (firstNonPinned) {
                     activate(firstNonPinned.id)
                 } else {
@@ -1902,7 +2313,7 @@ export default {
             }
         } else if (newSpace?.tabs?.length > 0) {
             // Fallback: activate the first non-pinned tab in the space
-            const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+            const firstNonPinned = newSpace.tabs.find(t => t.type === 'tab' && !t.pinned)
             if (firstNonPinned) {
                 activate(firstNonPinned.id)
             } else {
@@ -1960,7 +2371,7 @@ export default {
                 }
             }
             if (!activated && newSpace?.tabs?.length > 0) {
-                const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+                const firstNonPinned = newSpace.tabs.find(t => t.type === 'tab' && !t.pinned)
                 if (firstNonPinned) {
                     activate(firstNonPinned.id)
                 } else {
@@ -1969,7 +2380,7 @@ export default {
             }
         } else if (newSpace?.tabs?.length > 0) {
             // Fallback: activate the first non-pinned tab in the space
-            const firstNonPinned = newSpace.tabs.find(t => !t.pinned)
+            const firstNonPinned = newSpace.tabs.find(t => t.type === 'tab' && !t.pinned)
             if (firstNonPinned) {
                 activate(firstNonPinned.id)
             } else {
@@ -2032,3 +2443,5 @@ export default {
         return null
     }
 }
+
+export default data

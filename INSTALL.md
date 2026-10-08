@@ -17,11 +17,11 @@ Run pnpm install.
 
 Cd into the ./certs and
 Run the cert creation script: ./create.sh
-Just press enter for all prompts except Common Name, where you must enter localhost.
+The generated certificate covers both localhost and darc_darc.localhost.
 
 navigate the browser to about:settings and search for certificate open privacy and security and click security.
 go to manage certificates, local certificates and click trusted.
-open installed by you. select the localhost.crt certificate.
+open installed by you. Import and trust rootCA.pem once; localhost.crt is the server certificate signed by that root.
 
 Start the dev server with: pnpm dev.
 
@@ -38,6 +38,8 @@ Borderless PWA / IWA
 Navigate to about://web-app-internals.
 
 Enter https://localhost:5194 in the field “Install IWA via Dev Mode Proxy” and click Install.
+
+The Compose service link is https://darc_darc.localhost:5194/.
 
 A folder with an app shim should open. You can now close the browser window (but do not quit the browser process) and open that app shim.
 
