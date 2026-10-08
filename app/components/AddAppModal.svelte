@@ -30,6 +30,7 @@
     let installedSection = $state('closed')
     let submissionState = $state('idle')
     let submitError = $state('')
+    let composeWarning = $state(null)
     let checkoutController = null
     let catalogApps = $state([])
     let catalogState = $state('loading')
@@ -140,6 +141,7 @@
         const controller = new AbortController()
         checkoutController = controller
         try {
+            const needsManualCompose = app.pathType === 'dockerfile' || app.pathType === 'static'
             const checkout = await checkoutRepository({
                 url: app.githubUrl,
                 path: app.checkoutPath,
@@ -147,8 +149,17 @@
                 token: githubToken,
                 signal: controller.signal
             })
+            controller.signal.throwIfAborted()
             onAdd({ type: 'repo', app, checkout })
-            handleClose()
+            if (needsManualCompose) {
+                composeWarning = {
+                    type: app.pathType === 'static' ? 'Static HTML' : 'Dockerfile',
+                    path: `${checkout.path.replace(/\/+$/, '')}/docker-compose.yaml`,
+                    pathKind: checkout.path.startsWith('/') ? 'absolute' : 'relative'
+                }
+            } else {
+                handleClose()
+            }
         } catch (error) {
             if (error?.name !== 'AbortError') {
                 submitError = error?.message || 'Repository checkout failed'
@@ -161,6 +172,10 @@
         }
     }
 
+    function focusWarning(node) {
+        node.focus()
+    }
+
     function handleClose() {
         catalogController?.abort()
         catalogController = null
@@ -168,6 +183,7 @@
         checkoutController = null
         submissionState = 'idle'
         submitError = ''
+        composeWarning = null
         // Reset form
         Object.assign(appFormData, {
             catalogId: '',
@@ -285,15 +301,22 @@
         class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm"
         style="padding-top: 15vh;"
         onmousedown={handleBackdropClick}
-        role="dialog"
+        onkeydown={(event) => {
+            if (composeWarning && event.key === 'Escape') {
+                event.preventDefault()
+                handleClose()
+            }
+        }}
+        role={composeWarning ? 'alertdialog' : 'dialog'}
         aria-modal="true"
         aria-labelledby="modal-title"
+        aria-describedby={composeWarning ? 'compose-warning-description' : undefined}
         tabindex="-1"
     >
-        <div class="bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl w-full max-w-4xl h-[70vh] shadow-2xl flex flex-col" onmousedown={handleModalClick} role="presentation">
+        <div class="bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl w-full shadow-2xl flex flex-col {composeWarning ? 'max-w-xl' : 'max-w-4xl h-[70vh]'}" onmousedown={handleModalClick} role="presentation">
             <!-- Header -->
             <div class="flex items-center justify-between p-6 border-b border-white/10 flex-shrink-0">
-                <h2 id="modal-title" class="text-xl font-semibold text-white/90">Add New App</h2>
+                <h2 id="modal-title" class="text-xl font-semibold text-white/90">{composeWarning ? 'Docker Compose file required' : 'Add New App'}</h2>
                 <button 
                     class="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white/90"
                     onmousedown={handleClose}
@@ -305,6 +328,33 @@
                 </button>
             </div>
 
+            {#if composeWarning}
+                <div class="manual-compose-warning space-y-4 p-6">
+                    <p id="compose-warning-description" class="text-sm leading-relaxed text-white/80">
+                        The repository has been cloned. Until full support for {composeWarning.type} apps is added, you must manually add a Docker Compose file at the location below before the app can run.
+                    </p>
+                    <p class="text-xs text-white/60">
+                        {composeWarning.pathKind === 'absolute' ? 'Full path:' : 'Path inside your stacks folder:'}
+                    </p>
+                    <code class="block select-text break-all rounded-lg border border-white/15 bg-white/5 p-3 text-sm text-white/90">{composeWarning.path}</code>
+                </div>
+                <div class="flex justify-end border-t border-white/10 p-6">
+                    <button
+                        use:focusWarning
+                        type="button"
+                        class="cursor-pointer rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                        onmousedown={handleClose}
+                        onkeydown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                handleClose()
+                            }
+                        }}
+                    >
+                        Got it
+                    </button>
+                </div>
+            {:else}
             <!-- Tabs -->
             <div class="flex gap-2 p-4 pb-4 flex-shrink-0">
                 <button 
@@ -569,6 +619,7 @@
                     {submissionState === 'submitting' ? 'Cloning…' : 'Add App'}
                 </button>
             </div>
+            {/if}
         </div>
     </div>
 {/if}
