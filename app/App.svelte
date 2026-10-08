@@ -109,6 +109,8 @@
     let isScrolling = $state(false)
     let scrollTimeout = null
     let hovercardShowTime = null
+    let navigationHovercardTabId = $state(null)
+    let navigationHovercardTimeout = null
     
     // Nav button hovercard state
     let navButtonHovered = $state(false)
@@ -156,6 +158,7 @@
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
         // return // DEBUG: uncomment to disable hovercard hiding for testing
+        if (navigationHovercardTabId && navigationHovercardTabId === hoveredTab?.id) return
         if (hovercardUrlBarExpanded) return
         hoveredTab = null
         isTrashItemHover = false
@@ -246,6 +249,9 @@
         isMacPlatform = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent) || navigator.platform.includes('Mac')
         
         const dismissHovercards = () => {
+            if (navigationHovercardTimeout) clearTimeout(navigationHovercardTimeout)
+            navigationHovercardTimeout = null
+            navigationHovercardTabId = null
             hoveredTab = null
             hovercardShowTime = null
             if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
@@ -1304,6 +1310,40 @@
         hideContextMenu()
     }
 
+    function navigateTabHistory(tabId, direction) {
+        const frame = data.frames[tabId]?.frame
+        if (typeof frame?.[direction] !== 'function') return
+
+        const tab = data.docs[tabId]
+        if (tab && !tabDrag.active) {
+            const previousPosition = hoveredTab?.id === tabId ? hovercardPosition : null
+            window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
+            if (navButtonHoverTimeout) clearTimeout(navButtonHoverTimeout)
+            navButtonHoverTimeout = null
+            navButtonHovered = false
+
+            const rect = tabButtons[tabId]?.getBoundingClientRect() || document.querySelector('header')?.getBoundingClientRect()
+            const halfWidth = 160
+            hovercardPosition = previousPosition || {
+                x: Math.max(halfWidth + 10, Math.min((rect?.left || 0) + (rect?.width || 0) / 2, window.innerWidth - halfWidth - 10)),
+                y: Math.max(20, rect?.bottom || 20)
+            }
+            hovercardUrlBarExpanded = false
+            isTrashItemHover = false
+            hoveredTab = tab
+            hovercardShowTime = Date.now()
+            navigationHovercardTabId = tabId
+            navigationHovercardTimeout = setTimeout(() => {
+                navigationHovercardTimeout = null
+                navigationHovercardTabId = null
+                if (hoveredTab?.id === tabId) closeHovercard()
+            }, 500)
+            startHovercardPositionCheck()
+        }
+
+        frame[direction]()
+    }
+
     function goBack() {
         // If mouse is down, navigate spaces instead of frame navigation
         if (isMouseDown === 0 || isMouseDown === 1) {
@@ -1311,24 +1351,7 @@
             return
         }
 
-        if (data.spaceMeta.activeTabId) {
-
-            const frame = data.frames[data.spaceMeta.activeTabId]?.frame
-            frame.back?.()
-            // if (frame && typeof frame.back === 'function') {
-            //     // Check if the frame can go back
-            //     // if (typeof frame.canGoBack === 'function' && !frame.canGoBack()) {
-            //     //     // No back navigation available, set to start page
-            //     //     activeTab.url = 'about:newtab'
-            //     // } else {
-            //     frame.back()
-            //     // }
-            // } else if (activeTab.url !== 'about:newtab') {
-            //     // Frame doesn't support navigation or is not a controlled frame
-            //     // Set to start page
-            //     activeTab.url = 'about:newtab'
-            // }
-        }
+        navigateTabHistory(data.spaceMeta.activeTabId, 'back')
     }
 
     function goForward() {
@@ -1338,12 +1361,7 @@
             return
         }
 
-        if (data.spaceMeta.activeTabId) {
-            const frame = data.frames[data.spaceMeta.activeTabId]?.frame
-            if (frame && typeof frame.forward === 'function') {
-                frame.forward()
-            }
-        }
+        navigateTabHistory(data.spaceMeta.activeTabId, 'forward')
     }
 
     function reloadActiveTab() {
@@ -1554,6 +1572,9 @@
             }
             if (hovercardResetTimer) {
                 clearTimeout(hovercardResetTimer)
+            }
+            if (navigationHovercardTimeout) {
+                clearTimeout(navigationHovercardTimeout)
             }
             if (resizeTimeout) {
                 clearTimeout(resizeTimeout)
@@ -1780,6 +1801,7 @@
                 stopHovercardPositionCheck()
                 return
             }
+            if (navigationHovercardTabId === hoveredTab.id) return
             
             // Get current mouse position
             const mouseX = window.mouseX || 0
@@ -4190,32 +4212,33 @@
   {#key hoveredTab.id}
     <div class="tab-hovercard" 
          class:trash-item={isTrashItemHover}
+         class:navigation-hovercard={navigationHovercardTabId === hoveredTab.id}
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px; --hovercard-top: {hovercardPosition.y}px;">
        
             <TabHoverCard tab={hoveredTab} 
                           isClosedTab={false} 
-                          showHistoryImmediately={closeButtonHoveredDelayed}
+                          showHistoryImmediately={closeButtonHoveredDelayed || navigationHovercardTabId === hoveredTab.id}
                           instantMode={instantHovercardsMode}
                           showDevTools={devModeEnabled}
                           availableHeight={window.innerHeight - hovercardPosition.y - 20}
                           onGoBack={() => {
                               if (!hoveredTab?.id) return
-                              if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                  data.activate(hoveredTab.id)
+                              const tabId = hoveredTab.id
+                              if (data.spaceMeta.activeTabId !== tabId) {
+                                  data.activate(tabId)
                               }
                               setTimeout(() => {
-                                  const frame = data.frames[hoveredTab?.id]?.frame
-                                  frame?.back?.()
+                                  navigateTabHistory(tabId, 'back')
                               }, 50)
                           }}
                           onGoForward={() => {
                               if (!hoveredTab?.id) return
-                              if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                  data.activate(hoveredTab.id)
+                              const tabId = hoveredTab.id
+                              if (data.spaceMeta.activeTabId !== tabId) {
+                                  data.activate(tabId)
                               }
                               setTimeout(() => {
-                                  const frame = data.frames[hoveredTab?.id]?.frame
-                                  frame?.forward?.()
+                                  navigateTabHistory(tabId, 'forward')
                               }, 50)
                           }}
                           onReload={() => {
@@ -4324,6 +4347,7 @@
 {/if}
 
 <TabSidebar {isDragEnabled} onShowApps={toggleAppsOverlay} 
+           onNavigateHistory={navigateTabHistory}
            {customTabSidebarWidth} 
            {tabSidebarVisible} 
            {isResizingTabSidebar} 

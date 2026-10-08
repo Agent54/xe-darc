@@ -10,6 +10,7 @@
         devModeEnabled = false,
         onGoBack = null,
         onGoForward = null,
+        onNavigateHistory = null,
         onReload = null,
         onCloseTab = null,
         showUrl = true
@@ -2067,23 +2068,23 @@
                         onDevTools={handleDevToolsClick}
                         onGoBack={() => {
                             if (!hoveredTab?.id) return
+                            const tabId = hoveredTab.id
                             // Activate tab first if not active
-                            if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                data.activate(hoveredTab.id)
+                            if (data.spaceMeta.activeTabId !== tabId) {
+                                data.activate(tabId)
                             }
                             setTimeout(() => {
-                                const frame = data.frames[hoveredTab?.id]?.frame
-                                frame?.back?.()
+                                onNavigateHistory?.(tabId, 'back')
                             }, 50)
                         }}
                         onGoForward={() => {
                             if (!hoveredTab?.id) return
-                            if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                data.activate(hoveredTab.id)
+                            const tabId = hoveredTab.id
+                            if (data.spaceMeta.activeTabId !== tabId) {
+                                data.activate(tabId)
                             }
                             setTimeout(() => {
-                                const frame = data.frames[hoveredTab?.id]?.frame
-                                frame?.forward?.()
+                                onNavigateHistory?.(tabId, 'forward')
                             }, 50)
                         }}
                         onReload={() => {
