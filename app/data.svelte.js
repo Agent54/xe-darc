@@ -669,6 +669,11 @@ const refresh = throttle(async function (spaceId) {
         loadActiveSpaceForWindow(resolvedWindowId)
     }
 
+    // A change-feed refresh can run before bootstrap finishes. Restore from a complete session.
+    if (initialLoad) {
+        spaceId = undefined
+    }
+
     // db.viewCleanup().then(function (result) {
     //    console.log('viewCleanup', result)
     //   }).catch(function (err) {
@@ -760,11 +765,6 @@ const refresh = throttle(async function (spaceId) {
                 rememberCanvasShapeState(doc)
             }
 
-            if (!isDivider && !isShape && !spaceMeta.activeTabId && doc.spaceId === spaceMeta.activeSpace) {
-                spaceMeta.activeTabId = doc.id
-                console.log('setting active tab id a', spaceMeta.activeTabId, '"' + (doc.title || doc.url || '') + '"')
-            }
-
             if (!spaces[doc.spaceId]) {
                 spaces[doc.spaceId] = { _id: doc.spaceId, tabs: [] }
             }
@@ -834,7 +834,7 @@ const refresh = throttle(async function (spaceId) {
         }
 
         if (spaces[spaceMeta.activeSpace]) {
-            const lastActiveTabId = getLastActiveNonPinnedTabId(spaceMeta.activeSpace)
+            const lastActiveTabId = getLastActiveTabId(spaceMeta.activeSpace)
             if (lastActiveTabId) {
                 spaceMeta.activeTabId = lastActiveTabId
                 markTabActive(spaceMeta.activeSpace, lastActiveTabId)
@@ -842,9 +842,18 @@ const refresh = throttle(async function (spaceId) {
         }
     }
 
-    await ensureSpaceHasTab(spaceMeta.activeSpace, { shouldFocus: true })
-    
+    if (shouldReconcileActiveTab && !spaceMeta.activeTabId) {
+        const openTabs = spaces[spaceMeta.activeSpace]?.tabs?.filter(tab => {
+            return tab.type === 'tab' && !tab.archive && !tab.preview && !tab.lightbox
+        }) || []
+        const firstTab = openTabs.find(tab => !tab.pinned) || openTabs[0]
+        if (firstTab) {
+            activate(firstTab.id)
+        }
+    }
+
     initialLoad = false
+    await ensureSpaceHasTab(spaceMeta.activeSpace, { shouldFocus: true })
     // console.timeEnd('updt')
 }, 200)
 
@@ -1243,9 +1252,8 @@ const getAttachmentUrl = async (attachmentUrl, digest) => {
     return resolvedUrl
 }
 
-function getLastActiveNonPinnedTabId(spaceId) {
-    const activeHistory = getSpaceActiveHistoryEntries(spaceId || spaceMeta.activeSpace)
-    if (!activeHistory.length) return null
+function getLastActiveTabId(spaceId = spaceMeta.activeSpace, includePinned = true) {
+    const activeHistory = getSpaceActiveHistoryEntries(spaceId)
 
     for (const entry of activeHistory) {
         const tabId = getTabIdFromActiveHistoryEntry(entry)
@@ -1253,10 +1261,17 @@ function getLastActiveNonPinnedTabId(spaceId) {
             continue
         }
 
-        if (docs[tabId] && !docs[tabId].pinned && !docs[tabId].archive) return tabId
+        const tab = docs[tabId]
+        if (tab?.type === 'tab' && tab.spaceId === spaceId && !tab.archive && !tab.preview && !tab.lightbox && (includePinned || !tab.pinned)) {
+            return tabId
+        }
     }
 
     return null
+}
+
+function getLastActiveNonPinnedTabId(spaceId) {
+    return getLastActiveTabId(spaceId || spaceMeta.activeSpace, false)
 }
 
 function getTabLastActiveAt(tabId, spaceId = spaceMeta.activeSpace) {
