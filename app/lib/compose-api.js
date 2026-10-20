@@ -74,7 +74,9 @@ async function composeRequest(path, { signal } = {}) {
     }
 
     if (!response.ok) {
-        throw new Error(result?.message || result?.error || text || `Compose request failed (${response.status})`)
+        const error = new Error(result?.message || result?.error || text || `Compose request failed (${response.status})`)
+        error.status = response.status
+        throw error
     }
     return result
 }
@@ -100,18 +102,53 @@ function projectVariants(project) {
     }))
 }
 
+function isMissingComposeConfig(error) {
+    return error.status === 404 ||
+        (error.status >= 400 && /\bno such file or directory\b/i.test(error.message))
+}
+
+async function loadVariantContainers(encodedName, variant, signal) {
+    const query = new URLSearchParams({ all: 'true' })
+    if (variant.configFiles) query.set('path', variant.configFiles)
+    try {
+        return await composeRequest(`/v1.24/ps/${encodedName}?${query}`, { signal })
+    } catch (error) {
+        if (signal?.aborted || !variant.configFiles || !isMissingComposeConfig(error)) throw error
+        // Older Compose backends still try to load the deleted files for /ps.
+        // Retry by project, retaining only containers from this exact variant.
+        const containers = await composeRequest(`/v1.24/ps/${encodedName}?all=true`, { signal })
+        const files = variant.configFiles.split(',')
+        return Array.isArray(containers) ? containers.filter(container => {
+            const labels = container.Labels || container.labels || {}
+            const recorded = String(labels['com.docker.compose.project.config_files'] || '')
+                .split(',').map(file => file.trim())
+            return files.every(file => recorded.includes(file))
+        }) : []
+    }
+}
+
+function configFromContainers(containers) {
+    return { services: Object.fromEntries(containers.flatMap(container => {
+        const name = container.Service || container.service
+        const labels = container.Labels || container.labels || {}
+        if (!name || String(labels['com.docker.compose.oneoff']).toLowerCase() === 'true') return []
+        return [[name, {}]]
+    })) }
+}
+
 async function loadProjectVariant(project, variant, signal) {
     const name = project.Name || project.name
     const query = new URLSearchParams({ format: 'json' })
-    const psQuery = new URLSearchParams({ all: 'true' })
     if (variant.configFiles) {
         query.set('path', variant.configFiles)
-        psQuery.set('path', variant.configFiles)
     }
     const encodedName = encodeURIComponent(name)
     const [config, containers] = await Promise.all([
-        composeRequest(`/v1.24/config/${encodedName}?${query}`, { signal }),
-        composeRequest(`/v1.24/ps/${encodedName}?${psQuery}`, { signal })
+        composeRequest(`/v1.24/config/${encodedName}?${query}`, { signal }).catch(error => {
+            if (signal?.aborted || !isMissingComposeConfig(error)) throw error
+            return null
+        }),
+        loadVariantContainers(encodedName, variant, signal)
     ])
     return {
         project: name,
@@ -119,7 +156,7 @@ async function loadProjectVariant(project, variant, signal) {
         watching: Boolean(project.Watching ?? project.watching),
         configFiles: variant.configFiles,
         configPath: variant.configPath,
-        config,
+        config: config || configFromContainers(Array.isArray(containers) ? containers : []),
         containers: Array.isArray(containers) ? containers : []
     }
 }
