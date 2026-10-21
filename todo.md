@@ -3418,3 +3418,7 @@ replace mac native launcher and factor out app-manager (show app icon in dock?)
 
 bup tab to top feature
 
+startpage per space
+
+switch data container per space and open space setup menu on new space create
+

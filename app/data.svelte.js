@@ -834,7 +834,7 @@ const refresh = throttle(async function (spaceId) {
         }
 
         if (spaces[spaceMeta.activeSpace]) {
-            const lastActiveTabId = getLastActiveTabId(spaceMeta.activeSpace)
+            const lastActiveTabId = getLastActiveNonPinnedTabId(spaceMeta.activeSpace)
             if (lastActiveTabId) {
                 spaceMeta.activeTabId = lastActiveTabId
                 markTabActive(spaceMeta.activeSpace, lastActiveTabId)
@@ -1252,7 +1252,8 @@ const getAttachmentUrl = async (attachmentUrl, digest) => {
     return resolvedUrl
 }
 
-function getLastActiveTabId(spaceId = spaceMeta.activeSpace, includePinned = true) {
+function getLastActiveNonPinnedTabId(spaceId) {
+    spaceId ||= spaceMeta.activeSpace
     const activeHistory = getSpaceActiveHistoryEntries(spaceId)
 
     for (const entry of activeHistory) {
@@ -1262,16 +1263,12 @@ function getLastActiveTabId(spaceId = spaceMeta.activeSpace, includePinned = tru
         }
 
         const tab = docs[tabId]
-        if (tab?.type === 'tab' && tab.spaceId === spaceId && !tab.archive && !tab.preview && !tab.lightbox && (includePinned || !tab.pinned)) {
+        if (tab?.type === 'tab' && tab.spaceId === spaceId && !tab.archive && !tab.preview && !tab.lightbox && !tab.pinned) {
             return tabId
         }
     }
 
     return null
-}
-
-function getLastActiveNonPinnedTabId(spaceId) {
-    return getLastActiveTabId(spaceId || spaceMeta.activeSpace, false)
 }
 
 function getTabLastActiveAt(tabId, spaceId = spaceMeta.activeSpace) {
