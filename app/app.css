@@ -534,15 +534,6 @@ ul::-webkit-scrollbar {
 .tab-container .tab span {
     overflow: hidden;
 }
-.tab-loading-spinner {
-    position: absolute;
-    top: 2px;
-    left: 4px;
-    width: 16px;
-    height: 16px;
-    animation: spin 1s linear infinite;
-    z-index: 2;
-}
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }

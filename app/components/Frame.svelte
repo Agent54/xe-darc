@@ -582,7 +582,7 @@
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="" class="hibernated-lightbox-bg" lazy={true} />
                     {/if}
                     <div class="hibernated-lightbox-card">
-                        <LightboxHeader url={lbTab.url} title={lbTab.title} showControls={false} />
+                        <LightboxHeader tab={lbTab} showControls={false} />
                         {#if lbTab.screenshot}
                             <div class="hibernated-lightbox-body">
                                 <AttachmentImage src={lbTab.screenshot} digest={lbTab._attachments?.screenshot?.digest} alt="Lightbox preview" class="hibernated-lightbox-screenshot" lazy={true} />
@@ -937,9 +937,7 @@
                 <div class="lightbox-container" 
                     in:scale={{duration: 100}}>
                     <LightboxHeader
-                        url={lightboxChild?.url}
-                        title={lightboxChild?.title}
-                        tabId={lightboxChild?.id}
+                        tab={lightboxChild}
                         onMoveToTab={(e) => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { focus: !e.metaKey })}
                         onExpandFull={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { closeParent: true })}
                         onCollapsePreview={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { toPreview: true })}

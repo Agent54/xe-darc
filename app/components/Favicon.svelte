@@ -26,6 +26,7 @@
         favicon: data.docs[tab?.id]?.favicon ?? tab?.favicon,
         title: data.docs[tab?.id]?.title ?? tab?.title
     })
+    const loading = $derived(data.frames[tab?.id]?.loading ?? false)
     
     // Derive security status if not provided
     const securityStatus = $derived(() => {
@@ -121,6 +122,14 @@
     </svg>
 {/snippet}
 
+{#snippet loadingIndicator()}
+    {#if loading}
+        <svg class="favicon-loading-spinner" viewBox="0 0 16 16" role="img" aria-label="Loading page">
+            <path d="M8 2 A6 6 0 0 1 14 8" fill="none" stroke="rgba(255, 255, 255, 0.8)" stroke-width="2" stroke-linecap="round" />
+        </svg>
+    {/if}
+{/snippet}
+
 {#if showButton}
     <span 
         class="favicon-display" 
@@ -138,6 +147,7 @@
         {:else}
             {@render fallbackIcon()}
         {/if}
+        {@render loadingIndicator()}
     </span>
 {:else}
     <span class="favicon-wrapper" class:small={size === 'small'}>
@@ -152,10 +162,28 @@
         {:else}
             {@render fallbackIcon()}
         {/if}
+        {@render loadingIndicator()}
     </span>
 {/if}
 
 <style>
+    .favicon-display,
+    .favicon-wrapper {
+        position: relative;
+    }
+
+    .favicon-loading-spinner {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        animation: favicon-spin 1s linear infinite;
+        pointer-events: none;
+    }
+
+    @keyframes favicon-spin {
+        to { transform: rotate(360deg); }
+    }
+
     .favicon-display {
         display: flex;
         align-items: center;

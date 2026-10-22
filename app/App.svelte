@@ -3251,7 +3251,6 @@
 
 {#snippet rightPinnedTabItem(rightPinned, i)}
     {@const tab = data.docs[rightPinned.id]}
-    {@const frameData = data.frames[tab.id]}
     {#if tab.type !== 'divider'}
         <li 
             bind:this={tabButtons[tab.id]}
@@ -3274,15 +3273,6 @@
             onmouseleave={handleTabMouseLeave}
             >
             <div class="tab">
-                {#if frameData?.loading}
-                    <svg class="tab-loading-spinner" viewBox="0 0 16 16">
-                        <path d="M8 2 A6 6 0 0 1 14 8" 
-                            fill="none" 
-                            stroke="rgba(255, 255, 255, 0.8)" 
-                            stroke-width="2" 
-                            stroke-linecap="round"/>
-                    </svg>
-                {/if}
                 <div class="favicon-wrapper">    
                     <Favicon {tab} />
                 </div>
@@ -3367,7 +3357,6 @@
              style="left: {showNavigationToolbar ? 175 : 110}px;">
             {#each leftPinnedTabs as tabPinned, i (tabPinned.id)}
                 {@const tab = data.docs[tabPinned.id]}
-                {@const frameData = data.frames[tab.id]}
                 {#if tab.type !== 'divider'}
                     <li 
                         bind:this={tabButtons[tab.id]}
@@ -3390,15 +3379,6 @@
                         onmouseleave={handleTabMouseLeave}
                         >
                         <div class="tab">
-                            {#if frameData?.loading}
-                                <svg class="tab-loading-spinner" viewBox="0 0 16 16">
-                                    <path d="M8 2 A6 6 0 0 1 14 8" 
-                                        fill="none" 
-                                        stroke="rgba(255, 255, 255, 0.8)" 
-                                        stroke-width="2" 
-                                        stroke-linecap="round"/>
-                                </svg>
-                            {/if}
                             <div class="favicon-wrapper">    
                                 <Favicon {tab} />
                             </div>
@@ -3435,7 +3415,6 @@
         <ul class="tab-list tabs" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
                 {@const tab = data.docs[unpinned.id]}
-                {@const frameData = data.frames[tab.id]}
                 {#if tab.type === 'divider'}
                     <li class="tab-divider-container" data-tab-id={tab.id}>
                         <div class="tab-divider-vertical"></div>
@@ -3461,15 +3440,6 @@
                         onmouseleave={handleTabMouseLeave}
                         >
                         <div class="tab">
-                            {#if frameData?.loading}
-                                <svg class="tab-loading-spinner" viewBox="0 0 16 16">
-                                    <path d="M8 2 A6 6 0 0 1 14 8" 
-                                        fill="none" 
-                                        stroke="rgba(255, 255, 255, 0.8)" 
-                                        stroke-width="2" 
-                                        stroke-linecap="round"/>
-                                </svg>
-                            {/if}
 
                             <div class="favicon-wrapper">    
                                 <Favicon {tab} />
