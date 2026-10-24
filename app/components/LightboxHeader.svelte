@@ -1,12 +1,10 @@
 <script>
     import UrlBar from './UrlBar.svelte'
     import Tooltip from './Tooltip.svelte'
+    import Favicon from './Favicon.svelte'
 
     let {
-        url = '',
-        title = '',
-        tabId = null,
-        favicon = '',
+        tab,
         showControls = true,
         onMoveToTab = null,
         onExpandFull = null,
@@ -14,23 +12,17 @@
         onSettings = null,
         onClose = null,
     } = $props()
-
-    const faviconUrl = $derived(
-        favicon || (url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=16` : '')
-    )
 </script>
 
 <div class="lightbox-header-wrapper">
-    {#if title}
-        <div class="lightbox-title">{title}</div>
+    {#if tab.title}
+        <div class="lightbox-title">{tab.title}</div>
     {/if}
     <div class="lightbox-header">
     <div class="lightbox-info">
-        {#if faviconUrl}
-            <img src={faviconUrl} alt="" class="lightbox-favicon" />
-        {/if}
+        <Favicon {tab} showButton={false} />
         <div class="lightbox-urlbar">
-            <UrlBar {url} {tabId} variant="hovercard" showCloseButton={false} showSettingsButton={false} />
+            <UrlBar url={tab.url} tabId={tab.id} variant="hovercard" showCloseButton={false} showSettingsButton={false} />
         </div>
     </div>
     {#if showControls}
@@ -151,13 +143,6 @@
         gap: 8px;
         min-width: 0;
         flex: 1;
-    }
-
-    .lightbox-favicon {
-        width: 16px;
-        height: 16px;
-        flex-shrink: 0;
-        border-radius: 2px;
     }
 
     .lightbox-urlbar {

@@ -534,15 +534,6 @@ ul::-webkit-scrollbar {
 .tab-container .tab span {
     overflow: hidden;
 }
-.tab-loading-spinner {
-    position: absolute;
-    top: 2px;
-    left: 4px;
-    width: 16px;
-    height: 16px;
-    animation: spin 1s linear infinite;
-    z-index: 2;
-}
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -794,6 +785,20 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.settings-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.settings-menu-version {
+    color: rgba(255, 255, 255, 0.22);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+    text-transform: none;
 }
 
 .menu-item {
@@ -1194,6 +1199,11 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 .tab-hovercard.nav-button-hovercard {
     transform: none;
     animation: hovercard-fade-in-left 0.2s ease-out forwards;
+}
+
+.tab-hovercard.navigation-hovercard {
+    opacity: 1;
+    animation: none;
 }
 
 @keyframes hovercard-fade-in-left {

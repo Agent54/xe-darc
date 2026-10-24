@@ -153,6 +153,48 @@ document.addEventListener('keydown', function(event) {
 import { mount } from 'svelte'
 import App from './App.svelte'
 import data from './data.svelte.js'
+import { getWindowSessionHints, getWindowSessionStartup, getWindowBounds, rememberWindowBounds, restoreWindowBounds, openWindowSession } from './lib/window-session.js'
+
+const initialWindowSizeKey = 'initialWindowSizeApplied-v1'
+const initialWindowPositionKey = 'initialWindowPositionApplied-v1'
+const appDisplayModes = ['standalone', 'window-controls-overlay', 'unframed']
+const isAppWindow = window.location.protocol === 'isolated-app:' || appDisplayModes.some(mode => {
+  return window.matchMedia(`(display-mode: ${mode})`).matches
+})
+
+const initialWindowSizeApplied = localStorage.getItem(initialWindowSizeKey) === 'true'
+const initialWindowPositionApplied = localStorage.getItem(initialWindowPositionKey) === 'true'
+
+if (isAppWindow && (!initialWindowSizeApplied || !initialWindowPositionApplied)) {
+  const targetWidth = initialWindowSizeApplied
+    ? window.outerWidth
+    : Math.min(Math.round(window.outerWidth * 1.5), window.screen.availWidth)
+  const targetHeight = initialWindowSizeApplied
+    ? window.outerHeight
+    : Math.min(Math.round(window.outerHeight * 1.5), window.screen.availHeight)
+  const targetX = (window.screen.availLeft ?? 0) + Math.round((window.screen.availWidth - targetWidth) / 2)
+  const targetY = (window.screen.availTop ?? 0) + Math.round((window.screen.availHeight - targetHeight) / 2)
+  const shouldResize = !initialWindowSizeApplied
+  const shouldCenter = shouldResize || !initialWindowPositionApplied
+
+  // Record the one-time setup before requesting bounds changes. Native app shims can
+  // report adjusted bounds, so verifying the exact result caused this to run again
+  // on every launch and override the shim's restored user position.
+  if (shouldResize) {
+    localStorage.setItem(initialWindowSizeKey, 'true')
+  }
+  if (!initialWindowPositionApplied) {
+    localStorage.setItem(initialWindowPositionKey, 'true')
+  }
+
+  if (shouldResize) {
+    window.resizeTo(targetWidth, targetHeight)
+  }
+
+  if (shouldCenter) {
+    window.moveTo(targetX, targetY)
+  }
+}
 
 const app = mount(App, {
   target: document.getElementById('app'),
@@ -197,6 +239,13 @@ const clientId = crypto?.randomUUID
 let windowId = null
 let goodbyeSent = false
 let connectAckReceived = false
+let windowScreens = [{
+  availLeft: screen.availLeft ?? 0,
+  availTop: screen.availTop ?? 0,
+  availWidth: screen.availWidth,
+  availHeight: screen.availHeight
+}]
+const openedRestoreWindows = new Set()
 
 function failWindowIdBootstrap(message, error) {
   if (error) {
@@ -256,22 +305,10 @@ const connectAckTimeout = setTimeout(() => {
   }
 }, connectAckTimeoutMs)
 
-function getHintWindowId() {
-  const params = new URLSearchParams(window.location.search)
-  const urlHint = parseWindowId(params.get('darcWindowId'))
-  if (urlHint) return urlHint
-
-  if (typeof window.name === 'string' && window.name.startsWith('darc-window-')) {
-    return parseWindowId(window.name.slice('darc-window-'.length))
-  }
-
-  return null
-}
-
 function buildWindowInfoPayload() {
   return {
     clientId,
-    hintWindowId: getHintWindowId(),
+    ...getWindowSessionHints(window.location.href, window.name),
     windowId,
     url: window.location.href,
     timestamp: Date.now(),
@@ -310,6 +347,7 @@ async function getScreenDetailsPayload() {
 
   try {
     const details = await window.getScreenDetails()
+    windowScreens = [...details.screens]
     return {
       isExtended: !!details.isExtended,
       currentScreen: details.currentScreen ? {
@@ -347,7 +385,7 @@ async function getScreenDetailsPayload() {
 }
 
 async function sendConnect() {
-  const payload = buildWindowInfoPayload()
+  const payload = { ...buildWindowInfoPayload(), ...getWindowSessionStartup(localStorage) }
   payload.screenDetails = await getScreenDetailsPayload()
 
   port.postMessage({
@@ -359,6 +397,7 @@ async function sendConnect() {
 function sendGoodbye(reason) {
   if (goodbyeSent) return
   goodbyeSent = true
+  rememberWindowBounds(windowId, getWindowBounds(window), localStorage)
 
   port.postMessage({
     type: 'GOODBYE',
@@ -376,6 +415,7 @@ let lastFullSyncAt = 0
 
 function sendHeartbeat() {
   if (!windowId) return
+  rememberWindowBounds(windowId, getWindowBounds(window), localStorage)
 
   const now = Date.now()
   const needsFullSync = (now - lastFullSyncAt) >= FULL_SYNC_MS
@@ -418,7 +458,37 @@ port.onmessage = function(e) {
     clearTimeout(connectAckTimeout)
 
     setWindowIdFromWorker(message.payload?.windowId)
+    if (isAppWindow && message.payload?.bounds) {
+      try {
+        restoreWindowBounds(window, message.payload.bounds, windowScreens)
+      } catch (error) {
+        console.warn('Failed to restore window bounds', error)
+      }
+    }
     sendHeartbeat()
+    if (document.hasFocus()) {
+      port.postMessage({ type: 'FOCUS', payload: { clientId, windowId } })
+    }
+    if (isAppWindow && message.payload?.restoreSession) {
+      port.postMessage({ type: 'RESTORE_WINDOWS', payload: { clientId } })
+    }
+    return
+  }
+
+  if (message.type === 'RESTORE_WINDOWS') {
+    for (const saved of message.payload?.windows || []) {
+      if (saved.windowId === windowId || openedRestoreWindows.has(saved.windowId)) {
+        continue
+      }
+      openedRestoreWindows.add(saved.windowId)
+      try {
+        if (!openWindowSession(window, saved, windowScreens)) {
+          console.warn('Could not open saved window', saved.windowId)
+        }
+      } catch (error) {
+        console.warn('Failed to open saved window', saved.windowId, error)
+      }
+    }
     return
   }
 
@@ -446,6 +516,12 @@ sendConnect().catch(error => {
 
 sendHeartbeat()
 const heartbeatInterval = setInterval(sendHeartbeat, heartbeatMs)
+
+window.addEventListener('focus', () => {
+  if (windowId) {
+    port.postMessage({ type: 'FOCUS', payload: { clientId, windowId } })
+  }
+})
 
 window.addEventListener('pagehide', () => {
   sendGoodbye('pagehide')

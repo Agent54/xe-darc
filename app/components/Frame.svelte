@@ -8,6 +8,7 @@
     import AttachmentImage from './AttachmentImage.svelte'
     import LightboxHeader from './LightboxHeader.svelte'
     import { origin } from '../lib/utils.js'
+    import { showLinkPreview } from '../lib/link-preview.js'
     import data from '../data.svelte.js'
 
     let {
@@ -581,7 +582,7 @@
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="" class="hibernated-lightbox-bg" lazy={true} />
                     {/if}
                     <div class="hibernated-lightbox-card">
-                        <LightboxHeader url={lbTab.url} title={lbTab.title} showControls={false} />
+                        <LightboxHeader tab={lbTab} showControls={false} />
                         {#if lbTab.screenshot}
                             <div class="hibernated-lightbox-body">
                                 <AttachmentImage src={lbTab.screenshot} digest={lbTab._attachments?.screenshot?.digest} alt="Lightbox preview" class="hibernated-lightbox-screenshot" lazy={true} />
@@ -651,7 +652,7 @@
             <!--  bind:linkPreviewTimeout bind:linkPreviewVisible    linkPreviewVisible &&  -->
 
             {#if hoveredLink}
-                <div class="link-preview" transition:fade={{duration: 100}}>
+                <div class="link-preview" popover="manual" use:showLinkPreview transition:fade={{duration: 100}}>
                     {#if isDifferentOrigin}
                         <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
@@ -709,7 +710,7 @@
                 
                 <!-- Link preview for iframe fallback  linkPreviewVisible &&-->
                 {#if hoveredLink}
-                    <div class="link-preview" transition:fade={{duration: 100}}>
+                    <div class="link-preview" popover="manual" use:showLinkPreview transition:fade={{duration: 100}}>
                         {#if isDifferentOrigin}
                             <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
@@ -936,9 +937,7 @@
                 <div class="lightbox-container" 
                     in:scale={{duration: 100}}>
                     <LightboxHeader
-                        url={lightboxChild?.url}
-                        title={lightboxChild?.title}
-                        tabId={lightboxChild?.id}
+                        tab={lightboxChild}
                         onMoveToTab={(e) => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { focus: !e.metaKey })}
                         onExpandFull={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { closeParent: true })}
                         onCollapsePreview={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { toPreview: true })}
@@ -1205,8 +1204,15 @@
     }
 
     .link-preview {
-        position: absolute;
-        top: -4px;
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        /* SECURITY: This preview MUST overlap the web content boundary into browser
+           chrome so users can tell it is browser UI that web content cannot spoof.
+           Keep the -4px overlap and the popover top layer: z-index alone cannot
+           escape frame stacking contexts or clipping to stay above the tab bar. */
+        top: calc(var(--link-preview-frame-top) - 4px);
+        left: var(--link-preview-frame-left);
         /* margin-left: 7px; */
         background: rgba(25, 25, 25, 0.98);
         color: rgba(255, 255, 255, 0.95);
@@ -1218,7 +1224,7 @@
         border: 1px solid rgba(255, 255, 255, 0.103);
         backdrop-filter: blur(12px);
         z-index: 10010;
-        max-width: calc(100% - 24px);
+        max-width: calc(var(--link-preview-frame-width) - 24px);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1227,7 +1233,6 @@
         pointer-events: none;
         display: flex;
         align-items: center;
-        z-index: 10000;
         gap: 8px;
     }
 
