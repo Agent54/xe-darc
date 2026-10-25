@@ -467,9 +467,7 @@ async function persistTabUpdate(tabId) {
                 _rev: currentTab._rev
             })
 
-            if (docs[tabId]?.type === 'tab') {
-                docs[tabId]._rev = result.rev
-            }
+            applyTabUpdate(tabId, { _rev: result.rev })
 
             if (desiredTabUpdates.get(tabId) === update) {
                 desiredTabUpdates.delete(tabId)
@@ -1620,7 +1618,7 @@ const data = {
         const _id = `darc:tab_${crypto.randomUUID()}`
         const firstItem = spaces[spaceId]?.tabs?.[0]
         const group = !pinned && !preview && !lightbox ? getTabGroup(spaces[spaceId]?.tabs, groupTabId) : null
-        const tabGroupId = group ? group.tabGroupId || crypto.randomUUID() : null
+        const tabGroupId = group ? group.tabs[0].tabGroupId || crypto.randomUUID() : null
         const canvasPosition = group ? groupCanvasPosition(group.tabs, spaceId) : null
         if (group) {
             for (const [index, member] of group.tabs.entries()) {
@@ -1658,7 +1656,7 @@ const data = {
         
         docs[tab._id] = tab
         const creation = db.put(tab).then(result => {
-            tab._rev = result.rev
+            applyTabUpdate(tab.id, { _rev: result.rev })
         }).finally(() => tabCreationTasks.delete(tab.id))
         tabCreationTasks.set(tab.id, creation)
 
@@ -1674,7 +1672,7 @@ const data = {
         }
 
         await creation
-        return tab
+        return docs[_id]
     },
 
     updateCanvasShapes: (spaceId, elements, files = {}) => {
@@ -1827,6 +1825,9 @@ const data = {
     promoteLightboxToTab: (lightboxId, parentId, { focus = true, toPreview = false, closeParent = false } = {}) => {
         const lbTab = docs[lightboxId]
         const parentTab = docs[parentId]
+        if (!lbTab || !parentTab || !spaces[lbTab.spaceId] || !spaces[parentTab.spaceId]) {
+            return
+        }
 
         if (toPreview) {
             lbTab.lightbox = false
@@ -1865,31 +1866,25 @@ const data = {
             }
         }
 
-        //  FIXME: order not consistent const nextTab = sorted[parentIdx + 1]
-        const newOrder = parentTab.order + 1 // TODO: nextTab ? (parentTab.order + nextTab.order) / 2 : parentTab.order + 1
-        lbTab.lightbox = false
-        lbTab.preview = false
-        lbTab.archive = undefined
-        lbTab.order = newOrder
-        const spaceTabs = spaces[parentTab.spaceId]?.tabs
-        if (spaceTabs) {
+        const promotion = queueTabUpdate(lightboxId, { lightbox: false, preview: false, archive: undefined })
+        const spaceTabs = spaces[lbTab.spaceId].tabs
+        if (!spaceTabs.some(tab => tab.id === lightboxId)) {
             spaceTabs.push(lbTab)
         }
+        const groupTabId = getTabGroup(spaces[parentTab.spaceId].tabs, parentId) ? parentId : getLastActiveNonPinnedTabId(parentTab.spaceId)
+        const move = data.moveTab(lightboxId, { targetSpaceId: parentTab.spaceId, targetGroupTabId: groupTabId })
 
         if (previews[parentId]) {
             previews[parentId].lightbox = null
             previews[parentId].tabs = previews[parentId].tabs.filter(t => t._id !== lightboxId)
         }
 
-        db.put({ ...lbTab })
-
-        if (closeParent) {
-            closeTab(parentTab.spaceId, parentId)
-        }
+        const closing = closeParent ? closeTab(parentTab.spaceId, parentId) : null
 
         if (focus) {
             activate(lightboxId)
         }
+        return Promise.all([promotion, move, closing])
     },
 
     permissionRequest: (tabId, event) => {

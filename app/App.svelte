@@ -1338,7 +1338,7 @@
                 navigationHovercardTimeout = null
                 navigationHovercardTabId = null
                 if (hoveredTab?.id === tabId) closeHovercard()
-            }, 500)
+            }, 900)
             startHovercardPositionCheck()
         }
 
@@ -3190,7 +3190,7 @@
     let rightPinnedTabs = $derived(tabs.filter(tab => tab.pinned === 'right'))
     let currentGroupTabId = $derived(data.docs[data.spaceMeta.activeTabId]?.pinned ? data.getLastActiveNonPinnedTabId() : data.spaceMeta.activeTabId)
     let currentTabGroup = $derived(data.getTabGroup(currentGroupTabId))
-    let unpinnedTabs = $derived((currentTabGroup?.tabs || []).filter(tab => tab._rev && !closed[tab._rev]).toReversed())
+    let unpinnedTabs = $derived((currentTabGroup?.tabs || []).filter(tab => !closed[tab._rev]).toReversed())
     let unpinnedTabCount = $derived(unpinnedTabs.filter(tab => tab.type === 'tab').length)
     let visibleLeftPinnedTabs = $derived(leftPinnedTabs.filter(t => !invisiblePins[t.id]))
     let visibleRightPinnedTabs = $derived(rightPinnedTabs.filter(t => !invisiblePins[t.id]))

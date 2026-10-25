@@ -4,14 +4,25 @@ import { compileModule } from 'svelte/compiler'
 import { getWindowSessionHints, getWindowSessionStartup, rememberWindowBounds, fitWindowBounds, openWindowSession } from '../app/lib/window-session.js'
 import * as tabGroups from '../app/lib/tab-groups.js'
 import * as svelteServer from 'svelte/internal/server'
+import * as svelteClient from 'svelte/internal/client'
 
-const source = compileModule(
-    Deno.readTextFileSync(new URL('../app/data.svelte.js', import.meta.url)),
-    { generate: 'server', filename: 'data.svelte.js' }
-).js.code
-    .replace(/^import[\s\S]*?from ['"][^'"]+['"];?\n/gm, '')
-    .replaceAll('import.meta.hot', 'false')
-    .replace('export default data;', '({ data, refresh });')
+function compileStore(generate) {
+    return compileModule(
+        Deno.readTextFileSync(new URL('../app/data.svelte.js', import.meta.url)),
+        { generate, filename: 'data.svelte.js' }
+    ).js.code
+        .replace(/^import[\s\S]*?from ['"][^'"]+['"];?\n/gm, '')
+        .replaceAll('import.meta.hot', 'false')
+        .replace('export default data;', '({ data, refresh });')
+}
+
+const source = compileStore('server')
+const clientSource = compileStore('client')
+const appTabState = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
+    .match(/^    let currentGroupTabId[\s\S]*?(?=    let unpinnedTabCount)/m)[0]
+const readTopTabsSource = compileModule(`${appTabState}\nexport function readTabs () { return unpinnedTabs }`, { generate: 'client' }).js.code
+    .replace(/^import .*$/gm, '')
+    .replace('export function readTabs', 'function readTabs') + '\nreadTabs'
 
 const defaultSpace = 'darc:space_default'
 const otherSpace = 'darc:space_other'
@@ -107,7 +118,7 @@ function tab(id, spaceId = defaultSpace, extra = {}) {
     return { _id: id, _rev: '1-test', type: 'tab', spaceId, order: 1, url: 'https://example.com', ...extra }
 }
 
-function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'window-1', storage = new Map(), delayedWindowId = false }) {
+function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'window-1', storage = new Map(), delayedWindowId = false, runtime = 'server' }) {
     if (!storage.has(`activeSpaceId:${windowId}`)) {
         storage.set(`activeSpaceId:${windowId}`, activeSpace)
     }
@@ -143,9 +154,9 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     function PouchDB() { return db }
     PouchDB.plugin = () => {}
     const window = { darcWindowId: delayedWindowId ? null : windowId }
-    const { data, refresh } = vm.runInNewContext(source, {
+    const context = {
         PouchDB,
-        $: svelteServer,
+        $: runtime === 'client' ? svelteClient : svelteServer,
         ...tabGroups,
         findPlugin: {},
         bootstrap: [],
@@ -160,7 +171,11 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         crypto,
         console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')) } },
         setInterval() {}
-    })
+    }
+    // Svelte only proxies objects created in its own realm.
+    const { data, refresh } = runtime === 'client'
+        ? new Function(...Object.keys(context), clientSource.replace('({ data, refresh });', 'return { data, refresh }'))(...Object.values(context))
+        : vm.runInNewContext(source, context)
     return { data, refresh, window, storage, queries, writes }
 }
 
@@ -464,15 +479,118 @@ Deno.test('adding from a pinned pane retains the previously active group', async
     assert.equal(data.getTabGroup('anchor').tabs.some(tab => tab.id === added.id), true)
 })
 
+Deno.test('top tabs react immediately to repeated group additions and saved revisions in the client runtime', async () => {
+    const { data, refresh } = session({ tabs: [tab('anchor'), tab('outside')], history: ['anchor'], runtime: 'client' })
+    await refresh()
+    const readTabs = new Function('$', 'data', 'closed', readTopTabsSource.replace(/\nreadTabs$/, '\nreturn readTabs'))(svelteClient, data, svelteClient.proxy({}))
+    assert.deepEqual(Array.from(readTabs(), tab => tab.id), ['anchor'])
+
+    const expected = ['anchor']
+    for (let index = 0; index < 3; index++) {
+        const adding = data.newGroupTab(defaultSpace, { shouldFocus: true })
+        assert.equal(data.getTabGroup('anchor').tabs.length, expected.length + 1)
+        const pending = readTabs()
+        assert.equal(pending.length, expected.length + 1)
+        const newId = pending[0].id
+        // Read before persistence resolves so Svelte tracks the initially missing revision.
+        assert.equal(pending[0]._rev, undefined)
+        const saved = await adding
+        expected.unshift(newId)
+        assert.deepEqual(Array.from(readTabs(), tab => tab.id), expected)
+        assert.equal(saved._rev, '2-test')
+        assert.equal(readTabs().every(tab => tab._rev), true)
+        assert.equal(data.docs[newId]._rev, readTabs()[0]._rev)
+    }
+
+    data.activate('outside')
+    assert.deepEqual(Array.from(readTabs(), tab => tab.id), ['outside'])
+    data.activate('anchor')
+    assert.deepEqual(Array.from(readTabs(), tab => tab.id), expected)
+})
+
 Deno.test('closing and restoring a group member preserves membership and selects a sibling', async () => {
     const { data, refresh } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 }), tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 2 }), tab('outside')], history: ['two', 'outside', 'one'] })
     await refresh()
     await data.closeTab(defaultSpace, 'two')
     assert.equal(data.spaceMeta.activeTabId, 'one')
     assert.equal(data.getTabGroup('one').tabs.length, 1)
+    assert.equal(data.getTabGroup('one').id, 'tab:one')
+    assert.equal(data.getTabGroup('one').tabGroupId, null)
     await data.restoreClosedTab('two')
     assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two'])
+    assert.equal(data.getTabGroup('one').tabGroupId, 'group')
     assert.equal(data.spaceMeta.activeTabId, 'two')
+})
+
+Deno.test('adding to a collapsed singleton retains membership when its closed sibling is restored', async () => {
+    const { data, refresh } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0 }), tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 })], history: ['one'], runtime: 'client' })
+    await refresh()
+    const closing = data.closeTab(defaultSpace, 'two')
+    assert.equal(data.getTabGroup('one').tabGroupId, null)
+    assert.equal(data.getSidebarItems()[0].id, 'tab:one')
+    await closing
+    const added = await data.newGroupTab(defaultSpace)
+    assert.equal(added.tabGroupId, 'group')
+    await data.restoreClosedTab('two')
+    assert.equal(data.getTabGroup('one').tabs.length, 3)
+    assert.equal(data.getTabGroup('one').tabs.some(tab => tab.id === 'two'), true)
+})
+
+Deno.test('moving a lightbox to a tab appends to its parent group and preserves background focus', async () => {
+    const { data, refresh, writes } = session({
+        tabs: [
+            tab('parent', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 0 }),
+            tab('sibling', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 1 }),
+            tab('outside', defaultSpace, { order: 0 }),
+            tab('lightbox', defaultSpace, { opener: 'parent', lightbox: true })
+        ], history: ['parent'], runtime: 'client'
+    })
+    await refresh()
+    const promotion = data.promoteLightboxToTab('lightbox', 'parent', { focus: false })
+    assert.deepEqual(Array.from(data.getTabGroup('parent').tabs, tab => tab.id), ['parent', 'sibling', 'lightbox'])
+    assert.equal(data.getTabGroups().length, 2)
+    assert.equal(data.spaceMeta.activeTabId, 'parent')
+    assert.equal(data.previews.parent.lightbox, null)
+    assert.equal(data.previews.parent.tabs.some(tab => tab.id === 'lightbox'), false)
+    await promotion
+    const saved = writes.filter(tab => tab._id === 'lightbox').at(-1)
+    assert.equal(saved.tabGroupId, 'group')
+    assert.equal(saved.order, 10)
+    assert.equal(saved.lightbox, false)
+    assert.equal(saved.preview, false)
+    assert.equal(saved.archive, undefined)
+})
+
+Deno.test('moving a lightbox from a standalone tab creates a group with that tab', async () => {
+    const { data, refresh } = session({ tabs: [tab('parent'), tab('outside'), tab('lightbox', defaultSpace, { opener: 'parent', lightbox: true })], history: ['parent'] })
+    await refresh()
+    await data.promoteLightboxToTab('lightbox', 'parent')
+    assert.deepEqual(Array.from(data.getTabGroup('parent').tabs, tab => tab.id), ['parent', 'lightbox'])
+    assert.equal(data.spaceMeta.activeTabId, 'lightbox')
+    assert.equal(data.docs.parent.tabGroupId, data.docs.lightbox.tabGroupId)
+    assert.equal(data.getTabGroups().length, 2)
+})
+
+Deno.test('expanding a lightbox replaces its parent within the same group', async () => {
+    const { data, refresh } = session({
+        tabs: [tab('parent', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0 }), tab('sibling', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 }), tab('lightbox', defaultSpace, { opener: 'parent', lightbox: true })],
+        history: ['parent']
+    })
+    await refresh()
+    await data.promoteLightboxToTab('lightbox', 'parent', { closeParent: true })
+    assert.deepEqual(Array.from(data.getTabGroup('sibling').tabs, tab => tab.id), ['sibling', 'lightbox'])
+    assert.equal(data.getTabGroup('lightbox').tabGroupId, 'group')
+    assert.equal(data.docs.parent.archive, 'closed')
+    assert.equal(data.spaceMeta.activeTabId, 'lightbox')
+})
+
+Deno.test('moving a lightbox from a pinned pane uses the current non-pinned group', async () => {
+    const { data, refresh } = session({ tabs: [tab('anchor'), tab('parent', defaultSpace, { pinned: 'left' }), tab('lightbox', defaultSpace, { opener: 'parent', lightbox: true })], history: ['anchor'] })
+    await refresh()
+    data.activate('parent')
+    await data.promoteLightboxToTab('lightbox', 'parent')
+    assert.deepEqual(Array.from(data.getTabGroup('anchor').tabs, tab => tab.id), ['anchor', 'lightbox'])
+    assert.equal(data.docs.parent.pinned, 'left')
 })
 
 Deno.test('cross-space group moves update both lists, persistence and the source active selection', async () => {

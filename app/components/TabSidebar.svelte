@@ -1946,15 +1946,16 @@
                                                 {@render sidebarTab(item.tabs[0], i)}
                                             {:else}
                                                 {@const expansionId = `${spaceId}:${item.id}`}
-                                                {@const expanded = !!tabSearchQuery || (tabGroupExpansion[expansionId] ?? item.tabs.some(tab => tab.id === data.spaceMeta.activeTabId))}
+                                                {@const expanded = tabGroupExpansion[expansionId] ?? false}
                                                 <div class="tab-group-wrapper" class:expanded class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}>
                                                     <div class="tab-group" class:expanded title="{item.title} · {item.tabs.length} tabs">
                                                         <button class="tab-group-main"
                                                             onmousedown={(e) => { if (e.button === 0) { startTabDrag(item.tabs[0].id, e.currentTarget.closest('.tab-group-wrapper'), 'sidebar', spaceId, e, false, null, 'group') } }}
-                                                            onclick={(e) => { if (e.detail === 0 || (e.button === 0 && !didDragOccurred())) { data.activateSpace(spaceId); data.activate(data.getGroupActiveTab(item, spaceId).id) } }}>
+                                                            onclick={(e) => { if (e.detail === 0 || (e.button === 0 && !didDragOccurred())) { data.activateSpace(spaceId); data.activate(data.getGroupActiveTab(item, spaceId).id) } }}
+                                                            ondblclick={(e) => { if (e.button === 0 && !didDragOccurred()) { e.stopPropagation(); handleTabGroupToggle(expansionId, expanded) } }}>
                                                             <span class="tab-group-favicons">
-                                                                {#each item.tabs.slice(0, 3) as tab (tab.id)}
-                                                                    <span class="tab-group-favicon"><Favicon {tab} showButton={false} /></span>
+                                                                {#each item.tabs.slice(0, 3) as tab, index (tab.id)}
+                                                                    <span class="tab-group-favicon" class:fade={index === 2}><Favicon {tab} showButton={false} /></span>
                                                                 {/each}
                                                             </span>
                                                             <span class="tab-group-title">{item.title}</span>
@@ -1971,7 +1972,6 @@
                                                             {#each item.tabs as tab (tab.id)}
                                                                 {@render sidebarTab(tab, i)}
                                                             {/each}
-                                                            <button class="group-new-tab" onmousedown={(e) => { if (e.button === 0) { data.newGroupTab(spaceId, { groupTabId: item.tabs[0].id, shouldFocus: spaceId === data.spaceMeta.activeSpace }) } }} onclick={(e) => { if (e.detail === 0) { data.newGroupTab(spaceId, { groupTabId: item.tabs[0].id, shouldFocus: spaceId === data.spaceMeta.activeSpace }) } }} aria-label="Add tab to {item.title}">+ New tab</button>
                                                         </div>
                                                     {/if}
                                                 </div>
@@ -3879,6 +3879,7 @@
         display: flex;
         align-items: center;
         margin-right: 6px;
+        flex-shrink: 0;
     }
     
     .tab-group-favicon {
@@ -3891,6 +3892,7 @@
         opacity: 50%;
         position: relative;
         margin-left: 4px;
+        flex-shrink: 0;
     }
 
     .tab-group-wrapper:hover .tab-group-favicon {
@@ -3907,7 +3909,9 @@
         -webkit-mask: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
     }
     
-    .tab-group-favicon svg {
+    .tab-group-favicon :global(.favicon-wrapper),
+    .tab-group-favicon :global(svg),
+    .tab-group-favicon :global(img) {
         width: 100%;
         height: 100%;
     }
@@ -3919,7 +3923,7 @@
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
+        text-overflow: clip;
         flex: 1;
         line-height: 1.2;
         margin-top: -2px;
@@ -3958,11 +3962,11 @@
         width: 20px;
         height: 20px;
         border-radius: 4px;
-        opacity: 1;
+        opacity: 0;
         margin-right: 8px;
         flex-shrink: 0;
         overflow: hidden;
-        position: static;
+        position: absolute;
         right: 0;
         transition: opacity 150ms ease, transform 150ms ease;
     }
@@ -3977,22 +3981,7 @@
         color: rgba(255, 255, 255, 0.9);
     }
 
-    .group-new-tab {
-        border: 0;
-        border-radius: 8px;
-        padding: 8px;
-        background: transparent;
-        color: #a3a3a3;
-        text-align: left;
-        cursor: pointer;
-        font-size: 12px;
-    }
-
-    .group-new-tab:hover {
-        background: #ffffff0f;
-    }
-
-    .tab-group-main:focus-visible, .tab-group-toggle:focus-visible, .group-new-tab:focus-visible {
+    .tab-group-main:focus-visible, .tab-group-toggle:focus-visible {
         outline: 2px solid #a3a3a3;
         outline-offset: -2px;
     }
@@ -4006,11 +3995,16 @@
     }
     
     .tab-group-wrapper:hover .tab-group-count {
-        opacity: 1;
+        opacity: 0;
     }
     
-    .tab-group-wrapper:hover .tab-group-toggle {
+    .tab-group-wrapper:hover .tab-group-toggle,
+    .tab-group-wrapper:focus-within .tab-group-toggle {
         opacity: 1;
+    }
+
+    .tab-group-wrapper:focus-within .tab-group-count {
+        opacity: 0;
     }
     
     .tab-group-wrapper:hover .tab-group-title {

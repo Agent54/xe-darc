@@ -19,6 +19,10 @@ export function getTabGroups (items = []) {
     }
     return [...groups.values()].map(group => {
         group.tabs.sort((a, b) => (a.tabGroupOrder ?? a.order ?? 0) - (b.tabGroupOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
+        if (group.tabs.length === 1) {
+            group.id = `tab:${group.tabs[0].id}`
+            group.tabGroupId = null
+        }
         group.title = group.tabs[0].title || group.tabs[0].url || 'Tab group'
         return group
     }).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
@@ -100,13 +104,13 @@ export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, t
         if (!remaining.length) {
             return []
         }
-        const groupId = targetGroup.tabGroupId || createGroupId()
+        const groupId = targetGroup.tabs[0].tabGroupId || createGroupId()
         const beforeIndex = remaining.findIndex(item => item.id === beforeTabId)
         const afterIndex = remaining.findIndex(item => item.id === afterTabId)
         const insertIndex = afterIndex !== -1 ? afterIndex : beforeIndex !== -1 ? beforeIndex + 1 : remaining.length
         const members = [...remaining.slice(0, insertIndex), ...moving, ...remaining.slice(insertIndex)]
         const targetGroups = getTabGroups(targetItems.filter(item => !movingIds.has(item.id)))
-        const targetIndex = targetGroups.findIndex(group => group.id === targetGroup.id)
+        const targetIndex = targetGroups.findIndex(group => group.tabs.some(tab => tab.id === targetGroupTabId))
         const placement = sourceGroup?.id !== targetGroup.id || tab.spaceId !== targetSpaceId ? groupCanvasPosition(remaining, targetSpaceId) || {
             x: 200 + remaining.length * 1080, y: 200 + Math.max(0, targetIndex) * 860, width: 1000, height: 700
         } : null

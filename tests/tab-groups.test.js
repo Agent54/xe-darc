@@ -21,6 +21,17 @@ Deno.test('group order and member order are independent and remain stable when a
     assert.equal(items[0].id, 'last')
 })
 
+Deno.test('one remaining member has the same view identity as a standalone tab everywhere', () => {
+    const items = [grouped('one', 0), grouped('closed', 1, { archive: 'closed' }), grouped('pin', 2, { pinned: 'left' }), grouped('preview', 3, { preview: true })]
+    const singleton = getTabGroups(items)[0]
+    const standalone = getTabGroups([tab('one', 10)])[0]
+    assert.deepEqual({ ...singleton, tabs: singleton.tabs.map(tab => tab.id) }, { ...standalone, tabs: standalone.tabs.map(tab => tab.id) })
+    assert.equal(getSidebarItems(items)[0].tabGroupId, null)
+    assert.equal(getTabGroup(items, 'one').id, standalone.id)
+    assert.equal(addTabGroupFrames([{ id: 'one', x: 0, y: 0, width: 1000, height: 700 }], getTabGroups(items)).some(element => element.type === 'frame'), false)
+    assert.equal(items[0].tabGroupId, 'research')
+})
+
 Deno.test('dropping onto a standalone tab promotes both tabs into a shared virtual group', () => {
     const items = [tab('source', 1), tab('target', 20), tab('unrelated', 30)]
     const updates = move(items, 'source', { targetGroupTabId: 'target' })
@@ -56,7 +67,9 @@ Deno.test('dropping a member between sidebar entries detaches only that member',
     assert.equal(updates.length, 1)
     assert.equal(updates[0].tabGroupId, null)
     assert.equal(updates[0].order, 15)
-    assert.equal(getTabGroup(apply(items, updates), 'one').tabGroupId, 'research')
+    assert.equal(getTabGroup(apply(items, updates), 'one').tabGroupId, null)
+    assert.equal(getTabGroup(apply(items, updates), 'one').id, 'tab:one')
+    assert.equal(apply(items, updates).find(tab => tab.id === 'one').tabGroupId, 'research')
 })
 
 Deno.test('dragging a sidebar group reorders all members without changing their internal order', () => {
