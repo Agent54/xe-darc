@@ -24,6 +24,17 @@
   let zenModeWasActiveOnOpen = $state(false)
   let gridWindowId = $state(window.darcWindowId || '')
   let gridInstanceId = $state(window.darcInstanceId || '')
+  let expandedGroups = $state(new Set())
+
+  function toggleGroup (id) {
+    const next = new Set(expandedGroups)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+    expandedGroups = next
+  }
 
   function setActiveView(view) {
     activeView = view
@@ -195,6 +206,7 @@
           ...space,
           leftPinnedTabs: tabs.filter(tab => tab.pinned === true || tab.pinned === 'left'),
           rightPinnedTabs: tabs.filter(tab => tab.pinned === 'right'),
+          tabGroups: data.getTabGroups(id),
           unpinnedTabs: tabs.filter(tab => tab.type === 'tab' && !tab.pinned)
         }
       }
@@ -279,6 +291,7 @@
     // Interactive elements: clicking these should NOT close the grid view
     const isInteractiveElement = (
       target.closest('.grid-frame') ||
+      target.closest('.grid-tab-group') ||
       target.closest('.new-tab-button') ||
       target.closest('.grid-view-tab') ||
       target.closest('.grid-scope-toggle') ||
@@ -391,6 +404,7 @@
       {#each displayedSpaceOrder as spaceId (spaceId)}
         {@const space = spacesData[spaceId]}
         {@const tabs = space?.unpinnedTabs || []}
+        {@const groups = space?.tabGroups || []}
         {@const leftPins = space?.leftPinnedTabs || []}
         {@const rightPins = space?.rightPinnedTabs || []}
         {@const isCollapsed = collapsedSpaces.has(spaceId)}
@@ -472,7 +486,19 @@
                     </div>
                   </div>
                 {/each}
-                {#each tabs as tab, index (tab.id)}
+                {#each groups as group (group.id)}
+                  {@const grouped = !!group.tabGroupId}
+                  {@const expanded = expandedGroups.has(`${spaceId}:${group.id}`)}
+                  <div class="grid-tab-group" class:stacked={grouped && !expanded} class:expanded={grouped && expanded} class:pinned-last={group.id === groups.at(-1)?.id && rightPins.length > 0}>
+                    {#if grouped}
+                      <button class="grid-group-toggle" aria-label="{expanded ? 'Collapse' : 'Expand'} {group.title}" aria-expanded={expanded}
+                        onclick={(e) => { if (e.detail === 0) { toggleGroup(`${spaceId}:${group.id}`) } }}
+                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); toggleGroup(`${spaceId}:${group.id}`) } }}>
+                        <span>{group.tabs.length} tabs</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d={expanded ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} /></svg>
+                      </button>
+                    {/if}
+                    {#each (grouped && !expanded ? [data.getGroupActiveTab(group, spaceId)] : group.tabs) as tab, index (tab.id)}
                   {@const firstActiveHistoryEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                   {@const firstActiveTabId = typeof firstActiveHistoryEntry === 'string' ? firstActiveHistoryEntry : firstActiveHistoryEntry?.id}
                   {@const isSpaceActiveTab = spaceId !== activeSpaceId && tab.id === firstActiveTabId}
@@ -480,7 +506,6 @@
                     class="grid-frame"
                     class:active={tab.id === activeTabId}
                     class:space-active-tab={isSpaceActiveTab}
-                    class:pinned-last={index === tabs.length - 1 && rightPins.length > 0}
                   >
                     <div class="tab-header">
                       <div class="tab-info clickable"
@@ -522,6 +547,8 @@
                         </div>
                       {/if}
                     </div>
+                  </div>
+                {/each}
                   </div>
                 {/each}
                 {#each rightPins as tab, index (tab.id)}
@@ -982,8 +1009,8 @@
 
   .space-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, 320px);
-    grid-auto-rows: 180px;
+    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 320px));
+    grid-auto-rows: minmax(180px, auto);
     gap: 20px;
     width: 100%;
     will-change: auto;
@@ -1124,6 +1151,69 @@
     contain: layout style paint;
     will-change: transform;
     border: 1px solid transparent;
+  }
+
+  .grid-tab-group {
+    position: relative;
+    max-width: 100%;
+  }
+
+  .grid-tab-group.stacked {
+    border-radius: 10px;
+    box-shadow: 4px 4px 0 #272727, 8px 8px 0 #191919;
+    margin: 0 8px 8px 0;
+  }
+
+  .grid-tab-group.expanded {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 38px 12px 12px;
+    border: 1px solid #ffffff26;
+    border-radius: 12px;
+    grid-column: 1 / -1;
+  }
+
+  .grid-group-toggle {
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid #ffffff26;
+    border-radius: 7px;
+    padding: 4px 7px;
+    background: #242424;
+    color: #d4d4d4;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .stacked .tab-header {
+    padding-right: 86px;
+  }
+
+  .grid-group-toggle:hover {
+    background: #393939;
+  }
+
+  .grid-group-toggle:focus-visible {
+    outline: 2px solid #a3a3a3;
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 480px) {
+    .grid-tab-group .grid-frame {
+      width: min(320px, 70vw);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .grid-tab-group .grid-frame {
+      transition: none;
+    }
   }
 
   .grid-frame.active {

@@ -2603,6 +2603,12 @@ header:hover .hover-menu {
     transform: translate(-50%, -50%);
 }
 
+.tab-drag-indicator.joining-group {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    border-radius: 10px;
+}
+
 /* Sidepin drop zone overlay */
 .sidepin-drop-overlay {
     position: fixed;

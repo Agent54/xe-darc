@@ -103,6 +103,7 @@ const state = $state({
         height: 0,
     },
     sidepinZone: null, // null, 'left', or 'right'
+    dropTarget: null,
 })
 
 let pending = null
@@ -136,7 +137,7 @@ function handleMouseMove(e) {
                 clearTimeout(activateRafId)
                 activateRafId = null
             }
-            const tabRect = pending.tabEl.getBoundingClientRect()
+            const tabRect = (pending.dragType === 'group' ? pending.tabEl.querySelector('.tab-group') || pending.tabEl : pending.tabEl).getBoundingClientRect()
             didDrag = true
             state.active = true
             state.pending = false
@@ -171,9 +172,31 @@ function handleMouseMove(e) {
     state.mouseY = my
 
     state.deleteZone = false
+    state.dropTarget = null
+
+    if (state.dragType !== 'divider') {
+        const target = findGroupDropTarget(mx, my)
+        if (target) {
+            state.sidepinZone = null
+            state.dropTarget = target.drop
+            if (target.noop) {
+                hideIndicator()
+                return
+            }
+            if (target.join) {
+                const rect = target.join.getBoundingClientRect()
+                Object.assign(state.indicator, { visible: true, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width, height: rect.height })
+            } else if (target.hit) {
+                showIndicator(target.tabs, target.hit.index, target.hit.after, target.axis)
+            } else {
+                showIndicatorInList(target.list, target.tabs)
+            }
+            return
+        }
+    }
 
     // Try pinned tab containers first (left fixed, right fixed, and right inline in topbar)
-    if (state.dragType !== 'divider') {
+    if (state.dragType === 'tab') {
         const pinnedContainers = []
         const pinnedLeftContainer = document.querySelector('.fixed-pinned-tabs-left')
         if (pinnedLeftContainer) pinnedContainers.push([pinnedLeftContainer, 'left'])
@@ -253,6 +276,12 @@ function handleMouseMove(e) {
         return
     }
 
+    if (state.dragType === 'group') {
+        state.sidepinZone = null
+        hideIndicator()
+        return
+    }
+
     // Check for sidepin drop zones (left/right 20% of window, excluding tab sidebar and right sidebar)
     // Disable sidepin when sidebar is in multi-space (full width) mode
     if (document.querySelector('.sidebar-box.multi-space-mode')) { hideIndicator(); state.sidepinZone = null; return }
@@ -292,6 +321,58 @@ function isNoopDrop(tabs, hit) {
     if (hit.after && i + 1 < tabs.length && tabs[i + 1] === dragEl) return true
     if (!hit.after && i - 1 >= 0 && tabs[i - 1] === dragEl) return true
     return false
+}
+
+function findGroupDropTarget(mx, my) {
+    const contains = (element, padding = 0) => {
+        const rect = element.getBoundingClientRect()
+        return mx >= rect.left && mx <= rect.right && my >= rect.top - padding && my <= rect.bottom + padding
+    }
+    const scope = state.dragType === 'group' ? 'group' : 'tab'
+    const topbar = document.querySelector('.tab-list.tabs')
+    if (topbar && contains(topbar, 4)) {
+        if ([...topbar.querySelectorAll(':scope > .pinned-tab-container')].some(element => contains(element, 4))) {
+            return null
+        }
+        const tabs = topbar.querySelectorAll(':scope > .tab-container:not(.pinned-tab-container)')
+        const hit = findClosestTab(tabs, mx, 'x')
+        if (hit?.el === state.tabEl) {
+            return { noop: true }
+        }
+        const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, null) : {}
+        return { tabs, hit, list: topbar, axis: 'x', drop: {
+            beforeTabId: neighbors.afterTabId, afterTabId: neighbors.beforeTabId,
+            targetSpaceId: topbar.dataset.spaceId, targetGroupTabId: topbar.dataset.groupTabId, scope
+        } }
+    }
+    for (const list of document.querySelectorAll('.tabs-list')) {
+        const scrollParent = list.closest('.tab-content-container')
+        if (!contains(list) || (scrollParent && !contains(scrollParent))) continue
+        const targetSpaceId = list.closest('.space-content')?.dataset.spaceId
+        for (const content of list.querySelectorAll('.tab-group-content')) {
+            if (!contains(content)) continue
+            const tabs = content.querySelectorAll(':scope > .tab-item-container')
+            const hit = findClosestTab(tabs, my, 'y')
+            const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, targetSpaceId) : {}
+            return { tabs, hit, list: content, axis: 'y', drop: { ...neighbors, targetSpaceId, targetGroupTabId: content.dataset.groupTabId, scope } }
+        }
+        const tabs = list.querySelectorAll(':scope > .tab-item-container, :scope > .tab-divider-item, :scope > .tab-group-wrapper')
+        const hit = findClosestTab(tabs, my, 'y')
+        if (hit) {
+            if (hit.el === state.tabEl) {
+                return { noop: true }
+            }
+            const header = hit.el.querySelector(':scope > .tab-group') || hit.el
+            const rect = header.getBoundingClientRect()
+            const canJoin = !hit.el.classList.contains('tab-divider-item') && hit.el !== state.tabEl
+            if (canJoin && my > rect.top + rect.height * 0.25 && my < rect.bottom - rect.height * 0.25) {
+                return { join: header, drop: { targetSpaceId, targetGroupTabId: getTabId(hit.el), scope } }
+            }
+        }
+        const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, targetSpaceId) : {}
+        return { tabs, hit, list, axis: 'y', drop: { ...neighbors, targetSpaceId, targetGroupTabId: null, scope } }
+    }
+    return null
 }
 
 // Find which tab the mouse is closest to, returns { el, index, after }
@@ -400,7 +481,9 @@ function handleMouseUp(event, cancelled = false) {
     document.body.classList.remove('tab-dragging-active')
     
     if (state.active && dropCallback && !cancelled) {
-        if (state.deleteZone) {
+        if (state.dropTarget) {
+            dropCallback({ type: 'reorder', tabId: state.tabId, sourceSpaceId: state.sourceSpaceId, ...state.dropTarget })
+        } else if (state.deleteZone) {
             dropCallback({ type: 'remove-divider', dividerId: state.tabId, sourceSpaceId: state.sourceSpaceId })
         } else if (state.sidepinZone && state.indicator.visible) {
             // Positional sidepin drop (between existing pinned tabs)
@@ -427,6 +510,7 @@ function handleMouseUp(event, cancelled = false) {
     state.deleteZone = false
     state.indicator.visible = false
     state.sidepinZone = null
+    state.dropTarget = null
     pending = null
     activateRafId = null
 }
@@ -506,11 +590,11 @@ function buildDropInfo(tabs, hit, dragTabId, targetSpaceId) {
     let afterTabId = null  // tab that will be after the dragged tab
 
     if (hit.after) {
-        beforeTabId = getTabId(tabEls[hit.index])
-        afterTabId = hit.index + 1 < tabEls.length ? getTabId(tabEls[hit.index + 1]) : null
+        beforeTabId = getTabId(tabEls[hit.index], dragTabId)
+        afterTabId = hit.index + 1 < tabEls.length ? getTabId(tabEls[hit.index + 1], dragTabId) : null
     } else {
-        beforeTabId = hit.index > 0 ? getTabId(tabEls[hit.index - 1]) : null
-        afterTabId = getTabId(tabEls[hit.index])
+        beforeTabId = hit.index > 0 ? getTabId(tabEls[hit.index - 1], dragTabId) : null
+        afterTabId = getTabId(tabEls[hit.index], dragTabId)
     }
 
     // Skip the dragged tab if it appears as a neighbor (shouldn't happen due to isNoopDrop, but safety)
@@ -520,9 +604,10 @@ function buildDropInfo(tabs, hit, dragTabId, targetSpaceId) {
     return { beforeTabId, afterTabId, targetSpaceId }
 }
 
-function getTabId(el) {
+function getTabId(el, excludedId = null) {
     if (!el) return null
-    return el.getAttribute('data-tab-id') || el.id?.replace('tab_', '') || null
+    const id = el.getAttribute('data-tab-id') || el.id?.replace('tab_', '') || null
+    return id === excludedId ? el.getAttribute('data-other-tab-id') || id : id
 }
 
 function cancelDrag() {

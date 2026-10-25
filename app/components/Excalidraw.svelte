@@ -7,6 +7,7 @@
   import FrameWrapper from './ReactFrameWrapper.js'
   import { debounce } from '../lib/utils'
   import data from '../data.svelte.js'
+  import { addTabGroupFrames } from '../lib/tab-groups.js'
   // import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 
   let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs.filter(tab => tab.type === 'tab' && !tab.pinned)) || []))
@@ -49,9 +50,9 @@
     const tabHeight = 700  
     const columnSpacing = 80
     const rowSpacing = 160
+    const groups = data.getTabGroups()
 
     tabs.forEach((tab, index) => {
-      const columnsPerRow = 5
       // const totalWidth = (columnsPerRow * tabWidth) + ((columnsPerRow - 1) * columnSpacing)
 
       const canvasData = tab.canvas?.[data.spaceMeta.activeSpace]
@@ -65,8 +66,10 @@
         width = canvasData.width
         height = canvasData.height
       } else {
-        const row = Math.floor(index / columnsPerRow)
-        const col = index % columnsPerRow
+        const groupIndex = groups.findIndex(group => group.tabs.some(member => member.id === tab.id))
+        const group = groups[groupIndex]
+        const row = groupIndex
+        const col = group?.tabs.findIndex(member => member.id === tab.id) || 0
         
         const startX = 200
         const startY = 200
@@ -97,7 +100,7 @@
           "roughness": 0,
           "opacity": 100,
           "groupIds": canvasData?.groupIds || [],
-          "frameId": canvasData?.frameId || null,
+          "frameId": canvasData?.frameId?.startsWith('tab-group-frame:') ? null : canvasData?.frameId || null,
           "index": canvasData?.index,
           "roundness": {
               "type": 3
@@ -186,8 +189,8 @@
       elementOrders.set(shape.id, shape.canvasOrder)
       return shape.element
     }).filter(element => element && !elems[element.id])
-    return [...Object.values(elems), ...arrows, ...customElements]
-      .sort((a, b) => (elementOrders.get(a.id) ?? 0) - (elementOrders.get(b.id) ?? 0)) // convertToExcalidrawElements
+    return addTabGroupFrames([...Object.values(elems), ...arrows, ...customElements]
+      .sort((a, b) => (elementOrders.get(a.id) ?? 0) - (elementOrders.get(b.id) ?? 0)), groups) // convertToExcalidrawElements
   })
   
   let savedState
@@ -206,6 +209,7 @@
         currentItemStrokeColor: "#6c757d", // Default line color to mid gray
         currentItemFontSize: 40, // Double the standard font size (20px -> 40px)
         viewBackgroundColor: "#0000",
+        frameRendering: { enabled: true, clip: false, name: true, outline: true },
         gridSize: 20,
         gridStep: 5,
         gridModeEnabled: false,
@@ -377,7 +381,7 @@
           height: elem.height,
           angle: elem.angle,
           groupIds: elem.groupIds,
-          frameId: elem.frameId,
+          frameId: elem.frameId?.startsWith('tab-group-frame:') ? null : elem.frameId,
           index: elem.index,
           version: elem.version,
           versionNonce: elem.versionNonce,

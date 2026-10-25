@@ -23,6 +23,7 @@
     import data from './data.svelte.js'
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
+    import { getComposeAppPorts } from './lib/compose-api.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag, onDrop } from './lib/tab-drag.svelte.js'
     const iwaVersion = __IWA_VERSION__
@@ -763,7 +764,7 @@
         }
         
         collapseAndRemovePlaceholders()      
-        const newTab = data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
+        const newTab = data.newGroupTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (newTab) {
             setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
         }
@@ -858,7 +859,7 @@
                 url = 'about:newtab'
             }
             collapseAndRemovePlaceholders()
-            const tab = await data.newTab(data.spaceMeta.activeSpace, { url, shouldFocus: true })
+            const tab = await data.newGroupTab(data.spaceMeta.activeSpace, { url, shouldFocus: true })
             if (tab) {
                 setTimeout(checkTabListOverflow, 50)
             }
@@ -870,7 +871,7 @@
     async function handleNewTabInPartition(partition) {
         newTabMenuVisible = false
         collapseAndRemovePlaceholders()
-        const tab = await data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
+        const tab = await data.newGroupTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (tab) {
             data.docs[tab.id].partition = partition
             const space = data.spaces[data.spaceMeta.activeSpace]
@@ -1447,6 +1448,7 @@
                 tab.pinned = side === 'right' ? 'right' : 'left'
                 if (wasActive) data.previous()
                 data.moveTab(event.tabId, {
+                    scope: 'pinned',
                     beforeTabId: event.beforeTabId,
                     afterTabId: event.afterTabId,
                     targetSpaceId: null
@@ -1468,6 +1470,8 @@
                 tab.pinned = null
             }
             data.moveTab(event.tabId, {
+                scope: event.scope,
+                targetGroupTabId: event.targetGroupTabId,
                 beforeTabId: event.beforeTabId,
                 afterTabId: event.afterTabId,
                 targetSpaceId: event.targetSpaceId
@@ -2695,6 +2699,18 @@
         }
     }
 
+    async function openComposeUI() {
+        closeMenuImmediately()
+        const url = new URL('https://compose-ui.localhost/')
+        try {
+            const { https } = await getComposeAppPorts({ signal: AbortSignal.timeout(5000) })
+            url.port = String(https)
+        } catch (error) {
+            console.warn('Could not discover the Compose UI port:', error)
+        }
+        await data.newTab(data.spaceMeta.activeSpace, { url: url.href, shouldFocus: true })
+    }
+
     function openVSCodeWorkspace() {
         const url = 'http://localhost:8086/?workspace=/workspace/.vscode/orchestrator.code-workspace'
         data.newTab(data.spaceMeta.activeSpace, { url, shouldFocus: true, shouldFocus: true })
@@ -3172,7 +3188,9 @@
 
     let leftPinnedTabs = $derived(tabs.filter(tab => (tab.pinned === true || tab.pinned === 'left')))
     let rightPinnedTabs = $derived(tabs.filter(tab => tab.pinned === 'right'))
-    let unpinnedTabs = $derived(tabs.filter(tab => !tab.pinned))
+    let currentGroupTabId = $derived(data.docs[data.spaceMeta.activeTabId]?.pinned ? data.getLastActiveNonPinnedTabId() : data.spaceMeta.activeTabId)
+    let currentTabGroup = $derived(data.getTabGroup(currentGroupTabId))
+    let unpinnedTabs = $derived((currentTabGroup?.tabs || []).filter(tab => tab._rev && !closed[tab._rev]).toReversed())
     let unpinnedTabCount = $derived(unpinnedTabs.filter(tab => tab.type === 'tab').length)
     let visibleLeftPinnedTabs = $derived(leftPinnedTabs.filter(t => !invisiblePins[t.id]))
     let visibleRightPinnedTabs = $derived(rightPinnedTabs.filter(t => !invisiblePins[t.id]))
@@ -3412,7 +3430,7 @@
      
         <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: {(showNavigationToolbar ? 175 : 110) + leftPinnedTabsWidth}px; width: calc(100% - {devModeEnabled ? (showNavigationToolbar ? 478 : 413) + leftPinnedTabsWidth + rightPinnedTabsWidth : (showNavigationToolbar ? 448 : 383) + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
-        <ul class="tab-list tabs" style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
+        <ul class="tab-list tabs" data-group-tab-id={currentGroupTabId} data-space-id={data.spaceMeta.activeSpace} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
                 {@const tab = data.docs[unpinned.id]}
                 {#if tab.type === 'divider'}
@@ -4085,6 +4103,18 @@
                         </svg>
                     </span>
                     <span>Logs</span>
+                </div>
+                <div class="dev-menu-item menu-item"
+                     role="button"
+                     tabindex="0"
+                     onmousedown={(e) => { e.stopPropagation(); openComposeUI() }}
+                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openComposeUI() } }}>
+                    <span class="dev-menu-icon-item menu-icon-item">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9L12 21.75M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                        </svg>
+                    </span>
+                    <span>Compose UI</span>
                 </div>
                 <div class="dev-menu-item menu-item" 
                      role="button"
@@ -4806,7 +4836,7 @@
 {/if}
 
 {#if tabDrag.indicator.visible}
-    <div class="tab-drag-indicator" style="
+    <div class="tab-drag-indicator" class:joining-group={tabDrag.dropTarget?.targetGroupTabId && tabDrag.indicator.height > 2 && tabDrag.indicator.width > 2} style="
         left: {tabDrag.indicator.x}px;
         top: {tabDrag.indicator.y}px;
         width: {tabDrag.indicator.width}px;
@@ -4814,7 +4844,7 @@
     "></div>
 {/if}
 
-{#if tabDrag.active && tabDrag.dragType === 'tab' && data.docs[tabDrag.tabId]}
+{#if tabDrag.active && tabDrag.dragType !== 'divider' && data.docs[tabDrag.tabId]}
     {@const dragTab = data.docs[tabDrag.tabId]}
     <div class="tab-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px; height: {tabDrag.previewHeight}px;">
         <div class="favicon-wrapper">

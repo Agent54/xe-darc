@@ -2,12 +2,14 @@ import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { compileModule } from 'svelte/compiler'
 import { getWindowSessionHints, getWindowSessionStartup, rememberWindowBounds, fitWindowBounds, openWindowSession } from '../app/lib/window-session.js'
+import * as tabGroups from '../app/lib/tab-groups.js'
+import * as svelteServer from 'svelte/internal/server'
 
 const source = compileModule(
     Deno.readTextFileSync(new URL('../app/data.svelte.js', import.meta.url)),
     { generate: 'server', filename: 'data.svelte.js' }
 ).js.code
-    .replace(/^import .*$/gm, '')
+    .replace(/^import[\s\S]*?from ['"][^'"]+['"];?\n/gm, '')
     .replaceAll('import.meta.hot', 'false')
     .replace('export default data;', '({ data, refresh });')
 
@@ -117,6 +119,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     const queries = []
     const writes = []
     const db = {
+        get: async id => structuredClone(records.find(doc => doc._id === id)),
         bulkDocs: () => new Promise(() => {}),
         changes: () => ({ on() { return this } }),
         find: async query => {
@@ -128,6 +131,12 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         },
         put: async doc => {
             writes.push(doc)
+            const index = records.findIndex(record => record._id === doc._id)
+            if (index === -1) {
+                records.push(structuredClone(doc))
+            } else {
+                records[index] = structuredClone(doc)
+            }
             return { id: doc._id, rev: '2-test' }
         }
     }
@@ -136,6 +145,8 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     const window = { darcWindowId: delayedWindowId ? null : windowId }
     const { data, refresh } = vm.runInNewContext(source, {
         PouchDB,
+        $: svelteServer,
+        ...tabGroups,
         findPlugin: {},
         bootstrap: [],
         testData: [],
@@ -144,6 +155,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         throttle: fn => fn,
         tick: () => Promise.resolve(),
         window,
+        document: { getElementById() { return null } },
         localStorage: localStorageFor(storage),
         crypto,
         console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')) } },
@@ -426,6 +438,70 @@ Deno.test('final synchronous bounds survive worker shutdown before another heart
     await launch(storage, restarted)
 
     assert.deepEqual(worker.database.get('windows').windows[0].bounds, finalBounds)
+})
+
+Deno.test('group additions append members without moving the group and space additions still open first', async () => {
+    const { data, refresh, writes } = session({ tabs: [tab('before', defaultSpace, { order: 0 }), tab('anchor', defaultSpace, { order: 10 }), tab('after', defaultSpace, { order: 20 })], history: ['anchor'] })
+    await refresh()
+    const first = await data.newGroupTab(defaultSpace, { shouldFocus: true })
+    const second = await data.newGroupTab(defaultSpace, { shouldFocus: true })
+    const group = data.getTabGroup('anchor')
+    assert.deepEqual(Array.from(group.tabs, tab => tab.id), ['anchor', first.id, second.id])
+    assert.equal(group.order, 10)
+    assert.equal(first.tabGroupId, second.tabGroupId)
+    const standalone = await data.newTab(defaultSpace)
+    assert.equal(data.getTabGroups()[0].tabs[0].id, standalone.id)
+    assert.equal(standalone.tabGroupId, null)
+    assert.equal(writes.every(write => write.type === 'tab'), true)
+    assert.equal(writes.some(write => write._id === 'anchor' && write.tabGroupId === first.tabGroupId), true)
+})
+
+Deno.test('adding from a pinned pane retains the previously active group', async () => {
+    const { data, refresh } = session({ tabs: [tab('anchor'), tab('pin', defaultSpace, { pinned: 'left' })], history: ['anchor'] })
+    await refresh()
+    data.activate('pin')
+    const added = await data.newGroupTab(defaultSpace)
+    assert.equal(data.getTabGroup('anchor').tabs.some(tab => tab.id === added.id), true)
+})
+
+Deno.test('closing and restoring a group member preserves membership and selects a sibling', async () => {
+    const { data, refresh } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 }), tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 2 }), tab('outside')], history: ['two', 'outside', 'one'] })
+    await refresh()
+    await data.closeTab(defaultSpace, 'two')
+    assert.equal(data.spaceMeta.activeTabId, 'one')
+    assert.equal(data.getTabGroup('one').tabs.length, 1)
+    await data.restoreClosedTab('two')
+    assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two'])
+    assert.equal(data.spaceMeta.activeTabId, 'two')
+})
+
+Deno.test('cross-space group moves update both lists, persistence and the source active selection', async () => {
+    const { data, refresh, writes } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 }), tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 2 }), tab('outside'), tab('destination', otherSpace)], history: ['two', 'one', 'outside'] })
+    await refresh()
+    await data.moveTab('one', { scope: 'group', targetSpaceId: otherSpace, beforeTabId: 'destination' })
+    assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['outside'])
+    assert.equal(data.spaceMeta.activeTabId, 'outside')
+    assert.deepEqual(Array.from(data.getTabGroup('one', otherSpace).tabs, tab => tab.id), ['one', 'two'])
+    assert.equal(writes.filter(write => write.spaceId === otherSpace).length, 2)
+})
+
+Deno.test('adding a group member preserves the rank of a temporarily closed middle tab', async () => {
+    const { data, refresh } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0 }), tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 }), tab('three', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 2 })], history: ['one'] })
+    await refresh()
+    await data.closeTab(defaultSpace, 'two')
+    const added = await data.newGroupTab(defaultSpace)
+    await data.restoreClosedTab('two')
+    assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two', 'three', added.id])
+})
+
+Deno.test('pinning detaches a member and canvas scene saves never create group documents', async () => {
+    const { data, refresh, writes } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' })] })
+    await refresh()
+    await data.pin({ tabId: 'two', pinned: 'right' })
+    assert.equal(data.docs.two.tabGroupId, null)
+    data.updateCanvasShapes(defaultSpace, [{ id: 'tab-group-frame:group', type: 'frame', customData: { virtualTabGroup: true } }])
+    assert.equal(writes.every(write => write.type === 'tab'), true)
+    assert.equal(data.spaces[defaultSpace].tabs.some(tab => tab.type === 'shape'), false)
 })
 
 Deno.test('restore preserves positions on attached displays and fits windows from disconnected displays', () => {
