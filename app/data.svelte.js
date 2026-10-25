@@ -162,6 +162,13 @@ function getSpaceActiveHistoryEntries(spaceId = spaceMeta.activeSpace) {
     return normalizeActiveHistoryEntries(space.activeTabsOrder)
 }
 
+function getTabGroupHistory(spaceId) {
+    return [
+        spaceId === spaceMeta.activeSpace ? spaceMeta.activeTabId : null,
+        ...getSpaceActiveHistoryEntries(spaceId).map(getTabIdFromActiveHistoryEntry)
+    ]
+}
+
 function readTabActiveHistoryEntries(spaceId, windowId = window.darcWindowId) {
     const storageKey = getTabActiveHistoryStorageKey(spaceId, windowId)
     if (!storageKey) {
@@ -425,15 +432,47 @@ function queueCanvasShapeSave(shape) {
     canvasShapeSaveTasks.set(shape.id, saveTask)
 }
 
+function syncTabPreview(tab, previousOpener = tab.opener) {
+    tab.id ??= tab._id
+    for (const opener of new Set([previousOpener, tab.opener].filter(Boolean))) {
+        const visible = tab.opener === opener && !tab._deleted && (!tab.archive || tab.archive === 'preview') && (tab.preview || tab.lightbox)
+        if (!visible && !previews[opener]) {
+            continue
+        }
+        previews[opener] ??= { lightbox: null, tabs: [] }
+        const preview = previews[opener]
+        const index = preview.tabs.findIndex(item => item.id === tab.id)
+        if (visible) {
+            if (index === -1) {
+                preview.tabs.push(tab)
+            } else {
+                preview.tabs[index] = tab
+            }
+        } else if (index !== -1) {
+            preview.tabs.splice(index, 1)
+        }
+        if (visible && tab.lightbox) {
+            preview.lightbox = tab.id
+        } else if (preview.lightbox === tab.id) {
+            preview.lightbox = null
+        }
+    }
+}
+
 function applyTabUpdate(tabId, update) {
     const tab = docs[tabId]
     if (tab?.type !== 'tab') return false
 
+    const previousOpener = tab.opener
     Object.assign(tab, update)
 
     const spaceTab = spaces[tab.spaceId]?.tabs?.find(item => item.id === tabId)
     if (spaceTab && spaceTab !== tab && spaceTab.type === 'tab') {
         Object.assign(spaceTab, update)
+    }
+
+    if (['opener', 'preview', 'lightbox', 'archive', '_deleted'].some(key => Object.hasOwn(update, key))) {
+        syncTabPreview(tab, previousOpener)
     }
 
     return true
@@ -724,10 +763,6 @@ const refresh = throttle(async function (spaceId) {
         newSpaceTabs[spaceId] = []
     }
     const closedTabs = []
-    for (const previewTabId of Object.keys(previews)) {
-        previews[previewTabId].lightbox = null
-        previews[previewTabId].tabs = []
-    }
 
     for (const refreshDoc of newDocs) {
         let doc
@@ -759,6 +794,9 @@ const refresh = throttle(async function (spaceId) {
            
         } else if (doc.type === 'tab' || doc.type === 'divider' || doc.type === 'shape') {
             doc.id = doc._id // legacy compat, remove this later
+            if (doc.type === 'tab') {
+                syncTabPreview(docs[doc.id])
+            }
             const isDivider = doc.type === 'divider'
             const isShape = doc.type === 'shape'
 
@@ -788,11 +826,6 @@ const refresh = throttle(async function (spaceId) {
                     activeTabIdExists = true
                 }
                 if (doc.preview || doc.lightbox) {
-                    previews[doc.opener] ??= { lightbox: null, tabs: [] }
-                    previews[doc.opener].tabs.push(doc)
-                    if (doc.lightbox) {
-                        previews[doc.opener].lightbox = doc._id
-                    }
                     continue
                 }
                 newSpaceTabs[doc.spaceId].push(doc)
@@ -947,6 +980,9 @@ live: true,
 
     if (editingId !== change.id) {
         docs[change.id] = change.doc
+        if (change.doc.type === 'tab') {
+            syncTabPreview(docs[change.id], oldDoc?.opener)
+        }
 
         // fixme: deep comp
         for (const key of ['canvas', 'element', 'files', 'pinned', 'tabGroupId', 'tabGroupOrder', ...sortOrder]) { // force reload until using docs store
@@ -1320,9 +1356,9 @@ const data = {
     getPreviousActiveSpace,
     getLastActiveNonPinnedTabId,
     getTabLastActiveAt,
-    getTabGroups: (spaceId = spaceMeta.activeSpace) => getTabGroups(spaces[spaceId]?.tabs),
-    getSidebarItems: (spaceId = spaceMeta.activeSpace) => getSidebarItems(spaces[spaceId]?.tabs),
-    getTabGroup: (tabId = spaceMeta.activeTabId, spaceId = spaceMeta.activeSpace) => getTabGroup(spaces[spaceId]?.tabs, tabId),
+    getTabGroups: (spaceId = spaceMeta.activeSpace) => getTabGroups(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId)),
+    getSidebarItems: (spaceId = spaceMeta.activeSpace) => getSidebarItems(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId)),
+    getTabGroup: (tabId = spaceMeta.activeTabId, spaceId = spaceMeta.activeSpace) => getTabGroup(spaces[spaceId]?.tabs, tabId, getTabGroupHistory(spaceId)),
     getGroupActiveTab: (group, spaceId = spaceMeta.activeSpace) => {
         const history = spaces[spaceId]?.activeTabsOrder || []
         for (const entry of history) {
@@ -1655,6 +1691,7 @@ const data = {
         }
         
         docs[tab._id] = tab
+        syncTabPreview(docs[tab._id])
         const creation = db.put(tab).then(result => {
             applyTabUpdate(tab.id, { _rev: result.rev })
         }).finally(() => tabCreationTasks.delete(tab.id))

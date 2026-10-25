@@ -491,21 +491,50 @@ Deno.test('top tabs react immediately to repeated group additions and saved revi
         assert.equal(data.getTabGroup('anchor').tabs.length, expected.length + 1)
         const pending = readTabs()
         assert.equal(pending.length, expected.length + 1)
-        const newId = pending[0].id
+        const newId = pending.at(-1).id
         // Read before persistence resolves so Svelte tracks the initially missing revision.
-        assert.equal(pending[0]._rev, undefined)
+        assert.equal(pending.at(-1)._rev, undefined)
         const saved = await adding
-        expected.unshift(newId)
+        expected.push(newId)
         assert.deepEqual(Array.from(readTabs(), tab => tab.id), expected)
         assert.equal(saved._rev, '2-test')
         assert.equal(readTabs().every(tab => tab._rev), true)
-        assert.equal(data.docs[newId]._rev, readTabs()[0]._rev)
+        assert.equal(data.docs[newId]._rev, readTabs().at(-1)._rev)
     }
 
     data.activate('outside')
     assert.deepEqual(Array.from(readTabs(), tab => tab.id), ['outside'])
     data.activate('anchor')
     assert.deepEqual(Array.from(readTabs(), tab => tab.id), expected)
+})
+
+Deno.test('all group views preview the active neighbors and retain them when another group is selected', async () => {
+    const { data, refresh } = session({
+        tabs: [...['one', 'two', 'three', 'four', 'five'].map((id, index) => tab(id, defaultSpace, { title: id, tabGroupId: 'group', tabGroupOrder: index })), tab('outside')],
+        history: ['three', 'outside', 'one'], runtime: 'client'
+    })
+    await refresh()
+    const preview = group => Array.from(group.previewTabs, tab => tab.id)
+    assert.deepEqual(preview(data.getTabGroup('three')), ['two', 'three', 'four'])
+    data.activate('five')
+    assert.deepEqual(preview(data.getSidebarItems().find(group => group.tabGroupId)), ['three', 'four', 'five'])
+    data.activate('outside')
+    const group = data.getTabGroups().find(group => group.tabGroupId)
+    assert.deepEqual(preview(group), ['three', 'four', 'five'])
+    assert.equal(group.title, 'three · four · five')
+})
+
+Deno.test('clicking a group uses normal sidebar activation history and returns to its most recent tab', async () => {
+    const { data, refresh } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' }), tab('outside')], history: ['two', 'outside', 'one'] })
+    await refresh()
+    const activationSource = Deno.readTextFileSync(new URL('../app/components/TabSidebar.svelte', import.meta.url))
+        .match(/    function activateTab\(tabId, spaceId\) \{[\s\S]*?\n    \}/)[0]
+    const activateSidebarTab = new Function('data', 'multiSpaceMode', 'tabDrag', 'exitMultiSpaceMode', `${activationSource}\nreturn activateTab`)(data, false, {}, () => {})
+    const activateGroup = () => activateSidebarTab(data.getGroupActiveTab(data.getTabGroup('one')).id, defaultSpace)
+    activateGroup()
+    assert.equal(data.spaceMeta.activeTabId, 'outside')
+    activateGroup()
+    assert.equal(data.spaceMeta.activeTabId, 'two')
 })
 
 Deno.test('closing and restoring a group member preserves membership and selects a sibling', async () => {
@@ -559,6 +588,40 @@ Deno.test('moving a lightbox to a tab appends to its parent group and preserves 
     assert.equal(saved.lightbox, false)
     assert.equal(saved.preview, false)
     assert.equal(saved.archive, undefined)
+})
+
+Deno.test('lightbox visibility updates immediately when creating one without a database refresh', async () => {
+    const { data, refresh } = session({ tabs: [tab('parent')], history: ['parent'], runtime: 'client' })
+    await refresh()
+    const creating = data.newTab(defaultSpace, { opener: 'parent', lightbox: true, url: 'https://other.example/' })
+    const lightbox = Object.values(data.docs).find(tab => tab.lightbox)
+    assert.equal(data.previews.parent?.lightbox, lightbox.id)
+    assert.equal(data.previews.parent.tabs.length, 1)
+    assert.equal(data.spaceMeta.activeTabId, 'parent')
+    await creating
+    assert.equal(data.previews.parent.lightbox, lightbox.id)
+    assert.deepEqual(Array.from(data.getTabGroup('parent').tabs, tab => tab.id), ['parent'])
+})
+
+Deno.test('lightbox visibility updates immediately when converting a hover preview', async () => {
+    const { data, refresh } = session({ tabs: [tab('parent'), tab('preview', defaultSpace, { opener: 'parent', preview: true, archive: 'preview' })], history: ['parent'], runtime: 'client' })
+    await refresh()
+    const converting = data.updateTab('preview', { preview: false, lightbox: true })
+    assert.equal(data.previews.parent?.lightbox, 'preview')
+    await converting
+    assert.equal(data.previews.parent.lightbox, 'preview')
+    await data.closeTab(defaultSpace, 'preview')
+    assert.equal(data.previews.parent.lightbox, null)
+    assert.equal(data.previews.parent.tabs.length, 0)
+})
+
+Deno.test('lightbox visibility survives refreshing a different space', async () => {
+    const { data, refresh } = session({ tabs: [tab('parent'), tab('lightbox', defaultSpace, { opener: 'parent', lightbox: true }), tab('other', otherSpace)], history: ['parent'], runtime: 'client' })
+    await refresh()
+    assert.equal(data.previews.parent.lightbox, 'lightbox')
+    await refresh(otherSpace)
+    assert.equal(data.previews.parent.lightbox, 'lightbox')
+    assert.equal(data.previews.parent.tabs.length, 1)
 })
 
 Deno.test('moving a lightbox from a standalone tab creates a group with that tab', async () => {

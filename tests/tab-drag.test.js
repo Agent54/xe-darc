@@ -50,17 +50,17 @@ function sidebar (children) {
     return list
 }
 
-Deno.test('sidebar-to-topbar drops target the active group with reversed neighbor order', () => {
+Deno.test('sidebar-to-topbar drops preserve the same neighbor order as the sidebar', () => {
     const topbar = element('', 260, 0, 600, 40, { groupTabId: 'one', spaceId: 'target-space' })
-    topbar.selectors[':scope > .tab-container:not(.pinned-tab-container)'] = [element('three', 260, 0, 100, 40), element('two', 365, 0, 100, 40), element('one', 470, 0, 100, 40)]
+    topbar.selectors[':scope > .tab-container:not(.pinned-tab-container)'] = [element('one', 260, 0, 100, 40), element('two', 365, 0, 100, 40), element('three', 470, 0, 100, 40)]
     const harness = dragHarness({ topbar })
     harness.start('outside', element('outside', 0, 100, 250, 36))
     harness.move(355, 20)
     harness.release()
     const drop = harness.drops[0]
     assert.equal(drop.targetGroupTabId, 'one')
-    assert.equal(drop.beforeTabId, 'two')
-    assert.equal(drop.afterTabId, 'three')
+    assert.equal(drop.beforeTabId, 'one')
+    assert.equal(drop.afterTabId, 'two')
     assert.equal(drop.targetSpaceId, 'target-space')
 })
 

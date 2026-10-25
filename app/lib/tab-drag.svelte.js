@@ -341,7 +341,7 @@ function findGroupDropTarget(mx, my) {
         }
         const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, null) : {}
         return { tabs, hit, list: topbar, axis: 'x', drop: {
-            beforeTabId: neighbors.afterTabId, afterTabId: neighbors.beforeTabId,
+            ...neighbors,
             targetSpaceId: topbar.dataset.spaceId, targetGroupTabId: topbar.dataset.groupTabId, scope
         } }
     }

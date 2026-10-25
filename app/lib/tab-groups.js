@@ -6,7 +6,13 @@ export function tabGroupKey (tab) {
     return tab.tabGroupId ? `group:${tab.tabGroupId}` : `tab:${tab.id}`
 }
 
-export function getTabGroups (items = []) {
+export function getTabGroupPreviewTabs (tabs, activeTabId) {
+    const activeIndex = Math.max(0, tabs.findIndex(tab => tab.id === activeTabId))
+    const start = Math.max(0, Math.min(activeIndex - 1, tabs.length - 3))
+    return tabs.slice(start, start + 3)
+}
+
+export function getTabGroups (items = [], activeTabIds = []) {
     const groups = new Map()
     for (const tab of items.filter(isOpenTab)) {
         const key = tabGroupKey(tab)
@@ -23,18 +29,20 @@ export function getTabGroups (items = []) {
             group.id = `tab:${group.tabs[0].id}`
             group.tabGroupId = null
         }
-        group.title = group.tabs[0].title || group.tabs[0].url || 'Tab group'
+        const activeTabId = activeTabIds.find(id => group.tabs.some(tab => tab.id === id))
+        group.previewTabs = getTabGroupPreviewTabs(group.tabs, activeTabId)
+        group.title = group.previewTabs.map(tab => tab.title || tab.url || 'New tab').join(' · ')
         return group
     }).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
 }
 
-export function getSidebarItems (items = []) {
-    return [...getTabGroups(items), ...items.filter(item => item.type === 'divider')]
+export function getSidebarItems (items = [], activeTabIds = []) {
+    return [...getTabGroups(items, activeTabIds), ...items.filter(item => item.type === 'divider')]
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 }
 
-export function getTabGroup (items, tabId) {
-    return getTabGroups(items).find(group => group.tabs.some(tab => tab.id === tabId)) || null
+export function getTabGroup (items, tabId, activeTabIds = []) {
+    return getTabGroups(items, activeTabIds).find(group => group.tabs.some(tab => tab.id === tabId)) || null
 }
 
 export function orderBetween (before, after, field = 'order') {

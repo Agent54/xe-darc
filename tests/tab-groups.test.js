@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { getTabGroups, getTabGroup, getSidebarItems, planTabMove, addTabGroupFrames } from '../app/lib/tab-groups.js'
+import { getTabGroups, getTabGroup, getTabGroupPreviewTabs, getSidebarItems, planTabMove, addTabGroupFrames } from '../app/lib/tab-groups.js'
 
 const tab = (id, order, extra = {}) => ({ id, type: 'tab', spaceId: 'space', order, title: id, ...extra })
 const grouped = (id, rank, extra = {}) => tab(id, 10, { tabGroupId: 'research', tabGroupOrder: rank, ...extra })
@@ -25,11 +25,30 @@ Deno.test('one remaining member has the same view identity as a standalone tab e
     const items = [grouped('one', 0), grouped('closed', 1, { archive: 'closed' }), grouped('pin', 2, { pinned: 'left' }), grouped('preview', 3, { preview: true })]
     const singleton = getTabGroups(items)[0]
     const standalone = getTabGroups([tab('one', 10)])[0]
-    assert.deepEqual({ ...singleton, tabs: singleton.tabs.map(tab => tab.id) }, { ...standalone, tabs: standalone.tabs.map(tab => tab.id) })
+    const view = group => ({ ...group, tabs: group.tabs.map(tab => tab.id), previewTabs: group.previewTabs.map(tab => tab.id) })
+    assert.deepEqual(view(singleton), view(standalone))
     assert.equal(getSidebarItems(items)[0].tabGroupId, null)
     assert.equal(getTabGroup(items, 'one').id, standalone.id)
     assert.equal(addTabGroupFrames([{ id: 'one', x: 0, y: 0, width: 1000, height: 700 }], getTabGroups(items)).some(element => element.type === 'frame'), false)
     assert.equal(items[0].tabGroupId, 'research')
+})
+
+Deno.test('group previews center on the active tab and clamp to three adjacent tabs at either end', () => {
+    const tabs = ['one', 'two', 'three', 'four', 'five'].map((id, index) => grouped(id, index))
+    for (const [active, expected] of [
+        ['one', ['one', 'two', 'three']],
+        ['two', ['one', 'two', 'three']],
+        ['three', ['two', 'three', 'four']],
+        ['four', ['three', 'four', 'five']],
+        ['five', ['three', 'four', 'five']]
+    ]) {
+        assert.deepEqual(getTabGroupPreviewTabs(tabs, active).map(tab => tab.id), expected)
+        const group = getTabGroups(tabs, ['outside', active])[0]
+        assert.deepEqual(group.previewTabs.map(tab => tab.id), expected)
+        assert.equal(group.title, expected.join(' · '))
+    }
+    assert.deepEqual(getTabGroupPreviewTabs(tabs.slice(0, 2), 'two').map(tab => tab.id), ['one', 'two'])
+    assert.deepEqual(getTabGroupPreviewTabs(tabs.slice(0, 1), 'one').map(tab => tab.id), ['one'])
 })
 
 Deno.test('dropping onto a standalone tab promotes both tabs into a shared virtual group', () => {
