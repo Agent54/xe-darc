@@ -8,7 +8,7 @@ const source = compileModule(Deno.readTextFileSync(new URL('../app/lib/tab-drag.
 
 function element (id, x, y, width, height, dataset = {}, classes = []) {
     return {
-        id, dataset, selectors: {}, parents: {}, scrollWidth: width, clientWidth: width, scrollHeight: height, clientHeight: height,
+        id, dataset, selectors: {}, parents: {}, scrollTop: 0, scrollLeft: 0, scrollWidth: width, clientWidth: width, scrollHeight: height, clientHeight: height,
         getBoundingClientRect: () => ({ left: x, top: y, right: x + width, bottom: y + height, width, height }),
         getAttribute(name) { return name === 'data-tab-id' ? id : name === 'data-space-id' ? dataset.spaceId : null },
         querySelector(selector) { return this.selectors[selector] || null },
@@ -21,15 +21,16 @@ function element (id, x, y, width, height, dataset = {}, classes = []) {
 function dragHarness ({ topbar = null, lists = [] } = {}) {
     const listeners = new Map()
     const drops = []
+    let animationFrame
     const document = {
         body: { classList: { add() {}, remove() {} } },
         querySelector: selector => selector === '.tab-list.tabs' ? topbar : null,
-        querySelectorAll: selector => selector === '.tabs-list' ? lists : []
+        querySelectorAll: selector => selector === '.tabs-list' ? lists : selector === '.tab-group-content' ? lists.flatMap(list => list.querySelectorAll(selector)) : []
     }
     const api = vm.runInNewContext(source, {
         document,
         window: { innerWidth: 1400, addEventListener(name, handler) { listeners.set(name, handler) }, removeEventListener(name) { listeners.delete(name) }, dispatchEvent() {} },
-        requestAnimationFrame: () => 1, cancelAnimationFrame() {}, clearTimeout() {}, CustomEvent: function () {}
+        requestAnimationFrame: callback => { animationFrame = callback; return 1 }, cancelAnimationFrame() {}, clearTimeout() {}, CustomEvent: function () {}
     })
     api.onDrop(drop => drops.push(drop))
     return {
@@ -39,6 +40,7 @@ function dragHarness ({ topbar = null, lists = [] } = {}) {
             api.startTabDrag(id, el, zone, 'source-space', { button: 0, clientX: rect.left + 4, clientY: rect.top + 4 }, false, null, type)
         },
         move(x, y) { listeners.get('mousemove')({ clientX: x, clientY: y }) },
+        frame() { animationFrame() },
         release() { listeners.get('mouseup')({}) }
     }
 }
@@ -114,4 +116,24 @@ Deno.test('group header drags preserve group scope and cancellation never commit
     harness.cancelDrag()
     assert.equal(harness.drops.length, 1)
     assert.equal(harness.tabDrag.active, false)
+})
+
+Deno.test('dragging at a group edge scrolls its tabs before the outer sidebar', () => {
+    const list = sidebar([])
+    const content = element('', 8, 476, 234, 204, { groupTabId: 'first' })
+    content.selectors[':scope > .tab-item-container'] = [element('first', 8, 480, 234, 36)]
+    content.scrollHeight = 400
+    list.scrollHeight = 1200
+    list.selectors['.tab-group-content'] = [content]
+    const harness = dragHarness({ lists: [list] })
+    harness.start('source', element('source', 300, 0, 100, 40), 'topbar')
+    harness.move(120, 675)
+    harness.frame()
+    assert.ok(content.scrollTop > 0)
+    assert.equal(list.scrollTop, 0)
+
+    content.scrollTop = content.scrollHeight - content.clientHeight
+    harness.frame()
+    assert.ok(list.scrollTop > 0)
+    harness.cancelDrag()
 })

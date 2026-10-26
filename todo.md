@@ -3423,3 +3423,7 @@ startpage per space
 switch data container per space and open space setup menu on new space create
 
 checkout tracking and long running watch mode docker support in forgejo!
+
+feedback menu without friction
+
+payback system for bug reports and telemetry supply

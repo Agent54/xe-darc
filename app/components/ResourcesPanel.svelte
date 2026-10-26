@@ -132,7 +132,7 @@
     
     function ignoreResource(resource) {
         const origin = new URL(resource.url).origin
-        const success = data.ignorePermission(resource.type, origin, resource.requestId)
+        const success = data.ignorePermission(resource.type, origin)
         
         if (success) {
             console.log('Ignore resource:', resource.type, 'for origin:', origin)
@@ -209,12 +209,13 @@
         Object.entries(data.permissions).forEach(([resourceType, permission]) => {
             Object.values(permission.origins || {}).forEach(origin => {
                 const requests = origin.requests || []
-                requests.forEach(request => {
-                    if (request.status === 'requested' && request.windowId === window.darcWindowId) {
-                        requested.push(request)
-                        usedResourceTypes.add(resourceType)
-                    }
-                })
+                const request = requests.findLast(request =>
+                    request.status === 'requested' && request.windowId === window.darcWindowId
+                )
+                if (request) {
+                    requested.push(request)
+                    usedResourceTypes.add(resourceType)
+                }
             })
 
             if (scope === 'origin' && currentOrigin) {

@@ -50,14 +50,16 @@ function startAutoScroll() {
             }
         }
 
-        // Vertical: sidebar tabs-list the mouse is over
-        const sidebarLists = document.querySelectorAll('.tabs-list')
+        // Scroll the group before its containing sidebar, then continue outward at its edges.
+        const sidebarLists = [...document.querySelectorAll('.tab-group-content'), ...document.querySelectorAll('.tabs-list')]
         for (const list of sidebarLists) {
             if (list.scrollHeight <= list.clientHeight) continue
             const r = list.getBoundingClientRect()
             if (mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom) {
-                scrolled = autoScrollContainer(list, 'y') || scrolled
-                break
+                if (autoScrollContainer(list, 'y')) {
+                    scrolled = true
+                    break
+                }
             }
         }
 

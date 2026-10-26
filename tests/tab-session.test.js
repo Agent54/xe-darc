@@ -130,7 +130,13 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     const queries = []
     const writes = []
     const db = {
-        get: async id => structuredClone(records.find(doc => doc._id === id)),
+        get: async id => {
+            const record = records.find(doc => doc._id === id)
+            if (!record) {
+                throw { status: 404 }
+            }
+            return structuredClone(record)
+        },
         bulkDocs: () => new Promise(() => {}),
         changes: () => ({ on() { return this } }),
         find: async query => {
@@ -176,7 +182,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     const { data, refresh } = runtime === 'client'
         ? new Function(...Object.keys(context), clientSource.replace('({ data, refresh });', 'return { data, refresh }'))(...Object.values(context))
         : vm.runInNewContext(source, context)
-    return { data, refresh, window, storage, queries, writes }
+    return { data, refresh, window, storage, queries, writes, db }
 }
 
 Deno.test('a partial refresh at startup still restores the active tab from the complete session', async () => {
@@ -524,6 +530,52 @@ Deno.test('all group views preview the active neighbors and retain them when ano
     assert.equal(group.title, 'three · four · five')
 })
 
+Deno.test('group metadata is optional, persists separately and restores without becoming a sidebar item', async () => {
+    const initial = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' })], runtime: 'client' })
+    await initial.refresh()
+    assert.equal(initial.writes.length, 0)
+    assert.equal(initial.data.getTabGroup('one').metadata, null)
+    const saving = initial.data.updateTabGroup('group', { name: '  Research  ', color: '#aabbcc', emoji: 'R', favicon: 'https://example.com/icon.png' })
+    assert.equal(initial.data.getTabGroup('one').name, 'Research')
+    await saving
+    const saved = initial.writes.find(doc => doc.type === 'tabgroup')
+    assert.equal(saved._id, tabGroups.tabGroupMetadataId('group'))
+    assert.equal(saved.tabGroupId, 'group')
+    assert.equal(saved.name, 'Research')
+    assert.equal(saved.color, '#aabbcc')
+    assert.equal(saved.favicon, 'https://example.com/icon.png')
+    const restarted = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' }), saved], runtime: 'client' })
+    await restarted.refresh()
+    assert.equal(restarted.data.getTabGroup('one').title, 'Research')
+    assert.equal(restarted.data.getSidebarItems().length, 1)
+    assert.equal(restarted.data.spaces[defaultSpace].tabs.every(tab => tab.type === 'tab'), true)
+    await restarted.data.updateTabGroup('group', { name: null })
+    assert.equal(restarted.data.getTabGroup('one').name, null)
+    assert.equal(restarted.data.getTabGroup('one').metadata.color, '#aabbcc')
+    assert.equal(restarted.data.getTabGroup('one').title, 'https://example.com · https://example.com')
+})
+
+Deno.test('group metadata creation retries conflicts without losing concurrent customizations', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' })] })
+    await refresh()
+    const put = db.put
+    let conflict = true
+    db.put = async doc => {
+        if (doc.type === 'tabgroup' && conflict) {
+            conflict = false
+            await put({ ...doc, name: 'Remote', color: '#123456', _rev: '2-remote' })
+            throw { status: 409 }
+        }
+        return put(doc)
+    }
+    const first = data.updateTabGroup('group', { name: 'First' })
+    const latest = data.updateTabGroup('group', { name: 'Latest' })
+    await Promise.all([first, latest])
+    const saved = await db.get(tabGroups.tabGroupMetadataId('group'))
+    assert.equal(saved.name, 'Latest')
+    assert.equal(saved.color, '#123456')
+})
+
 Deno.test('clicking a group uses normal sidebar activation history and returns to its most recent tab', async () => {
     const { data, refresh } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' }), tab('outside')], history: ['two', 'outside', 'one'] })
     await refresh()
@@ -535,6 +587,56 @@ Deno.test('clicking a group uses normal sidebar activation history and returns t
     assert.equal(data.spaceMeta.activeTabId, 'outside')
     activateGroup()
     assert.equal(data.spaceMeta.activeTabId, 'two')
+})
+
+Deno.test('closing empty new tabs discards them across refresh and restart', async () => {
+    for (const url of ['about:newtab', 'about:blank']) {
+        const { data, refresh, writes } = session({ tabs: [tab('empty', defaultSpace, { url }), tab('page')], history: ['empty', 'page'] })
+        await refresh()
+        if (url === 'about:blank') {
+            data.frames.empty = { frame: { canGoBack: () => false, canGoForward: () => false } }
+        }
+        await data.closeTab(defaultSpace, 'empty')
+        assert.equal(data.spaceMeta.closedTabs.length, 0)
+        assert.equal(data.spaceMeta.activeTabId, 'page')
+        const saved = writes.findLast(doc => doc._id === 'empty')
+        assert.equal(saved.archive, 'deleted')
+        assert.equal(saved.deleted, true)
+        await refresh()
+        assert.equal(data.spaceMeta.closedTabs.length, 0)
+        const restarted = session({ tabs: [saved, tab('page')] })
+        await restarted.refresh()
+        assert.equal(restarted.data.spaceMeta.closedTabs.length, 0)
+        assert.deepEqual(Array.from(restarted.data.spaces[defaultSpace].tabs, tab => tab.id), ['page'])
+    }
+})
+
+Deno.test('closing the last empty new tab creates a replacement without a closed tab entry', async () => {
+    const { data, refresh } = session({ tabs: [tab('empty', defaultSpace, { url: 'about:newtab' })], history: ['empty'] })
+    await refresh()
+    await data.closeTab(defaultSpace, 'empty')
+    assert.equal(data.spaceMeta.closedTabs.length, 0)
+    const [replacement] = data.spaces[defaultSpace].tabs
+    assert.notEqual(replacement.id, 'empty')
+    assert.equal(replacement.url, 'about:newtab')
+    assert.equal(data.spaceMeta.activeTabId, replacement.id)
+})
+
+Deno.test('closing new tab pages with back or forward history and regular pages keeps them restorable', async () => {
+    for (const [url, back, forward] of [
+        ['about:newtab', true, false],
+        ['about:blank', false, true],
+        ['https://example.com', false, false]
+    ]) {
+        const { data, refresh, writes } = session({ tabs: [tab('closing', defaultSpace, { url }), tab('page')] })
+        await refresh()
+        data.frames.closing = { frame: { canGoBack: () => back, canGoForward: () => forward } }
+        await data.closeTab(defaultSpace, 'closing')
+        assert.equal(data.spaceMeta.closedTabs.some(tab => tab.id === 'closing'), true)
+        assert.equal(writes.findLast(doc => doc._id === 'closing').archive, 'closed')
+        await data.restoreClosedTab('closing')
+        assert.equal(data.spaces[defaultSpace].tabs.some(tab => tab.id === 'closing'), true)
+    }
 })
 
 Deno.test('closing and restoring a group member preserves membership and selects a sibling', async () => {

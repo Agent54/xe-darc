@@ -131,6 +131,18 @@
         }
         onHide()
     }
+
+    async function saveGroupName(event) {
+        event.preventDefault()
+        const name = new FormData(event.currentTarget).get('groupName')
+        await data.updateTabGroup(menu.tab.tabGroupId, { name }, menu.tab.spaceId)
+        onHide()
+    }
+
+    async function resetGroupName() {
+        await data.updateTabGroup(menu.tab.tabGroupId, { name: null }, menu.tab.spaceId)
+        onHide()
+    }
 </script>
 
 {#if menu.visible && menu.tab}
@@ -153,7 +165,19 @@
          onclick={(e) => e.stopPropagation()}
          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
          oncontextmenu={(e) => e.preventDefault()}>
-        {#if menu.tab.type === 'divider'}
+        {#if menu.tab.type === 'tabgroup'}
+            <form class="group-name-form" onsubmit={saveGroupName}>
+                <label for="tab-group-name">Group name</label>
+                <div class="group-name-fields">
+                    <input id="tab-group-name" name="groupName" value={menu.tab.name || ''} placeholder="Use tab titles" autocomplete="off" />
+                    <button type="submit">Save</button>
+                </div>
+            </form>
+            {#if menu.tab.name}
+                <button class="context-menu-item" role="menuitem" type="button" onmouseup={resetGroupName}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); resetGroupName() } }}>Use tab titles</button>
+            {/if}
+        {:else if menu.tab.type === 'divider'}
             <div class="context-menu-item" role="menuitem" tabindex="0"
                     onmouseup={() => removeDividerFromMenu(menu.tab)}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeDividerFromMenu(menu.tab) } }}>
@@ -396,6 +420,53 @@
 {/if}
 
 <style>
+    .group-name-form {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        color: #b8b8b8;
+        font-size: 12px;
+    }
+
+    .group-name-fields {
+        display: flex;
+        gap: 6px;
+    }
+
+    .group-name-fields input {
+        min-width: 0;
+        width: 170px;
+        padding: 7px 8px;
+        border: 1px solid #ffffff1f;
+        border-radius: 6px;
+        background: #151515;
+        color: #e5e5e5;
+        font: inherit;
+    }
+
+    .group-name-fields button {
+        padding: 7px 9px;
+        border: 1px solid #ffffff1f;
+        border-radius: 6px;
+        background: #252525;
+        color: #e5e5e5;
+        font: inherit;
+        cursor: pointer;
+    }
+
+    .group-name-fields :focus-visible {
+        outline: 1px solid #a3a3a3;
+        outline-offset: 2px;
+    }
+
+    button.context-menu-item {
+        border: 0;
+        background: transparent;
+        text-align: left;
+        font-family: inherit;
+    }
+
     .context-menu-scrim {
         position: fixed;
         top: 0;

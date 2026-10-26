@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { getTabGroups, getTabGroup, getTabGroupPreviewTabs, getSidebarItems, planTabMove, addTabGroupFrames } from '../app/lib/tab-groups.js'
+import { getTabGroups, getTabGroup, getTabGroupPreviewTabs, tabGroupMetadataId, getSidebarItems, planTabMove, addTabGroupFrames } from '../app/lib/tab-groups.js'
 
 const tab = (id, order, extra = {}) => ({ id, type: 'tab', spaceId: 'space', order, title: id, ...extra })
 const grouped = (id, rank, extra = {}) => tab(id, 10, { tabGroupId: 'research', tabGroupOrder: rank, ...extra })
@@ -49,6 +49,19 @@ Deno.test('group previews center on the active tab and clamp to three adjacent t
     }
     assert.deepEqual(getTabGroupPreviewTabs(tabs.slice(0, 2), 'two').map(tab => tab.id), ['one', 'two'])
     assert.deepEqual(getTabGroupPreviewTabs(tabs.slice(0, 1), 'one').map(tab => tab.id), ['one'])
+})
+
+Deno.test('a named group retains its preview tabs and a singleton still uses ordinary tab presentation', () => {
+    const tabs = [grouped('one', 0), grouped('two', 1)]
+    const metadata = { [tabGroupMetadataId('research')]: { name: 'Research', color: '#123456' } }
+    const group = getTabGroups(tabs, ['two'], metadata)[0]
+    assert.equal(group.name, 'Research')
+    assert.equal(group.title, 'Research')
+    assert.deepEqual(group.previewTabs.map(tab => tab.id), ['one', 'two'])
+    const single = getTabGroups(tabs.slice(0, 1), [], metadata)[0]
+    assert.equal(single.name, null)
+    assert.equal(single.metadata, null)
+    assert.equal(single.title, 'one')
 })
 
 Deno.test('dropping onto a standalone tab promotes both tabs into a shared virtual group', () => {

@@ -22,6 +22,7 @@
     import UrlBar from './UrlBar.svelte'
     import TabHoverCard from './TabHoverCard.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
+    import { observeScrollEdges } from '../lib/scroll-edges.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred } from '../lib/tab-drag.svelte.js'
     import { colors as spaceColors } from '../lib/utils.js'
     import { untrack, onMount } from 'svelte'
@@ -933,7 +934,8 @@
         
         // Find the active tab element in the sidebar
         setTimeout(() => {
-            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTabId}"]`)
+            const activeTabElement = document.querySelector(`.sidebar .tab-item-container[data-tab-id="${data.spaceMeta.activeTabId}"]`) ||
+                document.querySelector(`.sidebar [data-tab-group-id="${data.docs[data.spaceMeta.activeTabId]?.tabGroupId}"]`)
             if (activeTabElement) {
                 const tabsList = activeTabElement.closest('.tabs-list')
                 if (tabsList) {
@@ -1951,22 +1953,36 @@
                                                 {@const recentEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                                                 {@const spaceActive = spaceId !== data.spaceMeta.activeSpace && item.tabs.some(tab => tab.id === (typeof recentEntry === 'string' ? recentEntry : recentEntry?.id))}
                                                 <div class="tab-group-wrapper" class:expanded class:active class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}>
-                                                    <div class="tab-group" class:expanded class:active class:space-active-tab={spaceActive} title="{item.title} · {item.tabs.length} tabs">
+                                                    <div class="tab-group" class:expanded class:active class:space-active-tab={spaceActive} title="{item.title} · {item.tabs.length} tabs"
+                                                        oncontextmenu={(e) => handleTabContextMenu(e, { ...item, type: 'tabgroup', spaceId }, i)} role="group" aria-label={item.title}>
                                                         <button class="tab-group-main"
                                                             aria-label={item.title}
                                                             onmousedown={(e) => { if (e.button === 0) { startTabDrag(item.tabs[0].id, e.currentTarget.closest('.tab-group-wrapper'), 'sidebar', spaceId, e, false, null, 'group') } }}
                                                             onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred())) { activateTab(data.getGroupActiveTab(item, spaceId).id, spaceId) } }}
                                                             ondblclick={(e) => { if (e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(data.getGroupActiveTab(item, spaceId).id); handleTabGroupToggle(expansionId, expanded) } }}>
-                                                            <span class="tab-group-favicons" aria-hidden="true">
-                                                                {#each item.previewTabs as tab, index (tab.id)}
-                                                                    <span class="tab-group-favicon" class:fade={index === 2}><Favicon {tab} showButton={false} /></span>
-                                                                {/each}
-                                                            </span>
-                                                            <span class="tab-group-title" aria-hidden="true">
-                                                                {#each item.previewTabs as tab (tab.id)}
-                                                                    <span class="tab-group-title-part">{tab.title || tab.url || 'New tab'}</span>
-                                                                {/each}
-                                                            </span>
+                                                            {#if item.name}
+                                                                <span class="tab-group-favicons" aria-hidden="true">
+                                                                    {#if item.metadata?.emoji}
+                                                                        <span class="tab-group-custom-icon">{item.metadata.emoji}</span>
+                                                                    {:else if item.metadata?.favicon}
+                                                                        <span class="tab-group-favicon"><Favicon tab={{ favicon: item.metadata.favicon, title: item.name }} showButton={false} /></span>
+                                                                    {:else}
+                                                                        {#each item.previewTabs as tab, index (tab.id)}
+                                                                            <span class="tab-group-favicon" class:fade={index === 2}><Favicon {tab} showButton={false} /></span>
+                                                                        {/each}
+                                                                    {/if}
+                                                                </span>
+                                                                <span class="tab-group-title" aria-hidden="true">{item.name}</span>
+                                                            {:else}
+                                                                <span class="tab-group-title tab-group-preview" aria-hidden="true">
+                                                                    {#each item.previewTabs as tab (tab.id)}
+                                                                        <span class="tab-group-preview-item">
+                                                                            <span class="tab-group-favicon"><Favicon {tab} showButton={false} /></span>
+                                                                            <span class="tab-group-title-part">{tab.title || tab.url || 'New tab'}</span>
+                                                                        </span>
+                                                                    {/each}
+                                                                </span>
+                                                            {/if}
                                                         </button>
                                                         <span class="tab-group-count">{item.tabs.length}</span>
                                                         <button class="tab-group-toggle" aria-label="{expanded ? 'Collapse' : 'Expand'} {item.title}" aria-expanded={expanded}
@@ -1976,10 +1992,12 @@
                                                         </button>
                                                     </div>
                                                     {#if expanded}
-                                                        <div class="tab-group-content" data-group-tab-id={item.tabs[0].id}>
-                                                            {#each item.tabs as tab (tab.id)}
-                                                                {@render sidebarTab(tab, i)}
-                                                            {/each}
+                                                        <div class="tab-group-scroll">
+                                                            <div class="tab-group-content" data-group-tab-id={item.tabs[0].id} use:observeScrollEdges={item.tabs.length}>
+                                                                {#each item.tabs as tab (tab.id)}
+                                                                    {@render sidebarTab(tab, i)}
+                                                                {/each}
+                                                            </div>
                                                         </div>
                                                     {/if}
                                                 </div>
@@ -3779,6 +3797,7 @@
 
     /* Tab Group */
     .tab-group-wrapper {
+        --tab-group-background: #0b0b0b;
         display: flex;
         flex-direction: column;
         width: 100%;
@@ -3798,13 +3817,13 @@
     }
     
     .tab-group-wrapper.expanded {
-        background: transparent;
-        border: 1px solid hsl(0deg 0% 100% / 4%);
+        background: var(--tab-group-background);
+        border: 1px solid hsl(0deg 0% 100% / 6%);
         overflow: hidden;
-        margin-left: 0;
-        margin-top: 0;
-        margin-right: -2px;
-        max-width: calc(100% + 0px);
+    }
+
+    .tab-group-wrapper.expanded.active {
+        --tab-group-background: #111111;
     }
     
     .tab-group {
@@ -3836,10 +3855,7 @@
         border-radius: 12px 12px 0 0;
         border: 1px solid transparent;
         background: transparent;
-        margin-left: -1px;
-        margin-top: -1px;
-        width: calc(100% + 1px);
-        max-width: unset;
+        margin: 0;
     }
     
     .tab-group.expanded:hover {
@@ -3861,13 +3877,74 @@
         background: rgb(255 255 255 / 6%);
         border-color: hsl(0deg 0% 100% / 5.5%);
     }
+
+    .tab-group.expanded.active,
+    .tab-group.expanded.space-active-tab {
+        background: transparent;
+        border-color: transparent;
+    }
+
+    .tab-group.expanded .tab-group-main > span {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .tab-group.expanded .tab-group-toggle {
+        opacity: 1;
+    }
+
+    .tab-group.expanded .tab-group-count {
+        opacity: 0;
+    }
+
+    .tab-group-scroll {
+        position: relative;
+        min-height: 0;
+    }
+
+    .tab-group-scroll::before,
+    .tab-group-scroll::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 16px;
+        z-index: 10;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 150ms ease;
+    }
+
+    .tab-group-scroll::before {
+        top: 0;
+        background: linear-gradient(to bottom, var(--tab-group-background), transparent);
+    }
+
+    .tab-group-scroll::after {
+        bottom: 0;
+        background: linear-gradient(to top, var(--tab-group-background), transparent);
+    }
+
+    .tab-group-scroll[data-scroll-top='true']::before,
+    .tab-group-scroll[data-scroll-bottom='true']::after {
+        opacity: 1;
+    }
     
     .tab-group-content {
         display: none;
         flex-direction: column;
-        padding: 8px;
+        padding: 4px 3px;
         gap: 4px;
         flex: 1;
+        max-height: 204px;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+        scrollbar-color: #ffffff33 transparent;
+    }
+
+    .tab-group-content .tab-item-container.active {
+        box-shadow: 0 -8px 8px -2px var(--tab-group-background), 0 8px 8px -2px var(--tab-group-background);
     }
     
     .tab-group-wrapper.expanded .tab-group-content {
@@ -3964,6 +4041,24 @@
         overflow: hidden;
         mask: linear-gradient(to right, black 0%, black 65%, transparent 100%);
         -webkit-mask: linear-gradient(to right, black 0%, black 65%, transparent 100%);
+    }
+
+    .tab-group-preview-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex: 1 1 0;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .tab-group-preview-item .tab-group-favicon {
+        margin-left: 0;
+    }
+
+    .tab-group-custom-icon {
+        font-size: 14px;
+        line-height: 1;
     }
     
     .tab-group-count {

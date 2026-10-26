@@ -4,7 +4,7 @@ import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
-import { getTabGroups, getSidebarItems, getTabGroup, planTabMove, groupCanvasPosition } from './lib/tab-groups.js'
+import { getTabGroups, getSidebarItems, getTabGroup, tabGroupMetadataId, planTabMove, groupCanvasPosition } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
@@ -290,8 +290,8 @@ const ui = $state({ viewMode: 'default' })
 const desiredCanvasShapes = new Map()
 const canvasShapeSaveTasks = new Map()
 const canvasShapeStates = new Map()
-const desiredTabUpdates = new Map()
-const tabUpdateSaveTasks = new Map()
+const desiredDocumentUpdates = new Map()
+const documentUpdateSaveTasks = new Map()
 const tabCreationTasks = new Map()
 
 function getCanvasShapeState(element, canvasOrder, files = {}) {
@@ -459,12 +459,15 @@ function syncTabPreview(tab, previousOpener = tab.opener) {
     }
 }
 
-function applyTabUpdate(tabId, update) {
+function applyDocumentUpdate(tabId, update) {
     const tab = docs[tabId]
-    if (tab?.type !== 'tab') return false
+    if (!['tab', 'tabgroup'].includes(tab?.type)) return false
 
     const previousOpener = tab.opener
     Object.assign(tab, update)
+    if (tab.type === 'tabgroup') {
+        return true
+    }
 
     const spaceTab = spaces[tab.spaceId]?.tabs?.find(item => item.id === tabId)
     if (spaceTab && spaceTab !== tab && spaceTab.type === 'tab') {
@@ -478,24 +481,29 @@ function applyTabUpdate(tabId, update) {
     return true
 }
 
-async function persistTabUpdate(tabId) {
+async function persistDocumentUpdate(tabId) {
     await tabCreationTasks.get(tabId)
-    while (desiredTabUpdates.has(tabId)) {
-        const update = desiredTabUpdates.get(tabId)
+    while (desiredDocumentUpdates.has(tabId)) {
+        const update = desiredDocumentUpdates.get(tabId)
         let currentTab
 
         try {
             currentTab = await db.get(tabId)
         } catch (error) {
             if (error.status === 404) {
-                desiredTabUpdates.delete(tabId)
-                return
+                if (docs[tabId]?.type === 'tabgroup') {
+                    currentTab = { ...docs[tabId], _rev: undefined }
+                } else {
+                    desiredDocumentUpdates.delete(tabId)
+                    return
+                }
+            } else {
+                throw error
             }
-            throw error
         }
 
-        if (currentTab.type !== 'tab') {
-            desiredTabUpdates.delete(tabId)
+        if (!['tab', 'tabgroup'].includes(currentTab.type)) {
+            desiredDocumentUpdates.delete(tabId)
             return
         }
 
@@ -506,10 +514,10 @@ async function persistTabUpdate(tabId) {
                 _rev: currentTab._rev
             })
 
-            applyTabUpdate(tabId, { _rev: result.rev })
+            applyDocumentUpdate(tabId, { _rev: result.rev })
 
-            if (desiredTabUpdates.get(tabId) === update) {
-                desiredTabUpdates.delete(tabId)
+            if (desiredDocumentUpdates.get(tabId) === update) {
+                desiredDocumentUpdates.delete(tabId)
             }
         } catch (error) {
             if (error.status !== 409) {
@@ -519,30 +527,30 @@ async function persistTabUpdate(tabId) {
     }
 }
 
-function queueTabUpdate(tabId, update) {
-    if (docs[tabId]?.type !== 'tab') return Promise.resolve()
+function queueDocumentUpdate(tabId, update) {
+    if (!['tab', 'tabgroup'].includes(docs[tabId]?.type)) return Promise.resolve()
 
     const desiredUpdate = {
-        ...(desiredTabUpdates.get(tabId) || {}),
+        ...(desiredDocumentUpdates.get(tabId) || {}),
         ...update
     }
-    desiredTabUpdates.set(tabId, desiredUpdate)
-    applyTabUpdate(tabId, update)
+    desiredDocumentUpdates.set(tabId, desiredUpdate)
+    applyDocumentUpdate(tabId, update)
 
-    if (tabUpdateSaveTasks.has(tabId)) {
-        return tabUpdateSaveTasks.get(tabId)
+    if (documentUpdateSaveTasks.has(tabId)) {
+        return documentUpdateSaveTasks.get(tabId)
     }
 
-    const saveTask = persistTabUpdate(tabId)
-        .catch(error => console.error('Failed to save tab update', error))
+    const saveTask = persistDocumentUpdate(tabId)
+        .catch(error => console.error('Failed to save document update', error))
         .finally(() => {
-            tabUpdateSaveTasks.delete(tabId)
-            if (desiredTabUpdates.has(tabId)) {
-                queueTabUpdate(tabId, {})
+            documentUpdateSaveTasks.delete(tabId)
+            if (desiredDocumentUpdates.has(tabId)) {
+                queueDocumentUpdate(tabId, {})
             }
         })
 
-    tabUpdateSaveTasks.set(tabId, saveTask)
+    documentUpdateSaveTasks.set(tabId, saveTask)
     return saveTask
 }
 
@@ -970,12 +978,17 @@ live: true,
         rememberCanvasShapeState(change.doc)
     }
 
-    if (change.doc.type === 'tab') {
-        const desiredUpdate = desiredTabUpdates.get(change.id)
+    if (change.doc.type === 'tab' || change.doc.type === 'tabgroup') {
+        const desiredUpdate = desiredDocumentUpdates.get(change.id)
         if (desiredUpdate) {
-            applyTabUpdate(change.id, { ...change.doc, ...desiredUpdate })
+            applyDocumentUpdate(change.id, { ...change.doc, ...desiredUpdate })
             return
         }
+    }
+
+    if (change.doc.type === 'tabgroup') {
+        docs[change.id] = change.doc
+        return
     }
 
     if (editingId !== change.id) {
@@ -1075,6 +1088,10 @@ function closeTab (spaceId, tabId) {
         return
     }
 
+    const frame = frames[tabId]?.frame
+    const discard = (tab.url?.startsWith('about:newtab') || tab.url?.startsWith('about:blank')) &&
+        !frame?.canGoBack?.() && !frame?.canGoForward?.()
+
     if (frames[tabId]) {
         frames[tabId].frame = null
     }
@@ -1127,10 +1144,14 @@ function closeTab (spaceId, tabId) {
         // }
     ])
 
-    spaceMeta.closedTabs = [tab, ...spaceMeta.closedTabs.filter(item => item.id !== tabId)]
-    return queueTabUpdate(tabId, {
+    spaceMeta.closedTabs = [
+        ...(discard ? [] : [tab]),
+        ...spaceMeta.closedTabs.filter(item => item.id !== tabId)
+    ]
+    return queueDocumentUpdate(tabId, {
         closed: true, // legacy > make timestamp
-        archive: 'closed',
+        archive: discard ? 'deleted' : 'closed',
+        ...(discard ? { deleted: true } : {}),
         modified: Date.now()
     })
 
@@ -1356,9 +1377,20 @@ const data = {
     getPreviousActiveSpace,
     getLastActiveNonPinnedTabId,
     getTabLastActiveAt,
-    getTabGroups: (spaceId = spaceMeta.activeSpace) => getTabGroups(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId)),
-    getSidebarItems: (spaceId = spaceMeta.activeSpace) => getSidebarItems(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId)),
-    getTabGroup: (tabId = spaceMeta.activeTabId, spaceId = spaceMeta.activeSpace) => getTabGroup(spaces[spaceId]?.tabs, tabId, getTabGroupHistory(spaceId)),
+    getTabGroups: (spaceId = spaceMeta.activeSpace) => getTabGroups(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId), docs),
+    getSidebarItems: (spaceId = spaceMeta.activeSpace) => getSidebarItems(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId), docs),
+    getTabGroup: (tabId = spaceMeta.activeTabId, spaceId = spaceMeta.activeSpace) => getTabGroup(spaces[spaceId]?.tabs, tabId, getTabGroupHistory(spaceId), docs),
+    updateTabGroup: (tabGroupId, properties, spaceId = spaceMeta.activeSpace) => {
+        const _id = tabGroupMetadataId(tabGroupId)
+        if (!tabGroupId || !spaces[spaceId]) return Promise.resolve()
+        const update = Object.fromEntries(['name', 'color', 'favicon', 'emoji']
+            .filter(key => Object.hasOwn(properties, key))
+            .map(key => [key, typeof properties[key] === 'string' ? properties[key].trim() || null : null]))
+        if (!Object.keys(update).length) return Promise.resolve()
+        if (!docs[_id] && Object.values(update).every(value => value === null)) return Promise.resolve()
+        docs[_id] ??= { _id, type: 'tabgroup', tabGroupId, spaceId, created: Date.now() }
+        return queueDocumentUpdate(_id, { ...update, modified: Date.now() })
+    },
     getGroupActiveTab: (group, spaceId = spaceMeta.activeSpace) => {
         const history = spaces[spaceId]?.activeTabsOrder || []
         for (const entry of history) {
@@ -1379,7 +1411,7 @@ const data = {
         const tab = docs[tabId]
         if (!tab || !spaces[tab.spaceId]) return
 
-        const restoring = queueTabUpdate(tabId, {
+        const restoring = queueDocumentUpdate(tabId, {
             // TODO: handle previews and tab groups
             // ...(previews[tabId]?.tabs.map(prev => {
             //     if (frames[prev.id])  {
@@ -1596,7 +1628,7 @@ const data = {
     },
 
     pin({ tabId, pinned }) {
-        return queueTabUpdate(tabId, { pinned, ...(pinned ? { tabGroupId: null, tabGroupOrder: null } : {}) })
+        return queueDocumentUpdate(tabId, { pinned, ...(pinned ? { tabGroupId: null, tabGroupOrder: null } : {}) })
     },
 
     navigate(tabId, url) {
@@ -1658,7 +1690,7 @@ const data = {
         const canvasPosition = group ? groupCanvasPosition(group.tabs, spaceId) : null
         if (group) {
             for (const [index, member] of group.tabs.entries()) {
-                queueTabUpdate(member.id, { tabGroupId, order: group.order, tabGroupOrder: member.tabGroupOrder ?? index })
+                queueDocumentUpdate(member.id, { tabGroupId, order: group.order, tabGroupOrder: member.tabGroupOrder ?? index })
             }
         }
 
@@ -1693,7 +1725,7 @@ const data = {
         docs[tab._id] = tab
         syncTabPreview(docs[tab._id])
         const creation = db.put(tab).then(result => {
-            applyTabUpdate(tab.id, { _rev: result.rev })
+            applyDocumentUpdate(tab.id, { _rev: result.rev })
         }).finally(() => tabCreationTasks.delete(tab.id))
         tabCreationTasks.set(tab.id, creation)
 
@@ -1855,7 +1887,7 @@ const data = {
         }
 
         if (Object.keys(newProps).length > 0) {
-            await queueTabUpdate(tabId, newProps)
+            await queueDocumentUpdate(tabId, newProps)
         }
     },
 
@@ -1903,7 +1935,7 @@ const data = {
             }
         }
 
-        const promotion = queueTabUpdate(lightboxId, { lightbox: false, preview: false, archive: undefined })
+        const promotion = queueDocumentUpdate(lightboxId, { lightbox: false, preview: false, archive: undefined })
         const spaceTabs = spaces[lbTab.spaceId].tabs
         if (!spaceTabs.some(tab => tab.id === lightboxId)) {
             spaceTabs.push(lbTab)
@@ -1974,6 +2006,19 @@ const data = {
                 latestRequest.timestamp = Date.now()
             }
             return { granted }
+        }
+
+        const pendingRequest = permission.origins[origin].requests.findLast(request =>
+            request.status === 'requested' && request.windowId === window.darcWindowId
+        )
+        if (pendingRequest) {
+            pendingRequest.timestamp = Date.now()
+            pendingRequest.url = event.url
+            pendingRequest.tabId = tabId
+            pendingRequest.requester = event.requester || pendingRequest.requester
+            pendingRequest.explanation = event.explanation || pendingRequest.explanation
+            pendingRequest.requestType = event.requestType || pendingRequest.requestType
+            return { granted: false }
         }
 
         permission.origins[origin].requests.push({
@@ -2148,21 +2193,20 @@ const data = {
         return false
     },
 
-    ignorePermission: (permissionType, origin, requestId) => {
+    ignorePermission: (permissionType, origin) => {
         const permissionObj = permissions[permissionType]
         if (!permissionObj?.origins?.[origin]?.requests?.length) {
             return false
         }
 
-        const requests = permissionObj.origins[origin].requests
-        const request = requestId
-            ? requests.find(item => item.requestId === requestId)
-            : requests.findLast(item => item.status === 'requested')
-        if (request?.status === 'requested') {
-            request.status = 'ignored'
-            request.unseen = false
-            request.timestamp = Date.now()
-            
+        const pendingRequests = permissionObj.origins[origin].requests.filter(request => request.status === 'requested')
+        if (pendingRequests.length > 0) {
+            for (const request of pendingRequests) {
+                request.status = 'ignored'
+                request.unseen = false
+                request.timestamp = Date.now()
+            }
+
             return true
         }
         
@@ -2244,7 +2288,7 @@ const data = {
                     spaces[destSpaceId].tabs.push(member)
                     removedActiveTabId(id, sourceSpaceId)
                 }
-                saves.push(queueTabUpdate(id, update))
+                saves.push(queueDocumentUpdate(id, update))
                 if (controlledFrame && (!update.spaceId || update.spaceId === sourceSpaceId)) {
                     tick().then(() => {
                         const wrapper = frames[id]?.wrapper

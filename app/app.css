@@ -449,8 +449,8 @@ ul::-webkit-scrollbar {
     /* background-color: rgb(255 255 255 / 6%); */
     /* background-color: #ffffff0f; */
     min-width: 130px;
-    max-width: 200px;
-    flex: 0 1 200px; /* Don't grow, can shrink from 200px basis */
+    max-width: 280px;
+    flex: 0 1 280px; /* Don't grow, can shrink from 280px basis */
     -webkit-app-region: no-drag;
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
     -webkit-font-smoothing: subpixel-antialiased;
