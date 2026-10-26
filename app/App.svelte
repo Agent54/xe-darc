@@ -1058,8 +1058,10 @@
         
         console.log('%c[TAB-DEBUG] scroll effect triggered for tab: ' + activeTabId + ' tabChangeFromScroll=' + tabChangeFromScroll + ' initialScrollPerformed=' + initialScrollPerformed, 'color: #d946ef; font-weight: bold; font-size: 13px')
 
-        // Observer-driven activation must not snap back, but a pin layout change still needs alignment.
-        const shouldScroll = !tabChangeFromScroll || !initialScrollPerformed || tabLayoutChanged
+        // An older scroll's observer guard must not suppress a later sidebar/header activation.
+        const activation = data.ui.tabActivation
+        const activatedFromScroll = activation?.tabId === activeTabId && activation.source === 'scroll'
+        const shouldScroll = !activatedFromScroll || !initialScrollPerformed || tabLayoutChanged
         // Skip pinned tabs — they are in fixed containers outside the scroll root
         if (shouldScroll && !activeTab?.pinned && activeFrameWrapper) {
             // Temporarily set tabChangeFromScroll to prevent IntersectionObserver from changing active tab
@@ -1076,7 +1078,7 @@
                 scrollContainer.style.scrollBehavior = 'auto'
                 scrollContainer.style.scrollSnapType = 'none'
                 const scrollToActive = () => {
-                    if (!activeFrameWrapper || !scrollContainer) return
+                    if (!activeFrameWrapper?.isConnected || !scrollContainer || data.spaceMeta.activeTabId !== activeTabId) return
                     scrollContainer.scrollLeft = activeFrameWrapper.offsetLeft - 9
                 }
                 scrollToActive()
@@ -1108,7 +1110,7 @@
                 initialScrollPerformed = true
                 tabChangeFromScroll = true
                 const scrollToLastActive = () => {
-                    if (!lastNonPinnedWrapper || !scrollContainer) return
+                    if (!lastNonPinnedWrapper?.isConnected || !scrollContainer || data.spaceMeta.activeTabId !== activeTabId) return
                     scrollContainer.style.scrollBehavior = 'auto'
                     scrollContainer.style.scrollSnapType = 'none'
                     const wrapperRect = lastNonPinnedWrapper.getBoundingClientRect()
@@ -1412,10 +1414,19 @@
         _observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 const tabId = entry.target.id.replace('tab_', '')
-                const tab = data.docs[tabId]
-                
-                if (entry.isIntersecting) {
+                clearTimeout(visibilityTimers.get(tabId))
+                visibilityTimers.delete(tabId)
+
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+                    const activation = data.ui.tabActivation
                     const timer = setTimeout(() => {
+                        if (visibilityTimers.get(tabId) !== timer) return
+                        visibilityTimers.delete(tabId)
+                        const tab = data.docs[tabId]
+                        // Unobserving/removing a frame doesn't cancel already queued callbacks.
+                        if (data.ui.tabActivation !== activation || !entry.target.isConnected ||
+                            data.frames[tabId]?.wrapper !== entry.target || !scrollContainer?.contains(entry.target) ||
+                            tab?.spaceId !== data.spaceMeta.activeSpace || tab?.pinned || tab?.archive) return
                         if (tabChangeFromScroll || pinScrollTimer !== null) {
                             console.log('%c[TAB-DEBUG] IntersectionObserver SKIPPED tab: ' + tabId + ' (tabChangeFromScroll=' + tabChangeFromScroll + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
                             return
@@ -1431,7 +1442,7 @@
                             }
                             // Keep activeTabsOrder in sync with observer-driven activation so
                             // previous-active-tab styling and pinned-tab fallback remain correct.
-                            data.activate(tab.id)
+                            data.activate(tab.id, { source: 'scroll' })
                             tabChangeFromScrollTimer = setTimeout(() => {
                                 tabChangeFromScroll = false
                                 tabChangeFromScrollTimer = null
@@ -1439,12 +1450,6 @@
                         }
                     }, 450)
                     visibilityTimers.set(tabId, timer)
-                } else {
-                    const timer = visibilityTimers.get(tabId)
-                    if (timer) {
-                        clearTimeout(timer)
-                        visibilityTimers.delete(tabId)
-                    }
                 }
             })
         }, {
@@ -1499,6 +1504,9 @@
             if (_observer) {
                 _observer.disconnect()
             }
+            for (const timer of visibilityTimers.values()) clearTimeout(timer)
+            visibilityTimers.clear()
+            clearTimeout(pinScrollTimer)
             if (hovercardResetTimer) {
                 clearTimeout(hovercardResetTimer)
             }

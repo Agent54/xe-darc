@@ -297,6 +297,24 @@ Deno.test('activation survives another restart and later partial refreshes prese
     assert.equal(restarted.queries[1].selector.spaceId, otherSpace)
 })
 
+Deno.test('each activation has transient scroll intent, including repeated selections and previous-tab navigation', async () => {
+    const { data, refresh, writes } = session({ tabs: [tab('one'), tab('two')], history: ['one', 'two'], runtime: 'client' })
+    await refresh()
+    data.activate('two', { source: 'scroll' })
+    const scrollActivation = data.ui.tabActivation
+    assert.equal(scrollActivation.source, 'scroll')
+    assert.equal(scrollActivation.tabId, 'two')
+    data.activate('two')
+    assert.notEqual(data.ui.tabActivation, scrollActivation)
+    assert.equal(data.ui.tabActivation.source, 'navigation')
+    data.activate('two', { source: 'scroll' })
+    assert.equal(data.previous(), true)
+    assert.equal(data.spaceMeta.activeTabId, 'one')
+    assert.equal(data.ui.tabActivation.tabId, 'one')
+    assert.equal(data.ui.tabActivation.source, 'navigation')
+    assert.equal(writes.length, 0)
+})
+
 Deno.test('quitting the app and launching its base URL restores the same window, space and active tab', async () => {
     const storage = new Map()
     const database = new Map()

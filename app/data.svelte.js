@@ -286,7 +286,7 @@ const frames = $state({})
 let lastForceHibernateTime = 0
 const previews = $state({})
 const settings = $state({})
-const ui = $state({ viewMode: 'default' })
+const ui = $state({ viewMode: 'default', tabActivation: null })
 const desiredCanvasShapes = new Map()
 const canvasShapeSaveTasks = new Map()
 const canvasShapeStates = new Map()
@@ -1020,14 +1020,16 @@ live: true,
     }
 })
 
-function activate(tabId) {   
+function activate(tabId, { source = 'navigation', recordIfAlreadyCurrent = false } = {}) {
     // console.log('activate tab id ..', {tabId})
 
     spaceMeta.activeTabId = tabId
+    // Transient UI state: each activation carries its own scroll intent.
+    ui.tabActivation = { tabId, source }
 
     // console.timeLog('updt', 'activate')
 
-    markTabActive(spaceMeta.activeSpace, tabId)
+    markTabActive(spaceMeta.activeSpace, tabId, Date.now(), recordIfAlreadyCurrent)
 
     if (frames[tabId]) {
         frames[tabId].active = Date.now()
@@ -1586,12 +1588,7 @@ const data = {
         }
         
         // Set the previous tab as active
-        spaceMeta.activeTabId = previousTab.id
-        markTabActive(spaceMeta.activeSpace, previousTabId, Date.now(), true)
-
-        if (frames[previousTabId]) {
-            frames[previousTabId].active = Date.now()
-        }
+        activate(previousTab.id, { recordIfAlreadyCurrent: true })
         
         return true
     },
