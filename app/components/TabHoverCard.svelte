@@ -11,6 +11,7 @@
         isClosedTab = false, 
         showHistoryImmediately = false,
         instantMode = false,
+        stacked = false,
         showDevTools = false,
         onGoBack = null,
         onGoForward = null,
@@ -37,12 +38,14 @@
     })
     
     async function openTabHistory() {
-        const historyTab = await data.newTab(data.spaceMeta.activeSpace, {
+        const historyTab = await data.newTab(tab.spaceId || data.spaceMeta.activeSpace, {
             url: `about:tabhistory#${tab.id}`,
             title: `History - ${tab.title || 'Untitled'}`,
-            pinned: 'right'
+            pinned: 'right',
+            groupTabId: tab.id
         })
         if (historyTab) {
+            data.activateSpace(historyTab.spaceId)
             data.activate(historyTab.id)
         }
     }
@@ -310,7 +313,7 @@
     })
 </script>
 
-<div class="hovercard-content"
+<div class="hovercard-content" class:stacked
      role="tooltip"
      onmouseenter={() => hovercardHovered = true}
      onmouseleave={() => { hovercardHovered = false; onMouseLeave?.() }}>
@@ -489,6 +492,14 @@
         display: flex;
         flex-direction: column;
         max-height: 100%;
+    }
+
+    .hovercard-content.stacked {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        flex-shrink: 0;
+        max-height: none;
     }
 
     .hovercard-info {

@@ -1,6 +1,6 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
-    import { browserDebugFetch } from '../lib/browser-debug.js'
+    import { cdpFetch } from '../lib/cdp.js'
     
     let {
         onClose,
@@ -30,7 +30,7 @@
                 error = null
             }
             
-            const response = await browserDebugFetch('/json/list')
+            const response = await cdpFetch('/json/list')
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`)
             }
@@ -111,7 +111,7 @@
     
     function closeFrame(item) {
         if (item.id) {
-            browserDebugFetch(`/json/close/${item.id}`)
+            cdpFetch(`/json/close/${item.id}`)
                 .then(() => {
                     // Refresh the data after closing
                     fetchDevToolsData()
@@ -122,7 +122,7 @@
     
     function focusFrame(item) {
         if (item.id) {
-            browserDebugFetch(`/json/activate/${item.id}`)
+            cdpFetch(`/json/activate/${item.id}`)
                 .catch(err => console.warn('Failed to focus frame:', err))
         }
     }

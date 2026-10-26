@@ -2,6 +2,7 @@
 // Used by both App.svelte (top bar) and TabSidebar.svelte (sidebar)
 
 const DRAG_THRESHOLD = 5
+const GROUP_EXPAND_DELAY = 1000
 const AUTO_SCROLL_EDGE = 60 // px from edge to start scrolling
 const AUTO_SCROLL_SPEED = 12 // px per frame
 
@@ -112,6 +113,23 @@ let pending = null
 let activateRafId = null
 let didDrag = false
 let dropCallback = null
+let groupExpandCallback = null
+let hoveredGroup = null
+let groupExpandTimeout = null
+
+function updateGroupHover(group) {
+    if (hoveredGroup?.element === group?.element) return
+    clearTimeout(groupExpandTimeout)
+    groupExpandTimeout = null
+    hoveredGroup = group || null
+    if (!group) return
+
+    groupExpandTimeout = setTimeout(() => {
+        groupExpandTimeout = null
+        if (!state.active || findGroupDropTarget(state.mouseX, state.mouseY)?.hoverGroup?.element !== group.element) return
+        groupExpandCallback?.({ spaceId: group.spaceId, tabGroupId: group.tabGroupId })
+    }, GROUP_EXPAND_DELAY)
+}
 
 function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActive, pinnedSide, dragType = 'tab') {
     if (e.button !== 0) return
@@ -178,6 +196,7 @@ function handleMouseMove(e) {
 
     if (state.dragType !== 'divider') {
         const target = findGroupDropTarget(mx, my)
+        updateGroupHover(state.dragType === 'tab' ? target?.hoverGroup : null)
         if (target) {
             state.sidepinZone = null
             state.dropTarget = target.drop
@@ -195,6 +214,8 @@ function handleMouseMove(e) {
             }
             return
         }
+    } else {
+        updateGroupHover(null)
     }
 
     // Try pinned tab containers first (left fixed, right fixed, and right inline in topbar)
@@ -360,6 +381,7 @@ function findGroupDropTarget(mx, my) {
         }
         const tabs = list.querySelectorAll(':scope > .tab-item-container, :scope > .tab-divider-item, :scope > .tab-group-wrapper')
         const hit = findClosestTab(tabs, my, 'y')
+        let hoverGroup = null
         if (hit) {
             if (hit.el === state.tabEl) {
                 return { noop: true }
@@ -367,12 +389,15 @@ function findGroupDropTarget(mx, my) {
             const header = hit.el.querySelector(':scope > .tab-group') || hit.el
             const rect = header.getBoundingClientRect()
             const canJoin = !hit.el.classList.contains('tab-divider-item') && hit.el !== state.tabEl
+            hoverGroup = state.dragType === 'tab' && canJoin && hit.el.classList.contains('tab-group-wrapper') && !hit.el.classList.contains('expanded') && contains(header)
+                ? { element: hit.el, tabGroupId: hit.el.dataset.tabGroupId, spaceId: targetSpaceId }
+                : null
             if (canJoin && my > rect.top + rect.height * 0.25 && my < rect.bottom - rect.height * 0.25) {
-                return { join: header, drop: { targetSpaceId, targetGroupTabId: getTabId(hit.el), scope } }
+                return { join: header, hoverGroup, drop: { targetSpaceId, targetGroupTabId: getTabId(hit.el), scope } }
             }
         }
         const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, targetSpaceId) : {}
-        return { tabs, hit, list, axis: 'y', drop: { ...neighbors, targetSpaceId, targetGroupTabId: null, scope } }
+        return { tabs, hit, list, axis: 'y', hoverGroup, drop: { ...neighbors, targetSpaceId, targetGroupTabId: null, scope } }
     }
     return null
 }
@@ -476,6 +501,7 @@ function handleKeyDown(e) {
 }
 
 function handleMouseUp(event, cancelled = false) {
+    updateGroupHover(null)
     stopAutoScroll()
     window.removeEventListener('mousemove', handleMouseMove)
     window.removeEventListener('mouseup', handleMouseUp)
@@ -625,4 +651,11 @@ function onDrop(cb) {
     dropCallback = cb
 }
 
-export { state as tabDrag, startPending as startTabDrag, cancelDrag, setActivateRafId, didDragOccurred, onDrop }
+function onGroupExpand(cb) {
+    groupExpandCallback = cb
+    return () => {
+        if (groupExpandCallback === cb) groupExpandCallback = null
+    }
+}
+
+export { state as tabDrag, startPending as startTabDrag, cancelDrag, setActivateRafId, didDragOccurred, onDrop, onGroupExpand }

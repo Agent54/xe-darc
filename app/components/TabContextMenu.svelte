@@ -1,5 +1,7 @@
 <script>
     import data from '../data.svelte.js'
+    import { tick } from 'svelte'
+    import EmojiPicker from './EmojiPicker.svelte'
     
     let {
         menu = { visible: false, x: 0, y: 0, tab: null, index: null },
@@ -12,15 +14,26 @@
     
     let menuElement = $state(null)
     let adjustedY = $state(0)
+    let adjustedX = $state(0)
+    let groupMenuView = $state('menu')
+    let groupNameInput = $state(null)
+
+    $effect(() => {
+        if (menu.visible && menu.tab) groupMenuView = 'menu'
+    })
     
     $effect(() => {
         if (menu.visible) {
+            groupMenuView // Reposition when a group editor changes the menu size.
             adjustedY = menu.y
+            adjustedX = menu.x
             if (menuElement) {
                 requestAnimationFrame(() => {
+                    if (!menuElement) return
                     const menuHeight = menuElement.offsetHeight
                     const viewportHeight = window.innerHeight
                     const margin = 8
+                    adjustedX = Math.max(margin, Math.min(menu.x, window.innerWidth - menuElement.offsetWidth - margin))
                     if (menu.y + menuHeight + margin > viewportHeight) {
                         adjustedY = Math.max(margin, viewportHeight - menuHeight - margin)
                     }
@@ -53,25 +66,22 @@
     
     function pinTabLeft(tab) {
         if (!data.spaceMeta.activeSpace || !tab) return
-        const wasActive = data.spaceMeta.activeTabId === tab.id
         data.pin({ tabId: tab.id, pinned: 'left' })
-        if (wasActive) {
-            data.previous()
-        }
         onHide()
     }
     
     function pinTabRight(tab) {
-        const wasActive = data.spaceMeta.activeTabId === tab.id
         data.pin({ tabId: tab.id, pinned: 'right' })
-        if (wasActive) {
-            data.previous()
-        }
         onHide()
     }
     
     function unpinTab(tab) {
         data.pin({ tabId: tab.id, pinned: null })
+        onHide()
+    }
+
+    function setPinScope(scope) {
+        data.pin({ tabId: menu.tab.id, pinned: menu.tab.pinned, scope })
         onHide()
     }
     
@@ -143,6 +153,22 @@
         await data.updateTabGroup(menu.tab.tabGroupId, { name: null }, menu.tab.spaceId)
         onHide()
     }
+
+    async function showGroupView(view) {
+        groupMenuView = view
+        await tick()
+        if (view === 'rename') {
+            groupNameInput?.focus()
+            groupNameInput?.select()
+        } else if (view === 'menu') {
+            menuElement?.querySelector('button')?.focus()
+        }
+    }
+
+    async function saveGroupEmoji(emoji) {
+        await data.updateTabGroup(menu.tab.tabGroupId, { emoji, favicon: null }, menu.tab.spaceId)
+        onHide()
+    }
 </script>
 
 {#if menu.visible && menu.tab}
@@ -159,23 +185,40 @@
     
     <div class="context-menu" 
          bind:this={menuElement}
-         role="menu"
-         tabindex="0"
-         style="left: {menu.x}px; top: {adjustedY}px;"
+         role={menu.tab.type === 'tabgroup' && groupMenuView !== 'menu' ? 'dialog' : 'menu'}
+         aria-label={menu.tab.type === 'tabgroup' && groupMenuView !== 'menu' ? (groupMenuView === 'rename' ? 'Rename group' : 'Group icon') : undefined}
+         tabindex="-1"
+         style="left: {adjustedX}px; top: {adjustedY}px;"
          onclick={(e) => e.stopPropagation()}
-         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+         onkeydown={(e) => {
+             if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
+             if (e.key === 'Escape' && groupMenuView !== 'menu') {
+                 e.preventDefault()
+                 e.stopPropagation()
+                 showGroupView('menu')
+             }
+         }}
          oncontextmenu={(e) => e.preventDefault()}>
         {#if menu.tab.type === 'tabgroup'}
-            <form class="group-name-form" onsubmit={saveGroupName}>
-                <label for="tab-group-name">Group name</label>
-                <div class="group-name-fields">
-                    <input id="tab-group-name" name="groupName" value={menu.tab.name || ''} placeholder="Use tab titles" autocomplete="off" />
-                    <button type="submit">Save</button>
-                </div>
-            </form>
-            {#if menu.tab.name}
-                <button class="context-menu-item" role="menuitem" type="button" onmouseup={resetGroupName}
-                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); resetGroupName() } }}>Use tab titles</button>
+            {#if groupMenuView === 'menu'}
+                <button class="context-menu-item" role="menuitem" type="button" onclick={() => showGroupView('rename')}>Rename…</button>
+                <button class="context-menu-item" role="menuitem" type="button" onclick={() => showGroupView('emoji')}>Change icon…</button>
+            {:else}
+                <button class="group-editor-back" type="button" onclick={() => showGroupView('menu')}>← {groupMenuView === 'rename' ? 'Rename group' : 'Group icon'}</button>
+                {#if groupMenuView === 'rename'}
+                    <form class="group-name-form" onsubmit={saveGroupName}>
+                        <label for="tab-group-name">Group name</label>
+                        <div class="group-name-fields">
+                            <input bind:this={groupNameInput} id="tab-group-name" name="groupName" value={menu.tab.name || ''} placeholder="Use tab titles" autocomplete="off" />
+                            <button type="submit">Save</button>
+                        </div>
+                    </form>
+                    {#if menu.tab.name}
+                        <button class="context-menu-item" type="button" onclick={resetGroupName}>Use tab titles</button>
+                    {/if}
+                {:else}
+                    <EmojiPicker value={menu.tab.metadata?.emoji} onSelect={saveGroupEmoji} />
+                {/if}
             {/if}
         {:else if menu.tab.type === 'divider'}
             <div class="context-menu-item" role="menuitem" tabindex="0"
@@ -228,6 +271,13 @@
                 </span>
                 <span>Unpin Tab</span>
             </div>
+            <div class="pin-scope-label">Pin scope</div>
+            {#each [['group', 'Tab group'], ['space', 'Space']] as [scope, label]}
+                <button class="context-menu-item" type="button" role="menuitemradio" aria-checked={data.getPinScope(menu.tab) === scope} onclick={() => setPinScope(scope)}>
+                    <span class="context-menu-icon" aria-hidden="true">{data.getPinScope(menu.tab) === scope ? '✓' : ''}</span>
+                    <span>{label}</span>
+                </button>
+            {/each}
         {:else}
             <div class="context-menu-item-row">
                 <div class="context-menu-item context-menu-item-left" 
@@ -420,6 +470,31 @@
 {/if}
 
 <style>
+    .pin-scope-label {
+        padding: 10px 14px 6px;
+        border-top: 1px solid #ffffff14;
+        color: #888;
+        font-size: 11px;
+    }
+
+    .group-editor-back {
+        display: block;
+        width: 100%;
+        padding: 11px 12px;
+        border: 0;
+        border-bottom: 1px solid #ffffff14;
+        border-radius: 8px 8px 0 0;
+        background: transparent;
+        color: #b8b8b8;
+        font: inherit;
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .group-editor-back:hover { background: #ffffff0f; }
+    .group-editor-back:focus-visible, button.context-menu-item:focus-visible { outline: 1px solid #a3a3a3; outline-offset: -2px; }
+
     .group-name-form {
         display: flex;
         flex-direction: column;
@@ -461,6 +536,7 @@
     }
 
     button.context-menu-item {
+        width: 100%;
         border: 0;
         background: transparent;
         text-align: left;

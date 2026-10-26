@@ -4,7 +4,7 @@ import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
-import { getTabGroups, getSidebarItems, getTabGroup, tabGroupMetadataId, planTabMove, groupCanvasPosition } from './lib/tab-groups.js'
+import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, nextPinOrder, tabGroupMetadataId, planTabMove, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
@@ -876,7 +876,10 @@ const refresh = throttle(async function (spaceId) {
         }
 
         if (spaces[spaceMeta.activeSpace]) {
-            const lastActiveTabId = getLastActiveNonPinnedTabId(spaceMeta.activeSpace)
+            const lastEntry = getSpaceActiveHistoryEntries(spaceMeta.activeSpace)[0]
+            const lastTab = docs[getTabIdFromActiveHistoryEntry(lastEntry)]
+            const lastGroupPin = lastTab?.pinned && getPinScope(lastTab) === 'group' && getTabGroup(spaces[spaceMeta.activeSpace].tabs, lastTab.id) ? lastTab.id : null
+            const lastActiveTabId = getLastActiveNonPinnedTabId(spaceMeta.activeSpace) || lastGroupPin
             if (lastActiveTabId) {
                 spaceMeta.activeTabId = lastActiveTabId
                 markTabActive(spaceMeta.activeSpace, lastActiveTabId)
@@ -998,7 +1001,7 @@ live: true,
         }
 
         // fixme: deep comp
-        for (const key of ['canvas', 'element', 'files', 'pinned', 'tabGroupId', 'tabGroupOrder', ...sortOrder]) { // force reload until using docs store
+        for (const key of ['canvas', 'element', 'files', 'pinned', 'pinScope', 'pinOrder', 'tabGroupId', 'tabGroupOrder', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
                 if (change.doc.spaceId && change.doc.type !== 'space' && change.doc.type !== 'activity') {
                     console.log('refreshing', change.doc.spaceId)
@@ -1319,6 +1322,8 @@ const getAttachmentUrl = async (attachmentUrl, digest) => {
 function getLastActiveNonPinnedTabId(spaceId) {
     spaceId ||= spaceMeta.activeSpace
     const activeHistory = getSpaceActiveHistoryEntries(spaceId)
+    const active = docs[spaceMeta.activeTabId]?.spaceId === spaceId ? docs[spaceMeta.activeTabId] : docs[getTabIdFromActiveHistoryEntry(activeHistory[0])]
+    const group = active?.pinned && active.spaceId === spaceId && getPinScope(active) === 'group' ? getTabGroup(spaces[spaceId]?.tabs, active.id) : null
 
     for (const entry of activeHistory) {
         const tabId = getTabIdFromActiveHistoryEntry(entry)
@@ -1327,12 +1332,22 @@ function getLastActiveNonPinnedTabId(spaceId) {
         }
 
         const tab = docs[tabId]
-        if (tab?.type === 'tab' && tab.spaceId === spaceId && !tab.archive && !tab.preview && !tab.lightbox && !tab.pinned) {
+        if (tab?.type === 'tab' && tab.spaceId === spaceId && !tab.archive && !tab.preview && !tab.lightbox && !tab.pinned && (!group || group.tabs.some(member => member.id === tabId))) {
             return tabId
         }
     }
 
-    return null
+    return group?.tabs.find(tab => !tab.pinned)?.id || null
+}
+
+function getCurrentGroupTabId(spaceId = spaceMeta.activeSpace) {
+    const items = spaces[spaceId]?.tabs || []
+    const groups = getTabGroups(items)
+    const members = new Set(groups.flatMap(group => group.tabs.map(tab => tab.id)))
+    if (members.has(spaceMeta.activeTabId)) return spaceMeta.activeTabId
+    return getLastActiveNonPinnedTabId(spaceId) ||
+        getSpaceActiveHistoryEntries(spaceId).map(getTabIdFromActiveHistoryEntry).find(id => members.has(id)) ||
+        groups[0]?.tabs[0]?.id || null
 }
 
 function getTabLastActiveAt(tabId, spaceId = spaceMeta.activeSpace) {
@@ -1376,6 +1391,10 @@ const data = {
     activateSpace,
     getPreviousActiveSpace,
     getLastActiveNonPinnedTabId,
+    getCurrentGroupTabId,
+    getPinScope,
+    getSidepins: (spaceId = spaceMeta.activeSpace, groupTabId = getCurrentGroupTabId(spaceId)) => getSidepins(spaces[spaceId]?.tabs, groupTabId),
+    getSpacePins: (spaceId = spaceMeta.activeSpace) => getSidepins(spaces[spaceId]?.tabs, null),
     getTabLastActiveAt,
     getTabGroups: (spaceId = spaceMeta.activeSpace) => getTabGroups(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId), docs),
     getSidebarItems: (spaceId = spaceMeta.activeSpace) => getSidebarItems(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId), docs),
@@ -1402,7 +1421,7 @@ const data = {
         return group.tabs[0]
     },
     newGroupTab: (spaceId = spaceMeta.activeSpace, options = {}) => {
-        const tabId = options.groupTabId || (docs[spaceMeta.activeTabId]?.pinned ? getLastActiveNonPinnedTabId(spaceId) : spaceMeta.activeTabId)
+        const tabId = options.groupTabId || getCurrentGroupTabId(spaceId)
         return data.newTab(spaceId, { ...options, groupTabId: tabId })
     },
     loadSampleData,
@@ -1627,8 +1646,42 @@ const data = {
         db.put(updated)
     },
 
-    pin({ tabId, pinned }) {
-        return queueDocumentUpdate(tabId, { pinned, ...(pinned ? { tabGroupId: null, tabGroupOrder: null } : {}) })
+    pin({ tabId, pinned, scope, groupTabId, beforeTabId, afterTabId, targetSpaceId }) {
+        const tab = docs[tabId]
+        if (tab?.type !== 'tab') return Promise.resolve()
+        if (!pinned) return queueDocumentUpdate(tabId, { pinned: null, pinScope: null, pinOrder: null })
+
+        const pinScope = scope || (tab.pinned ? getPinScope(tab) : 'group')
+        if (targetSpaceId && targetSpaceId !== tab.spaceId) {
+            if (!spaces[targetSpaceId]) return Promise.resolve()
+            const moving = data.moveTab(tabId, { targetSpaceId, targetGroupTabId: groupTabId })
+            const pinning = data.pin({ tabId, pinned, scope: pinScope, groupTabId, beforeTabId, afterTabId })
+            return Promise.all([moving, pinning])
+        }
+        const items = spaces[tab.spaceId]?.tabs || []
+        const anchor = groupTabId || (tab.pinned && getPinScope(tab) === 'space' ? getCurrentGroupTabId(tab.spaceId) : tabId)
+        const group = pinScope === 'group' ? getTabGroup(items, anchor) : null
+        const saves = []
+        let membership = {}
+        if (group && !group.tabs.some(member => member.id === tabId) && (!tab.tabGroupId || tab.tabGroupId !== group.tabs[0].tabGroupId)) {
+            const updates = planTabMove(items, items, tabId, { targetSpaceId: tab.spaceId, targetGroupTabId: anchor }, () => crypto.randomUUID())
+            for (const { id, ...update } of updates) {
+                if (id === tabId) membership = update
+                else saves.push(queueDocumentUpdate(id, update))
+            }
+        }
+        const pinOrder = beforeTabId || afterTabId
+            ? orderBetween(docs[beforeTabId], docs[afterTabId], 'pinOrder')
+            : tab.pinOrder ?? (tab.pinned ? tab.order ?? 0 : nextPinOrder(items))
+        saves.push(queueDocumentUpdate(tabId, { ...membership, pinned: pinned === true ? 'left' : pinned, pinScope, pinOrder }))
+
+        if (spaceMeta.activeSpace === tab.spaceId && spaceMeta.activeTabId === tabId) {
+            const candidates = (pinScope === 'group' ? getTabGroup(items, tabId)?.tabs || [] : items)
+                .filter(member => member.type === 'tab' && !member.pinned && !member.archive && !member.preview && !member.lightbox)
+            const replacement = data.getGroupActiveTab({ tabs: candidates }, tab.spaceId)
+            if (replacement) activate(replacement.id)
+        }
+        return Promise.all(saves)
     },
 
     navigate(tabId, url) {
@@ -1681,11 +1734,12 @@ const data = {
         removal.catch(error => console.error('Failed to remove divider:', error))
     },
     
-    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned, groupTabId } = {}) => {
+    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned, pinScope = 'group', groupTabId } = {}) => {
         // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
         const firstItem = spaces[spaceId]?.tabs?.[0]
-        const group = !pinned && !preview && !lightbox ? getTabGroup(spaces[spaceId]?.tabs, groupTabId) : null
+        const isGroupMember = !preview && !lightbox && (!pinned || pinScope === 'group')
+        const group = isGroupMember ? getTabGroup(spaces[spaceId]?.tabs, groupTabId) : null
         const tabGroupId = group ? group.tabs[0].tabGroupId || crypto.randomUUID() : null
         const canvasPosition = group ? groupCanvasPosition(group.tabs, spaceId) : null
         if (group) {
@@ -1702,7 +1756,7 @@ const data = {
             favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64` : undefined,
             url: url || 'about:newtab',
             title: url ? title : 'New Tab',
-            order: group ? group.order : !pinned && !preview && !lightbox && firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
+            order: group ? group.order : isGroupMember && firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
             tabGroupId,
             tabGroupOrder: group ? Math.max(...group.tabs.map((member, index) => member.tabGroupOrder ?? index)) + 1 : null,
             ...(canvasPosition ? { canvas: { [spaceId]: canvasPosition } } : {}),
@@ -1710,7 +1764,8 @@ const data = {
             preview: !!preview,
             archive: preview ? 'preview' : undefined,
             lightbox: !!lightbox,
-            pinned
+            pinned,
+            ...(pinned ? { pinScope, pinOrder: nextPinOrder(spaces[spaceId].tabs) } : {})
         }
 
         if (!spaces[spaceId].tabs?.length) {
@@ -2250,7 +2305,10 @@ const data = {
         const tabDoc = docs[tabId]
         if (!tabDoc) return
 
-        if (tabDoc.type === 'tab' && scope !== 'pinned') {
+        if (tabDoc.type === 'tab' && scope === 'pinned') {
+            return data.pin({ tabId, pinned: tabDoc.pinned || 'left', beforeTabId, afterTabId, targetSpaceId })
+        }
+        if (tabDoc.type === 'tab') {
             const sourceSpaceId = tabDoc.spaceId
             const destSpaceId = targetSpaceId || sourceSpaceId
             if (!spaces[destSpaceId]) return
@@ -2342,11 +2400,6 @@ const data = {
         }
 
         tab.order = newOrder
-        if (scope === 'pinned') {
-            tab.tabGroupId = null
-            tab.tabGroupOrder = null
-        }
-
         if (isSpaceMove) {
             // Cross-space: protect frame from destruction via onDestroy
             if (frameData) {

@@ -1,11 +1,21 @@
+:root {
+    /* Shared header/sidebar tab colors, midway between their original values. */
+    --tab-hover-background: #181818;
+    --tab-hover-border: rgb(255 255 255 / 2.5%);
+    --tab-active-background: #212121;
+    --tab-active-border: rgb(255 255 255 / 4%);
+    --tab-active-hover-background: #2a2a2a;
+    --tab-active-hover-border: rgb(255 255 255 / 5.5%);
+}
+
 #backgroundFrames {
     display: none;
 }
 header {
     position: fixed;
-    left: env(titlebar-area-x, 0);
+    left: calc(env(titlebar-area-x, 0px) + var(--tab-sidebar-width, 0px));
     top: env(titlebar-area-y, 0);
-    width: env(titlebar-area-width, 100%);
+    width: calc(env(titlebar-area-width, 100%) - var(--tab-sidebar-width, 0px));
     height: env(titlebar-area-height, 35px);
     z-index: 2100;
     background-color: #000;
@@ -459,15 +469,12 @@ ul::-webkit-scrollbar {
     /* hsl(0deg 0% 100% / 2%); */
 }
 .tab-container:hover, .tab-container.hovered, .tab-container.menu-open {
-    background-color: rgb(255 255 255 / 12%);
-    border: 1px solid hsl(0deg 0% 100% / 3%);
+    background-color: var(--tab-hover-background);
+    border: 1px solid var(--tab-hover-border);
 }
 .tab-container.active {
-    /* background-color: rgb(255 255 255 / 17%);
-    border: 1px solid hsl(0deg 0% 100% / 6.5%); */
-
-    background: #262626;
-    border: 1px solid hsl(0deg 0% 100% / 5%);
+    background: var(--tab-active-background);
+    border: 1px solid var(--tab-active-border);
     position: sticky;
     left: 0;
     right: 0;
@@ -475,8 +482,8 @@ ul::-webkit-scrollbar {
     box-shadow: -8px 0 8px -2px black, 8px 0 8px -2px black;
 }
 .tab-container.active:hover, .tab-container.active.hovered, .tab-container.active.menu-open {
-    background-color: #2b2b2b;
-    border: 1px solid hsl(0deg 0% 100% / 7%);
+    background-color: var(--tab-active-hover-background);
+    border: 1px solid var(--tab-active-hover-border);
 
 }
 .tab-container .tab {

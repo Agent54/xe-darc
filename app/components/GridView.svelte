@@ -201,13 +201,14 @@
     for (const id of spaceOrder) {
       const space = data.spaces[id]
       if (space) {
-        const tabs = space.tabs || []
+        const pins = data.getSpacePins(id)
+        const groups = data.getTabGroups(id)
         result[id] = {
           ...space,
-          leftPinnedTabs: tabs.filter(tab => tab.pinned === true || tab.pinned === 'left'),
-          rightPinnedTabs: tabs.filter(tab => tab.pinned === 'right'),
-          tabGroups: data.getTabGroups(id),
-          unpinnedTabs: tabs.filter(tab => tab.type === 'tab' && !tab.pinned)
+          leftPinnedTabs: pins.filter(tab => tab.pinned === true || tab.pinned === 'left'),
+          rightPinnedTabs: pins.filter(tab => tab.pinned === 'right'),
+          tabGroups: groups,
+          memberTabs: groups.flatMap(group => group.tabs)
         }
       }
     }
@@ -403,7 +404,7 @@
       <div class="spaces-content">
       {#each displayedSpaceOrder as spaceId (spaceId)}
         {@const space = spacesData[spaceId]}
-        {@const tabs = space?.unpinnedTabs || []}
+        {@const tabs = space?.memberTabs || []}
         {@const groups = space?.tabGroups || []}
         {@const leftPins = space?.leftPinnedTabs || []}
         {@const rightPins = space?.rightPinnedTabs || []}

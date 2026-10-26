@@ -527,7 +527,7 @@ Deno.test('all group views preview the active neighbors and retain them when ano
     data.activate('outside')
     const group = data.getTabGroups().find(group => group.tabGroupId)
     assert.deepEqual(preview(group), ['three', 'four', 'five'])
-    assert.equal(group.title, 'three · four · five')
+    assert.equal(group.title, 'one')
 })
 
 Deno.test('group metadata is optional, persists separately and restores without becoming a sidebar item', async () => {
@@ -535,7 +535,7 @@ Deno.test('group metadata is optional, persists separately and restores without 
     await initial.refresh()
     assert.equal(initial.writes.length, 0)
     assert.equal(initial.data.getTabGroup('one').metadata, null)
-    const saving = initial.data.updateTabGroup('group', { name: '  Research  ', color: '#aabbcc', emoji: 'R', favicon: 'https://example.com/icon.png' })
+    const saving = initial.data.updateTabGroup('group', { name: '  Research  ', color: '#aabbcc', emoji: '🧪', favicon: 'https://example.com/icon.png' })
     assert.equal(initial.data.getTabGroup('one').name, 'Research')
     await saving
     const saved = initial.writes.find(doc => doc.type === 'tabgroup')
@@ -543,16 +543,25 @@ Deno.test('group metadata is optional, persists separately and restores without 
     assert.equal(saved.tabGroupId, 'group')
     assert.equal(saved.name, 'Research')
     assert.equal(saved.color, '#aabbcc')
+    assert.equal(saved.emoji, '🧪')
     assert.equal(saved.favicon, 'https://example.com/icon.png')
     const restarted = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' }), saved], runtime: 'client' })
     await restarted.refresh()
     assert.equal(restarted.data.getTabGroup('one').title, 'Research')
+    assert.equal(restarted.data.getTabGroup('one').metadata.emoji, '🧪')
     assert.equal(restarted.data.getSidebarItems().length, 1)
     assert.equal(restarted.data.spaces[defaultSpace].tabs.every(tab => tab.type === 'tab'), true)
     await restarted.data.updateTabGroup('group', { name: null })
     assert.equal(restarted.data.getTabGroup('one').name, null)
     assert.equal(restarted.data.getTabGroup('one').metadata.color, '#aabbcc')
-    assert.equal(restarted.data.getTabGroup('one').title, 'https://example.com · https://example.com')
+    assert.equal(restarted.data.getTabGroup('one').title, 'https://example.com')
+    await restarted.data.updateTabGroup('group', { emoji: '🌱', favicon: null })
+    assert.equal(restarted.data.getTabGroup('one').name, null)
+    assert.equal(restarted.data.getTabGroup('one').metadata.emoji, '🌱')
+    assert.equal(restarted.data.getTabGroup('one').metadata.favicon, null)
+    await restarted.data.updateTabGroup('group', { emoji: null, favicon: null })
+    assert.equal(restarted.data.getTabGroup('one').metadata.emoji, null)
+    assert.deepEqual(Array.from(restarted.data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two'])
 })
 
 Deno.test('group metadata creation retries conflicts without losing concurrent customizations', async () => {
@@ -777,14 +786,174 @@ Deno.test('adding a group member preserves the rank of a temporarily closed midd
     assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two', 'three', added.id])
 })
 
-Deno.test('pinning detaches a member and canvas scene saves never create group documents', async () => {
+Deno.test('pinning preserves membership and canvas scene saves never create group documents', async () => {
     const { data, refresh, writes } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' })] })
     await refresh()
     await data.pin({ tabId: 'two', pinned: 'right' })
-    assert.equal(data.docs.two.tabGroupId, null)
+    assert.equal(data.docs.two.tabGroupId, 'group')
+    assert.equal(data.docs.two.pinScope, 'group')
+    assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two'])
+    await data.pin({ tabId: 'two', pinned: null })
+    assert.equal(data.docs.two.tabGroupId, 'group')
     data.updateCanvasShapes(defaultSpace, [{ id: 'tab-group-frame:group', type: 'frame', customData: { virtualTabGroup: true } }])
     assert.equal(writes.every(write => write.type === 'tab'), true)
     assert.equal(data.spaces[defaultSpace].tabs.some(tab => tab.type === 'shape'), false)
+})
+
+Deno.test('group pins update top tabs immediately and unpin into their original member position', async () => {
+    const { data, refresh, db } = session({
+        tabs: ['one', 'two', 'three'].map((id, index) => tab(id, defaultSpace, { tabGroupId: 'group', tabGroupOrder: index })),
+        history: ['two', 'one'], runtime: 'client'
+    })
+    await refresh()
+    const readTabs = new Function('$', 'data', 'closed', readTopTabsSource.replace(/\nreadTabs$/, '\nreturn readTabs'))(svelteClient, data, svelteClient.proxy({}))
+    assert.deepEqual(Array.from(readTabs(), tab => tab.id), ['one', 'two', 'three'])
+    const pinning = data.pin({ tabId: 'two', pinned: 'left' })
+    assert.deepEqual(Array.from(readTabs(), tab => tab.id), ['one', 'three'])
+    assert.equal(data.spaceMeta.activeTabId, 'one')
+    assert.equal(data.docs.two.tabGroupOrder, 1)
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['two'])
+    await pinning
+    await data.pin({ tabId: 'two', pinned: null })
+    assert.deepEqual(Array.from(readTabs(), tab => tab.id), ['one', 'two', 'three'])
+    assert.equal((await db.get('two')).tabGroupOrder, 1)
+    assert.equal(data.getSidepins().length, 0)
+})
+
+Deno.test('pin scope is per tab, survives restart and can attach a space pin to the current group', async () => {
+    const { data, refresh, db } = session({
+        tabs: [tab('one', defaultSpace, { tabGroupId: 'a' }), tab('pin', defaultSpace, { tabGroupId: 'a' }),
+            tab('other', defaultSpace, { tabGroupId: 'b' }), tab('other-pin', defaultSpace, { tabGroupId: 'b' })],
+        history: ['one'], runtime: 'client'
+    })
+    await refresh()
+    await data.pin({ tabId: 'pin', pinned: 'left' })
+    await data.pin({ tabId: 'other-pin', pinned: 'right' })
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['pin'])
+    data.activate('other')
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['other-pin'])
+    await data.pin({ tabId: 'pin', pinned: 'left', scope: 'space' })
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id).sort(), ['other-pin', 'pin'])
+    assert.equal(data.docs.pin.tabGroupId, 'a')
+    assert.deepEqual(Array.from(data.getSpacePins(), tab => tab.id), ['pin'])
+    await data.pin({ tabId: 'pin', pinned: 'left', scope: 'group' })
+    assert.equal(data.docs.pin.tabGroupId, 'b')
+    assert.equal(data.docs['other-pin'].pinScope, 'group')
+    const restarted = session({ tabs: await Promise.all(['one', 'pin', 'other', 'other-pin'].map(id => db.get(id))), history: ['one'] })
+    await restarted.refresh()
+    assert.equal(restarted.data.getSidepins().length, 0)
+    restarted.data.activate('other')
+    assert.deepEqual(Array.from(restarted.data.getSidepins(), tab => tab.id).sort(), ['other-pin', 'pin'])
+    await restarted.data.pin({ tabId: 'pin', pinned: null })
+    assert.equal(restarted.data.getTabGroup('pin').tabs.some(tab => tab.id === 'other'), true)
+})
+
+Deno.test('pinning the only center tab keeps its group selected and group additions still work', async () => {
+    const { data, refresh } = session({ tabs: [tab('solo'), tab('outside')], history: ['solo', 'outside'], runtime: 'client' })
+    await refresh()
+    await data.pin({ tabId: 'solo', pinned: 'right' })
+    assert.equal(data.spaceMeta.activeTabId, 'solo')
+    assert.equal(data.getCurrentGroupTabId(), 'solo')
+    assert.equal(data.getLastActiveNonPinnedTabId(), null)
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['solo'])
+    const added = await data.newGroupTab(defaultSpace, { shouldFocus: true })
+    assert.equal(data.docs.solo.tabGroupId, added.tabGroupId)
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['solo'])
+    await data.pin({ tabId: added.id, pinned: 'left' })
+    assert.equal(data.getCurrentGroupTabId(), added.id)
+    assert.equal(data.getLastActiveNonPinnedTabId(), null)
+    await data.pin({ tabId: 'solo', pinned: null })
+    assert.equal(data.getLastActiveNonPinnedTabId(), 'solo')
+})
+
+Deno.test('activating a group pin selects its own group rather than the most recent other group', async () => {
+    const { data, refresh } = session({
+        tabs: [tab('center', defaultSpace, { tabGroupId: 'a' }), tab('pin', defaultSpace, { tabGroupId: 'a', pinned: 'left', pinScope: 'group' }), tab('other')],
+        history: ['other'], runtime: 'client'
+    })
+    await refresh()
+    data.activate('pin')
+    assert.equal(data.getCurrentGroupTabId(), 'pin')
+    assert.equal(data.getLastActiveNonPinnedTabId(), 'center')
+    const readTabs = new Function('$', 'data', 'closed', readTopTabsSource.replace(/\nreadTabs$/, '\nreturn readTabs'))(svelteClient, data, svelteClient.proxy({}))
+    assert.deepEqual(Array.from(readTabs(), tab => tab.id), ['center'])
+})
+
+Deno.test('reordering sidepins leaves tab and group positions unchanged', async () => {
+    const { data, refresh, db } = session({
+        tabs: ['one', 'two', 'three'].map((id, index) => tab(id, defaultSpace, { tabGroupId: 'group', order: 10, tabGroupOrder: index })),
+        history: ['one']
+    })
+    await refresh()
+    await data.pin({ tabId: 'two', pinned: 'left' })
+    await data.pin({ tabId: 'three', pinned: 'left', afterTabId: 'two' })
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['three', 'two'])
+    assert.equal(data.docs.three.order, 10)
+    assert.equal(data.docs.three.tabGroupOrder, 2)
+    await data.moveTab('three', { scope: 'pinned', beforeTabId: 'two' })
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['two', 'three'])
+    await data.pin({ tabId: 'three', pinned: null })
+    assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two', 'three'])
+    assert.equal((await db.get('three')).order, 10)
+})
+
+Deno.test('moving a group to another space carries group pins while space pins stay in their space', async () => {
+    const { data, refresh, db } = session({
+        tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('pin', defaultSpace, { tabGroupId: 'group', pinned: 'left', pinScope: 'group' }),
+            tab('space-pin', defaultSpace, { tabGroupId: 'group', pinned: 'right', pinScope: 'space' }), tab('outside')],
+        history: ['one']
+    })
+    await refresh()
+    await data.moveTab('one', { scope: 'group', targetSpaceId: otherSpace })
+    assert.equal(data.docs.pin.spaceId, otherSpace)
+    assert.equal(data.docs.pin.pinned, 'left')
+    assert.equal(data.docs.pin.pinScope, 'group')
+    assert.equal(data.docs['space-pin'].spaceId, defaultSpace)
+    data.activateSpace(otherSpace)
+    data.activate('one')
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['pin'])
+    assert.equal((await db.get('pin')).spaceId, otherSpace)
+})
+
+Deno.test('dragging from another space into a sidepin joins the destination group', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('one'), tab('source', otherSpace)], history: ['one'] })
+    await refresh()
+    await data.pin({ tabId: 'source', pinned: 'right', targetSpaceId: defaultSpace, groupTabId: 'one' })
+    assert.equal(data.docs.source.spaceId, defaultSpace)
+    assert.equal(data.docs.source.pinScope, 'group')
+    assert.equal(data.docs.source.tabGroupId, data.docs.one.tabGroupId)
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['source'])
+    assert.equal((await db.get('source')).pinned, 'right')
+})
+
+Deno.test('older pins without recoverable membership remain space pins until scoped explicitly', async () => {
+    const { data, refresh } = session({ tabs: [tab('one'), tab('legacy', defaultSpace, { pinned: 'left' })], history: ['one'] })
+    await refresh()
+    assert.equal(data.getPinScope(data.docs.legacy), 'space')
+    assert.deepEqual(Array.from(data.getSpacePins(), tab => tab.id), ['legacy'])
+    await data.pin({ tabId: 'legacy', pinned: 'left', scope: 'group' })
+    assert.equal(data.docs.legacy.pinScope, 'group')
+    assert.equal(data.docs.legacy.tabGroupId, data.docs.one.tabGroupId)
+})
+
+Deno.test('restart keeps a pin-only group selected even when another group has center tabs', async () => {
+    const { data, refresh } = session({
+        tabs: [tab('pin', defaultSpace, { pinned: 'left', pinScope: 'group' }), tab('other')], history: ['pin', 'other']
+    })
+    await refresh()
+    assert.equal(data.spaceMeta.activeTabId, 'pin')
+    assert.equal(data.getCurrentGroupTabId(), 'pin')
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['pin'])
+})
+
+Deno.test('creating a sidepin defaults to group scope and respects its group anchor', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('one')], history: ['one'] })
+    await refresh()
+    const pin = await data.newTab(defaultSpace, { pinned: 'right', groupTabId: 'one' })
+    assert.equal(data.docs[pin.id].pinScope, 'group')
+    assert.equal(pin.tabGroupId, data.docs.one.tabGroupId)
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), [pin.id])
+    assert.equal((await db.get(pin.id)).pinScope, 'group')
 })
 
 Deno.test('restore preserves positions on attached displays and fits windows from disconnected displays', () => {

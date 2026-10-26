@@ -1377,24 +1377,12 @@
     function pinTabLeft(tab) {
         if (!data.spaceMeta.activeSpace || !tab) return
 
-        const wasActive = data.spaceMeta.activeTabId === tab.id
         data.pin({ tabId: tab.id, pinned: 'left' })
-        
-        // If pinning the active tab, activate previous tab to trigger scroll
-        if (wasActive) {
-            data.previous()
-        }
         hideContextMenu()
     }
 
     function pinTabRight(tab) {
-        const wasActive = data.spaceMeta.activeTabId === tab.id
         data.pin({ tabId: tab.id, pinned: 'right' })
-        
-        // If pinning the active tab, activate previous tab to trigger scroll
-        if (wasActive) {
-            data.previous()
-        }
         hideContextMenu()
     }
 
@@ -1442,32 +1430,19 @@
             if (!tab) return
             const side = event.side
 
-            if (event.beforeTabId || event.afterTabId) {
-                // Positional sidepin: set pinned state in-memory, then moveTab persists everything in one db.put
-                const wasActive = data.spaceMeta.activeTabId === tab.id
-                tab.pinned = side === 'right' ? 'right' : 'left'
-                if (wasActive) data.previous()
-                data.moveTab(event.tabId, {
-                    scope: 'pinned',
-                    beforeTabId: event.beforeTabId,
-                    afterTabId: event.afterTabId,
-                    targetSpaceId: null
-                })
-            } else {
-                if (side === 'left') {
-                    pinTabLeft(tab)
-                } else {
-                    pinTabRight(tab)
-                }
-            }
+            data.pin({
+                tabId: tab.id, pinned: side,
+                groupTabId: data.getCurrentGroupTabId(),
+                targetSpaceId: data.spaceMeta.activeSpace,
+                beforeTabId: event.beforeTabId, afterTabId: event.afterTabId
+            })
         } else if (event.type === 'reorder') {
             const tab = data.docs[event.tabId]
-            if (tab?.pinned) {
+            if (tab?.pinned && event.scope !== 'group') {
                 if (isPinHidden(tab.id)) {
                     delete invisiblePins[tab.id]
                     localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
                 }
-                tab.pinned = null
             }
             data.moveTab(event.tabId, {
                 scope: event.scope,
@@ -1839,7 +1814,7 @@
                 const hoveredTabElement = elementUnderCursor.closest('.tab-container')
                 if (hoveredTabElement) {
                     // Find the tab by checking all tab arrays (leftPinned, regular, rightPinned)
-                    const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => tab.type === 'tab' && !tab.pinned), ...rightPinnedTabs]
+                    const allTabs = [...leftPinnedTabs, ...unpinnedTabs, ...rightPinnedTabs]
                     const matchingTab = allTabs.find(tab => tabButtons[tab.id] === hoveredTabElement)
                     isStillHovering = matchingTab?.id === hoveredTab.id
                 }
@@ -3186,12 +3161,13 @@
     // reserved for possibly handling only closed tabs from current tab group in future do not remove or switch to data.closedTabs
     const closedTabs = []
 
-    let leftPinnedTabs = $derived(tabs.filter(tab => (tab.pinned === true || tab.pinned === 'left')))
-    let rightPinnedTabs = $derived(tabs.filter(tab => tab.pinned === 'right'))
-    let currentGroupTabId = $derived(data.docs[data.spaceMeta.activeTabId]?.pinned ? data.getLastActiveNonPinnedTabId() : data.spaceMeta.activeTabId)
+    let currentGroupTabId = $derived(data.getCurrentGroupTabId())
     let currentTabGroup = $derived(data.getTabGroup(currentGroupTabId))
-    let unpinnedTabs = $derived((currentTabGroup?.tabs || []).filter(tab => !closed[tab._rev]))
+    let unpinnedTabs = $derived((currentTabGroup?.tabs || []).filter(tab => !tab.pinned && !closed[tab._rev]))
     let unpinnedTabCount = $derived(unpinnedTabs.filter(tab => tab.type === 'tab').length)
+    let scopedPins = $derived(data.getSidepins().filter(tab => !closed[tab._rev]))
+    let leftPinnedTabs = $derived(scopedPins.filter(tab => tab.pinned === true || tab.pinned === 'left'))
+    let rightPinnedTabs = $derived(scopedPins.filter(tab => tab.pinned === 'right'))
     let visibleLeftPinnedTabs = $derived(leftPinnedTabs.filter(t => !invisiblePins[t.id]))
     let visibleRightPinnedTabs = $derived(rightPinnedTabs.filter(t => !invisiblePins[t.id]))
     
@@ -3335,7 +3311,7 @@
     }}
 />
 
-<header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) { cancelFocusModeHide(); focusModeHovered = true } }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) scheduleFocusModeHide() }}>
+<header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} style="--tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;" onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) { cancelFocusModeHide(); focusModeHovered = true } }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) scheduleFocusModeHide() }}>
     <!-- Main background drag handle -->
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 178px;' : 'right: 137px;'}"></div>
     
@@ -4306,7 +4282,7 @@
                 } else {
                     const hoveredTabElement = elementUnderCursor?.closest('.tab-container')
                     if (hoveredTabElement) {
-                        const allTabs = [...leftPinnedTabs, ...tabs.filter(tab => tab.type === 'tab' && !tab.pinned), ...rightPinnedTabs]
+                        const allTabs = [...leftPinnedTabs, ...unpinnedTabs, ...rightPinnedTabs]
                         const matchingTab = allTabs.find(tab => tabButtons[tab.id] === hoveredTabElement)
                         shouldKeepOpen = matchingTab?.id === hoveredTab?.id
                     }

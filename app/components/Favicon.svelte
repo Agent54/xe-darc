@@ -20,25 +20,22 @@
     }
     
     // Use reactive doc data for url/favicon, falling back to prop
-    const reactiveTab = $derived({
-        ...tab,
-        url: data.docs[tab?.id]?.url ?? tab?.url,
-        favicon: data.docs[tab?.id]?.favicon ?? tab?.favicon,
-        title: data.docs[tab?.id]?.title ?? tab?.title
-    })
+    const reactiveUrl = $derived(data.docs[tab?.id]?.url ?? tab?.url)
+    const reactiveFavicon = $derived(data.docs[tab?.id]?.favicon ?? tab?.favicon)
+    const reactiveTitle = $derived(data.docs[tab?.id]?.title ?? tab?.title)
     const loading = $derived(data.frames[tab?.id]?.loading ?? false)
     
     // Derive security status if not provided
-    const securityStatus = $derived(() => {
+    const securityStatus = $derived.by(() => {
         if (security !== null) return security
         
-        if (!reactiveTab?.url) return null
+        if (!reactiveUrl) return null
         
         // Skip security checks for about: URLs - they don't have origins
-        if (reactiveTab.url.startsWith('about:')) return null
+        if (reactiveUrl.startsWith('about:')) return null
         
         try {
-            const origin = new URL(reactiveTab.url).origin
+            const origin = new URL(reactiveUrl).origin
             const originData = data.origins[origin]
             
             return {
@@ -46,7 +43,7 @@
                          originData?.hasSecurityWarning || 
                          originData?.mixedContent || 
                          originData?.securityState === 'mixed' || 
-                         (originData?.securityState === 'insecure' && reactiveTab.url?.startsWith('https:')),
+                         (originData?.securityState === 'insecure' && reactiveUrl.startsWith('https:')),
                 originData
             }
         } catch (error) {
@@ -55,8 +52,8 @@
     })
     
     const faviconContent = $derived.by(() => {
-        const url = reactiveTab?.url
-        const favicon = reactiveTab?.favicon
+        const url = reactiveUrl
+        const favicon = reactiveFavicon
         
         // New tab icon - check URL FIRST before anything else
         // This ensures about: pages always show correct icon regardless of any other state
@@ -65,7 +62,7 @@
         }
         
         // Security indicator takes precedence for non-about: URLs
-        if (securityStatus()?.hasError) {
+        if (securityStatus?.hasError) {
             return { type: 'security', component: SecurityIndicator }
         }
 
@@ -134,7 +131,7 @@
     <span 
         class="favicon-display" 
         class:small={size === 'small'}
-        title={reactiveTab?.title || reactiveTab?.url || ''}
+        title={reactiveTitle || reactiveUrl || ''}
         aria-label="Tab favicon and security status">
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
