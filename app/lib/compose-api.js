@@ -41,6 +41,10 @@ async function getComposeConnection(signal) {
     throw new Error(`Xe Launcher Compose API is unavailable over HTTPS: ${lastError?.message || 'connection failed'}`)
 }
 
+export async function getComposeAPIOrigin() {
+    return (await getComposeConnection()).origin
+}
+
 export async function getComposeAppPorts({ signal } = {}) {
     if (composeConnection) {
         try {

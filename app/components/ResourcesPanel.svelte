@@ -208,11 +208,8 @@
 
         Object.entries(data.permissions).forEach(([resourceType, permission]) => {
             Object.values(permission.origins || {}).forEach(origin => {
-                const requests = origin.requests || []
-                const request = requests.findLast(request =>
-                    request.status === 'requested' && request.windowId === window.darcWindowId
-                )
-                if (request) {
+                const request = origin.requests?.at(-1)
+                if (request?.status === 'requested' && request.windowId === window.darcWindowId) {
                     requested.push(request)
                     usedResourceTypes.add(resourceType)
                 }

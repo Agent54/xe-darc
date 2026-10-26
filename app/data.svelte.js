@@ -2008,10 +2008,8 @@ const data = {
             return { granted }
         }
 
-        const pendingRequest = permission.origins[origin].requests.findLast(request =>
-            request.status === 'requested' && request.windowId === window.darcWindowId
-        )
-        if (pendingRequest) {
+        const pendingRequest = permission.origins[origin].requests.at(-1)
+        if (pendingRequest?.status === 'requested' && pendingRequest.windowId === window.darcWindowId) {
             pendingRequest.timestamp = Date.now()
             pendingRequest.url = event.url
             pendingRequest.tabId = tabId
@@ -2147,14 +2145,12 @@ const data = {
             return false
         }
 
-        const pendingRequests = permissionObj.origins[origin].requests.filter(request => request.status === 'requested')
-        if (pendingRequests.length > 0) {
-            for (const request of pendingRequests) {
-                request.status = 'granted'
-                request.unseen = false
-                request.needsReload = true
-                request.timestamp = Date.now()
-            }
+        const request = permissionObj.origins[origin].requests.at(-1)
+        if (request.status === 'requested') {
+            request.status = 'granted'
+            request.unseen = false
+            request.needsReload = true
+            request.timestamp = Date.now()
             
             if (permission === 'always') {
                 permissionObj.origins[origin].permission = 'always'
@@ -2173,16 +2169,14 @@ const data = {
             return false
         }
 
-        // Find the pending requests for this permission type and origin
-        const pendingRequests = permissionObj.origins[origin].requests.filter(request => request.status === 'requested')
-        if (pendingRequests.length > 0) {
+        // Find the pending request for this permission type and origin
+        const request = permissionObj.origins[origin].requests.at(-1)
+        if (request.status === 'requested') {
             // Update the request status
-            for (const request of pendingRequests) {
-                request.status = 'denied'
-                request.unseen = false
-                request.needsReload = true
-                request.timestamp = Date.now()
-            }
+            request.status = 'denied'
+            request.unseen = false
+            request.needsReload = true
+            request.timestamp = Date.now()
             
             // Set the permission to denied for this origin
             permissionObj.origins[origin].permission = 'denied'
@@ -2199,14 +2193,11 @@ const data = {
             return false
         }
 
-        const pendingRequests = permissionObj.origins[origin].requests.filter(request => request.status === 'requested')
-        if (pendingRequests.length > 0) {
-            for (const request of pendingRequests) {
-                request.status = 'ignored'
-                request.unseen = false
-                request.timestamp = Date.now()
-            }
-
+        const request = permissionObj.origins[origin].requests.at(-1)
+        if (request.status === 'requested') {
+            request.status = 'ignored'
+            request.unseen = false
+            request.timestamp = Date.now()
             return true
         }
         

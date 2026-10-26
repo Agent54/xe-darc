@@ -1,4 +1,5 @@
 <script>
+    import { browserDebugFetch } from '../lib/browser-debug.js'
     // Tab sidebar component with Firefox-like hover behavior
     // let { isDragEnabled = true } = $props() 
     let { 
@@ -1433,7 +1434,7 @@
     async function handleDevToolsClick() {
         try {
             // Get dev tools list to find the correct context ID
-            const response = await fetch('/devtools-api/json/list')
+            const response = await browserDebugFetch('/json/list')
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`)
             }
@@ -1465,7 +1466,7 @@
                     await new Promise(resolve => setTimeout(resolve, 1))
                     
                     // Fetch updated dev tools list
-                    const updatedResponse = await fetch('/devtools-api/json/list')
+                    const updatedResponse = await browserDebugFetch('/json/list')
                     if (updatedResponse.ok) {
                         const updatedData = await updatedResponse.json()
                         matchingItem = updatedData.find(item => item.url?.includes(randomHash))
@@ -1484,9 +1485,8 @@
             }
             
             if (matchingItem?.devtoolsFrontendUrl) {
-                // Replace the remote DevTools frontend with local one while keeping WebSocket params
-                const originalUrl = new URL(matchingItem.devtoolsFrontendUrl)
-                const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html?wss=localhost:5194/devtools-api/devtools/${originalUrl.search.split('/devtools/')[1]}`
+                // The API supplies the matching frontend and the launcher's debugger URL.
+                const localDevToolsUrl = matchingItem.devtoolsFrontendUrl
                 
                 await data.newTab(data.spaceMeta.activeSpace, { 
                     url: localDevToolsUrl, 

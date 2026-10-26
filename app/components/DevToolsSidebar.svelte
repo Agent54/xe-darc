@@ -1,5 +1,6 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
+    import { browserDebugFetch } from '../lib/browser-debug.js'
     
     let {
         onClose,
@@ -29,7 +30,7 @@
                 error = null
             }
             
-            const response = await fetch('/devtools-api/json/list')
+            const response = await browserDebugFetch('/json/list')
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`)
             }
@@ -97,9 +98,8 @@
     
     function openDevTools(item) {
         if (item.devtoolsFrontendUrl && data && currentSpaceId) {
-            // Replace the remote DevTools frontend with local one while keeping WebSocket params
-            const originalUrl = new URL(item.devtoolsFrontendUrl)
-            const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html?wss=localhost:5194/devtools-api/devtools/${originalUrl.search.split('/devtools/')[1]}`
+            // The API supplies the matching frontend and the launcher's debugger URL.
+            const localDevToolsUrl = item.devtoolsFrontendUrl
             
             data.newTab(currentSpaceId, { 
                 url: localDevToolsUrl, 
@@ -111,7 +111,7 @@
     
     function closeFrame(item) {
         if (item.id) {
-            fetch(`/devtools-api/json/close/${item.id}`)
+            browserDebugFetch(`/json/close/${item.id}`)
                 .then(() => {
                     // Refresh the data after closing
                     fetchDevToolsData()
@@ -122,7 +122,7 @@
     
     function focusFrame(item) {
         if (item.id) {
-            fetch(`/devtools-api/json/activate/${item.id}`)
+            browserDebugFetch(`/json/activate/${item.id}`)
                 .catch(err => console.warn('Failed to focus frame:', err))
         }
     }
