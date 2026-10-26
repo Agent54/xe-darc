@@ -1035,11 +1035,15 @@
 
     // Track if initial scroll to active tab has been performed
     let initialScrollPerformed = $state(false)
+    let previousTabLayout = null
+    let pinScrollTimer = null
     
-    // Effect to handle scrolling to active tab when it changes or when sidebars are toggled
+    // Keep the center pane aligned when activation or visible sidepins change its layout.
     $effect(() => {
         // Watch for changes to active tab and sidebar state
         const sidebarCount = openSidebars.size // just for triggering effect
+        const tabLayout = `${visibleLeftPinnedTabs.length}:${visibleRightPinnedTabs.length}:${unpinnedTabCount}`
+        const tabLayoutChanged = previousTabLayout !== null && tabLayout !== previousTabLayout
         const activeTabId = data.spaceMeta.activeTabId
         const activeFrameWrapper = data.frames[activeTabId]?.wrapper
         const activeTab = data.docs[activeTabId]
@@ -1050,21 +1054,14 @@
         if (!activeFrameWrapper && !activeTab?.pinned) {
             return
         }
+        previousTabLayout = tabLayout
         
         console.log('%c[TAB-DEBUG] scroll effect triggered for tab: ' + activeTabId + ' tabChangeFromScroll=' + tabChangeFromScroll + ' initialScrollPerformed=' + initialScrollPerformed, 'color: #d946ef; font-weight: bold; font-size: 13px')
 
-        // Don't scroll if tab change was caused by scrolling
-        // if (tabChangeFromScroll) {
-        //     return
-        // }
-        
-        // Set flag to prevent intersection observer from activating intermediate tabs during scroll
-        // tabChangeFromScroll = true
-        
-        // Only scroll frame into view if tab change was NOT caused by scrolling
-        // Also scroll on initial load when wrapper first becomes available
+        // Observer-driven activation must not snap back, but a pin layout change still needs alignment.
+        const shouldScroll = !tabChangeFromScroll || !initialScrollPerformed || tabLayoutChanged
         // Skip pinned tabs — they are in fixed containers outside the scroll root
-        if ((!tabChangeFromScroll || !initialScrollPerformed) && !activeTab?.pinned && activeFrameWrapper) {
+        if (shouldScroll && !activeTab?.pinned && activeFrameWrapper) {
             // Temporarily set tabChangeFromScroll to prevent IntersectionObserver from changing active tab
             if (!initialScrollPerformed) {
                 tabChangeFromScroll = true
@@ -1133,6 +1130,12 @@
             }
             // If lastNonPinnedWrapper not yet mounted, don't set initialScrollPerformed
             // so this effect re-runs when the wrapper becomes available
+        } else if (activeTab?.pinned && _lastNonPinnedWrapper) {
+            // Selecting a group pin can replace the entire center group after startup, too.
+            // Keep the visibility observer from activating that center tab over the selected pin.
+            clearTimeout(pinScrollTimer)
+            _lastNonPinnedWrapper.scrollIntoView({ behavior: 'instant' })
+            pinScrollTimer = setTimeout(() => { pinScrollTimer = null }, 500)
         }
         
         if (tabButtons[activeTabId]) {
@@ -1142,59 +1145,6 @@
                 block: 'nearest'
             })
         }
-        
-        // Reset flag after scroll animation completes (longer delay for smooth scrolling)
-        // setTimeout(() => {
-        //     tabChangeFromScroll = false
-        // }, isWindowResizing ? 100 : 800)
-    })
-
-    let pinsInit = false
-    $effect(() => {
-        // TODO: hanlde this
-        // const leftCount = leftPinnedTabs.length
-        // const rightCount = rightPinnedTabs.length
-        // Reset invisible state when no tabs are pinned on a side (clean up state)
-        // if (leftCount === 0 && invisiblePins.left) {
-        //     delete invisiblePins.left
-        // }
-        // if (rightCount === 0 && invisiblePins.right) {
-        //     delete invisiblePins.right
-        // }
-        
-        if (tabChangeFromScroll || !pinsInit) {
-            pinsInit = true
-            return
-        }
-    
-        untrack(() => {
-             // Find the active tab in unpinned tabs
-            if (data.spaceMeta.activeTabId) {
-                // console.log('pins effect triggered for tab:', data.spaceMeta.activeTabId)
-                const activeTab = data.docs[data.spaceMeta.activeTabId]
-                // Skip pinned tabs — they are in fixed containers outside the scroll root
-                if (activeTab?.pinned) return
-                const activeFrameWrapper = data.frames[data.spaceMeta.activeTabId]?.wrapper
-                // Scroll the active unpinned tab into view after pinned tabs layout change
-                // setTimeout(() => {
-                    if (activeFrameWrapper) {
-                        activeFrameWrapper.scrollIntoView({ 
-                            behavior: 'instant' // isWindowResizing ? 'auto' : 'smooth' 
-                        })
-                    } else {
-                        // If no specific active tab, scroll to the beginning of unpinned section
-                        const firstUnpinnedTab = unpinnedTabs.find(tab => tab.type === 'tab')
-                        const wrapper = data.frames[firstUnpinnedTab?.id]?.wrapper
-                        if (wrapper) {
-                            wrapper.scrollIntoView({ 
-                                behavior: 'instant' // isWindowResizing ? 'auto' : 'smooth' 
-                            })
-                        }
-                    }
-                // }, 200)
-            }
-        })
-       
     })
 
     function closeTab(tab, event, createPlaceholder = false) {
@@ -1466,7 +1416,7 @@
                 
                 if (entry.isIntersecting) {
                     const timer = setTimeout(() => {
-                        if (tabChangeFromScroll) {
+                        if (tabChangeFromScroll || pinScrollTimer !== null) {
                             console.log('%c[TAB-DEBUG] IntersectionObserver SKIPPED tab: ' + tabId + ' (tabChangeFromScroll=' + tabChangeFromScroll + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
                             return
                         }
