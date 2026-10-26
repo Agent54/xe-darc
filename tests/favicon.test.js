@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import vm from 'node:vm'
-import { compile } from 'svelte/compiler'
+import { compile, compileModule } from 'svelte/compiler'
 import * as server from 'svelte/internal/server'
 import { render } from 'svelte/server'
+import { getTabGroups, tabGroupMetadataId } from '../app/lib/tab-groups.js'
 
 const data = { docs: {}, frames: {}, origins: {} }
 
@@ -11,11 +11,15 @@ function component(name, dependencies = {}) {
     const compiled = compile(source, { generate: 'server', filename: `${name}.svelte` }).js.code
         .replace(/^import .*$/gm, '')
         .replace('export default function', 'function')
-    return vm.runInNewContext(`${compiled}\n${name}`, { $: server, data, URL, ...dependencies })
+    return new Function('$', 'data', ...Object.keys(dependencies), `${compiled}\nreturn ${name}`)(server, data, ...Object.values(dependencies))
 }
 
 const SecurityIndicator = component('SecurityIndicator', { origin: url => new URL(url).origin })
 const Favicon = component('Favicon', { SecurityIndicator })
+const previewSource = compileModule(Deno.readTextFileSync(new URL('../app/lib/tab-group-preview.svelte.js', import.meta.url)), { generate: 'server' }).js.code
+    .replace(/^import .*$/gm, '').replace(/^export /gm, '')
+const getFaviconWindow = new Function(`${previewSource}\nreturn getFaviconWindow`)()
+const TabGroupPreview = component('TabGroupPreview', { Favicon, getFaviconWindow })
 const LightboxHeader = component('LightboxHeader', {
     Favicon,
     UrlBar: () => {},
@@ -35,6 +39,22 @@ function lightboxFavicon(tab) {
     assert.equal(markup, faviconMarkup(Favicon, { tab, showButton: false }))
     return markup
 }
+
+Deno.test('group drag previews render the group title and favicons without a hover controller', () => {
+    const tabs = Array.from({ length: 4 }, (_, index) => ({
+        id: `member-${index}`, type: 'tab', tabGroupId: 'group', tabGroupOrder: index,
+        title: `Member ${index}`, url: 'about:blank'
+    }))
+    for (const metadata of [null, { name: 'Research', emoji: '🔎' }, { name: 'Work', favicon: 'data:image/png;base64,AA==' }]) {
+        const docs = metadata ? { [tabGroupMetadataId('group')]: metadata } : {}
+        const [group] = getTabGroups(tabs, [], docs)
+        const html = render(TabGroupPreview, { props: { group, groupId: group.id, active: true, disabled: true } }).body
+        assert.match(html, new RegExp(`>${metadata?.name || 'Member 0'}</span>`))
+        assert.equal((html.match(/class="preview-favicon[\s"]/g) || []).length, metadata ? 2 : 3)
+        if (metadata?.emoji) assert.match(html, /🔎/)
+        if (metadata?.favicon) assert.match(html, /data:image\/png;base64,AA==/)
+    }
+})
 
 Deno.test('lightbox shares fallback, new-tab, image and inline SVG favicons', () => {
     const tab = { id: 'favicon-tab', url: 'https://example.com', title: 'Example' }

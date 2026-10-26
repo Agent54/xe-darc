@@ -38,7 +38,9 @@
     <input class="emoji-search" bind:this={searchInput} bind:value={query} type="search" aria-label="Search emojis" placeholder="Search emojis" />
     <div class="emoji-grid" role="group" aria-label="Group emoji">
         {#each matches as [emoji, label] (emoji)}
-            <button type="button" class:selected={value === emoji} aria-pressed={value === emoji} aria-label={label} title={label} onclick={() => onSelect(emoji)}>{emoji}</button>
+            <button type="button" class:selected={value === emoji} aria-pressed={value === emoji} aria-label={label} title={label}
+                    onmouseup={() => onSelect(emoji)}
+                    onclick={(e) => { if (e.detail === 0) onSelect(emoji) }}>{emoji}</button>
         {:else}
             <p>No matching emojis</p>
         {/each}
@@ -47,7 +49,9 @@
         <input bind:value={customEmoji} aria-label="Paste an emoji" placeholder="Or paste an emoji" />
         <button type="submit" disabled={!validCustomEmoji}>Use</button>
     </form>
-    <button class="reset-emoji" type="button" onclick={() => onSelect(null)}>Use tab favicons</button>
+    <button class="reset-emoji" type="button"
+            onmouseup={() => onSelect(null)}
+            onclick={(e) => { if (e.detail === 0) onSelect(null) }}>Use tab favicons</button>
 </div>
 
 <style>

@@ -5,6 +5,7 @@ const DRAG_THRESHOLD = 5
 const GROUP_EXPAND_DELAY = 1000
 const AUTO_SCROLL_EDGE = 60 // px from edge to start scrolling
 const AUTO_SCROLL_SPEED = 12 // px per frame
+const SIDEBAR_ITEMS = ':scope > .tab-item-container, :scope > .tab-divider-item, :scope > .tab-group-wrapper'
 
 let autoScrollRafId = null
 
@@ -275,7 +276,7 @@ function handleMouseMove(e) {
             if (listRect.right <= sp.left || listRect.left >= sp.right) continue
         }
         if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top && my <= listRect.bottom) {
-            const tabs = list.querySelectorAll(':scope > .tab-item-container, :scope > .tab-divider-item')
+            const tabs = list.querySelectorAll(SIDEBAR_ITEMS)
             const hit = findClosestTab(tabs, my, 'y')
             if (hit) {
                 if (isNoopDrop(tabs, hit)) { hideIndicator(); state.sidepinZone = null; return }
@@ -379,7 +380,7 @@ function findGroupDropTarget(mx, my) {
             const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, targetSpaceId) : {}
             return { tabs, hit, list: content, axis: 'y', drop: { ...neighbors, targetSpaceId, targetGroupTabId: content.dataset.groupTabId, scope } }
         }
-        const tabs = list.querySelectorAll(':scope > .tab-item-container, :scope > .tab-divider-item, :scope > .tab-group-wrapper')
+        const tabs = list.querySelectorAll(SIDEBAR_ITEMS)
         const hit = findClosestTab(tabs, my, 'y')
         let hoverGroup = null
         if (hit) {
@@ -568,7 +569,7 @@ function resolveDropTarget(mx, my, dragTabId) {
             if (listRect.right <= sp.left || listRect.left >= sp.right) continue
         }
         if (mx >= listRect.left && mx <= listRect.right && my >= listRect.top && my <= listRect.bottom) {
-            const tabs = list.querySelectorAll(':scope > .tab-item-container, :scope > .tab-divider-item')
+            const tabs = list.querySelectorAll(SIDEBAR_ITEMS)
             const hit = findClosestTab(tabs, my, 'y')
             if (hit && !isNoopDrop(tabs, hit)) {
                 const spaceContent = list.closest('.space-content')

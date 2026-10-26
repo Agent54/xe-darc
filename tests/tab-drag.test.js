@@ -115,12 +115,59 @@ Deno.test('an expanded group accepts drops between its child tabs', () => {
     assert.equal(harness.drops[0].afterTabId, 'second')
 })
 
+Deno.test('spacers can move between expanded groups from either direction', () => {
+    for (const sourceY of [84, 500]) {
+        for (const pointerY of [273, 275]) {
+            const first = element('first', 0, 100, 250, 170, {}, ['tab-group-wrapper', 'expanded'])
+            const second = element('second', 0, 278, 250, 170, {}, ['tab-group-wrapper', 'expanded'])
+            const spacer = element('spacer', 0, sourceY, 250, 8, {}, ['tab-divider-item'])
+            const children = sourceY < 100 ? [spacer, first, second] : [first, second, spacer]
+            const harness = dragHarness({ lists: [sidebar(children)] })
+            harness.start('spacer', spacer, 'sidebar', 'divider')
+            harness.move(120, pointerY)
+            assert.equal(harness.tabDrag.indicator.visible, true)
+            assert.equal(harness.tabDrag.indicator.y, 274)
+            assert.equal(harness.tabDrag.indicator.height, 2)
+            harness.release()
+            assert.deepEqual({ ...harness.drops[0] }, {
+                type: 'reorder', tabId: 'spacer', sourceSpaceId: 'source-space',
+                beforeTabId: 'first', afterTabId: 'second', targetSpaceId: 'target-space'
+            })
+        }
+    }
+})
+
+Deno.test('spacer drops over expanded children stay outside the group', () => {
+    const wrapper = element('first', 0, 100, 250, 170, {}, ['tab-group-wrapper', 'expanded'])
+    const content = element('', 8, 136, 234, 130, { groupTabId: 'first' })
+    content.selectors[':scope > .tab-item-container'] = [element('first', 8, 140, 234, 36), element('second', 8, 180, 234, 36)]
+    const spacer = element('spacer', 0, 300, 250, 8, {}, ['tab-divider-item'])
+    const list = sidebar([wrapper, spacer])
+    list.selectors['.tab-group-content'] = [content]
+    const harness = dragHarness({ lists: [list] })
+    harness.start('spacer', spacer, 'sidebar', 'divider')
+    harness.move(120, 175)
+    assert.equal(harness.tabDrag.indicator.y, 96)
+    harness.release()
+    assert.equal(harness.drops[0].beforeTabId, null)
+    assert.equal(harness.drops[0].afterTabId, 'first')
+    assert.equal(harness.drops[0].targetGroupTabId, undefined)
+
+    harness.start('spacer', spacer, 'sidebar', 'divider')
+    harness.move(120, 250)
+    assert.equal(harness.tabDrag.indicator.visible, false)
+    harness.release()
+    assert.equal(harness.drops.length, 1)
+})
+
 Deno.test('group header drags preserve group scope and cancellation never commits a move', () => {
     const wrapper = element('first', 0, 100, 250, 170)
     wrapper.selectors['.tab-group'] = element('', 0, 100, 250, 36)
     const harness = dragHarness({ lists: [sidebar([element('target', 0, 300, 250, 36)])] })
     harness.start('first', wrapper, 'sidebar', 'group')
     harness.move(120, 302)
+    assert.equal(harness.tabDrag.dragType, 'group')
+    assert.equal(harness.tabDrag.tabEl, wrapper)
     assert.equal(harness.tabDrag.previewHeight, 36)
     harness.release()
     assert.equal(harness.drops[0].scope, 'group')

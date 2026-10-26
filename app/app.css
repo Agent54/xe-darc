@@ -6,16 +6,22 @@
     --tab-active-border: rgb(255 255 255 / 4%);
     --tab-active-hover-background: #2a2a2a;
     --tab-active-hover-border: rgb(255 255 255 / 5.5%);
+    --tab-group-tab-hover-background: color-mix(in srgb, var(--tab-hover-background), white 5%);
 }
 
 #backgroundFrames {
     display: none;
 }
 header {
+    /* The sidebar occupies the window-controls reserve rather than adding to it. */
+    --header-left: max(env(titlebar-area-x, 0px), var(--tab-sidebar-width, 0px));
+    --header-navigation-left: max(0px, calc(env(titlebar-area-x, 0px) + 86px - var(--header-left)));
+    --header-tabs-left: max(0px, calc(env(titlebar-area-x, 0px) + 110px - var(--header-left)));
+    --header-left-drag-width: max(0px, calc(var(--header-tabs-left) - 5px));
     position: fixed;
-    left: calc(env(titlebar-area-x, 0px) + var(--tab-sidebar-width, 0px));
+    left: var(--header-left);
     top: env(titlebar-area-y, 0);
-    width: calc(env(titlebar-area-width, 100%) - var(--tab-sidebar-width, 0px));
+    width: calc(env(titlebar-area-width, 100%) + env(titlebar-area-x, 0px) - var(--header-left));
     height: env(titlebar-area-height, 35px);
     z-index: 2100;
     background-color: #000;
@@ -33,6 +39,11 @@ header {
     align-items: flex-start;
     opacity: 1;
     transition: opacity 0s;
+}
+
+header.has-navigation-toolbar {
+    --header-tabs-left: calc(var(--header-navigation-left) + 89px);
+    --header-left-drag-width: max(0px, calc(var(--header-navigation-left) - 1px));
 }
 
 header.window-background {
@@ -70,9 +81,13 @@ header.focus-mode {
     z-index: 1;
 }
 
+.header-drag-handle-left {
+    width: var(--header-left-drag-width);
+}
+
 .navigation-toolbar {
     position: absolute;
-    left: 86px;
+    left: var(--header-navigation-left);
     top: 9px;
     display: flex;
     align-items: center;
@@ -276,7 +291,7 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
     -webkit-app-region: no-drag;
     z-index: 1;
     top: 6px;
-    left: 110px;
+    left: var(--header-tabs-left);
     display: flex;
     align-items: flex-start;
     gap: 0;
@@ -1802,6 +1817,12 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 .fixed-pinned-tabs.hidden {
     opacity: 0;
     pointer-events: none;
+}
+
+/* Anchor left pins to the header so they follow its sidebar offset. */
+.fixed-pinned-tabs-left {
+    position: absolute;
+    left: var(--header-tabs-left);
 }
 
 /* Right pinned tabs - positioned inside tab-wrapper, not fixed */

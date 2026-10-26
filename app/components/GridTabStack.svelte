@@ -1,19 +1,42 @@
 <script>
-  import { onDestroy, tick } from 'svelte'
+  import { onDestroy } from 'svelte'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
-  import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
+  import { createTabGroupPreview, getFaviconWindow, getDefaultGroupTabIndex } from '../lib/tab-group-preview.svelte.js'
 
-  let { group, activeTabId, spaceActiveTabId = null, onActivate, onClose, onWheel } = $props()
+  let { group, activeTabId, spaceActiveTabId = null, defaultTabId = null, onActivate, onClose, onWheel } = $props()
   let dialog = $state(null)
   let expanded = $state(false)
-  let keyboardIndex = $state(0)
+  let keyboardIndex = $state(null)
+  let visiblePreviews = $state(new Set())
+  let previewObserver
   const preview = createTabGroupPreview()
   const scrubbing = $derived(preview.state.groupId === group.id)
-  const selectedIndex = $derived(Math.min(scrubbing ? preview.state.tabIndex : keyboardIndex, group.tabs.length - 1))
+  const defaultIndex = $derived(getDefaultGroupTabIndex(group.tabs, [activeTabId, spaceActiveTabId, defaultTabId]))
+  const selectedIndex = $derived(Math.min(scrubbing ? preview.state.tabIndex : keyboardIndex ?? defaultIndex, group.tabs.length - 1))
   const selectedTab = $derived(group.tabs[selectedIndex])
+  const faviconWindow = $derived(getFaviconWindow(group.tabs.length, scrubbing ? preview.state.progress : selectedIndex / Math.max(1, group.tabs.length - 1)))
 
-  onDestroy(() => preview.destroy())
+  onDestroy(() => {
+    preview.destroy()
+    previewObserver?.disconnect()
+  })
+
+  // Mount screenshot and favicon components only after visible cards have laid out.
+  function observePreview(node) {
+    previewObserver ??= new IntersectionObserver(entries => {
+      if (!dialog?.open) return
+      const next = new Set(visiblePreviews)
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue
+        next.add(entry.target.dataset.tabId)
+        previewObserver.unobserve(entry.target)
+      }
+      if (next.size !== visiblePreviews.size) visiblePreviews = next
+    }, { root: node.parentElement, rootMargin: '120px' })
+    previewObserver.observe(node)
+    return { destroy: () => previewObserver.unobserve(node) }
+  }
 
   function scrub(event) {
     if (event.pointerType === 'touch') return
@@ -23,14 +46,21 @@
 
   function resetPreview() {
     preview.leave(group.id)
-    keyboardIndex = 0
+    keyboardIndex = null
   }
 
-  async function openGroup() {
+  function openGroup() {
+    if (!dialog?.isConnected || dialog.open) return
     resetPreview()
+    dialog.showModal()
     expanded = true
-    await tick()
-    if (dialog?.isConnected) dialog.showModal()
+  }
+
+  function handleExpandMouseDown(event) {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    openGroup()
   }
 
   function handleStackKey(event) {
@@ -49,9 +79,9 @@
   }
 </script>
 
-{#snippet thumbnail(tab)}
+{#snippet thumbnail(tab, lazy = true)}
   {#if tab.screenshot}
-    <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="" lazy={true} fadeIn={false} />
+    <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="" {lazy} fadeIn={false} />
   {:else}
     <span class="empty-preview">
       <span class="empty-favicon"><Favicon {tab} showButton={false} /></span>
@@ -66,11 +96,17 @@
   <div class="stack-front" class:active={selectedTab.id === activeTabId} class:space-active-tab={selectedTab.id === spaceActiveTabId}>
     <div class="stack-header">
       <button class="stack-title" onclick={() => onActivate(selectedTab, selectedIndex)} onkeydown={handleStackKey} aria-label="Activate {selectedTab.title || 'Untitled'}. Use left and right arrows to browse tabs.">
-        <span class="tab-favicon"><Favicon tab={selectedTab} showButton={false} /></span>
+        <span class="group-favicons" aria-hidden="true" style:width="{faviconWindow.visible * 18}px">
+          <span class="group-favicon-track" style:transform="translateX({-faviconWindow.offset * 18}px)">
+            {#each group.tabs.slice(faviconWindow.start, faviconWindow.end) as tab (tab.id)}
+              <span class="preview-favicon" class:selected={scrubbing && selectedTab.id === tab.id}><Favicon {tab} showButton={false} /></span>
+            {/each}
+          </span>
+        </span>
         <span class="title-text">{selectedTab.title || 'Untitled'}</span>
       </button>
       <span class="stack-count">{group.tabs.length}</span>
-      <button class="icon-button expand-button" onclick={openGroup} aria-label="Expand {group.title}" aria-haspopup="dialog" aria-expanded={expanded} title="Expand group">
+      <button class="icon-button expand-button" onmousedown={handleExpandMouseDown} onclick={(event) => { if (event.detail === 0) openGroup() }} aria-label="Expand {group.title}" aria-haspopup="dialog" aria-expanded={expanded} title="Expand group">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6m0-6-7 7M10 20H4v-6m0 6 7-7" /></svg>
       </button>
     </div>
@@ -87,10 +123,9 @@
 <!-- The native dialog provides focus containment, Escape, and focus restoration. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <dialog bind:this={dialog} class="group-dialog" aria-label={group.title} style:--columns={Math.min(3, group.tabs.length)}
-  onclose={() => { expanded = false }} oncancel={(event) => event.stopPropagation()}
+  onclose={() => { expanded = false; visiblePreviews = new Set() }} oncancel={(event) => event.stopPropagation()}
   onkeydown={(event) => { if (event.key === 'Escape') event.stopPropagation() }}
-  onmousedown={(event) => event.stopPropagation()} onclick={closeOutside}>
-  {#if expanded}
+  onmousedown={(event) => { event.stopPropagation(); if (event.button === 0) closeOutside(event) }}>
   <header class="dialog-header">
     <div class="dialog-heading"><h2>{group.title}</h2><span>{group.tabs.length} tabs</span></div>
     <button class="icon-button dismiss-button" onclick={() => dialog.close()} aria-label="Close group" title="Close group">
@@ -98,11 +133,12 @@
     </button>
   </header>
   <div class="dialog-grid">
+    {#if expanded}
     {#each group.tabs as tab, index (tab.id)}
-      <div class="dialog-card" class:active={tab.id === activeTabId} class:space-active-tab={tab.id === spaceActiveTabId}>
+      <div class="dialog-card" class:active={tab.id === activeTabId} class:space-active-tab={tab.id === spaceActiveTabId} data-tab-id={tab.id} use:observePreview>
         <div class="card-header">
           <button class="stack-title" onclick={() => onActivate(tab, index)} aria-label="Activate {tab.title || 'Untitled'}">
-            <span class="tab-favicon"><Favicon {tab} showButton={false} /></span>
+            <span class="tab-favicon">{#if visiblePreviews.has(tab.id)}<Favicon {tab} showButton={false} />{/if}</span>
             <span class="title-text">{tab.title || 'Untitled'}</span>
           </button>
           <button class="icon-button close-tab" onclick={(event) => onClose(event, tab, index)} aria-label="Close {tab.title || 'Untitled'}">
@@ -110,12 +146,12 @@
           </button>
         </div>
         <button class="card-preview" onclick={() => onActivate(tab, index)} onwheel={(event) => onWheel(event, tab, index)} aria-label="Activate {tab.title || 'Untitled'}">
-          {@render thumbnail(tab)}
+          {#if visiblePreviews.has(tab.id)}{@render thumbnail(tab, false)}{/if}
         </button>
       </div>
     {/each}
+    {/if}
   </div>
-  {/if}
 </dialog>
 
 <style>
@@ -151,20 +187,27 @@
   button { font: inherit; color: inherit; cursor: pointer; }
   .stack-title { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; text-align: left; }
   .tab-favicon { display: flex; width: 14px; height: 14px; flex-shrink: 0; opacity: .5; transition: opacity 200ms ease-out; }
+  .group-favicons { display: block; height: 16px; flex-shrink: 0; overflow: hidden; }
+  .group-favicon-track { display: flex; width: max-content; height: 100%; }
+  .preview-favicon { display: flex; align-items: center; justify-content: center; width: 18px; height: 16px; flex-shrink: 0; opacity: .5; transition: opacity 200ms ease-out; }
+  .preview-favicon :global(.favicon-wrapper) { width: 14px; height: 14px; }
+  .space-active-tab .preview-favicon { opacity: .87; }
+  .grid-tab-group:hover .preview-favicon { opacity: .85; }
+  .active .preview-favicon, .preview-favicon.selected { opacity: 1; }
   .title-text { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 11px; font-weight: 500; color: rgb(255 255 255 / 45%); mask: linear-gradient(to right, black 0%, black 85%, transparent 100%); transition: color 200ms ease-out; }
   .space-active-tab .title-text { color: #e5e5e5; text-shadow: 0 0 .3px currentColor; }
   .space-active-tab .tab-favicon { opacity: .87; }
   .grid-tab-group:hover .title-text, .dialog-card:hover .title-text, .active .title-text { color: rgb(255 255 255 / 90%); }
-  .grid-tab-group:hover .tab-favicon, .dialog-card:hover .tab-favicon, .active .tab-favicon { opacity: 1; }
-  .stack-count { color: rgb(255 255 255 / 25%); font-size: 10px; font-variant-numeric: tabular-nums; padding: 0 2px; transition: color 200ms ease-out, opacity 150ms ease; }
+  .dialog-card:hover .tab-favicon, .active .tab-favicon { opacity: 1; }
+  .stack-count { color: rgb(255 255 255 / 40%); background: rgb(255 255 255 / 4%); border-radius: 4px; min-width: 18px; text-align: center; font-size: 10px; line-height: 16px; font-variant-numeric: tabular-nums; padding: 0 4px; transition: color 200ms ease-out; }
   .grid-tab-group:hover .stack-count { color: rgb(255 255 255 / 50%); }
   .icon-button { display: grid; place-items: center; width: 18px; height: 18px; padding: 2px; flex-shrink: 0; border: 0; border-radius: 4px; color: #717171; background: transparent; transition: background 150ms ease, color 150ms ease; }
   .icon-button svg { width: 14px; height: 14px; }
   .icon-button:hover { background: #2a2a2a; color: #fff; }
   .expand-button { transition: background 150ms ease, color 150ms ease, opacity 150ms ease; }
-  .stack-count, .expand-button { opacity: 0; pointer-events: none; }
-  .grid-tab-group:hover .stack-count, .grid-tab-group:hover .expand-button,
-  .grid-tab-group:focus-within .stack-count, .grid-tab-group:focus-within .expand-button { opacity: 1; pointer-events: auto; }
+  .expand-button { opacity: 0; pointer-events: none; }
+  .grid-tab-group:hover .expand-button,
+  .grid-tab-group:focus-within .expand-button { opacity: 1; pointer-events: auto; }
   button:focus-visible { outline: 2px solid #a8c7fa; outline-offset: -2px; border-radius: 5px; }
   .stack-preview, .card-preview { display: block; position: relative; width: 100%; min-height: 0; padding: 0; border: 0; background: #1a1a1a; border-radius: 0 0 8px 8px; overflow: hidden; transition: opacity 150ms ease-out; }
   .stack-preview:hover, .card-preview:hover { opacity: .85; }
@@ -196,7 +239,7 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
   }
   .group-dialog[open] { display: flex; flex-direction: column; animation: dialog-in 180ms cubic-bezier(.2, .8, .2, 1); }
-  .group-dialog::backdrop { background: #0009; backdrop-filter: blur(12px); }
+  .group-dialog::backdrop { background: rgb(0 0 0 / 12%); backdrop-filter: blur(1px); }
   .dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 24px 18px; flex-shrink: 0; }
   .dialog-heading { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
   h2 { margin: 0; font-size: 17px; line-height: 1.4; font-weight: 600; letter-spacing: -.025em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -216,9 +259,9 @@
     .close-tab { opacity: 1; }
   }
   @media (hover: none) {
-    .stack-count, .expand-button { opacity: 1; pointer-events: auto; }
+    .expand-button { opacity: 1; pointer-events: auto; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .stack-layer, .stack-header, .card-header, .tab-favicon, .title-text, .stack-count, .icon-button, .expand-button, .stack-preview, .card-preview, .preview-image, .scrub-position, .scrub-track, .group-dialog[open] { animation: none; transition: none; }
+    .stack-layer, .stack-header, .card-header, .tab-favicon, .preview-favicon, .title-text, .stack-count, .icon-button, .expand-button, .stack-preview, .card-preview, .preview-image, .scrub-position, .scrub-track, .group-dialog[open] { animation: none; transition: none; }
   }
 </style>

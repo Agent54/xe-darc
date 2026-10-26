@@ -87,6 +87,7 @@
     let instantModeResetTimer = null
     let hovercardUrlBarExpanded = $state(false)
     let expandedHovercardTabs = $state({})
+    let expandedHovercardHistoryTabId = $state(null)
     let menuCloseTimeout = null
     
     // Resize handle visibility - only enable after sidebar is fully shown
@@ -141,6 +142,7 @@
         hoveredGroupTarget = null
         hovercardAnchor = null
         hovercardShowTime = null
+        expandedHovercardHistoryTabId = null
     }
     
     onMount(() => {
@@ -149,6 +151,7 @@
             hoveredGroupTarget = null
             hovercardAnchor = null
             hovercardShowTime = null
+            expandedHovercardHistoryTabId = null
             if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
         }
         window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
@@ -1087,6 +1090,7 @@
         hoveredGroupTarget = target.group
         hoveredTab = target.tab
         expandedHovercardTabs = {}
+        expandedHovercardHistoryTabId = null
         hovercardUrlBarExpanded = false
         hovercardShowTime = Date.now()
         instantHovercardsMode = true
@@ -1100,6 +1104,7 @@
     function closeHovercardTab(tab) {
         const remaining = hovercardTabs.filter(member => member.id !== tab.id)
         data.closeTab(tab.spaceId, tab.id)
+        if (expandedHovercardHistoryTabId === tab.id) expandedHovercardHistoryTabId = null
         delete expandedHovercardTabs[tab.id]
         hovercardUrlBarExpanded = Object.values(expandedHovercardTabs).some(Boolean)
         if (hoveredGroupTarget && remaining.length) {
@@ -1636,7 +1641,7 @@
                         </button>
                         <!-- NOTE: Tabs are also rendered in App.svelte (top bar) - keep hibernated class in sync there too -->
                         {#each globallyPinnedTabs as tab (tab.id)}
-                            <button class="pinned-tab" class:hibernated={data.isTabHibernated(tab.id)}
+                            <button class="pinned-tab" data-tab-id={tab.id} class:hibernated={data.isTabHibernated(tab.id)}
                                     onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                     onmouseleave={handleTabMouseLeave}>
                                 <Favicon {tab} showButton={false} />
@@ -1823,7 +1828,7 @@
                                     <div class="pinned-tabs-grid">
                                         {#each spacePins as tab (tab.id)}
                                             {#if tabMatchesSearch(tab)}
-                                                <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} title={tab.title || tab.url} aria-label={tab.title || tab.url} onmousedown={(e) => { if (e.button === 0) activateTab(tab.id, spaceId) }} oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}>
+                                                <button class="app-tab" data-tab-id={tab.id} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} title={tab.title || tab.url} aria-label={tab.title || tab.url} onmousedown={(e) => { if (e.button === 0) activateTab(tab.id, spaceId) }} oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}>
                                                     <Favicon {tab} showButton={false} />
                                                 </button>
                                             {/if}
@@ -1889,7 +1894,7 @@
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list" onscroll={handleTabsListScroll}>
 
-                                   {#snippet sidebarTab(tab, i)}
+                                   {#snippet sidebarTab(tab, i, groupActivationTarget = false)}
                                         {#if tab.type === 'divider'}
                                             {#if !tabSearchQuery}
                                                 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1917,7 +1922,7 @@
                                             {/if}
                                         {:else if tab.type === 'tab'}
                                             {#if tabMatchesSearch(tab)}
-                                                <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
+                                                <div class="tab-item-container" class:group-activation-target={groupActivationTarget} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id} data-tab-id={tab.id}
                                                      role="listitem"
                                                      onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                      onmouseleave={handleTabMouseLeave}
@@ -1967,6 +1972,7 @@
                                                 {@const expansionId = `${spaceId}:${item.id}`}
                                                 {@const expanded = tabGroupExpansion[expansionId] ?? false}
                                                 {@const active = item.tabs.some(tab => tab.id === data.spaceMeta.activeTabId)}
+                                                {@const activationTab = data.getGroupActiveTab(item, spaceId)}
                                                 {@const recentEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                                                 {@const spaceActive = spaceId !== data.spaceMeta.activeSpace && item.tabs.some(tab => tab.id === (typeof recentEntry === 'string' ? recentEntry : recentEntry?.id))}
                                                 <div class="tab-group-wrapper" class:expanded class:active class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
@@ -1977,8 +1983,8 @@
                                                         <button class="tab-group-main"
                                                             aria-label={item.title}
                                                             onmousedown={(e) => { if (e.button === 0) { startTabDrag(item.tabs[0].id, e.currentTarget.closest('.tab-group-wrapper'), 'sidebar', spaceId, e, false, null, 'group') } }}
-                                                            onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred())) { activateTab(data.getGroupActiveTab(item, spaceId).id, spaceId) } }}
-                                                            ondblclick={(e) => { if (e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(data.getGroupActiveTab(item, spaceId).id); handleTabGroupToggle(expansionId, expanded) } }}>
+                                                            onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred())) { activateTab(activationTab.id, spaceId) } }}
+                                                            ondblclick={(e) => { if (e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(activationTab.id); handleTabGroupToggle(expansionId, expanded) } }}>
                                                             <TabGroupPreview group={item} groupId={expansionId} preview={groupPreview} active={active || spaceActive} disabled={tabDrag.active || tabDrag.pending} />
                                                         </button>
                                                         <span class="tab-group-count">{item.tabs.length}</span>
@@ -1992,7 +1998,7 @@
                                                         <div class="tab-group-scroll" hidden={!expanded}>
                                                             <div class="tab-group-content" data-group-tab-id={item.tabs[0].id} use:observeScrollEdges={item.tabs.length}>
                                                                 {#each item.tabs as tab (tab.id)}
-                                                                    {@render sidebarTab(tab, i)}
+                                                                    {@render sidebarTab(tab, i, tab.id === activationTab.id)}
                                                                 {/each}
                                                             </div>
                                                         </div>
@@ -2050,7 +2056,7 @@
                     <div class="closed-tabs-list">
                         {#each data.spaceMeta.closedTabs as tab (tab.id)}
                             {#if tabMatchesSearch(tab)}
-                                <button class="closed-tab-item"
+                                <button class="closed-tab-item" data-tab-id={tab.id}
                                         onmousedown={() => data.restoreClosedTab(tab.id)}
                                         onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                         onmouseleave={handleTabMouseLeave}>
@@ -2096,8 +2102,16 @@
              style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
             {#each hovercardTabs as previewTab (previewTab.id)}
             <TabHoverCard tab={previewTab} stacked={!!hoveredGroupTarget}
+                        onActivate={(tab) => activateTab(tab.id, tab.spaceId)}
+                        bind:showHistory={
+                            () => expandedHovercardHistoryTabId === previewTab.id,
+                            (visible) => {
+                                if (visible) expandedHovercardHistoryTabId = previewTab.id
+                                else if (expandedHovercardHistoryTabId === previewTab.id) expandedHovercardHistoryTabId = null
+                            }
+                        }
                         isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === previewTab.id)}
-                        showHistoryImmediately={closeButtonHoveredDelayed}
+                        showHistoryImmediately={!hoveredGroupTarget && closeButtonHoveredDelayed}
                         instantMode={instantHovercardsMode}
                         showDevTools={devModeEnabled}
                         availableHeight={window.innerHeight - hovercardPosition.y - 20}
@@ -2194,9 +2208,21 @@
         user-select: none;
         overflow: visible;
         border-radius: 18px;
-        box-shadow: 0 -3px 0 rgb(0 0 0 / 96%), 0 -6px 8px rgb(0 0 0 / 80%);
         transform: translateZ(0);
         backface-visibility: hidden;
+    }
+
+    .sidebar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        box-shadow: 0 -3px 0 rgb(0 0 0 / 96%), 0 -5px 4px rgb(0 0 0 / 80%);
+        /* Keep the additional shadow strictly above the sidebar. */
+        clip-path: inset(-9px 0 100% 0);
+        pointer-events: none;
     }
     
     .sidebar-box.visible .sidebar {
@@ -3756,7 +3782,7 @@
 
     /* Tab Group */
     .tab-group-wrapper {
-        --tab-group-background: #0b0b0b;
+        --tab-group-background: #101010;
         display: flex;
         flex-direction: column;
         width: 100%;
@@ -3773,6 +3799,10 @@
     .tab-group-wrapper:hover {
         background: transparent;
         border: 1px solid transparent;
+    }
+
+    .tab-group-wrapper.tab-dragging {
+        opacity: 0.3;
     }
     
     .tab-group-wrapper.expanded {
@@ -3796,7 +3826,7 @@
         gap: 4px;
         border-radius: 12px;
         /* background: #ffffff0f; */
-        transition: background-color 150ms ease;
+        transition: background-color 150ms ease, opacity 150ms ease;
         border: 1px solid  transparent;
         /* hsl(0deg 0% 100% / 2%); */
         height: 36px;
@@ -3820,6 +3850,12 @@
         border: 1px solid transparent;
         background: transparent;
         margin: 0;
+        opacity: 0.35;
+    }
+
+    .tab-group.expanded:hover,
+    .tab-group.expanded:has(:focus-visible) {
+        opacity: 0.7;
     }
     
     .tab-group.expanded:hover {
@@ -3876,22 +3912,32 @@
         background: linear-gradient(to top, var(--tab-group-background), transparent);
     }
 
-    .tab-group-scroll[data-scroll-top='true']::before,
-    .tab-group-scroll[data-scroll-bottom='true']::after {
+    /* The action adds these attributes at runtime, outside Svelte's CSS analysis. */
+    .tab-group-scroll:global([data-scroll-top='true'])::before,
+    .tab-group-scroll:global([data-scroll-bottom='true'])::after {
         opacity: 1;
     }
     
     .tab-group-content {
         display: none;
         flex-direction: column;
-        padding: 4px 3px;
+        padding: 5px 4px;
         gap: 4px;
         flex: 1;
-        max-height: 204px;
+        max-height: calc(5 * 36px + 4 * 4px + 2 * 5px);
         overflow-y: auto;
         overscroll-behavior-y: contain;
         scrollbar-width: thin;
         scrollbar-color: #ffffff33 transparent;
+    }
+
+    .tab-group-content .tab-item-container:not(.active):hover {
+        background-color: var(--tab-group-tab-hover-background);
+    }
+
+    .tab-group-wrapper.expanded:not(.active):has(> .tab-group > .tab-group-main:is(:hover, :focus-visible)) .tab-item-container.group-activation-target {
+        background-color: var(--tab-group-tab-hover-background);
+        border-color: var(--tab-hover-border);
     }
 
     .tab-group-content .tab-item-container.active {

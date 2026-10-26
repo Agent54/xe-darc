@@ -24,6 +24,15 @@ const readTopTabsSource = compileModule(`${appTabState}\nexport function readTab
     .replace(/^import .*$/gm, '')
     .replace('export function readTabs', 'function readTabs') + '\nreadTabs'
 
+const hovercardTabState = Deno.readTextFileSync(new URL('../app/components/TabHoverCard.svelte', import.meta.url))
+    .match(/^    const tab = \$derived\(.*$/m)[0]
+const readHovercardSource = compileModule(`
+    export function createHovercardReader () {
+        ${hovercardTabState}
+        return () => ({ screenshot: tab.screenshot, digest: tab._attachments?.screenshot?.digest })
+    }
+`, { generate: 'client' }).js.code.replace(/^import .*$/gm, '').replace(/^export /gm, '')
+
 const defaultSpace = 'darc:space_default'
 const otherSpace = 'darc:space_other'
 const workerSource = Deno.readTextFileSync(new URL('../public/test-shared-worker.js', import.meta.url))
@@ -129,6 +138,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     records.push(...structuredClone(tabs))
     const queries = []
     const writes = []
+    const changeListeners = new Map()
     const db = {
         get: async id => {
             const record = records.find(doc => doc._id === id)
@@ -138,7 +148,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
             return structuredClone(record)
         },
         bulkDocs: () => new Promise(() => {}),
-        changes: () => ({ on() { return this } }),
+        changes: () => ({ on(event, callback) { changeListeners.set(event, callback); return this } }),
         find: async query => {
             queries.push(query)
             const result = records.filter(doc => {
@@ -182,7 +192,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     const { data, refresh } = runtime === 'client'
         ? new Function(...Object.keys(context), clientSource.replace('({ data, refresh });', 'return { data, refresh }'))(...Object.values(context))
         : vm.runInNewContext(source, context)
-    return { data, refresh, window, storage, queries, writes, db }
+    return { data, refresh, window, storage, queries, writes, db, emitChange: doc => changeListeners.get('change')({ id: doc._id, doc, seq: 1 }) }
 }
 
 Deno.test('a partial refresh at startup still restores the active tab from the complete session', async () => {
@@ -530,6 +540,33 @@ Deno.test('top tabs react immediately to repeated group additions and saved revi
     assert.deepEqual(Array.from(readTabs(), tab => tab.id), ['outside'])
     data.activate('anchor')
     assert.deepEqual(Array.from(readTabs(), tab => tab.id), expected)
+})
+
+Deno.test('standalone and group hovercards refresh attachment digests from screenshot captures without rebuilding sidebar tab lists', async () => {
+    for (const tabGroupId of [null, 'group']) {
+        const { data, refresh, db, writes, emitChange } = session({
+            tabs: [tab('one', defaultSpace, { tabGroupId, screenshot: 'attachment://one/screenshot', _attachments: { screenshot: { digest: 'old' } } }),
+                tab('two', defaultSpace, { tabGroupId })],
+            history: ['one'], runtime: 'client'
+        })
+        await refresh()
+        const sidebarSnapshot = data.getTabGroup('one').tabs.find(tab => tab.id === 'one')
+        const createReader = new Function('$', 'data', 'previewTab', `${readHovercardSource}\nreturn createHovercardReader`)(svelteClient, data, sidebarSnapshot)
+        const read = createReader()
+        assert.equal(read().digest, 'old')
+        data.frames.one = { frame: { captureVisibleRegion: async () => 'data:image/png;base64,bmV3' } }
+        await data.captureScreenshot('one')
+        const saved = await db.get('one')
+        assert.ok(writes.at(-1)._attachments.screenshot.data instanceof Blob)
+        // Pouch publishes a new document with the same attachment URL and a new digest.
+        await emitChange({ ...saved, _rev: '2-new', _attachments: { screenshot: { digest: 'new', stub: true } } })
+        assert.equal(sidebarSnapshot._attachments.screenshot.digest, 'old')
+        assert.deepEqual(read(), { screenshot: 'attachment://one/screenshot', digest: 'new' })
+        await emitChange({ ...data.docs.one, _rev: '3-new', _attachments: { screenshot: { digest: 'newer', stub: true } } })
+        assert.equal(read().digest, 'newer')
+        await emitChange({ ...data.docs.one, _rev: '4-cleared', screenshot: null, _attachments: {} })
+        assert.deepEqual(read(), { screenshot: null, digest: undefined })
+    }
 })
 
 Deno.test('all group views preview the active neighbors and retain them when another group is selected', async () => {

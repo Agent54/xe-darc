@@ -482,6 +482,7 @@
                   {#if group.tabGroupId}
                     <GridTabStack {group} {activeTabId}
                       spaceActiveTabId={spaceId !== activeSpaceId ? firstActiveTabId : null}
+                      defaultTabId={data.getGroupActiveTab(group, spaceId)?.id}
                       onActivate={(tab, index) => handleFrameClick(tab, index, spaceId)}
                       onClose={(event, tab, index) => handleCloseTab(event, tab, index, spaceId)}
                       onWheel={handleFrameWheel} />

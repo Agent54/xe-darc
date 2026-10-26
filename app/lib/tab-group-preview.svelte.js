@@ -1,8 +1,17 @@
 const PREVIEW_DELAY = 700
 const RESET_DELAY = 2000
 
-export function getFaviconWindow (tabCount, progress = 0) {
-    const visible = Math.min(3, tabCount)
+export function getDefaultGroupTabIndex (tabs, preferredTabIds = []) {
+    for (const id of preferredTabIds) {
+        if (!id) continue
+        const index = tabs.findIndex(tab => tab.id === id)
+        if (index !== -1) return index
+    }
+    return 0
+}
+
+export function getFaviconWindow (tabCount, progress = 0, maxVisible = 3) {
+    const visible = Math.min(maxVisible, tabCount)
     const position = Math.max(0, Math.min(1, progress)) * Math.max(0, tabCount - visible)
     const start = Math.floor(position)
     return { start, end: Math.min(tabCount, start + visible + (position > start ? 1 : 0)), offset: position - start, visible }

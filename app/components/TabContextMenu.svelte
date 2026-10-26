@@ -201,10 +201,16 @@
          oncontextmenu={(e) => e.preventDefault()}>
         {#if menu.tab.type === 'tabgroup'}
             {#if groupMenuView === 'menu'}
-                <button class="context-menu-item" role="menuitem" type="button" onclick={() => showGroupView('rename')}>Rename…</button>
-                <button class="context-menu-item" role="menuitem" type="button" onclick={() => showGroupView('emoji')}>Change icon…</button>
+                <button class="context-menu-item" role="menuitem" type="button"
+                        onmouseup={() => showGroupView('rename')}
+                        onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>Rename…</button>
+                <button class="context-menu-item" role="menuitem" type="button"
+                        onmouseup={() => showGroupView('emoji')}
+                        onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>Change icon…</button>
             {:else}
-                <button class="group-editor-back" type="button" onclick={() => showGroupView('menu')}>← {groupMenuView === 'rename' ? 'Rename group' : 'Group icon'}</button>
+                <button class="group-editor-back" type="button"
+                        onmouseup={() => showGroupView('menu')}
+                        onclick={(e) => { if (e.detail === 0) showGroupView('menu') }}>← {groupMenuView === 'rename' ? 'Rename group' : 'Group icon'}</button>
                 {#if groupMenuView === 'rename'}
                     <form class="group-name-form" onsubmit={saveGroupName}>
                         <label for="tab-group-name">Group name</label>
@@ -214,7 +220,9 @@
                         </div>
                     </form>
                     {#if menu.tab.name}
-                        <button class="context-menu-item" type="button" onclick={resetGroupName}>Use tab titles</button>
+                        <button class="context-menu-item" type="button"
+                                onmouseup={resetGroupName}
+                                onclick={(e) => { if (e.detail === 0) resetGroupName() }}>Use tab titles</button>
                     {/if}
                 {:else}
                     <EmojiPicker value={menu.tab.metadata?.emoji} onSelect={saveGroupEmoji} />
@@ -273,7 +281,9 @@
             </div>
             <div class="pin-scope-label">Pin scope</div>
             {#each [['group', 'Tab group'], ['space', 'Space']] as [scope, label]}
-                <button class="context-menu-item" type="button" role="menuitemradio" aria-checked={data.getPinScope(menu.tab) === scope} onclick={() => setPinScope(scope)}>
+                <button class="context-menu-item" type="button" role="menuitemradio" aria-checked={data.getPinScope(menu.tab) === scope}
+                        onmouseup={() => setPinScope(scope)}
+                        onclick={(e) => { if (e.detail === 0) setPinScope(scope) }}>
                     <span class="context-menu-icon" aria-hidden="true">{data.getPinScope(menu.tab) === scope ? '✓' : ''}</span>
                     <span>{label}</span>
                 </button>

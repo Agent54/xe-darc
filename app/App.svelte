@@ -11,6 +11,7 @@
     import Excalidraw from './components/Excalidraw.svelte'
     import GridView from './components/GridView.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
+    import TabGroupPreview from './components/TabGroupPreview.svelte'
     import TabHoverCard from './components/TabHoverCard.svelte'
     import TabContextMenu from './components/TabContextMenu.svelte'
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
@@ -3213,7 +3214,7 @@
             class:hovered={tab.id === hoveredTab?.id}
             class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
             class:collapsed={isPinHidden(tab.id)}
-            class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
+            class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
             role="tab"
             tabindex="0"
             title={tab.title || tab.url}
@@ -3269,7 +3270,7 @@
     }}
 />
 
-<header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} style="--tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;" onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) { cancelFocusModeHide(); focusModeHovered = true } }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) scheduleFocusModeHide() }}>
+<header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} class:has-navigation-toolbar={showNavigationToolbar} style="--tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;" onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) { cancelFocusModeHide(); focusModeHovered = true } }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) scheduleFocusModeHide() }}>
     <!-- Main background drag handle -->
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 178px;' : 'right: 137px;'}"></div>
     
@@ -3305,8 +3306,7 @@
     <!-- Left pinned tabs section (favicon only, fixed left of scrolling tabs) -->
     {#if leftPinnedTabs.length > 0}
         <div class="fixed-pinned-tabs fixed-pinned-tabs-left" 
-             class:hidden={focusModeEnabled && !focusModeHovered}
-             style="left: {showNavigationToolbar ? 175 : 110}px;">
+             class:hidden={focusModeEnabled && !focusModeHovered}>
             {#each leftPinnedTabs as tabPinned, i (tabPinned.id)}
                 {@const tab = data.docs[tabPinned.id]}
                 {#if tab.type !== 'divider'}
@@ -3319,7 +3319,7 @@
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
                         class:collapsed={isPinHidden(tab.id)}
-                        class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
+                        class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
                         title={tab.title || tab.url}
@@ -3362,7 +3362,7 @@
         </div>
     {/if}
      
-        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: {(showNavigationToolbar ? 175 : 110) + leftPinnedTabsWidth}px; width: calc(100% - {devModeEnabled ? (showNavigationToolbar ? 478 : 413) + leftPinnedTabsWidth + rightPinnedTabsWidth : (showNavigationToolbar ? 448 : 383) + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: calc(var(--header-tabs-left) + {leftPinnedTabsWidth}px); width: calc(100% - var(--header-tabs-left) - {(devModeEnabled ? 303 : 273) + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list tabs" data-group-tab-id={currentGroupTabId} data-space-id={data.spaceMeta.activeSpace} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
@@ -3381,7 +3381,7 @@
                         class:hibernated={data.isTabHibernated(tab.id)}
                         class:hovered={tab.id === hoveredTab?.id}
                         class:menu-open={contextMenu.visible && contextMenu.tab?.id === tab.id}
-                        class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
+                        class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
                         onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, wasActive); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab, i))) } } }}
@@ -3506,7 +3506,7 @@
     </div>
 
     <!-- Left drag handle -->
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {showNavigationToolbar ? 85 : 105}px;"></div>
+    <div class="header-drag-handle header-drag-handle-left" class:drag-enabled={isDragEnabled}></div>
 
     <!-- Right drag handle (width adjusts for right pinned tabs) -->
     <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {115 - rightPinnedTabsWidth}px; left: unset; {devModeEnabled ? 'right: 190px;' : 'right: 158px;'}"></div>
@@ -4150,6 +4150,7 @@
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px; --hovercard-top: {hovercardPosition.y}px;">
        
             <TabHoverCard tab={hoveredTab} 
+                          onActivate={activateTab}
                           isClosedTab={false} 
                           showHistoryImmediately={closeButtonHoveredDelayed || navigationHovercardTabId === hoveredTab.id}
                           instantMode={instantHovercardsMode}
@@ -4264,6 +4265,7 @@
          onmouseenter={handleNavHovercardMouseEnter}
          onmouseleave={handleNavHovercardMouseLeave}>
         <TabHoverCard tab={activeTab} 
+                      onActivate={activateTab}
                       isClosedTab={false} 
                       showHistoryImmediately={true}
                       instantMode={true}
@@ -4780,11 +4782,17 @@
 
 {#if tabDrag.active && tabDrag.dragType !== 'divider' && data.docs[tabDrag.tabId]}
     {@const dragTab = data.docs[tabDrag.tabId]}
+    {@const dragGroup = tabDrag.dragType === 'group' ? data.getTabGroup(tabDrag.tabId, tabDrag.sourceSpaceId) : null}
     <div class="tab-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px; height: {tabDrag.previewHeight}px;">
-        <div class="favicon-wrapper">
-            <Favicon tab={dragTab} />
-        </div>
-        <span class="tab-drag-preview-title">{dragTab.title || dragTab.url || 'Untitled'}</span>
+        {#if dragGroup}
+            <TabGroupPreview group={dragGroup} groupId={dragGroup.id} active disabled />
+            <span class="tab-drag-preview-count">{dragGroup.tabs.length}</span>
+        {:else}
+            <div class="favicon-wrapper">
+                <Favicon tab={dragTab} />
+            </div>
+            <span class="tab-drag-preview-title">{dragTab.title || dragTab.url || 'Untitled'}</span>
+        {/if}
     </div>
 {/if}
 
@@ -4853,7 +4861,7 @@
         padding: 4px;
         background-color: rgb(50 50 50);
         border: 1px solid rgb(70 70 70);
-        border-radius: 8px;
+        border-radius: 12px;
         box-sizing: border-box;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     }
@@ -4906,6 +4914,15 @@
         min-width: 0;
     }
 
+    .tab-drag-preview-count {
+        flex-shrink: 0;
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: rgb(255 255 255 / 10%);
+        color: rgb(255 255 255 / 40%);
+        font-size: 10px;
+    }
+
     .tab-drag-preview :global(.favicon-wrapper) {
         opacity: 0.87;
         flex-shrink: 0;
@@ -4938,9 +4955,9 @@
     }
 
     .window-controls-container {
-        position: absolute;
-        top: 8px;
-        left: 10px;
+        position: fixed;
+        top: calc(env(titlebar-area-y, 0px) + 8px);
+        left: calc(env(titlebar-area-x, 0px) + 10px);
         display: flex;
         gap: 0px;
         z-index: 10000;

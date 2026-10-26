@@ -2,21 +2,22 @@
     import Favicon from './Favicon.svelte'
     import { getFaviconWindow } from '../lib/tab-group-preview.svelte.js'
 
-    let { group, groupId, preview, active = false, disabled = false } = $props()
-    const scrubbing = $derived(preview.state.groupId === groupId)
+    let { group, groupId, preview = null, active = false, disabled = false } = $props()
+    const scrubbing = $derived(preview != null && preview.state.groupId === groupId)
     const progress = $derived(scrubbing ? preview.state.progress : 0)
     const selectedTab = $derived(scrubbing ? group.tabs[Math.min(preview.state.tabIndex, group.tabs.length - 1)] : null)
-    const window = $derived(getFaviconWindow(group.tabs.length, progress))
+    const faviconSlots = $derived(group.metadata?.emoji || group.metadata?.favicon ? 2 : 3)
+    const window = $derived(getFaviconWindow(group.tabs.length, progress, faviconSlots))
     const title = $derived(selectedTab ? selectedTab.title || selectedTab.url || 'New tab' : group.title)
 
     function scrub (event) {
-        if (disabled) return
+        if (disabled || !preview) return
         const rect = event.currentTarget.getBoundingClientRect()
         if (!rect.width) return
         preview.move(groupId, (event.clientX - rect.left) / rect.width, group.tabs.length)
     }
 
-    $effect(() => { if (disabled) preview.leaveStrip(groupId) })
+    $effect(() => { if (disabled) preview?.leaveStrip(groupId) })
 </script>
 
 <span class="group-preview" class:active aria-hidden="true">
@@ -25,8 +26,8 @@
     {:else if group.metadata?.favicon}
         <span class="custom-icon"><Favicon tab={{ favicon: group.metadata.favicon, title: group.name }} showButton={false} /></span>
     {/if}
-    <span class="favicon-viewport" class:scrolled={group.tabs.length > 3 && progress > 0} class:at-end={group.tabs.length < 3 || progress === 1}
-          role="group" style:width="{window.visible * 18}px" onmouseenter={scrub} onmousemove={scrub} onmouseleave={() => preview.leaveStrip(groupId)}>
+    <span class="favicon-viewport" class:scrolled={group.tabs.length > window.visible && progress > 0} class:at-end={group.tabs.length <= window.visible || progress === 1}
+          role="group" style:width="{window.visible * 18}px" onmouseenter={scrub} onmousemove={scrub} onmouseleave={() => preview?.leaveStrip(groupId)}>
         <span class="favicon-track" style:transform="translateX({-window.offset * 18}px)">
             {#each group.tabs.slice(window.start, window.end) as tab (tab.id)}
                 <span class="preview-favicon" class:selected={selectedTab?.id === tab.id}><Favicon {tab} showButton={false} /></span>

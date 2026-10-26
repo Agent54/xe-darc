@@ -11,9 +11,9 @@ function previewHarness () {
     const timers = new Map()
     const setTimeout = (callback, delay) => { const id = nextId++; timers.set(id, { callback, at: now + delay }); return id }
     const clearTimeout = id => timers.delete(id)
-    const api = new Function('$', 'setTimeout', 'clearTimeout', `${source}\nreturn { createTabGroupPreview, getFaviconWindow }`)(svelteClient, setTimeout, clearTimeout)
+    const api = new Function('$', 'setTimeout', 'clearTimeout', `${source}\nreturn { createTabGroupPreview, getFaviconWindow, getDefaultGroupTabIndex }`)(svelteClient, setTimeout, clearTimeout)
     return {
-        preview: api.createTabGroupPreview(), window: api.getFaviconWindow, timers,
+        preview: api.createTabGroupPreview(), window: api.getFaviconWindow, defaultIndex: api.getDefaultGroupTabIndex, timers,
         advance(ms) {
             const end = now + ms
             while (true) {
@@ -27,6 +27,28 @@ function previewHarness () {
         }
     }
 }
+
+Deno.test('grid stacks default to their current active member, then space or remembered activity', () => {
+    const { defaultIndex } = previewHarness()
+    const tabs = ['first', 'remembered', 'space-active', 'active'].map(id => ({ id }))
+    assert.equal(defaultIndex(tabs, ['active', 'space-active', 'remembered']), 3)
+    assert.equal(defaultIndex(tabs, ['another-group', 'space-active', 'remembered']), 2)
+    assert.equal(defaultIndex(tabs, ['another-group', null, 'remembered']), 1)
+    assert.equal(defaultIndex(tabs, [null, 'closed', 'missing']), 0)
+    assert.equal(defaultIndex(tabs.toReversed(), ['active']), 0)
+})
+
+Deno.test('the default favicon window includes active members beyond the first three tabs', () => {
+    const { defaultIndex, window } = previewHarness()
+    for (const count of [2, 3, 10, 200]) {
+        const tabs = Array.from({ length: count }, (_, index) => ({ id: `tab-${index}` }))
+        for (const active of tabs) {
+            const index = defaultIndex(tabs, [active.id])
+            const favicons = window(tabs.length, index / Math.max(1, tabs.length - 1))
+            assert.ok(index >= favicons.start && index < favicons.end)
+        }
+    }
+})
 
 Deno.test('favicon scrubbing waits 700 ms and pointer movement retains the initial timer', () => {
     const { preview, advance } = previewHarness()
@@ -105,13 +127,18 @@ Deno.test('the favicon viewport reaches every tab while mounting only its visibl
     assert.deepEqual(window(10, 0), { start: 0, end: 3, offset: 0, visible: 3 })
     assert.deepEqual(window(10, 1), { start: 7, end: 10, offset: 0, visible: 3 })
     assert.deepEqual(window(100, 0.5), { start: 48, end: 52, offset: 0.5, visible: 3 })
+    assert.deepEqual(window(10, 0, 2), { start: 0, end: 2, offset: 0, visible: 2 })
+    assert.deepEqual(window(10, 1, 2), { start: 8, end: 10, offset: 0, visible: 2 })
     for (const count of [2, 3, 4, 10, 200]) {
-        for (let step = 0; step <= 100; step++) {
-            const progress = step / 100
-            const result = window(count, progress)
-            const hovered = Math.min(count - 1, Math.floor(progress * count))
-            assert.ok(result.end - result.start <= 4)
-            assert.ok(hovered >= result.start && hovered < result.end)
+        for (const slots of [2, 3]) {
+            for (let step = 0; step <= 100; step++) {
+                const progress = step / 100
+                const result = window(count, progress, slots)
+                const hovered = Math.min(count - 1, Math.floor(progress * count))
+                assert.equal(result.visible, Math.min(count, slots))
+                assert.ok(result.end - result.start <= slots + 1)
+                assert.ok(hovered >= result.start && hovered < result.end)
+            }
         }
     }
 })

@@ -6,13 +6,15 @@
     import data from '../data.svelte.js'
     
     let { 
-        tab, 
+        tab: previewTab,
         onMouseLeave, 
         isClosedTab = false, 
         showHistoryImmediately = false,
+        showHistory = $bindable(false),
         instantMode = false,
         stacked = false,
         showDevTools = false,
+        onActivate = null,
         onGoBack = null,
         onGoForward = null,
         onReload = null,
@@ -22,11 +24,22 @@
         onHistoryVisibilityChange = null,
         availableHeight = null
     } = $props()
+
+    const tab = $derived(data.docs[previewTab.id] || previewTab)
     
     const HEADER_HEIGHT = 100
     const SCREENSHOT_HEIGHT = 180
     const HISTORY_TITLE_HEIGHT = 30
     const MIN_HISTORY_HEIGHT = 100
+    const title = $derived(tab.title || 'Untitled')
+    const activationLabel = $derived(`${isClosedTab ? 'Restore' : 'Open'} ${title}`)
+
+    function activateTab() {
+        if (isClosedTab) return data.restoreClosedTab(tab.id)
+        if (onActivate) return onActivate(tab)
+        if (tab.spaceId && data.spaceMeta.activeSpace !== tab.spaceId) data.activateSpace(tab.spaceId)
+        data.activate(tab.id)
+    }
     
     let historyMaxHeight = $derived(() => {
         const maxFromVh = window.innerHeight * 0.5
@@ -51,12 +64,18 @@
     }
     
     let hovercardHovered = $state(false)
-    let showHistory = $state(false)
     let showDelayedElements = $state(false)
     let historyShowTimer = null
     let delayedElementsTimer = null
     let hoveredHistoryEntry = $state(null)
     let hoveredEntryIndex = $state(null)
+
+    $effect(() => {
+        if (!showHistory) {
+            hoveredHistoryEntry = null
+            hoveredEntryIndex = null
+        }
+    })
     
     // Check if an entry is in the direct lineage (predecessor) of the hovered entry
     function isInLineage(entryIndex) {
@@ -323,7 +342,7 @@
             <div class="hovercard-text">
                 <div class="hovercard-title-wrapper" use:initScrollFade>
                     <div class="fade-left"></div>
-                    <div class="hovercard-title" onscroll={handleScrollFade}>{data.docs[tab.id]?.title || tab.title || 'Untitled'}</div>
+                    <button type="button" class="hovercard-title" aria-label={activationLabel} onclick={activateTab} onscroll={handleScrollFade}>{title}</button>
                     <div class="fade-right"></div>
                 </div>
             </div>
@@ -339,7 +358,7 @@
         </div>
         
         <UrlBar 
-            url={data.docs[tab.id]?.url || tab.url}
+            url={tab.url}
             tabId={tab.id}
             {isClosedTab}
             {showDevTools}
@@ -355,31 +374,31 @@
         />
     </div>
     {#if hoveredHistoryEntry?.screenshot}
-        <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
+        <button type="button" class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0} aria-label={activationLabel} onclick={activateTab}>
             {#key hoveredHistoryEntry.id}
                 <AttachmentImage src={hoveredHistoryEntry.screenshot} digest={hoveredHistoryEntry._attachments?.screenshot?.digest} alt="Page preview" />
             {/key}
             {#if showDelayedElements}
-                <button class="expand-button" aria-label="Expand screenshot">
+                <span class="expand-button" aria-hidden="true">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                     </svg>
-                </button>
+                </span>
             {/if}
-        </div>
+        </button>
     {:else if tab.screenshot}
-        <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
+        <button type="button" class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0} aria-label={activationLabel} onclick={activateTab}>
             {#key tab.id}
                 <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Page preview" />
             {/key}
             {#if showDelayedElements}
-                <button class="expand-button" aria-label="Expand screenshot">
+                <span class="expand-button" aria-hidden="true">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                     </svg>
-                </button>
+                </span>
             {/if}
-        </div>
+        </button>
     {/if}
     {#if showHistory && historyEntries.length > 0}
         <div class="history-section">
@@ -536,6 +555,14 @@
     }
     
     .hovercard-title {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: none;
+        background: transparent;
+        text-align: left;
+        font-family: inherit;
+        cursor: pointer;
         font-size: 14px;
         font-weight: 600;
         color: rgba(255, 255, 255, 0.9);
@@ -571,6 +598,11 @@
     }
 
     .hovercard-screenshot {
+        display: block;
+        padding: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
         width: 100%;
         height: 180px;
         overflow: hidden;
