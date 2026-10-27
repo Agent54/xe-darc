@@ -1,3 +1,9 @@
+<script module>
+    // Shared by every sidebar instance for this session; never persisted with tab data.
+    const defaultTabGroupMaxHeight = 5 * 36 + 4 * 4 + 2 * 5
+    let tabGroupMaxHeight = $state(defaultTabGroupMaxHeight)
+</script>
+
 <script>
     import { cdpFetch } from '../lib/cdp.js'
     // Tab sidebar component with Firefox-like hover behavior
@@ -97,6 +103,7 @@
     
     // Tab group expansion state
     let tabGroupExpansion = $state({})
+    let groupResize = $state(null)
     const groupPreview = createTabGroupPreview()
     onMount(() => () => groupPreview.destroy())
     let tabSearchQuery = $state('')
@@ -223,7 +230,7 @@
     
     function handleMouseLeave() {
         // Don't hide sidebar when URL bar is expanded, in multi-space mode, or dragging/pending drag
-        if (!urlBarExpanded && !multiSpaceMode && !tabDrag.active && !tabDrag.pending) {
+        if (!urlBarExpanded && !multiSpaceMode && !tabDrag.active && !tabDrag.pending && !groupResize) {
             // Always set isHovered to false for resize handle logic
             isHovered = false
             // Immediately disable resize handle when leaving
@@ -572,6 +579,42 @@
         isResizingLanes = false
         document.removeEventListener('mousemove', handleLaneDividerMouseMove)
         document.removeEventListener('mouseup', handleLaneDividerMouseUp)
+    }
+
+    function setTabGroupMaxHeight(height) {
+        tabGroupMaxHeight = Math.max(86, Math.min(window.innerHeight - 120, height))
+    }
+
+    function startGroupResize(event, groupId) {
+        if (event.button !== 0 || tabDrag.active || tabDrag.pending) return
+        event.preventDefault()
+        event.stopPropagation()
+        closeHovercard()
+        if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+        const content = event.currentTarget.parentElement.querySelector('.tab-group-content')
+        const style = getComputedStyle(content)
+        const padding = style.boxSizing === 'border-box' ? 0 : parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+        groupResize = { groupId, pointerId: event.pointerId, startY: event.clientY, startHeight: content.clientHeight - padding }
+        event.currentTarget.setPointerCapture(event.pointerId)
+    }
+
+    function moveGroupResize(event) {
+        if (event.pointerId !== groupResize?.pointerId) return
+        setTabGroupMaxHeight(groupResize.startHeight + event.clientY - groupResize.startY)
+    }
+
+    function endGroupResize(event) {
+        if (event.pointerId !== groupResize?.pointerId) return
+        groupResize = null
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+        if (!event.currentTarget.closest('.sidebar-box')?.matches(':hover')) handleMouseLeave()
+    }
+
+    function handleGroupResizeKey(event) {
+        if (!['ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return
+        event.preventDefault()
+        event.stopPropagation()
+        setTabGroupMaxHeight(event.key === 'Home' ? defaultTabGroupMaxHeight : tabGroupMaxHeight + (event.key === 'ArrowDown' ? 20 : -20))
     }
     
     function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
@@ -1056,7 +1099,7 @@
     })
     
     function revealGroupActivationTab(element) {
-        if (tabDrag.active || tabDrag.pending) return
+        if (tabDrag.active || tabDrag.pending || groupResize) return
         const wrapper = element.closest('.tab-group-wrapper.expanded')
         const content = wrapper?.querySelector('.tab-group-content')
         const target = content?.querySelector('.group-activation-target')
@@ -2004,7 +2047,7 @@
                                                 {@const activationTab = data.getGroupActiveTab(item, spaceId)}
                                                 {@const recentEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                                                 {@const spaceActive = spaceId !== data.spaceMeta.activeSpace && item.tabs.some(tab => tab.id === (typeof recentEntry === 'string' ? recentEntry : recentEntry?.id))}
-                                                <div class="tab-group-wrapper" class:expanded class:active class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
+                                                <div class="tab-group-wrapper" class:expanded class:active class:group-resizing={groupResize?.groupId === expansionId} style:--tab-group-max-height="{tabGroupMaxHeight}px" class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
                                                      role="group" aria-label={item.title} onmouseenter={() => groupPreview.enter(expansionId)} onmouseleave={() => groupPreview.leave(expansionId)} onpointerover={handleGroupPointerOver}>
                                                     <div class="tab-group" class:expanded class:active class:space-active-tab={spaceActive}
                                                         onmouseenter={(e) => handleTabMouseEnter(null, e)} onmouseleave={handleTabMouseLeave}
@@ -2031,6 +2074,12 @@
                                                                     {@render sidebarTab(tab, i, tab.id === activationTab.id)}
                                                                 {/each}
                                                             </div>
+                                                            <button class="tab-group-resize" type="button" aria-label="Resize expanded tab groups" title="Drag to resize tab groups"
+                                                                onpointerdown={(event) => startGroupResize(event, expansionId)} onpointermove={moveGroupResize}
+                                                                onpointerup={endGroupResize} onpointercancel={endGroupResize} onlostpointercapture={endGroupResize}
+                                                                onkeydown={handleGroupResizeKey}>
+                                                                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor"><path d="M4 10 10 4M8 10l2-2" /></svg>
+                                                            </button>
                                                         </div>
                                                     {/if}
                                                 </div>
@@ -3979,7 +4028,7 @@
         padding: 5px 4px;
         gap: 4px;
         flex: 1;
-        max-height: calc(5 * 36px + 4 * 4px + 2 * 5px);
+        max-height: var(--tab-group-max-height, 206px);
         overflow-y: auto;
         overscroll-behavior-y: contain;
         scrollbar-width: thin;
@@ -4008,6 +4057,36 @@
     
     .tab-group-wrapper.expanded .tab-group-content {
         display: flex;
+    }
+
+    .tab-group-resize {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 16px;
+        height: 16px;
+        padding: 2px;
+        border: 0;
+        border-radius: 0 0 10px 0;
+        background: var(--tab-group-background);
+        color: rgb(255 255 255 / 15%);
+        cursor: ns-resize;
+        user-select: none;
+        touch-action: none;
+        z-index: 11;
+        -webkit-app-region: no-drag;
+    }
+
+    .tab-group-resize svg {
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
+
+    .tab-group-resize:hover,
+    .tab-group-resize:focus-visible,
+    .group-resizing .tab-group-resize {
+        color: rgb(255 255 255 / 45%);
     }
     
     .tab-group-empty-message {

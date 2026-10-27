@@ -368,6 +368,55 @@ try {
     await page.waitForFunction(() => !window.tabDrag.active)
     await page.hover('.add-spacer-preview')
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.add-spacer-preview-line')).opacity === '1')
+
+    await page.setViewport({ width: 800, height: 1000 })
+    await page.evaluate(() => window.flushSync(() => {
+        for (let index = 0; index < 2; index++) {
+            const tab = { ...window.data.docs['group-two'], id: `resize-${index}`, title: `Resize ${index}`, tabGroupId: 'resize', tabGroupOrder: index, order: 20 + index }
+            window.data.docs[tab.id] = tab
+            window.data.spaces.space.tabs.push(tab)
+        }
+    }))
+    await page.$eval('[data-tab-group-id="resize"] .tab-group-toggle', button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
+    const groupContent = '[data-tab-group-id="group"] .tab-group-content'
+    const resizeHandle = '[data-tab-group-id="group"] .tab-group-resize'
+    const resizeGroup = async delta => {
+        const point = await page.$eval(resizeHandle, button => {
+            const rect = button.getBoundingClientRect()
+            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        })
+        await page.mouse.move(point.x, point.y)
+        await page.mouse.down()
+        await page.mouse.move(point.x, point.y + delta, { steps: 5 })
+        assert.equal(await page.evaluate(() => window.tabDrag.active || window.tabDrag.pending), false, 'resizing must not start a tab drag')
+        await page.mouse.up()
+        await page.waitForFunction(() => !document.querySelector('.group-resizing'))
+    }
+    const initialHeight = await page.$eval(groupContent, content => content.clientHeight)
+    await resizeGroup(80)
+    assert.equal(await page.$eval(groupContent, content => content.clientHeight), initialHeight + 80, 'dragging the corner increases the expanded list height')
+    assert.deepEqual(await page.$$eval('.tab-group-content', lists => lists.map(content => getComputedStyle(content).maxHeight)), ['286px', '286px'], 'all groups share the session height limit')
+    assert.ok(await page.$eval('[data-tab-group-id="resize"] .tab-group-content', content => content.clientHeight < 286), 'short groups must retain their natural height')
+    await resizeGroup(-120)
+    await page.waitForFunction(() => document.querySelector('[data-tab-group-id="group"] .tab-group-scroll').dataset.scrollBottom === 'true')
+    assert.equal(await page.$eval(groupContent, content => content.clientHeight), initialHeight - 40, 'shrinking restores inner overflow and its fade')
+    await resizeGroup(-400)
+    assert.equal(await page.$eval(groupContent, content => getComputedStyle(content).maxHeight), '86px', 'the resize limit must leave room for two rows')
+    await page.focus(resizeHandle)
+    await page.keyboard.press('Home')
+    assert.equal(await page.$eval(groupContent, content => getComputedStyle(content).maxHeight), '206px', 'Home restores the original five-tab cap')
+    await page.keyboard.press('ArrowDown')
+    assert.equal(await page.$eval(groupContent, content => getComputedStyle(content).maxHeight), '226px', 'the handle supports keyboard resizing')
+    for (let i = 0; i < 2; i++) {
+        await page.$eval('[data-tab-group-id="group"] .tab-group-toggle', button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
+    }
+    assert.equal(await page.$eval(groupContent, content => getComputedStyle(content).maxHeight), '226px', 'the session limit survives collapsing and reopening')
+    await page.focus(resizeHandle)
+    await page.keyboard.press('Home')
+    await page.$eval(resizeHandle, button => button.blur())
+    await page.evaluate(() => window.flushSync(() => {
+        window.data.spaces.space.tabs = window.data.spaces.space.tabs.filter(tab => tab.tabGroupId !== 'resize')
+    }))
     await page.setViewport({ width: 375, height: 800 })
     await hovercardLeft('.tab-group-main', true)
     assert.equal(await page.$eval('.tab-hovercard-sidebar', stack => {
@@ -377,7 +426,7 @@ try {
     await page.evaluate(() => window.flushSync(() => { window.data.ui.sidebarVisible = false }))
     assert.equal(await page.$('.sidebar-window-drag'), null, 'hover-mode sidebars must not leave an invisible drag strip over the header')
     assert.deepEqual(errors, [])
-    console.log('Chromium: group headers reveal their remembered tab without scrolling the sidebar; group menu actions support mouse release and keyboard; favicon regressions pass')
+    console.log('Chromium: shared group height resizes by corner and keyboard with inner overflow preserved; header previews, group menus and favicon regressions pass')
 } finally {
     await browser?.close()
     await server.shutdown()
