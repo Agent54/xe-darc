@@ -1,7 +1,7 @@
 export function getSidebarHovercardPosition (anchor, width, height, viewportWidth, viewportHeight) {
     const maxX = Math.max(10, viewportWidth - width - 10)
     const maxY = Math.max(20, viewportHeight - Math.min(height, viewportHeight - 40) - 20)
-    const preferredX = anchor.right + width > viewportWidth - 10 ? anchor.left - width - 10 : anchor.right
+    const preferredX = anchor.right + 10 + width > viewportWidth - 10 ? anchor.left - width - 10 : anchor.right + 10
     return {
         x: Math.max(10, Math.min(preferredX, maxX)),
         y: Math.max(20, Math.min(anchor.top - 26, maxY))

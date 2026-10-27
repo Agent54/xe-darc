@@ -2,6 +2,7 @@
 // Used by both App.svelte (top bar) and TabSidebar.svelte (sidebar)
 
 const DRAG_THRESHOLD = 5
+const GROUP_JOIN_DELAY = 700
 const GROUP_EXPAND_DELAY = 1000
 const AUTO_SCROLL_EDGE = 60 // px from edge to start scrolling
 const AUTO_SCROLL_SPEED = 12 // px per frame
@@ -117,6 +118,28 @@ let dropCallback = null
 let groupExpandCallback = null
 let hoveredGroup = null
 let groupExpandTimeout = null
+let joinHoverTarget = null
+let joinHoverTimeout = null
+let joinReady = false
+
+function updateJoinHover(element) {
+    if (joinHoverTarget === (element || null)) return
+    clearTimeout(joinHoverTimeout)
+    joinHoverTimeout = null
+    joinHoverTarget = element || null
+    joinReady = false
+    if (!element) return
+
+    joinHoverTimeout = setTimeout(() => {
+        joinHoverTimeout = null
+        if (!state.active || findGroupDropTarget(state.mouseX, state.mouseY)?.join !== element) {
+            updateJoinHover(null)
+            return
+        }
+        joinReady = true
+        handleMouseMove({ clientX: state.mouseX, clientY: state.mouseY })
+    }, GROUP_JOIN_DELAY)
+}
 
 function updateGroupHover(group) {
     if (hoveredGroup?.element === group?.element) return
@@ -197,15 +220,16 @@ function handleMouseMove(e) {
 
     if (state.dragType !== 'divider') {
         const target = findGroupDropTarget(mx, my)
+        updateJoinHover(target?.join)
         updateGroupHover(state.dragType === 'tab' ? target?.hoverGroup : null)
         if (target) {
             state.sidepinZone = null
-            state.dropTarget = target.drop
+            state.dropTarget = target.join && joinReady ? target.joinDrop : target.drop
             if (target.noop) {
                 hideIndicator()
                 return
             }
-            if (target.join) {
+            if (target.join && joinReady) {
                 const rect = target.join.getBoundingClientRect()
                 Object.assign(state.indicator, { visible: true, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width, height: rect.height })
             } else if (target.hit) {
@@ -217,6 +241,7 @@ function handleMouseMove(e) {
         }
     } else {
         updateGroupHover(null)
+        updateJoinHover(null)
     }
 
     // Try pinned tab containers first (left fixed, right fixed, and right inline in topbar)
@@ -383,6 +408,7 @@ function findGroupDropTarget(mx, my) {
         const tabs = list.querySelectorAll(SIDEBAR_ITEMS)
         const hit = findClosestTab(tabs, my, 'y')
         let hoverGroup = null
+        let join = null
         if (hit) {
             if (hit.el === state.tabEl) {
                 return { noop: true }
@@ -394,11 +420,13 @@ function findGroupDropTarget(mx, my) {
                 ? { element: hit.el, tabGroupId: hit.el.dataset.tabGroupId, spaceId: targetSpaceId }
                 : null
             if (canJoin && my > rect.top + rect.height * 0.25 && my < rect.bottom - rect.height * 0.25) {
-                return { join: header, hoverGroup, drop: { targetSpaceId, targetGroupTabId: getTabId(hit.el), scope } }
+                join = header
             }
         }
         const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, targetSpaceId) : {}
-        return { tabs, hit, list, axis: 'y', hoverGroup, drop: { ...neighbors, targetSpaceId, targetGroupTabId: null, scope } }
+        return { tabs, hit, list, axis: 'y', hoverGroup, join,
+            joinDrop: join ? { targetSpaceId, targetGroupTabId: getTabId(hit.el), scope } : null,
+            drop: { ...neighbors, targetSpaceId, targetGroupTabId: null, scope } }
     }
     return null
 }
@@ -503,6 +531,7 @@ function handleKeyDown(e) {
 
 function handleMouseUp(event, cancelled = false) {
     updateGroupHover(null)
+    updateJoinHover(null)
     stopAutoScroll()
     window.removeEventListener('mousemove', handleMouseMove)
     window.removeEventListener('mouseup', handleMouseUp)

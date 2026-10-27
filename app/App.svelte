@@ -772,6 +772,7 @@
     }
 
     function showNewTabMenu(isInline = false) {
+        if (tabDrag.active || tabDrag.pending) return
         if (isInline && inlineNewTabButtonElement) {
             const rect = inlineNewTabButtonElement.getBoundingClientRect()
             newTabMenuPosition = { left: rect.left }
@@ -780,6 +781,7 @@
     }
 
     function handleNewTabButtonMouseEnter(isInline = false) {
+        if (tabDrag.active || tabDrag.pending) return
         // Cancel any pending close when mouse enters button
         if (newTabMenuLeaveTimeout) {
             clearTimeout(newTabMenuLeaveTimeout)
@@ -4849,6 +4851,16 @@
     :global(body.tab-dragging-active iframe),
     :global(body.tab-dragging-active controlledframe) {
         pointer-events: none;
+    }
+
+    :global(body.tab-dragging-active :is(.new-tab-button-wrapper, .inline-new-tab-button-wrapper)),
+    :global(body.tab-dragging-active :is(.new-tab-button-wrapper, .inline-new-tab-button-wrapper) *) {
+        pointer-events: none !important;
+    }
+
+    :global(body.tab-dragging-active .new-tab-header-menu) {
+        visibility: hidden !important;
+        opacity: 0 !important;
     }
 
     .tab-drag-preview {

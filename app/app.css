@@ -7,6 +7,8 @@
     --tab-active-hover-background: #2a2a2a;
     --tab-active-hover-border: rgb(255 255 255 / 5.5%);
     --tab-group-tab-hover-background: color-mix(in srgb, var(--tab-hover-background), white 5%);
+    --hovercard-active-header-background: #161616;
+    --hovercard-active-header-border: rgb(255 255 255 / 6%);
 }
 
 #backgroundFrames {
@@ -479,8 +481,8 @@ ul::-webkit-scrollbar {
     /* background-color: rgb(255 255 255 / 6%); */
     /* background-color: #ffffff0f; */
     min-width: 130px;
-    max-width: 280px;
-    flex: 0 1 280px; /* Don't grow, can shrink from 280px basis */
+    max-width: 263px;
+    flex: 0 1 263px; /* Don't grow, can shrink from 263px basis */
     -webkit-app-region: no-drag;
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
     -webkit-font-smoothing: subpixel-antialiased;

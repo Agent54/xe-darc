@@ -13,6 +13,7 @@
         showHistory = $bindable(false),
         instantMode = false,
         stacked = false,
+        active = undefined,
         showDevTools = false,
         onActivate = null,
         onGoBack = null,
@@ -26,6 +27,7 @@
     } = $props()
 
     const tab = $derived(data.docs[previewTab.id] || previewTab)
+    const headerFocused = $derived(!isClosedTab && (active ?? tab.id === data.spaceMeta.activeTabId))
     
     const HEADER_HEIGHT = 100
     const SCREENSHOT_HEIGHT = 180
@@ -332,7 +334,7 @@
     })
 </script>
 
-<div class="hovercard-content" class:stacked
+<div class="hovercard-content" class:stacked class:active={headerFocused}
      role="tooltip"
      onmouseenter={() => hovercardHovered = true}
      onmouseleave={() => { hovercardHovered = false; onMouseLeave?.() }}>
@@ -358,6 +360,7 @@
         </div>
         
         <UrlBar 
+            escapeOverflow={stacked}
             url={tab.url}
             tabId={tab.id}
             {isClosedTab}
@@ -493,6 +496,7 @@
 <style>
     /* Ensure these styles are scoped to this component */
     .hovercard-content {
+        --hovercard-title-fade-color: rgba(0, 0, 0, 0.95);
         background: rgba(0, 0, 0, 0.95);
         backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -519,6 +523,7 @@
         margin: 0;
         flex-shrink: 0;
         max-height: none;
+        box-shadow: none;
     }
 
     .hovercard-info {
@@ -533,6 +538,27 @@
 
     .hovercard-info:last-child {
         border-bottom: none;
+    }
+
+    .hovercard-content.active {
+        --hovercard-title-fade-color: var(--hovercard-active-header-background, #161616);
+        --url-bar-idle-background: transparent;
+        --url-bar-idle-border: transparent;
+    }
+
+    .hovercard-content.active .hovercard-info::before {
+        content: '';
+        position: absolute;
+        inset: 8px;
+        z-index: -1;
+        border-radius: 8px;
+        border: 1px solid var(--hovercard-active-header-border, rgb(255 255 255 / 6%));
+        background: var(--hovercard-active-header-background, #161616);
+        pointer-events: none;
+    }
+
+    .hovercard-content.active .hovercard-title {
+        color: #f0f0f0;
     }
 
     .hovercard-header {
@@ -589,12 +615,12 @@
     
     .hovercard-title-wrapper .fade-left {
         left: 0;
-        background: linear-gradient(to left, transparent, rgba(0, 0, 0, 0.95));
+        background: linear-gradient(to left, transparent, var(--hovercard-title-fade-color));
     }
     
     .hovercard-title-wrapper .fade-right {
         right: 0;
-        background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.95));
+        background: linear-gradient(to right, transparent, var(--hovercard-title-fade-color));
     }
 
     .hovercard-screenshot {

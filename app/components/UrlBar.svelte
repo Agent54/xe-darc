@@ -1,6 +1,7 @@
 <script>
     import UrlRenderer from './UrlRenderer.svelte'
     import data from '../data.svelte.js'
+    import { overflowPopover } from '../lib/overflow-popover.js'
     
     let { 
         url = '',
@@ -18,7 +19,8 @@
         onSettings = null,
         onExpandedChange = null,
         variant = 'default',
-        enableHoverExpand = true
+        enableHoverExpand = true,
+        escapeOverflow = false
     } = $props()
     
     let urlBarExpanded = $state(expanded)
@@ -31,6 +33,7 @@
     let urlButtonEl = $state(null)
     let showLeftFade = $state(false)
     let showRightFade = $state(true)
+    let urlBarSection = $state(null)
     
     function calculateMaxWidth() {
         if (urlBarContainer && variant === 'hovercard') {
@@ -192,10 +195,11 @@
 </script>
 
 <div class="url-bar-section" class:hovercard={variant === 'hovercard'} class:hover-expand-enabled={enableHoverExpand}
+     bind:this={urlBarSection}
      role="group"
      onmouseenter={handleMouseEnter}
      onmouseleave={handleMouseLeave}>
-    <div class="url-bar-wrapper">
+    <div class="url-bar-wrapper" use:overflowPopover={{ open: escapeOverflow && (urlBarExpanded || (isHovered && enableHoverExpand)), anchor: urlBarSection }}>
         <div class="url-bar-container" 
              bind:this={urlBarContainer}
              class:expanded={urlBarExpanded}
@@ -293,6 +297,7 @@
         margin-top: 8px;
         position: relative;
         z-index: 10;
+        min-height: 32px;
     }
     
     .url-bar-wrapper {
@@ -301,6 +306,17 @@
     
     .hovercard .url-bar-wrapper {
         margin-left: -10px;
+    }
+
+    .url-bar-wrapper:popover-open {
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        overflow: visible;
     }
     
     .url-bar-container {
@@ -330,7 +346,8 @@
         height: 32px;
         border-radius: 8px;
         z-index: 20;
-        background: rgb(255 255 255 / 5%);
+        background: var(--url-bar-idle-background, rgb(255 255 255 / 5%));
+        border-color: var(--url-bar-idle-border, rgb(255 255 255 / 2%));
     }
     
     .url-bar-container:not(.expanded):not(:hover) {

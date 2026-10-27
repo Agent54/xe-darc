@@ -90,14 +90,64 @@ Deno.test('topbar-to-sidebar edge drops detach individual tabs', () => {
     assert.equal(harness.drops[0].scope, 'tab')
 })
 
-Deno.test('the center of a sidebar entry joins a group and uses a frame highlight', () => {
-    const target = element('target', 0, 100, 250, 36)
-    const harness = dragHarness({ lists: [sidebar([target])] })
+Deno.test('joining a sidebar tab or group waits 700ms without resetting for pointer movement', () => {
+    for (const type of ['tab', 'group']) {
+        for (const target of [element('target', 0, 100, 250, 36), collapsedGroup()]) {
+            const harness = dragHarness({ lists: [sidebar([target])] })
+            harness.start('source', element('source', 300, 0, 100, 40), 'sidebar', type)
+            harness.move(120, 118)
+            assert.equal(harness.tabDrag.indicator.height, 2)
+            assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
+            harness.advance(699)
+            harness.move(125, 119)
+            assert.equal(harness.tabDrag.indicator.height, 2)
+            harness.advance(1)
+            assert.equal(harness.tabDrag.indicator.height, 36)
+            harness.release()
+            assert.equal(harness.drops[0].targetGroupTabId, target.id)
+            assert.equal(harness.drops[0].scope, type)
+        }
+    }
+})
+
+Deno.test('releasing before the merge delay keeps a normal sidebar reorder', () => {
+    const harness = dragHarness({ lists: [sidebar([element('target', 0, 100, 250, 36)])] })
     harness.start('source', element('source', 300, 0, 100, 40), 'topbar')
     harness.move(120, 118)
-    assert.equal(harness.tabDrag.indicator.height, 36)
+    harness.advance(699)
     harness.release()
-    assert.equal(harness.drops[0].targetGroupTabId, 'target')
+    assert.equal(harness.drops[0].targetGroupTabId, null)
+    assert.equal(harness.drops[0].afterTabId, 'target')
+    harness.advance(1000)
+    assert.equal(harness.tabDrag.active, false)
+    assert.equal(harness.tabDrag.indicator.visible, false)
+})
+
+Deno.test('changing merge targets, returning to an edge and cancelling reset the delay', () => {
+    const harness = dragHarness({ lists: [sidebar([element('first', 0, 100, 250, 36), element('second', 0, 150, 250, 36)])] })
+    const source = element('source', 300, 0, 100, 40)
+    harness.start('source', source, 'topbar')
+    harness.move(120, 118)
+    harness.advance(600)
+    harness.move(120, 168)
+    harness.advance(100)
+    assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
+    harness.advance(600)
+    assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, 'second')
+    harness.move(120, 152)
+    assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
+    assert.equal(harness.tabDrag.indicator.height, 2)
+    harness.move(120, 168)
+    harness.advance(699)
+    harness.cancelDrag()
+    harness.start('source', source, 'topbar')
+    harness.move(120, 168)
+    harness.advance(1)
+    assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
+    harness.advance(699)
+    assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, 'second')
+    harness.release()
+    assert.equal(harness.drops.length, 1)
 })
 
 Deno.test('an expanded group accepts drops between its child tabs', () => {

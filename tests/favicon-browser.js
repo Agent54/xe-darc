@@ -11,16 +11,24 @@ const modules = {
     entry: `
         import { mount, flushSync } from 'svelte'
         import Sidebar from './app/components/TabSidebar.svelte'
+        import { tabDrag } from './app/lib/tab-drag.svelte.js'
         import data from 'fixture-data'
         window.data = data
         window.flushSync = flushSync
-        mount(Sidebar, { target: document.body, props: { showUrl: false, tabSidebarVisible: true } })
+        window.tabDrag = tabDrag
+        mount(Sidebar, { target: document.body, props: {
+            showUrl: false,
+            get tabSidebarVisible() { return data.ui.sidebarVisible },
+            get isDragEnabled() { return data.ui.dragEnabled },
+            get customTabSidebarWidth() { return data.ui.sidebarWidth }
+        } })
     `,
     'fixture-data': compileModule(`
         import { getSidebarItems, getTabGroup } from './app/lib/tab-groups.js'
         const tab = (id, favicon, extra = {}) => ({ id, title: id, url: 'https://example.com', type: 'tab', spaceId: 'space', favicon: location.origin + favicon, ...extra })
         const data = $state({
             docs: {}, frames: {}, origins: {}, menuActions: [],
+            ui: { sidebarVisible: true, dragEnabled: true, sidebarWidth: 263 },
             spaceMeta: {
                 globalPins: [tab('pin-one', '/one.svg'), tab('pin-two', '/two.svg')],
                 closedTabs: [tab('closed-one', '/one.svg'), tab('closed-missing', '/missing.svg'), tab('closed-two', '/two.svg')],
@@ -66,9 +74,6 @@ const bundle = await rollup({
             }
             if (source.endsWith('/data.svelte.js')) {
                 return 'fixture-data'
-            }
-            if (/\/(Tooltip|UrlRenderer|UrlBar)\.svelte$/.test(source)) {
-                return 'empty'
             }
             if (source === 'svelte') {
                 return require.resolve('svelte').replace('index-server.js', 'index-client.js')
@@ -128,6 +133,14 @@ try {
     await page.goto(`http://127.0.0.1:${server.addr.port}`)
     await page.waitForFunction(() => document.querySelector('.closed-tab-item .fallback-favicon'))
     assert.deepEqual(errors, [])
+    assert.deepEqual(await page.$eval('.sidebar-window-drag', strip => {
+        const rect = strip.getBoundingClientRect()
+        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, region: getComputedStyle(strip).getPropertyValue('-webkit-app-region'), reachable: document.elementFromPoint(200, 17) === strip, clearsControls: document.querySelector('.search-toggle-tab').getBoundingClientRect().top >= rect.bottom }
+    }), { left: 0, top: 0, width: 263, height: 35, region: 'drag', reachable: true, clearsControls: true }, 'the open sidebar must provide its own unobstructed title-bar drag strip')
+    await page.evaluate(() => window.flushSync(() => { window.data.ui.dragEnabled = false; window.data.ui.sidebarWidth = 320 }))
+    assert.equal(await page.$eval('.sidebar-window-drag', strip => getComputedStyle(strip).getPropertyValue('-webkit-app-region')), 'no-drag')
+    assert.equal(await page.$eval('.sidebar-window-drag', strip => strip.getBoundingClientRect().width), 320)
+    await page.evaluate(() => window.flushSync(() => { window.data.ui.dragEnabled = true; window.data.ui.sidebarWidth = 263 }))
     const hovercardLeft = async (trigger, grouped) => {
         await page.hover(trigger)
         await page.waitForFunction(grouped => {
@@ -137,8 +150,43 @@ try {
         return page.$eval('.hovercard-content', card => card.getBoundingClientRect().left)
     }
     const groupLeft = await hovercardLeft('.tab-group-main', true)
+    assert.equal(await page.$$eval('.hovercard-content.active', cards => cards.length), 1, 'only the remembered group member receives a header capsule')
+    assert.equal(await page.$eval('.hovercard-content.active .hovercard-title', title => title.textContent), 'group-two')
+    assert.equal(await page.$eval('.hovercard-content.active .hovercard-info', header => getComputedStyle(header, '::before').backgroundColor), 'rgb(22, 22, 22)')
+    assert.equal(await page.$eval('.hovercard-content.active .url-bar-container', urlBar => getComputedStyle(urlBar).backgroundColor), 'rgba(0, 0, 0, 0)', 'the title and URL share one capsule surface')
+    await (await page.$('.tab-hovercard-sidebar')).screenshot({ path: `${root}.cache/tab-hovercard-capsule.png` })
+    await page.hover('.hovercard-content.active .hovercard-title')
+    await page.waitForSelector('.hovercard-content.active .url-bar-section.hover-expand-enabled')
+    await page.hover('.hovercard-content.active .url-bar-url')
+    await page.waitForSelector('.url-bar-wrapper:popover-open')
+    await page.waitForFunction(() => {
+        const stack = document.querySelector('.group-hovercards').getBoundingClientRect()
+        const url = document.querySelector('.url-bar-wrapper:popover-open .url-bar-container').getBoundingClientRect()
+        return url.right > stack.right + 40
+    })
+    assert.equal(await page.evaluate(() => {
+        const stack = document.querySelector('.group-hovercards').getBoundingClientRect()
+        const url = document.querySelector('.url-bar-wrapper:popover-open .url-bar-container').getBoundingClientRect()
+        return !!document.elementFromPoint(stack.right + 30, url.top + 16)?.closest('.url-bar-wrapper:popover-open')
+    }), true, 'the expanded URL bar must remain visible and interactive beyond the scrollable stack')
+    await page.click('.url-bar-wrapper:popover-open .url-bar-url')
+    await page.waitForFunction(() => document.activeElement?.classList.contains('url-bar-input'))
+    const floatingTop = await page.$eval('.url-bar-wrapper:popover-open', bar => bar.getBoundingClientRect().top)
+    await page.$eval('.group-hovercards', stack => { stack.scrollTop += 30 })
+    await page.waitForFunction(top => Math.abs(document.querySelector('.url-bar-wrapper:popover-open').getBoundingClientRect().top - (top - 30)) < 1, {}, floatingTop)
+    await page.evaluate(() => { document.body.style.background = '#242424' })
+    await page.screenshot({ path: `${root}.cache/tab-group-floating-url.png` })
+    await page.evaluate(() => { document.body.style.background = '' })
+    await page.keyboard.press('Escape')
+    await page.mouse.move(700, 550)
+    await page.waitForSelector('.url-bar-wrapper:popover-open', { hidden: true })
     const singleLeft = await hovercardLeft('.tabs-list > [data-tab-id="outside"]', false)
     assert.ok(Math.abs(groupLeft - singleLeft) < 0.5, `group and single hovercards must align: ${groupLeft} vs ${singleLeft}`)
+    const rowRight = await page.$eval('.tabs-list > [data-tab-id="outside"]', row => row.getBoundingClientRect().right)
+    assert.ok(Math.abs(singleLeft - rowRight - 18) < 0.5, 'both preview types retain the original 10px gap plus the card inset')
+    assert.equal(await page.$('.hovercard-content.active'), null)
+    await page.evaluate(() => window.flushSync(() => { window.data.spaceMeta.activeTabId = 'outside' }))
+    await page.waitForSelector('.hovercard-content.active')
     await page.mouse.move(600, 500)
     await page.evaluate(() => {
         window.closedRows = [...document.querySelectorAll('.closed-tab-item')]
@@ -231,6 +279,48 @@ try {
         })
         assert.equal(await page.$eval('.tabs-list', list => list.scrollTop), outerScrollTop, 'revealing the remembered tab must only scroll inside its group')
     }
+    await page.mouse.move(600, 500)
+    const borderPoint = await page.evaluate(() => {
+        window.flushSync(() => { window.data.spaces.space.activeTabsOrder = ['outside', 'group-tail-5'] })
+        document.querySelector('.tab-group-content').scrollTop = 0
+        const wrapper = document.querySelector('.tab-group-wrapper')
+        const rect = wrapper.getBoundingClientRect()
+        for (let offset = 0; offset < rect.height; offset += 0.5) {
+            for (const x of [rect.left, rect.left + 0.25, rect.right - 1, rect.right - 0.25]) {
+                const y = rect.top + offset
+                if (document.elementFromPoint(x, y) === wrapper) return { x, y }
+            }
+        }
+        throw new Error('The fixture must have an exposed group border')
+    })
+    await page.mouse.move(borderPoint.x, borderPoint.y)
+    const borderPreview = await page.evaluate(({ x, y }) => {
+        const wrapper = document.querySelector('.tab-group-wrapper')
+        const target = document.querySelector('.group-activation-target')
+        const row = target.getBoundingClientRect()
+        const content = document.querySelector('.tab-group-content').getBoundingClientRect()
+        return {
+            onBorder: document.elementFromPoint(x, y) === wrapper,
+            visible: row.top >= content.top && row.bottom <= content.bottom,
+            background: getComputedStyle(target).backgroundColor,
+            transition: getComputedStyle(target).transitionDuration,
+            frameBackground: getComputedStyle(wrapper).backgroundColor
+        }
+    }, borderPoint)
+    assert.deepEqual(borderPreview, { onBorder: true, visible: true, background: 'rgb(36, 36, 36)', transition: '0s', frameBackground: 'rgb(16, 16, 16)' }, 'border entry must reveal and highlight the remembered tab immediately with the subdued frame')
+    await page.hover('.tab-group-content > [data-tab-id="group-tail-4"]')
+    assert.equal(await page.$eval('.group-activation-target', row => getComputedStyle(row).backgroundColor), 'rgba(0, 0, 0, 0)', 'browsing individual rows must clear the header activation preview immediately')
+    await page.$eval('.tab-group', header => header.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 100 })))
+    await (await page.waitForSelector('.context-menu button ::-p-text(Rename…)')).click()
+    await page.waitForFunction(() => document.activeElement?.id === 'tab-group-name')
+    assert.deepEqual(await page.$eval('#tab-group-name', input => {
+        const style = getComputedStyle(input)
+        return { outline: style.outlineStyle, shadow: style.boxShadow, appearance: style.appearance, border: style.borderColor, background: style.backgroundColor }
+    }), { outline: 'none', shadow: 'none', appearance: 'none', border: 'rgba(255, 255, 255, 0.02)', background: 'rgb(33, 33, 33)' }, 'the focused rename input uses a background change with a quiet border')
+    await (await page.$('.context-menu')).screenshot({ path: `${root}.cache/group-rename-focus.png` })
+    await page.$eval('#tab-group-name', input => input.blur())
+    assert.deepEqual(await page.$eval('#tab-group-name', input => ({ background: getComputedStyle(input).backgroundColor, border: getComputedStyle(input).borderColor })), { background: 'rgb(21, 21, 21)', border: 'rgba(255, 255, 255, 0.02)' }, 'leaving the field restores only its background')
+    await page.mouse.click(600, 500)
     for (const [label, action] of [['Convert to space', 'convert'], ['Close all', 'close']]) {
         for (const keyboard of [false, true]) {
             await page.$eval('.tab-group', header => header.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 100 })))
@@ -257,6 +347,35 @@ try {
     await page.waitForNetworkIdle({ idleTime: 100 })
     assert.equal(requests.filter(path => path === '/updated.svg').length, 1, 'a changed favicon must still load')
     assert.equal(await page.$('[data-tab-id="outside"] .favicon-loading-spinner'), null)
+    await page.hover('.tabs-list > [data-tab-id="outside"] .tab-item-main')
+    const dragStart = await page.$eval('.tabs-list > [data-tab-id="outside"] .tab-item-main', button => {
+        const rect = button.getBoundingClientRect()
+        return { x: rect.left + 20, y: rect.top + rect.height / 2 }
+    })
+    await page.mouse.move(dragStart.x, dragStart.y)
+    await page.mouse.down()
+    await page.mouse.move(dragStart.x + 10, dragStart.y + 10)
+    await page.waitForFunction(() => window.tabDrag.active)
+    await page.hover('.new-tab-more-button')
+    assert.equal(await page.$eval('.new-tab-button', button => button.matches(':hover')), false, 'new-tab controls must not hover during tab dragging')
+    assert.equal(await page.$eval('.new-tab-hover-menu', menu => getComputedStyle(menu).visibility), 'hidden')
+    await page.$eval('.tabs-list', list => { list.scrollTop = 0 })
+    await page.waitForSelector('.add-spacer-preview')
+    await page.hover('.add-spacer-preview')
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.add-spacer-preview-line')).opacity === '0')
+    assert.equal(await page.$eval('.add-spacer-preview', button => button.matches(':hover')), false, 'divider insertion must not hover during tab dragging')
+    await page.mouse.up()
+    await page.waitForFunction(() => !window.tabDrag.active)
+    await page.hover('.add-spacer-preview')
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.add-spacer-preview-line')).opacity === '1')
+    await page.setViewport({ width: 375, height: 800 })
+    await hovercardLeft('.tab-group-main', true)
+    assert.equal(await page.$eval('.tab-hovercard-sidebar', stack => {
+        const rect = stack.getBoundingClientRect()
+        return rect.left >= 0 && rect.right <= window.innerWidth
+    }), true, 'the capsule stack must still fit a narrow viewport')
+    await page.evaluate(() => window.flushSync(() => { window.data.ui.sidebarVisible = false }))
+    assert.equal(await page.$('.sidebar-window-drag'), null, 'hover-mode sidebars must not leave an invisible drag strip over the header')
     assert.deepEqual(errors, [])
     console.log('Chromium: group headers reveal their remembered tab without scrolling the sidebar; group menu actions support mouse release and keyboard; favicon regressions pass')
 } finally {

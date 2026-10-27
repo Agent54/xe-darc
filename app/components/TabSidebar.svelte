@@ -1,8 +1,8 @@
 <script>
     import { cdpFetch } from '../lib/cdp.js'
     // Tab sidebar component with Firefox-like hover behavior
-    // let { isDragEnabled = true } = $props() 
     let { 
+        isDragEnabled = true,
         onShowApps = () => {},
         customTabSidebarWidth = null,
         tabSidebarVisible = false,
@@ -74,6 +74,7 @@
     let hoveredGroupTarget = $state(null)
     let hovercardAnchor = $state(null)
     const hoveredGroup = $derived(hoveredGroupTarget ? data.getTabGroup(hoveredGroupTarget.tabId, hoveredGroupTarget.spaceId) : null)
+    const hovercardActivationTabId = $derived(hoveredGroup ? data.getGroupActiveTab(hoveredGroup, hoveredGroupTarget.spaceId)?.id : null)
     const hovercardTabs = $derived(hoveredGroupTarget ? hoveredGroup?.tabs || [] : hoveredTab ? [hoveredTab] : [])
     let hoverTimeout = null
     let hovercardPosition = $state({ x: 0, y: 0 })
@@ -1054,9 +1055,9 @@
         }
     })
     
-    function revealGroupActivationTab(header) {
+    function revealGroupActivationTab(element) {
         if (tabDrag.active || tabDrag.pending) return
-        const wrapper = header.closest('.tab-group-wrapper.expanded')
+        const wrapper = element.closest('.tab-group-wrapper.expanded')
         const content = wrapper?.querySelector('.tab-group-content')
         const target = content?.querySelector('.group-activation-target')
         if (!target) return
@@ -1067,6 +1068,14 @@
         const bottom = bounds.bottom - 16
         if (row.top < top) content.scrollTop += row.top - top
         else if (row.bottom > bottom) content.scrollTop += row.bottom - bottom
+    }
+
+    function handleGroupPointerOver(event) {
+        const wrapper = event.currentTarget
+        const content = wrapper.querySelector('.tab-group-scroll')
+        if (content?.contains(event.target)) return
+        if (wrapper.contains(event.relatedTarget) && !content?.contains(event.relatedTarget)) return
+        revealGroupActivationTab(wrapper)
     }
 
     function getSidebarHoverTarget(element, fallbackTab = null) {
@@ -1557,6 +1566,11 @@
 
 <svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
+{#if tabSidebarVisible}
+    <div class="sidebar-window-drag" class:drag-enabled={isDragEnabled && !tabDrag.active && !tabDrag.pending && !isResizingTabSidebar && !tabContextMenu.visible}
+         style:width="{customTabSidebarWidth || 263}px" aria-hidden="true"></div>
+{/if}
+
 <div class="sidebar-box" 
      class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
      class:visible={tabSidebarVisible}
@@ -1991,9 +2005,9 @@
                                                 {@const recentEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                                                 {@const spaceActive = spaceId !== data.spaceMeta.activeSpace && item.tabs.some(tab => tab.id === (typeof recentEntry === 'string' ? recentEntry : recentEntry?.id))}
                                                 <div class="tab-group-wrapper" class:expanded class:active class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
-                                                     role="group" aria-label={item.title} onmouseenter={() => groupPreview.enter(expansionId)} onmouseleave={() => groupPreview.leave(expansionId)}>
+                                                     role="group" aria-label={item.title} onmouseenter={() => groupPreview.enter(expansionId)} onmouseleave={() => groupPreview.leave(expansionId)} onpointerover={handleGroupPointerOver}>
                                                     <div class="tab-group" class:expanded class:active class:space-active-tab={spaceActive}
-                                                        onmouseenter={(e) => { revealGroupActivationTab(e.currentTarget); handleTabMouseEnter(null, e) }} onmouseleave={handleTabMouseLeave}
+                                                        onmouseenter={(e) => handleTabMouseEnter(null, e)} onmouseleave={handleTabMouseLeave}
                                                         onfocusin={(e) => revealGroupActivationTab(e.currentTarget)}
                                                         oncontextmenu={(e) => handleTabContextMenu(e, { ...item, type: 'tabgroup', spaceId }, i)} role="group" aria-label={item.title}>
                                                         <button class="tab-group-main"
@@ -2118,6 +2132,7 @@
              style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
             {#each hovercardTabs as previewTab (previewTab.id)}
             <TabHoverCard tab={previewTab} stacked={!!hoveredGroupTarget}
+                        active={hoveredGroupTarget ? previewTab.id === hovercardActivationTabId : undefined}
                         onActivate={(tab) => activateTab(tab.id, tab.spaceId)}
                         bind:showHistory={
                             () => expandedHovercardHistoryTabId === previewTab.id,
@@ -2172,6 +2187,19 @@
     contextMenuOpenTime={tabContextMenuOpenTime} />
 
 <style>
+    .sidebar-window-drag {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: max(35px, env(titlebar-area-height, 35px));
+        z-index: 2201;
+        -webkit-app-region: no-drag;
+    }
+
+    .sidebar-window-drag.drag-enabled {
+        -webkit-app-region: drag;
+    }
+
     .sidebar-box {
         background: transparent;
         position: fixed;
@@ -2193,6 +2221,7 @@
     }
 
     .sidebar-box.visible {
+        top: max(35px, env(titlebar-area-height, 35px));
         padding-right: 0;
         padding-left: 3px;
     }
@@ -3549,6 +3578,11 @@
     }
     
     /* New Tab Button */
+    :global(body.tab-dragging-active) :is(.new-tab-row, .add-spacer-insertion),
+    :global(body.tab-dragging-active) :is(.new-tab-row, .add-spacer-insertion) :global(*) {
+        pointer-events: none !important;
+    }
+
     .new-tab-button {
         display: flex;
         align-items: center;
@@ -3832,9 +3866,13 @@
         --tab-group-background: #111111;
     }
 
+    .tab-group-wrapper.expanded:not(.active) {
+        border-color: hsl(0deg 0% 100% / 4.5%);
+    }
+
     .tab-group-wrapper.expanded:not(.active):hover {
-        --tab-group-background: #171717;
-        border-color: hsl(0deg 0% 100% / 8%);
+        --tab-group-background: #101010;
+        border-color: hsl(0deg 0% 100% / 6%);
     }
     
     .tab-group {
@@ -3952,7 +3990,14 @@
         background-color: var(--tab-group-tab-hover-background);
     }
 
-    .tab-group-wrapper.expanded:not(.active):has(> .tab-group:hover, > .tab-group :focus-visible) .tab-item-container.group-activation-target {
+    .tab-group-wrapper.expanded:not(.active) .tab-item-container.group-activation-target,
+    .tab-group-wrapper.expanded:not(.active):hover:not(:has(> .tab-group-scroll:hover)) .tab-item-container,
+    .tab-group-wrapper.expanded:not(.active):has(> .tab-group :focus-visible) .tab-item-container {
+        transition: none;
+    }
+
+    .tab-group-wrapper.expanded:not(.active):hover:not(:has(> .tab-group-scroll:hover)) .tab-item-container.group-activation-target,
+    .tab-group-wrapper.expanded:not(.active):has(> .tab-group :focus-visible) .tab-item-container.group-activation-target {
         background-color: var(--tab-group-tab-hover-background);
         border-color: var(--tab-hover-border);
     }
@@ -4464,6 +4509,7 @@
         overscroll-behavior: contain;
         scrollbar-width: thin;
         scrollbar-color: #ffffff33 transparent;
+        filter: drop-shadow(0 20px 20px rgb(0 0 0 / 40%)) drop-shadow(0 8px 8px rgb(0 0 0 / 20%));
     }
     
     @keyframes hovercard-sidebar-fade-in {

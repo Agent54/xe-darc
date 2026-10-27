@@ -538,14 +538,21 @@
     }
 
     .group-name-fields input {
+        appearance: none;
+        outline: none;
+        box-shadow: none;
         min-width: 0;
         width: 170px;
         padding: 7px 8px;
-        border: 1px solid #ffffff1f;
+        border: 1px solid rgb(255 255 255 / 2%);
         border-radius: 6px;
         background: #151515;
         color: #e5e5e5;
         font: inherit;
+    }
+
+    .group-name-fields input:focus {
+        background: var(--tab-active-background, #212121);
     }
 
     .group-name-fields button {
@@ -558,7 +565,7 @@
         cursor: pointer;
     }
 
-    .group-name-fields :focus-visible {
+    .group-name-fields button:focus-visible {
         outline: 1px solid #a3a3a3;
         outline-offset: 2px;
     }
