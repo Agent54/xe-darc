@@ -14,7 +14,8 @@
 }
 header {
     /* The sidebar occupies the window-controls reserve rather than adding to it. */
-    --header-left: max(env(titlebar-area-x, 0px), var(--tab-sidebar-width, 0px));
+    --header-sidebar-gap: 0px;
+    --header-left: max(env(titlebar-area-x, 0px), calc(var(--tab-sidebar-width, 0px) + var(--header-sidebar-gap)));
     --header-navigation-left: max(0px, calc(env(titlebar-area-x, 0px) + 86px - var(--header-left)));
     --header-tabs-left: max(0px, calc(env(titlebar-area-x, 0px) + 110px - var(--header-left)));
     --header-left-drag-width: max(0px, calc(var(--header-tabs-left) - 5px));
@@ -39,6 +40,10 @@ header {
     align-items: flex-start;
     opacity: 1;
     transition: opacity 0s;
+}
+
+header.has-tab-sidebar {
+    --header-sidebar-gap: 9px;
 }
 
 header.has-navigation-toolbar {

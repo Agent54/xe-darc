@@ -169,6 +169,18 @@
         await data.updateTabGroup(menu.tab.tabGroupId, { emoji, favicon: null }, menu.tab.spaceId)
         onHide()
     }
+
+    function convertGroupToSpace() {
+        const group = menu.tab
+        onHide()
+        return data.convertTabGroupToSpace(group.tabs[0].id, group.spaceId)
+    }
+
+    function closeGroup() {
+        const group = menu.tab
+        onHide()
+        return data.closeTabGroup(group.tabs[0].id, group.spaceId)
+    }
 </script>
 
 {#if menu.visible && menu.tab}
@@ -207,6 +219,12 @@
                 <button class="context-menu-item" role="menuitem" type="button"
                         onmouseup={() => showGroupView('emoji')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>Change icon…</button>
+                <button class="context-menu-item" role="menuitem" type="button"
+                        onmouseup={convertGroupToSpace}
+                        onclick={(e) => { if (e.detail === 0) convertGroupToSpace() }}>Convert to space</button>
+                <button class="context-menu-item" role="menuitem" type="button"
+                        onmouseup={closeGroup}
+                        onclick={(e) => { if (e.detail === 0) closeGroup() }}>Close all</button>
             {:else}
                 <button class="group-editor-back" type="button"
                         onmouseup={() => showGroupView('menu')}

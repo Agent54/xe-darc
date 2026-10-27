@@ -1054,6 +1054,21 @@
         }
     })
     
+    function revealGroupActivationTab(header) {
+        if (tabDrag.active || tabDrag.pending) return
+        const wrapper = header.closest('.tab-group-wrapper.expanded')
+        const content = wrapper?.querySelector('.tab-group-content')
+        const target = content?.querySelector('.group-activation-target')
+        if (!target) return
+        const bounds = content.getBoundingClientRect()
+        const row = target.getBoundingClientRect()
+        // Keep the target clear of the group's overflow fades without scrolling the sidebar.
+        const top = bounds.top + 16
+        const bottom = bounds.bottom - 16
+        if (row.top < top) content.scrollTop += row.top - top
+        else if (row.bottom > bottom) content.scrollTop += row.bottom - bottom
+    }
+
     function getSidebarHoverTarget(element, fallbackTab = null) {
         const row = element?.closest('.tab-item-container, .closed-tab-item, .pinned-tab, .app-tab')
         const header = element?.closest('.tab-group-wrapper > .tab-group')
@@ -1082,9 +1097,9 @@
 
     function showSidebarHovercard(target) {
         if (tabDrag.active || !target.element.isConnected) return
-        hovercardAnchor = target.element
+        hovercardAnchor = target.group ? target.element.closest('.tab-group-wrapper') : target.element
         hovercardPosition = getSidebarHovercardPosition(
-            target.element.getBoundingClientRect(), target.group ? 336 : 328,
+            hovercardAnchor.getBoundingClientRect(), target.group ? 336 : 328,
             target.tabs.reduce((height, tab) => height + (tab.screenshot ? 260 : 80) + 8, 0), window.innerWidth, window.innerHeight
         )
         hoveredGroupTarget = target.group
@@ -1978,7 +1993,8 @@
                                                 <div class="tab-group-wrapper" class:expanded class:active class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
                                                      role="group" aria-label={item.title} onmouseenter={() => groupPreview.enter(expansionId)} onmouseleave={() => groupPreview.leave(expansionId)}>
                                                     <div class="tab-group" class:expanded class:active class:space-active-tab={spaceActive}
-                                                        onmouseenter={(e) => handleTabMouseEnter(null, e)} onmouseleave={handleTabMouseLeave}
+                                                        onmouseenter={(e) => { revealGroupActivationTab(e.currentTarget); handleTabMouseEnter(null, e) }} onmouseleave={handleTabMouseLeave}
+                                                        onfocusin={(e) => revealGroupActivationTab(e.currentTarget)}
                                                         oncontextmenu={(e) => handleTabContextMenu(e, { ...item, type: 'tabgroup', spaceId }, i)} role="group" aria-label={item.title}>
                                                         <button class="tab-group-main"
                                                             aria-label={item.title}
@@ -2218,10 +2234,11 @@
         top: 0;
         left: 0;
         right: 0;
-        height: 3px;
-        box-shadow: 0 -3px 0 rgb(0 0 0 / 96%), 0 -5px 4px rgb(0 0 0 / 80%);
-        /* Keep the additional shadow strictly above the sidebar. */
-        clip-path: inset(-9px 0 100% 0);
+        /* Extend past the 18px corners and the existing 16px shadow. */
+        height: 34px;
+        border-radius: inherit;
+        box-shadow: 0 -3px 6px 1px rgb(0 0 0 / 85%);
+        z-index: -1;
         pointer-events: none;
     }
     
@@ -3782,7 +3799,7 @@
 
     /* Tab Group */
     .tab-group-wrapper {
-        --tab-group-background: #101010;
+        --tab-group-background: #0c0c0c;
         display: flex;
         flex-direction: column;
         width: 100%;
@@ -3935,7 +3952,7 @@
         background-color: var(--tab-group-tab-hover-background);
     }
 
-    .tab-group-wrapper.expanded:not(.active):has(> .tab-group > .tab-group-main:is(:hover, :focus-visible)) .tab-item-container.group-activation-target {
+    .tab-group-wrapper.expanded:not(.active):has(> .tab-group:hover, > .tab-group :focus-visible) .tab-item-container.group-activation-target {
         background-color: var(--tab-group-tab-hover-background);
         border-color: var(--tab-hover-border);
     }

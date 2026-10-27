@@ -1043,21 +1043,26 @@ function activate(tabId, { source = 'navigation', recordIfAlreadyCurrent = false
     return null
 }
 
-function ensureSpaceHasTab(spaceId, { shouldFocus = false } = {}) {
+function ensureSpaceHasTab(spaceId, { shouldFocus = false, groupTabId } = {}) {
     const space = spaces[spaceId]
     if (!space) {
         return null
     }
 
-    const hasOpenTab = space.tabs?.some(tab => {
-        return tab.type === 'tab' && !tab.archive && !tab.preview && !tab.lightbox
-    })
+    const items = groupTabId ? getTabGroup(space.tabs, groupTabId)?.tabs : space.tabs
+    const openTabs = items?.filter(tab => {
+        return tab.type === 'tab' && !tab.pinned && !tab.archive && !tab.preview && !tab.lightbox
+    }) || []
 
-    if (hasOpenTab) {
+    if (openTabs.length) {
+        if (spaceMeta.activeSpace === spaceId && !space.tabs.some(tab =>
+            tab.id === spaceMeta.activeTabId && tab.type === 'tab' && !tab.archive && !tab.preview && !tab.lightbox)) {
+            activate(data.getGroupActiveTab({ tabs: openTabs }, spaceId).id)
+        }
         return null
     }
 
-    return data.newTab(spaceId, { shouldFocus })
+    return data.newTab(spaceId, { shouldFocus, groupTabId: groupTabId || getCurrentGroupTabId(spaceId) })
 }
 
 function activateSpace(spaceId) {
@@ -1086,7 +1091,7 @@ function getPreviousActiveSpace() {
     return null
 }
 
-function closeTab (spaceId, tabId) {
+function closeTab (spaceId, tabId, { createReplacement = true } = {}) {
     const tab = docs[tabId]
 
     if (!tab) {
@@ -1103,6 +1108,9 @@ function closeTab (spaceId, tabId) {
 
     const space = spaces[spaceId]
     const siblings = getTabGroup(space?.tabs, tabId)?.tabs.filter(tab => tab.id !== tabId) || []
+    const currentGroupTabId = getCurrentGroupTabId(spaceId)
+    const wasCurrentGroup = spaceMeta.activeSpace === spaceId &&
+        [tab, ...siblings].some(member => member.id === currentGroupTabId)
     if (space?.tabs) {
         space.tabs = space.tabs.filter(openTab => openTab.id !== tabId)
     }
@@ -1120,7 +1128,12 @@ function closeTab (spaceId, tabId) {
         }
     }
 
-    ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
+    if (createReplacement) {
+        if (!tab.pinned && !tab.preview && !tab.lightbox && siblings.length) {
+            ensureSpaceHasTab(spaceId, { groupTabId: siblings[0].id, shouldFocus: wasCurrentGroup })
+        }
+        ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
+    }
    
     db.bulkDocs([
         ...(previews[tabId]?.tabs.map(prev => {
@@ -1422,6 +1435,37 @@ const data = {
         }
         return group.tabs[0]
     },
+    closeTabGroup: (tabId, spaceId = docs[tabId]?.spaceId) => {
+        const group = data.getTabGroup(tabId, spaceId)
+        if (!group) return Promise.resolve()
+        const closing = group.tabs.map(tab => closeTab(spaceId, tab.id, { createReplacement: false }))
+        const replacement = ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
+        return Promise.all([...closing, replacement])
+    },
+    convertTabGroupToSpace: async (tabId, spaceId = docs[tabId]?.spaceId) => {
+        const group = data.getTabGroup(tabId, spaceId)
+        if (!group) return null
+        const selectedTab = data.getGroupActiveTab(group, spaceId)
+        const memberIds = new Set(group.tabs.map(tab => tab.id))
+        const history = getSpaceActiveHistoryEntries(spaceId).filter(entry => memberIds.has(getTabIdFromActiveHistoryEntry(entry)))
+        const space = await data.newSpace({
+            name: group.title,
+            color: group.metadata?.color || spaces[spaceId].color,
+            glyph: group.metadata?.emoji,
+            createTab: false
+        })
+        await data.moveTab(group.tabs[0].id, { scope: 'group', targetSpaceId: space._id })
+        await Promise.all(group.tabs.map((tab, index) => queueDocumentUpdate(tab.id, {
+            tabGroupId: null, tabGroupOrder: null, order: index,
+            ...(tab.pinned ? { pinScope: 'space' } : {})
+        })))
+        spaces[space._id].tabs.sort((a, b) => a.order - b.order)
+        spaces[space._id].activeTabsOrder = history
+        persistTabActiveHistoryForSpace(space._id)
+        activateSpace(space._id)
+        activate(selectedTab.id)
+        return spaces[space._id]
+    },
     newGroupTab: (spaceId = spaceMeta.activeSpace, options = {}) => {
         const tabId = options.groupTabId || getCurrentGroupTabId(spaceId)
         return data.newTab(spaceId, { ...options, groupTabId: tabId })
@@ -1593,24 +1637,25 @@ const data = {
         return true
     },
 
-    newSpace: () => {
+    newSpace: async ({ name = 'Space ' + (Object.keys(spaces).length + 1), color = projectColors[Object.keys(spaces).length % projectColors.length].color, glyph, createTab = true } = {}) => {
         const _id = `darc:space_${crypto.randomUUID()}`
-        const name = 'Space ' + (Object.keys(spaces).length + 1)
         const space = {
             _id,
             spaceId: _id,
             type: 'space',
             order: Date.now(),
             created: Date.now(),
-            color: projectColors[Object.keys(spaces).length % projectColors.length].color,
+            color,
+            ...(glyph ? { glyph } : {}),
             name
         }
 
+        await db.put(space)
         spaces[_id] = { ...space, tabs: [], activeTabsOrder: [] }
-        db.put(space)
-        data.newTab(_id)
+        spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
+        if (createTab) await data.newTab(_id)
 
-        db.put({
+        await db.put({
             _id: `darc:activity_${crypto.randomUUID()}`,
             type: 'activity',
             archive: 'history',
@@ -1619,6 +1664,7 @@ const data = {
             name,
             created: Date.now()
         })
+        return spaces[_id]
     },
 
     deleteSpace: (spaceId) => {
@@ -1789,7 +1835,9 @@ const data = {
 
         if (shouldFocus && !preview && !lightbox) {
             await tick()
-            activate(_id)
+            if (spaceMeta.activeSpace === spaceId && !docs[_id].archive) {
+                activate(_id)
+            }
         }
 
         await creation

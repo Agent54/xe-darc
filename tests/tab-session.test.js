@@ -686,6 +686,96 @@ Deno.test('closing the last empty new tab creates a replacement without a closed
     assert.equal(data.spaceMeta.activeTabId, replacement.id)
 })
 
+Deno.test('closing the last center tab replaces it in its group while keeping sidepins visible', async () => {
+    for (const activePin of [false, true]) {
+        const { data, refresh, db } = session({ tabs: [
+            tab('center', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0 }),
+            tab('pin', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1, pinned: 'left', pinScope: 'group' }),
+            tab('outside')
+        ], history: ['center', 'outside'], runtime: 'client' })
+        await refresh()
+        if (activePin) {
+            data.activate('pin')
+        }
+        const readTabs = new Function('$', 'data', 'closed', readTopTabsSource.replace(/\nreadTabs$/, '\nreturn readTabs'))(svelteClient, data, svelteClient.proxy({}))
+        const closing = data.closeTab(defaultSpace, 'center')
+        const [replacement] = readTabs()
+        assert.ok(replacement)
+        assert.equal(replacement.url, 'about:newtab')
+        assert.equal(replacement.tabGroupId, 'group')
+        assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['pin'])
+        await closing
+        assert.equal(data.spaceMeta.activeTabId, replacement.id)
+        assert.equal((await db.get(replacement.id)).tabGroupId, 'group')
+        await refresh()
+        assert.deepEqual(Array.from(readTabs(), tab => tab.id), [replacement.id])
+    }
+})
+
+Deno.test('closing the last center tab with space pins creates a selected replacement', async () => {
+    const { data, refresh } = session({ tabs: [tab('center'), tab('pin', defaultSpace, { pinned: 'right' })], history: ['center', 'pin'] })
+    await refresh()
+    await data.closeTab(defaultSpace, 'center')
+    const replacement = data.spaces[defaultSpace].tabs.find(tab => !tab.pinned)
+    assert.ok(replacement)
+    assert.equal(replacement.url, 'about:newtab')
+    assert.equal(data.spaceMeta.activeTabId, replacement.id)
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['pin'])
+})
+
+Deno.test('refresh repairs a space containing only space pins and non-tab entries', async () => {
+    const { data, refresh } = session({ tabs: [
+        tab('pin', defaultSpace, { pinned: 'left' }), tab('divider', defaultSpace, { type: 'divider' }),
+        tab('preview', defaultSpace, { preview: true }), tab('lightbox', defaultSpace, { lightbox: true })
+    ], history: ['pin'] })
+    await refresh()
+    const replacement = data.spaces[defaultSpace].tabs.find(tab => tab.type === 'tab' && !tab.pinned)
+    assert.ok(replacement)
+    assert.equal(replacement.url, 'about:newtab')
+    assert.equal(data.spaceMeta.activeTabId, replacement.id)
+    await refresh()
+    assert.equal(data.spaces[defaultSpace].tabs.filter(tab => tab.type === 'tab' && !tab.pinned).length, 1)
+})
+
+Deno.test('activating a space with open tabs and no valid selection restores an existing tab', async () => {
+    const { data, refresh } = session({ tabs: [tab('center'), tab('destination', otherSpace)], history: ['center'] })
+    await refresh()
+    data.activateSpace(otherSpace)
+    assert.equal(data.spaceMeta.activeTabId, 'destination')
+})
+
+Deno.test('a pending replacement cannot take focus after switching spaces or closing it', async () => {
+    for (const action of ['switch', 'close']) {
+        const { data, refresh } = session({ tabs: [tab('center'), tab('destination', otherSpace)], history: ['center'], runtime: 'client' })
+        await refresh()
+        const closing = data.closeTab(defaultSpace, 'center')
+        const replacement = data.spaces[defaultSpace].tabs[0]
+        if (action === 'switch') {
+            data.activateSpace(otherSpace)
+            await closing
+            assert.equal(data.spaceMeta.activeTabId, 'destination')
+        } else {
+            const closingReplacement = data.closeTab(defaultSpace, replacement.id)
+            await Promise.all([closing, closingReplacement])
+            assert.notEqual(data.spaceMeta.activeTabId, replacement.id)
+            assert.equal(data.docs[data.spaceMeta.activeTabId].archive, undefined)
+        }
+    }
+})
+
+Deno.test('closing a background group center creates its replacement without changing selection', async () => {
+    const { data, refresh } = session({ tabs: [
+        tab('center', defaultSpace, { tabGroupId: 'group' }),
+        tab('pin', defaultSpace, { tabGroupId: 'group', pinned: 'left', pinScope: 'group' }), tab('outside')
+    ], history: ['outside', 'center'] })
+    await refresh()
+    await data.closeTab(defaultSpace, 'center')
+    assert.equal(data.spaceMeta.activeTabId, 'outside')
+    const replacement = data.getTabGroup('pin').tabs.find(tab => !tab.pinned)
+    assert.ok(replacement)
+    assert.equal(replacement.url, 'about:newtab')
+})
+
 Deno.test('closing new tab pages with back or forward history and regular pages keeps them restorable', async () => {
     for (const [url, back, forward] of [
         ['about:newtab', true, false],
@@ -830,6 +920,112 @@ Deno.test('cross-space group moves update both lists, persistence and the source
     assert.equal(data.spaceMeta.activeTabId, 'outside')
     assert.deepEqual(Array.from(data.getTabGroup('one', otherSpace).tabs, tab => tab.id), ['one', 'two'])
     assert.equal(writes.filter(write => write.spaceId === otherSpace).length, 2)
+})
+
+Deno.test('converting a group creates a named space with ordered standalone tabs and its remembered selection', async () => {
+    const { data, refresh, db, writes } = session({ tabs: [
+        tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0, title: 'First page' }),
+        tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 }),
+        tab('pin', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 2, pinned: 'right', pinScope: 'group', pinOrder: 4 }),
+        tab('outside'),
+        tab('closed', defaultSpace, { tabGroupId: 'group', archive: 'closed' })
+    ], history: ['outside', 'two', 'one', 'pin'], runtime: 'client' })
+    await refresh()
+    await data.updateTabGroup('group', { name: 'Research', color: '#123456', emoji: '🔎' })
+    const space = await data.convertTabGroupToSpace('one')
+    assert.equal(space.name, 'Research')
+    assert.equal(space.color, '#123456')
+    assert.equal(space.glyph, '🔎')
+    assert.deepEqual(Array.from(space.tabs, tab => tab.id), ['one', 'two', 'pin'])
+    assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['outside'])
+    assert.equal(data.spaceMeta.spaceOrder.includes(space._id), true)
+    assert.equal(data.spaceMeta.activeSpace, space._id)
+    assert.equal(data.spaceMeta.activeTabId, 'two')
+    assert.deepEqual(Array.from(data.getSidebarItems(space._id), item => item.tabGroupId), [null, null])
+    assert.equal(data.docs.pin.pinScope, 'space')
+    assert.equal(data.docs.pin.pinned, 'right')
+    assert.equal(data.docs.pin.pinOrder, 4)
+    assert.equal(data.docs.closed.spaceId, defaultSpace)
+    for (const [index, id] of ['one', 'two', 'pin'].entries()) {
+        const saved = await db.get(id)
+        assert.equal(saved.spaceId, space._id)
+        assert.equal(saved.tabGroupId, null)
+        assert.equal(saved.order, index)
+    }
+    assert.equal(writes.some(doc => doc.type === 'tab' && doc.url === 'about:newtab'), false)
+    await refresh()
+    assert.equal(data.spaceMeta.activeTabId, 'two')
+    assert.deepEqual(Array.from(data.getSidebarItems(space._id), item => item.tabs[0].id), ['one', 'two'])
+})
+
+Deno.test('converting the only group leaves one source replacement and uses the first tab title as the space name', async () => {
+    const { data, refresh, writes } = session({ tabs: [
+        tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0, title: 'Reading' }),
+        tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 })
+    ], history: ['two', 'one'] })
+    await refresh()
+    const space = await data.convertTabGroupToSpace('one')
+    assert.equal(space.name, 'Reading')
+    assert.equal(data.spaceMeta.activeTabId, 'two')
+    assert.equal(data.spaces[defaultSpace].tabs.length, 1)
+    assert.equal(data.spaces[defaultSpace].tabs[0].url, 'about:newtab')
+    assert.deepEqual(Array.from(space.tabs, tab => tab.id), ['one', 'two'])
+    assert.equal(writes.filter(doc => doc.type === 'tab' && doc.url === 'about:newtab').length, 1)
+})
+
+Deno.test('closing a group includes its pins, preserves restorable membership and leaves unrelated tabs active', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0 }),
+        tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1, pinned: 'left', pinScope: 'group' }),
+        tab('outside')
+    ], history: ['outside', 'two', 'one'] })
+    await refresh()
+    await data.closeTabGroup('one')
+    assert.equal(data.spaceMeta.activeTabId, 'outside')
+    assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['outside'])
+    assert.deepEqual(Array.from(data.spaceMeta.closedTabs, tab => tab.id).sort(), ['one', 'two'])
+    for (const id of ['one', 'two']) {
+        const saved = await db.get(id)
+        assert.equal(saved.archive, 'closed')
+        assert.equal(saved.closed, true)
+        assert.equal(saved.tabGroupId, 'group')
+    }
+    await data.restoreClosedTab('one')
+    await data.restoreClosedTab('two')
+    assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two'])
+})
+
+Deno.test('closing the only group creates one replacement and normal space creation still starts with one tab', async () => {
+    const { data, refresh, writes } = session({ tabs: [
+        tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' })
+    ], history: ['two', 'one'] })
+    await refresh()
+    await data.closeTabGroup('one')
+    assert.equal(data.spaces[defaultSpace].tabs.length, 1)
+    assert.equal(data.spaces[defaultSpace].tabs[0].id, data.spaceMeta.activeTabId)
+    assert.equal(writes.filter(doc => doc.type === 'tab' && doc.url === 'about:newtab').length, 1)
+    const space = await data.newSpace()
+    assert.equal(space.tabs.length, 1)
+    assert.equal(space.tabs[0].url, 'about:newtab')
+    assert.equal(data.spaceMeta.spaceOrder.includes(space._id), true)
+})
+
+Deno.test('closing the only group with sidepins creates one standalone replacement', async () => {
+    for (const pinFirst of [false, true]) {
+        const { data, refresh, writes } = session({ tabs: [
+            tab('center', defaultSpace, { tabGroupId: 'group', tabGroupOrder: pinFirst ? 1 : 0 }),
+            tab('pin', defaultSpace, { tabGroupId: 'group', tabGroupOrder: pinFirst ? 0 : 1, pinned: 'right', pinScope: 'group' }),
+            tab('space-pin', defaultSpace, { pinned: 'left' })
+        ], history: ['center'] })
+        await refresh()
+        await data.closeTabGroup('center')
+        const replacements = data.spaces[defaultSpace].tabs.filter(tab => !tab.pinned)
+        assert.equal(replacements.length, 1)
+        assert.equal(replacements[0].tabGroupId, null)
+        assert.equal(data.spaceMeta.activeTabId, replacements[0].id)
+        assert.equal(writes.filter(doc => doc.type === 'tab' && doc.url === 'about:newtab').length, 1)
+        assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['space-pin'])
+    }
 })
 
 Deno.test('adding a group member preserves the rank of a temporarily closed middle tab', async () => {
