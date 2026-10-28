@@ -7,8 +7,7 @@
     --tab-active-hover-background: #2a2a2a;
     --tab-active-hover-border: rgb(255 255 255 / 5.5%);
     --tab-group-tab-hover-background: color-mix(in srgb, var(--tab-hover-background), white 5%);
-    --hovercard-active-header-background: #161616;
-    --hovercard-active-header-border: rgb(255 255 255 / 6%);
+    --hovercard-active-header-background: #101010;
 }
 
 #backgroundFrames {

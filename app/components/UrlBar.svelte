@@ -203,6 +203,7 @@
         <div class="url-bar-container" 
              bind:this={urlBarContainer}
              class:expanded={urlBarExpanded}
+             class:hover-expanded={isHovered && enableHoverExpand}
              style={maxExpandedWidth ? `width: ${maxExpandedWidth}px;` : ''}
              role="toolbar"
              tabindex="0"
@@ -364,11 +365,13 @@
     }
     
     .hovercard .url-bar-container.expanded {
-        background: rgba(0, 0, 0, 0.95);
+        background: #161616;
+        border-color: rgb(255 255 255 / 4%);
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        transition-property: width, box-shadow, border-color;
     }
     
-    .url-bar-section.hover-expand-enabled:hover .url-bar-container:not(.expanded) {
+    .url-bar-section.hover-expand-enabled .url-bar-container.hover-expanded:not(.expanded) {
         width: min(600px, 90vw);
         background: rgba(0, 0, 0, 0.98);
         backdrop-filter: blur(20px);
@@ -378,11 +381,12 @@
         transition-delay: 200ms;
     }
     
-    .url-bar-section.hovercard.hover-expand-enabled:hover .url-bar-container:not(.expanded) {
-        background: rgba(0, 0, 0, 0.95);
+    .url-bar-section.hovercard.hover-expand-enabled .url-bar-container.hover-expanded:not(.expanded) {
+        background: #161616;
         backdrop-filter: blur(20px);
-        border: 1px solid hsl(0deg 0% 100% / 10%);
+        border: 1px solid rgb(255 255 255 / 4%);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        transition-property: width, box-shadow, border-color;
         transition-delay: 0ms;
         overflow: visible;
     }

@@ -71,6 +71,7 @@
     let delayedElementsTimer = null
     let hoveredHistoryEntry = $state(null)
     let hoveredEntryIndex = $state(null)
+    const screenshotTab = $derived(hoveredHistoryEntry?.screenshot ? hoveredHistoryEntry : tab)
 
     $effect(() => {
         if (!showHistory) {
@@ -376,24 +377,9 @@
             enableHoverExpand={showDelayedElements}
         />
     </div>
-    {#if hoveredHistoryEntry?.screenshot}
+    {#if screenshotTab.screenshot}
         <button type="button" class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0} aria-label={activationLabel} onclick={activateTab}>
-            {#key hoveredHistoryEntry.id}
-                <AttachmentImage src={hoveredHistoryEntry.screenshot} digest={hoveredHistoryEntry._attachments?.screenshot?.digest} alt="Page preview" />
-            {/key}
-            {#if showDelayedElements}
-                <span class="expand-button" aria-hidden="true">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                    </svg>
-                </span>
-            {/if}
-        </button>
-    {:else if tab.screenshot}
-        <button type="button" class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0} aria-label={activationLabel} onclick={activateTab}>
-            {#key tab.id}
-                <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Page preview" />
-            {/key}
+            <AttachmentImage src={screenshotTab.screenshot} digest={screenshotTab._attachments?.screenshot?.digest} alt="Page preview" />
             {#if showDelayedElements}
                 <span class="expand-button" aria-hidden="true">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -529,7 +515,7 @@
     .hovercard-info {
         padding: 16px;
         font-family: 'Inter', sans-serif;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
         overflow: visible;
         position: relative;
         z-index: 5;
@@ -541,24 +527,16 @@
     }
 
     .hovercard-content.active {
-        --hovercard-title-fade-color: var(--hovercard-active-header-background, #161616);
-        --url-bar-idle-background: transparent;
-        --url-bar-idle-border: transparent;
+        --hovercard-title-fade-color: var(--hovercard-active-header-background, #101010);
     }
 
-    .hovercard-content.active .hovercard-info::before {
-        content: '';
-        position: absolute;
-        inset: 8px;
-        z-index: -1;
-        border-radius: 8px;
-        border: 1px solid var(--hovercard-active-header-border, rgb(255 255 255 / 6%));
-        background: var(--hovercard-active-header-background, #161616);
-        pointer-events: none;
+    .hovercard-content.active .hovercard-info {
+        background: var(--hovercard-active-header-background, #101010);
+        border-radius: 11px 11px 0 0;
     }
 
-    .hovercard-content.active .hovercard-title {
-        color: #f0f0f0;
+    .hovercard-content.active .hovercard-info:last-child {
+        border-radius: 11px;
     }
 
     .hovercard-header {
@@ -627,7 +605,7 @@
         display: block;
         padding: 0;
         border: none;
-        background: transparent;
+        background: #1a1a1a;
         cursor: pointer;
         width: 100%;
         height: 180px;

@@ -1268,7 +1268,7 @@ function isInternalPage (url) {
 function isTabHibernated (tabId) {
     const tab = docs[tabId]
     if (isInternalPage(tab?.url)) return false
-    return !frames[tabId]?.frame
+    return !frames[tabId]?.frame && !frames[tabId]?.pendingLoad
 }
 
 // Helper function to resolve attachment URLs to blob URLs
@@ -1714,18 +1714,28 @@ const data = {
 
     navigate(tabId, url) {
         const tab = docs[tabId]
-        const frame = frames[tabId]
+        if (tab?.type !== 'tab') {
+            return
+        }
+        const frame = frames[tabId] ??= {}
 
         // TODO: central dataside favicon handling and title invalidation
+
+        frame.pendingLoad = !frame.frame && !isInternalPage(url)
+        frame.loading = !isInternalPage(url)
+        frame.forceHibernated = false
+        frame.initialLoad = true
+        const saving = queueDocumentUpdate(tabId, {
+            url,
+            title: url.startsWith('about:newtab') || url.startsWith('about:blank') ? 'New Tab' : url,
+            favicon: null
+        })
 
         if (frame.frame) {
             frame.frame.src = url
         }
 
-        db.put({
-            ...tab,
-            url
-        })
+        return saving
 
         // db.put({d
         //     _id: `darc:activity_${crypto.randomUUID()}`,
@@ -1817,9 +1827,10 @@ const data = {
         }
        
         frames[tab.id].initialLoad = true
+        frames[tab.id].pendingLoad = !!shouldFocus && !isInternalPage(tab.url)
+        frames[tab.id].loading = frames[tab.id].pendingLoad
 
         if (shouldFocus && !preview && !lightbox) {
-            await tick()
             if (spaceMeta.activeSpace === spaceId && !docs[_id].archive) {
                 activate(_id)
             }

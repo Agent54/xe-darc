@@ -166,6 +166,27 @@
         isTrashItemHover = false
         hovercardShowTime = null
     }
+
+    function dismissHovercards() {
+        if (navigationHovercardTimeout) clearTimeout(navigationHovercardTimeout)
+        if (hoverTimeout) clearTimeout(hoverTimeout)
+        if (navButtonHoverTimeout) clearTimeout(navButtonHoverTimeout)
+        navigationHovercardTimeout = null
+        navigationHovercardTabId = null
+        hoverTimeout = null
+        navButtonHoverTimeout = null
+        hoveredTab = null
+        navButtonHovered = false
+        hovercardUrlBarExpanded = false
+        isTrashItemHover = false
+        hovercardShowTime = null
+        stopHovercardPositionCheck()
+    }
+
+    function handleHovercardPointerDown(event) {
+        if (event.target?.closest?.('.tab-hovercard, .tab-hovercard-sidebar')) return
+        window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
+    }
     
     let isTabListOverflowing = $state(false)
     let isTabListAtEnd = $state(false)
@@ -250,14 +271,6 @@
     onMount(() => {
         isMacPlatform = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent) || navigator.platform.includes('Mac')
         
-        const dismissHovercards = () => {
-            if (navigationHovercardTimeout) clearTimeout(navigationHovercardTimeout)
-            navigationHovercardTimeout = null
-            navigationHovercardTabId = null
-            hoveredTab = null
-            hovercardShowTime = null
-            if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
-        }
         window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
         return () => window.removeEventListener('darc-dismiss-hovercards', dismissHovercards)
     })
@@ -629,6 +642,7 @@
 
     function handleFrameMouseDown(event) {
         // console.log('Mouse button pressed:', event.detail.button)
+        window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
         isMouseDown = event.detail.button
         
         // Track mouse activity for focus management
@@ -1293,7 +1307,7 @@
                 navigationHovercardTimeout = null
                 navigationHovercardTabId = null
                 if (hoveredTab?.id === tabId) closeHovercard()
-            }, 900)
+            }, 800)
             startHovercardPositionCheck()
         }
 
@@ -3257,6 +3271,7 @@
 {/snippet}
 
 <svelte:window
+    onpointerdowncapture={handleHovercardPointerDown}
     onkeydowncapture={handleKeyDown}
     onclick={hideContextMenu}
     oncontextmenu={handleGlobalContextMenu}

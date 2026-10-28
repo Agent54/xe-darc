@@ -542,6 +542,132 @@ Deno.test('top tabs react immediately to repeated group additions and saved revi
     assert.deepEqual(Array.from(readTabs(), tab => tab.id), expected)
 })
 
+Deno.test('new tabs activate and show their buttons before the first async boundary', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('anchor')], history: ['anchor'], runtime: 'client' })
+    await refresh()
+    const readTabs = new Function('$', 'data', 'closed', readTopTabsSource.replace(/\nreadTabs$/, '\nreturn readTabs'))(svelteClient, data, svelteClient.proxy({}))
+    const put = db.put
+    let finishCreation
+    db.put = doc => doc._id === 'anchor' ? put(doc) : new Promise(resolve => {
+        finishCreation = () => resolve(put(doc))
+    })
+
+    const creating = data.newGroupTab(defaultSpace, { shouldFocus: true })
+    const newId = readTabs().at(-1).id
+    assert.notEqual(newId, 'anchor')
+    assert.equal(data.spaceMeta.activeTabId, newId)
+    assert.equal(data.ui.tabActivation.tabId, newId)
+    assert.equal(data.docs[newId].url, 'about:newtab')
+    assert.equal(data.isTabHibernated(newId), false)
+    finishCreation()
+    await creating
+})
+
+Deno.test('new tab navigation publishes URL and loading state while storage and the frame are unavailable', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('new', defaultSpace, { url: 'about:newtab', title: 'New Tab' })], runtime: 'client' })
+    await refresh()
+    const get = db.get
+    let releaseRead
+    db.get = id => new Promise(resolve => { releaseRead = () => resolve(get(id)) })
+    const url = 'https://search.example/?q=hello'
+    const navigating = data.navigate('new', url)
+    assert.equal(data.docs.new.url, url)
+    assert.equal(data.spaces[defaultSpace].tabs.find(tab => tab.id === 'new').url, url)
+    assert.equal(data.docs.new.title, url)
+    assert.equal(data.docs.new.favicon, null)
+    assert.equal(data.frames.new.loading, true)
+    assert.equal(data.frames.new.pendingLoad, true)
+    assert.equal(data.frames.new.initialLoad, true)
+    assert.equal(data.isTabHibernated('new'), false)
+    await Promise.resolve()
+    await Promise.resolve()
+    releaseRead()
+    await navigating
+    assert.equal((await get('new')).url, url)
+})
+
+Deno.test('navigation before tab creation finishes saves the destination after creation', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('anchor')], history: ['anchor'], runtime: 'client' })
+    await refresh()
+    const put = db.put
+    let finishCreation
+    db.put = doc => doc._id === 'anchor' || finishCreation ? put(doc) : new Promise(resolve => {
+        finishCreation = () => resolve(put(doc))
+    })
+    const creating = data.newGroupTab(defaultSpace, { shouldFocus: true })
+    const id = data.spaceMeta.activeTabId
+    const navigating = data.navigate(id, 'https://search.example/results')
+    assert.equal(data.docs[id].url, 'https://search.example/results')
+    finishCreation()
+    await Promise.all([creating, navigating])
+    assert.equal((await db.get(id)).url, 'https://search.example/results')
+})
+
+Deno.test('rapid navigation uses the existing frame and keeps the latest destination through an older change event', async () => {
+    const { data, refresh, db, emitChange } = session({ tabs: [tab('page')], runtime: 'client' })
+    await refresh()
+    const navigations = []
+    const frame = svelteClient.proxy({ set src(url) { navigations.push(url) } })
+    data.frames.page = { frame }
+    const first = data.navigate('page', 'https://first.example/')
+    const second = data.navigate('page', 'https://second.example/')
+    emitChange(tab('page', defaultSpace, { url: 'https://first.example/' }))
+    assert.equal(data.docs.page.url, 'https://second.example/')
+    assert.equal(data.frames.page.frame, frame)
+    assert.equal(data.frames.page.pendingLoad, false)
+    assert.deepEqual(navigations, ['https://first.example/', 'https://second.example/'])
+    await Promise.all([first, second])
+    assert.equal((await db.get('page')).url, 'https://second.example/')
+})
+
+Deno.test('fresh web tabs stay pending until frame creation and hibernation still clears that intent', async () => {
+    const { data, refresh } = session({ tabs: [tab('anchor')], runtime: 'client' })
+    await refresh()
+    const creating = data.newTab(defaultSpace, { url: 'https://example.com/', shouldFocus: true })
+    const pending = data.spaces[defaultSpace].tabs.find(tab => tab.id !== 'anchor')
+    assert.equal(data.isTabHibernated(pending.id), false)
+    assert.equal(data.frames[pending.id].pendingLoad, true)
+    assert.equal(data.frames[pending.id].loading, true)
+    await creating
+    data.hibernate(pending.id, true)
+    assert.equal(data.isTabHibernated(pending.id), true)
+    await data.navigate(pending.id, 'https://example.com/next')
+    assert.equal(data.frames[pending.id].forceHibernated, false)
+    assert.equal(data.isTabHibernated(pending.id), false)
+    await data.navigate(pending.id, 'about:newtab')
+    assert.equal(data.frames[pending.id].pendingLoad, false)
+    assert.equal(data.frames[pending.id].loading, false)
+    assert.equal(data.docs[pending.id].title, 'New Tab')
+    const background = await data.newTab(defaultSpace, { url: 'https://background.example/' })
+    assert.equal(data.isTabHibernated(background.id), true)
+    assert.equal(data.frames[background.id].pendingLoad, false)
+    assert.equal(data.frames[background.id].loading, false)
+})
+
+Deno.test('metadata from an older page cannot overwrite a newer navigation or replacement frame', async () => {
+    const source = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
+        .match(/    async function updateTabMeta\(tab\) \{[\s\S]*?(?=\/\/ Content script)/)[0]
+    for (const change of ['none', 'navigation', 'redirect', 'replacement']) {
+        const tab = { id: 'page', url: 'https://example.com/' }
+        let finishTitle
+        const frame = { src: tab.url, executeScript: () => new Promise(resolve => { finishTitle = resolve }) }
+        const updates = []
+        const data = { docs: { page: tab }, frames: { page: { frame } }, updateTab: (...args) => updates.push(args) }
+        const updateMeta = new Function('data', 'isNewTabUrl', 'isTabHistoryUrl', `${source}\nreturn updateTabMeta`)(data, () => false, () => false)
+        const updating = updateMeta(tab)
+        if (change === 'navigation') {
+            tab.url = 'https://next.example/'
+        } else if (change === 'redirect') {
+            frame.src = 'https://redirect.example/'
+        } else if (change === 'replacement') {
+            data.frames.page.frame = { src: tab.url }
+        }
+        finishTitle(['Old page title'])
+        await updating
+        assert.equal(updates.length, change === 'none' ? 1 : 0, change)
+    }
+})
+
 Deno.test('standalone and group hovercards refresh attachment digests from screenshot captures without rebuilding sidebar tab lists', async () => {
     for (const tabGroupId of [null, 'group']) {
         const { data, refresh, db, writes, emitChange } = session({

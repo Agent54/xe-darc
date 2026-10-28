@@ -790,6 +790,7 @@
         if (!frame) return
 
         let url = frame.src || tab.url
+        const requestedUrl = data.docs[tab.id]?.url
 
         // For about: URLs, clear favicon but preserve existing title
         if (url.startsWith('about:')) {
@@ -827,6 +828,9 @@
             }
 
             // console.log('updateTabMeta', {favicon, title, url})
+            if (data.frames[tab.id]?.frame !== frame || frame.src !== url || data.docs[tab.id]?.url !== requestedUrl) {
+                return
+            }
             data.updateTab(tab.id, { favicon, title, url })
         } catch (err) {
             console.log('Error updating tab meta:', err, tab)

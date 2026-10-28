@@ -150,15 +150,20 @@ try {
         return page.$eval('.hovercard-content', card => card.getBoundingClientRect().left)
     }
     const groupLeft = await hovercardLeft('.tab-group-main', true)
-    assert.equal(await page.$$eval('.hovercard-content.active', cards => cards.length), 1, 'only the remembered group member receives a header capsule')
+    assert.equal(await page.$$eval('.hovercard-content.active', cards => cards.length), 1, 'only the remembered group member receives a brighter header')
     assert.equal(await page.$eval('.hovercard-content.active .hovercard-title', title => title.textContent), 'group-two')
-    assert.equal(await page.$eval('.hovercard-content.active .hovercard-info', header => getComputedStyle(header, '::before').backgroundColor), 'rgb(22, 22, 22)')
-    assert.equal(await page.$eval('.hovercard-content.active .url-bar-container', urlBar => getComputedStyle(urlBar).backgroundColor), 'rgba(0, 0, 0, 0)', 'the title and URL share one capsule surface')
-    await (await page.$('.tab-hovercard-sidebar')).screenshot({ path: `${root}.cache/tab-hovercard-capsule.png` })
+    assert.deepEqual(await page.$eval('.hovercard-content.active .hovercard-info', header => ({
+        background: getComputedStyle(header).backgroundColor,
+        capsule: getComputedStyle(header, '::before').content,
+        topBorder: getComputedStyle(header).borderTopWidth,
+        bottomBorder: getComputedStyle(header).borderBottomWidth
+    })), { background: 'rgb(16, 16, 16)', capsule: 'none', topBorder: '0px', bottomBorder: '0px' }, 'the whole active header uses a subtle surface with no inset capsule or enclosing border')
+    await (await page.$('.tab-hovercard-sidebar')).screenshot({ path: `${root}.cache/tab-hovercard-header.png` })
     await page.hover('.hovercard-content.active .hovercard-title')
     await page.waitForSelector('.hovercard-content.active .url-bar-section.hover-expand-enabled')
     await page.hover('.hovercard-content.active .url-bar-url')
     await page.waitForSelector('.url-bar-wrapper:popover-open')
+    assert.equal(await page.$eval('.url-bar-wrapper:popover-open .url-bar-container', bar => getComputedStyle(bar).backgroundColor), 'rgb(22, 22, 22)', 'a floating URL bar must have an opaque background immediately')
     await page.waitForFunction(() => {
         const stack = document.querySelector('.group-hovercards').getBoundingClientRect()
         const url = document.querySelector('.url-bar-wrapper:popover-open .url-bar-container').getBoundingClientRect()
@@ -171,6 +176,9 @@ try {
     }), true, 'the expanded URL bar must remain visible and interactive beyond the scrollable stack')
     await page.click('.url-bar-wrapper:popover-open .url-bar-url')
     await page.waitForFunction(() => document.activeElement?.classList.contains('url-bar-input'))
+    await page.mouse.move(700, 550)
+    assert.equal(await page.$eval('.url-bar-wrapper:popover-open .url-bar-container.expanded', bar => getComputedStyle(bar).backgroundColor), 'rgb(22, 22, 22)', 'the focused URL editor keeps its background when the pointer leaves')
+    assert.equal(await page.$eval('.url-bar-wrapper:popover-open .url-bar-input', input => document.activeElement === input), true)
     const floatingTop = await page.$eval('.url-bar-wrapper:popover-open', bar => bar.getBoundingClientRect().top)
     await page.$eval('.group-hovercards', stack => { stack.scrollTop += 30 })
     await page.waitForFunction(top => Math.abs(document.querySelector('.url-bar-wrapper:popover-open').getBoundingClientRect().top - (top - 30)) < 1, {}, floatingTop)
@@ -433,7 +441,7 @@ try {
     assert.equal(await page.$eval('.tab-hovercard-sidebar', stack => {
         const rect = stack.getBoundingClientRect()
         return rect.left >= 0 && rect.right <= window.innerWidth
-    }), true, 'the capsule stack must still fit a narrow viewport')
+    }), true, 'the hovercard stack must still fit a narrow viewport')
     await page.evaluate(() => window.flushSync(() => { window.data.ui.sidebarVisible = false }))
     assert.equal(await page.$('.sidebar-window-drag'), null, 'hover-mode sidebars must not leave an invisible drag strip over the header')
     assert.deepEqual(errors, [])
