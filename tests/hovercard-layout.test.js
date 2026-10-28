@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict'
-import { getSidebarHovercardPosition } from '../app/lib/hovercard-layout.js'
+import { canFitSidebarHovercardHistory, getSidebarHovercardPosition } from '../app/lib/hovercard-layout.js'
+
+Deno.test('sidebar history fits beside the preview only when a full card fits on either side of the trigger', () => {
+    const leftSidebar = { left: 10, right: 260 }
+    assert.equal(canFitSidebarHovercardHistory(leftSidebar, 936), true)
+    assert.equal(canFitSidebarHovercardHistory(leftSidebar, 935), false)
+    assert.equal(canFitSidebarHovercardHistory({ left: 676, right: 926 }, 936), true)
+    assert.equal(canFitSidebarHovercardHistory({ left: 675, right: 925 }, 936), false)
+    assert.equal(canFitSidebarHovercardHistory({ left: 10, right: 600 }, 1200), false)
+})
 
 Deno.test('a short sidebar preview stays beside its trigger', () => {
     assert.deepEqual(getSidebarHovercardPosition({ left: 10, right: 260, top: 200 }, 336, 280, 1200, 800), { x: 270, y: 174 })

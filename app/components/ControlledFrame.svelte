@@ -1909,6 +1909,18 @@ document.addEventListener('input', function(event) {
                         console.error('Failed to parse additional drag/drop data:', error)
                     }
                 }
+            } else if (message.startsWith('iwa:click:')) {
+                const prefix = `iwa:click:${mytab.id}:`
+                if (!message.startsWith(prefix)) return
+                try {
+                    const clickData = JSON.parse(message.substring(prefix.length))
+                    if (!clickData || typeof clickData !== 'object' || Array.isArray(clickData)) return
+                    window.dispatchEvent(new CustomEvent('darc-controlled-frame-click', {
+                        detail: { ...clickData, tabId: mytab.id, sourceFrame: `tab_${mytab.id}` }
+                    }))
+                } catch (error) {
+                    console.error('Failed to parse controlled frame click:', error)
+                }
             } else if (message.startsWith('iwa:mousedown:')) {
                 // Handle mousedown from controlled frame - handle colons in tab ID
                 // Format: iwa:mousedown:${tabId}:${button}:${mod}

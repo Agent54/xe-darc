@@ -25,6 +25,7 @@
     import { origin } from './lib/utils.js'
     import { colors } from './lib/utils.js'
     import { getComposeAppPorts } from './lib/compose-api.js'
+    import { resolveSidepinVisibility } from './lib/sidepin-visibility.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag, onDrop } from './lib/tab-drag.svelte.js'
     const iwaVersion = __IWA_VERSION__
@@ -665,6 +666,10 @@
         lastMouseActivityTime = Date.now()
     }
 
+    function handleFrameClick() {
+        window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
+    }
+
     // Zoom threshold tracking
     let zoomOutCounter = $state(0)
     let zoomInCounter = $state(0)
@@ -762,6 +767,7 @@
     window.addEventListener('darc-new-tab-from-frame', handleFrameNewTab)
     window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
+    window.addEventListener('darc-controlled-frame-click', handleFrameClick)
     window.addEventListener('darc-key-from-frame', handleFrameKey)
     window.addEventListener('close-apps-overlay', () => { closeAppsOverlay() })
     // Disabled: zoom-out gestures should not toggle the overview grid view.
@@ -1285,7 +1291,7 @@
         if (typeof frame?.[direction] !== 'function') return
 
         const tab = data.docs[tabId]
-        if (tab && !tabDrag.active) {
+        if (tab && !tabDrag.active && !focusModeEnabled) {
             const previousPosition = hoveredTab?.id === tabId ? hovercardPosition : null
             window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
             if (navButtonHoverTimeout) clearTimeout(navButtonHoverTimeout)
@@ -1550,6 +1556,7 @@
             window.removeEventListener('darc-new-tab-from-frame', handleFrameNewTab)
             window.removeEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
             window.removeEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
+            window.removeEventListener('darc-controlled-frame-click', handleFrameClick)
             window.removeEventListener('darc-key-from-frame', handleFrameKey)
         }
     })
@@ -3139,26 +3146,32 @@
     let currentTabGroup = $derived(data.getTabGroup(currentGroupTabId))
     let unpinnedTabs = $derived((currentTabGroup?.tabs || []).filter(tab => !tab.pinned && !closed[tab._rev]))
     let unpinnedTabCount = $derived(unpinnedTabs.filter(tab => tab.type === 'tab').length)
+    let spaceSidepins = $derived(tabs.filter(tab => tab.type === 'tab' && tab.pinned && !tab.archive && !tab.preview && !tab.lightbox))
     let scopedPins = $derived(data.getSidepins().filter(tab => !closed[tab._rev]))
     let leftPinnedTabs = $derived(scopedPins.filter(tab => tab.pinned === true || tab.pinned === 'left'))
     let rightPinnedTabs = $derived(scopedPins.filter(tab => tab.pinned === 'right'))
-    let visibleLeftPinnedTabs = $derived(leftPinnedTabs.filter(t => !invisiblePins[t.id]))
-    let visibleRightPinnedTabs = $derived(rightPinnedTabs.filter(t => !invisiblePins[t.id]))
+    let pinVisibility = $derived(resolveSidepinVisibility(spaceSidepins, invisiblePins))
+    let visibleLeftPinnedTabs = $derived(leftPinnedTabs.filter(t => !pinVisibility[t.id]))
+    let visibleRightPinnedTabs = $derived(rightPinnedTabs.filter(t => !pinVisibility[t.id]))
     
-    const isPinHidden = (tabId) => !!invisiblePins[tabId]
+    const isPinHidden = (tabId) => !!pinVisibility[tabId]
     
     function togglePinHidden(tabId) {
-        if (invisiblePins[tabId]) {
-            delete invisiblePins[tabId]
-        } else {
-            invisiblePins[tabId] = true
-        }
+        invisiblePins = isPinHidden(tabId)
+            ? resolveSidepinVisibility(spaceSidepins, pinVisibility, tabId)
+            : { ...pinVisibility, [tabId]: true }
+    }
+
+    $effect(() => {
+        if (!sidebarStateLoaded) return
+        // Normalize restored pins and changes to their side, scope, or group membership.
+        if (invisiblePins !== pinVisibility) invisiblePins = pinVisibility
         try {
             localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
         } catch (error) {
             console.warn('Failed to save invisible pins state:', error)
         }
-    }
+    })
     
     // Calculate space taken by different UI elements
     let leftPinnedWidth = $derived.by(() => {
@@ -3233,7 +3246,7 @@
             role="tab"
             tabindex="0"
             title={tab.title || tab.url}
-            onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, wasActive, 'right'); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab, i))) } } }}
+            onmousedown={(e) => { if (e.button === 0) { startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, tab.id === data.spaceMeta.activeTabId, 'right') } }}
             onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
             oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
@@ -3253,7 +3266,7 @@
             <button class="pinned-toggle-btn" 
                     aria-label={isPinHidden(tab.id) ? "Expand pinned tab" : "Collapse pinned tab"}
                     onclick={(e) => { if (!didDragOccurred()) { e.stopPropagation(); togglePinnedFrames(tab.id) } }} 
-                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames(tab.id) } }}>
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); togglePinnedFrames(tab.id) } }}>
                 {#if isPinHidden(tab.id)}
                     <!-- Closed: point right (toward where panel would appear) -->
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -3339,7 +3352,7 @@
                         role="tab"
                         tabindex="0"
                         title={tab.title || tab.url}
-                        onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, wasActive, 'left'); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab, i))) } } }}
+                        onmousedown={(e) => { if (e.button === 0) { startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, tab.id === data.spaceMeta.activeTabId, 'left') } }}
                         onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
                         oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}
@@ -3359,7 +3372,7 @@
                         <button class="pinned-toggle-btn" 
                                 aria-label={isPinHidden(tab.id) ? "Expand pinned tab" : "Collapse pinned tab"}
                                 onclick={(e) => { if (!didDragOccurred()) { e.stopPropagation(); togglePinnedFrames(tab.id) } }} 
-                                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePinnedFrames(tab.id) } }}>
+                                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); togglePinnedFrames(tab.id) } }}>
                             {#if isPinHidden(tab.id)}
                                 <!-- Closed: point left (toward where panel would appear) -->
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">

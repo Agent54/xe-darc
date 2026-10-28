@@ -8,6 +8,10 @@ export function getSidebarHovercardPosition (anchor, width, height, viewportWidt
     }
 }
 
+export function canFitSidebarHovercardHistory (anchor, viewportWidth) {
+    return Math.max(anchor.left - 20, viewportWidth - anchor.right - 20) >= 656
+}
+
 export function fitSidebarHovercard (node, options) {
     let frame
     let anchor = options.anchor?.getBoundingClientRect()
@@ -16,6 +20,7 @@ export function fitSidebarHovercard (node, options) {
         frame = requestAnimationFrame(() => {
             if (options.anchor?.isConnected) anchor = options.anchor.getBoundingClientRect()
             if (!anchor) return
+            options.onHistoryBesideChange?.(canFitSidebarHovercardHistory(anchor, window.innerWidth))
             options.onPosition(getSidebarHovercardPosition(
                 anchor, node.offsetWidth, Math.max(node.offsetHeight, node.scrollHeight), window.innerWidth, window.innerHeight
             ))

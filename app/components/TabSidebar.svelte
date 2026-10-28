@@ -31,7 +31,7 @@
     import TabGroupPreview from './TabGroupPreview.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
     import { observeScrollEdges } from '../lib/scroll-edges.js'
-    import { fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
+    import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
     import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, onGroupExpand } from '../lib/tab-drag.svelte.js'
     import { colors as spaceColors } from '../lib/utils.js'
@@ -79,6 +79,7 @@
     let hoveredTab = $state(null)
     let hoveredGroupTarget = $state(null)
     let hovercardAnchor = $state(null)
+    let hovercardHistoryBeside = $state(false)
     const hoveredGroup = $derived(hoveredGroupTarget ? data.getTabGroup(hoveredGroupTarget.tabId, hoveredGroupTarget.spaceId) : null)
     const hovercardActivationTabId = $derived(hoveredGroup ? data.getGroupActiveTab(hoveredGroup, hoveredGroupTarget.spaceId)?.id : null)
     const hovercardTabs = $derived(hoveredGroupTarget ? hoveredGroup?.tabs || [] : hoveredTab ? [hoveredTab] : [])
@@ -1150,6 +1151,7 @@
     function showSidebarHovercard(target) {
         if (tabDrag.active || !target.element.isConnected) return
         hovercardAnchor = target.group ? target.element.closest('.tab-group-wrapper') : target.element
+        hovercardHistoryBeside = canFitSidebarHovercardHistory(hovercardAnchor.getBoundingClientRect(), window.innerWidth)
         hovercardPosition = getSidebarHovercardPosition(
             hovercardAnchor.getBoundingClientRect(), target.group ? 336 : 328,
             target.tabs.reduce((height, tab) => height + (tab.screenshot ? 260 : 80) + 8, 0), window.innerWidth, window.innerHeight
@@ -2177,10 +2179,12 @@
     {#key hoveredGroupTarget ? `${hoveredGroupTarget.spaceId}:${hoveredGroupTarget.id}` : hoveredTab.id}
         <div class="tab-hovercard-sidebar" class:group-hovercards={!!hoveredGroupTarget}
              role={hoveredGroupTarget ? 'region' : undefined} aria-label={hoveredGroup?.title}
-             use:fitSidebarHovercard={{ anchor: hovercardAnchor, onPosition: updateHovercardPosition }}
              style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
+            <div class="tab-hovercard-stack"
+                 use:fitSidebarHovercard={{ anchor: hovercardAnchor, onPosition: updateHovercardPosition, onHistoryBesideChange: (beside) => { hovercardHistoryBeside = beside } }}>
             {#each hovercardTabs as previewTab (previewTab.id)}
             <TabHoverCard tab={previewTab} stacked={!!hoveredGroupTarget}
+                        historyBeside={hovercardHistoryBeside}
                         active={hoveredGroupTarget ? previewTab.id === hovercardActivationTabId : undefined}
                         onActivate={(tab) => activateTab(tab.id, tab.spaceId)}
                         bind:showHistory={
@@ -2221,6 +2225,7 @@
                         }}
                         onMouseLeave={handleTabMouseLeave} />
             {/each}
+            </div>
         </div>
     {/key}
 {/if}
@@ -4594,12 +4599,18 @@
         animation: hovercard-sidebar-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
         user-select: none;
+        /* Transparent hit area spans the gap on either side without moving the cards. */
+        padding: 0 10px;
+        margin-left: -10px;
+    }
+
+    .tab-hovercard-stack {
         max-height: calc(100vh - 40px);
         display: flex;
         flex-direction: column;
     }
 
-    .tab-hovercard-sidebar.group-hovercards {
+    .tab-hovercard-sidebar.group-hovercards > .tab-hovercard-stack {
         box-sizing: border-box;
         width: 336px;
         max-width: calc(100vw - 20px);
@@ -4610,6 +4621,10 @@
         scrollbar-width: thin;
         scrollbar-color: #ffffff33 transparent;
         filter: drop-shadow(0 20px 20px rgb(0 0 0 / 40%)) drop-shadow(0 8px 8px rgb(0 0 0 / 20%));
+    }
+
+    .tab-hovercard-sidebar.group-hovercards > .tab-hovercard-stack:has(:global(.history-beside)) {
+        width: 656px;
     }
     
     @keyframes hovercard-sidebar-fade-in {

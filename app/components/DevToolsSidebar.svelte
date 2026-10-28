@@ -172,7 +172,7 @@
     fetchDevToolsData()
 </script>
 
-<RightSidebar title="Dev Tools" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
+<RightSidebar title="Dev Tools" padding={false} {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
         <div class="devtools-content">
             <div class="devtools-header">
@@ -224,7 +224,7 @@
     {/snippet}
     
     {#snippet hierarchyItem(item, depth)}
-        <div class="devtools-item" class:root-item={depth === 0} class:child-item={depth > 0} style="margin-left: {depth * 20}px">
+        <div class="devtools-item" class:root-item={depth === 0} class:child-item={depth > 0} style="margin-left: {depth * 8}px">
             <div class="item-header" 
                  class:clickable={item.children.length > 0} 
                  role={item.children.length > 0 ? "button" : undefined}
@@ -308,7 +308,7 @@
 <style>
     .devtools-content {
         color: #fff;
-        padding-top: 20px;
+        padding: 20px 8px;
     }
     
     .devtools-header {

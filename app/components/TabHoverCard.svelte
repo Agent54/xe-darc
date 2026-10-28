@@ -13,6 +13,7 @@
         showHistory = $bindable(false),
         instantMode = false,
         stacked = false,
+        historyBeside = false,
         active = undefined,
         showDevTools = false,
         onActivate = null,
@@ -336,6 +337,7 @@
 </script>
 
 <div class="hovercard-content" class:stacked class:active={headerFocused}
+     class:history-beside={historyBeside && showHistory && historyEntries.length > 0}
      role="tooltip"
      onmouseenter={() => hovercardHovered = true}
      onmouseleave={() => { hovercardHovered = false; onMouseLeave?.() }}>
@@ -405,7 +407,7 @@
                     Clear all
                 </button>
             </div>
-            <div class="history-list" style="max-height: {historyMaxHeight()};">
+            <div class="history-list" style:max-height={historyBeside ? 'none' : historyMaxHeight()}>
                 <div class="history-connector-line"></div>
                 {#each historyEntries as historyTab, index}
                 <div class="history-item"
@@ -504,12 +506,48 @@
     }
 
     .hovercard-content.stacked {
-        width: 100%;
-        max-width: none;
+        width: 320px;
+        max-width: 100%;
         margin: 0;
         flex-shrink: 0;
         max-height: none;
         box-shadow: none;
+    }
+
+    .hovercard-content.history-beside {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        width: 640px;
+        min-height: 130px;
+    }
+
+    .history-beside .hovercard-info {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .hovercard-content.history-beside.active .hovercard-info {
+        border-top-right-radius: 0;
+    }
+
+    .history-beside .hovercard-screenshot.has-history {
+        grid-column: 1;
+        grid-row: 2;
+        border-bottom-left-radius: 11px;
+        border-bottom-right-radius: 0;
+    }
+
+    .history-beside .history-section {
+        grid-column: 2;
+        grid-row: 1 / 3;
+        contain: size;
+        border-top: none;
+        border-left: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .history-beside .history-list {
+        min-height: 0;
     }
 
     .hovercard-info {
