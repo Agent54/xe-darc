@@ -1723,6 +1723,7 @@ const data = {
 
         frame.pendingLoad = !frame.frame && !isInternalPage(url)
         frame.loading = !isInternalPage(url)
+        frame.navigationSource = isInternalPage(url) ? null : 'browser'
         frame.forceHibernated = false
         frame.initialLoad = true
         const saving = queueDocumentUpdate(tabId, {

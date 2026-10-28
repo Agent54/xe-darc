@@ -578,6 +578,7 @@ Deno.test('new tab navigation publishes URL and loading state while storage and 
     assert.equal(data.frames.new.loading, true)
     assert.equal(data.frames.new.pendingLoad, true)
     assert.equal(data.frames.new.initialLoad, true)
+    assert.equal(data.frames.new.navigationSource, 'browser')
     assert.equal(data.isTabHibernated('new'), false)
     await Promise.resolve()
     await Promise.resolve()
@@ -607,7 +608,10 @@ Deno.test('rapid navigation uses the existing frame and keeps the latest destina
     const { data, refresh, db, emitChange } = session({ tabs: [tab('page')], runtime: 'client' })
     await refresh()
     const navigations = []
-    const frame = svelteClient.proxy({ set src(url) { navigations.push(url) } })
+    const frame = svelteClient.proxy({ set src(url) {
+        assert.equal(data.frames.page.navigationSource, 'browser')
+        navigations.push(url)
+    } })
     data.frames.page = { frame }
     const first = data.navigate('page', 'https://first.example/')
     const second = data.navigate('page', 'https://second.example/')
@@ -635,6 +639,7 @@ Deno.test('fresh web tabs stay pending until frame creation and hibernation stil
     assert.equal(data.frames[pending.id].forceHibernated, false)
     assert.equal(data.isTabHibernated(pending.id), false)
     await data.navigate(pending.id, 'about:newtab')
+    assert.equal(data.frames[pending.id].navigationSource, null)
     assert.equal(data.frames[pending.id].pendingLoad, false)
     assert.equal(data.frames[pending.id].loading, false)
     assert.equal(data.docs[pending.id].title, 'New Tab')

@@ -558,7 +558,7 @@
 
         // Fallback off-origin blocking in loadstart (main blocking is in onBeforeRequest)
         // This catches edge cases where the request handler didn't fire
-        if (event?.url && tab.url) {
+        if (event?.url && tab.url && data.frames[tab.id]?.navigationSource !== 'browser') {
             const currentOrigin = origin(tab.url)
             const targetOrigin = origin(event.url)
             
@@ -611,6 +611,7 @@
         // console.log('stopped', {tab})
         // console.log('handleLoadStop', data.frames[tab.id]?.frame?.src)
         if (!data.frames[tab.id]) return
+        data.frames[tab.id].navigationSource = null
         const wasLoading = data.frames[tab.id].loading
         data.frames[tab.id].loading = false
         data.frames[tab.id].initialLoad = true
@@ -1205,7 +1206,7 @@ document.addEventListener('input', function(event) {
             const requestType = details.type || details.request?.type
             
             // Block off-origin main_frame navigations BEFORE they start (more reliable than frame.stop())
-            if (requestType === 'main_frame') {
+            if (requestType === 'main_frame' && data.frames[tab.id]?.navigationSource !== 'browser') {
                 const currentTabUrl = tab?.url
                 if (currentTabUrl) {
                     const currentOrigin = origin(currentTabUrl)
@@ -2064,14 +2065,14 @@ document.addEventListener('input', function(event) {
             controlledFrame.onaudiostatechanged = throttle(e => handleAudioStateChanged(mytab, e), 500, {leading: false})
             
             // fired when navigation (including reloads and traversals) starts, for every navigable of the embedded document, but not same document navigation.
-            // IMPORTANT: leading: true is required to block off-origin navigation before it completes
-            controlledFrame.onloadstart = throttle( e => handleLoadStart(mytab, e), 500, {leading: true})
+            // Navigation policy must run before loadstop clears the direct-navigation exemption.
+            controlledFrame.onloadstart = e => handleLoadStart(mytab, e)
             
             // fired when navigation has been completed.
             // controlledFrame.onloadcommit =  throttle(e => handleLoadCommit(mytab, e), 500, {leading: false})
             
             // fired when all pending navigations finish(either commit or abort). If a new navigation starts after, loadstop may fire again.
-            controlledFrame.onloadstop = throttle(e => handleLoadStop(mytab, e), 500, {leading: false})
+            controlledFrame.onloadstop = e => handleLoadStop(mytab, e)
 
              // fired when the Window associated with embedded navigable fires a load event.
             // controlledFrame.oncontentload =  throttle(e => handleContentLoad(mytab, e), 500, {leading: false})
