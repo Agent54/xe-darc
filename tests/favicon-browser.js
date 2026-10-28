@@ -11,11 +11,20 @@ const modules = {
     entry: `
         import { mount, flushSync } from 'svelte'
         import Sidebar from './app/components/TabSidebar.svelte'
+        import LinkPreviewFavicon from './app/components/LinkPreviewFavicon.svelte'
         import { tabDrag } from './app/lib/tab-drag.svelte.js'
         import data from 'fixture-data'
         window.data = data
         window.flushSync = flushSync
         window.tabDrag = tabDrag
+        window.mountLinkPreview = () => {
+            const target = document.createElement('div')
+            target.id = 'link-preview-fixture'
+            document.body.append(target)
+            mount(LinkPreviewFavicon, { target, props: {
+                get url() { return data.linkPreviewUrl }
+            } })
+        }
         mount(Sidebar, { target: document.body, props: {
             showUrl: false,
             get tabSidebarVisible() { return data.ui.sidebarVisible },
@@ -27,7 +36,7 @@ const modules = {
         import { getSidebarItems, getTabGroup } from './app/lib/tab-groups.js'
         const tab = (id, favicon, extra = {}) => ({ id, title: id, url: 'https://example.com', type: 'tab', spaceId: 'space', favicon: location.origin + favicon, ...extra })
         const data = $state({
-            docs: {}, frames: {}, origins: {}, menuActions: [],
+            docs: {}, frames: {}, origins: {}, menuActions: [], linkPreviewUrl: '',
             ui: { sidebarVisible: true, dragEnabled: true, sidebarWidth: 263 },
             spaceMeta: {
                 globalPins: [tab('pin-one', '/one.svg'), tab('pin-two', '/two.svg')],
@@ -444,8 +453,44 @@ try {
     }), true, 'the hovercard stack must still fit a narrow viewport')
     await page.evaluate(() => window.flushSync(() => { window.data.ui.sidebarVisible = false }))
     assert.equal(await page.$('.sidebar-window-drag'), null, 'hover-mode sidebars must not leave an invisible drag strip over the header')
+
+    const previewRequests = []
+    await page.setRequestInterception(true)
+    page.on('request', request => {
+        const url = new URL(request.url())
+        if (url.hostname === 't1.gstatic.com') {
+            previewRequests.push(url.searchParams.get('url'))
+            const missing = url.searchParams.get('url') === 'https://missing.example'
+            request.respond({
+                status: missing ? 404 : 200,
+                contentType: 'image/svg+xml',
+                body: missing ? '' : '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="6"/></svg>'
+            })
+        } else {
+            request.continue()
+        }
+    })
+    await page.evaluate(() => {
+        window.flushSync(() => { window.data.linkPreviewUrl = 'https://missing.example/path?a=1&size=999#section' })
+        window.mountLinkPreview()
+    })
+    await page.waitForSelector('#link-preview-fixture .fallback-favicon')
+    assert.equal(await page.$('#link-preview-fixture img'), null, 'a failed link favicon must show the globe instead of a broken image')
+    assert.deepEqual(previewRequests, ['https://missing.example'])
+    await page.evaluate(() => window.flushSync(() => { window.data.linkPreviewUrl = 'https://missing.example/another-path' }))
+    assert.ok(await page.$('#link-preview-fixture .fallback-favicon'), 'another link on the same origin must keep the fallback')
+    await page.evaluate(() => window.flushSync(() => { window.data.linkPreviewUrl = 'https://working.example/path?a=1&size=999#section' }))
+    await page.waitForFunction(() => document.querySelector('#link-preview-fixture img')?.naturalWidth > 0)
+    assert.deepEqual(previewRequests, ['https://missing.example', 'https://working.example'], 'a new origin must load its favicon after the previous one fails')
+    assert.deepEqual(await page.$eval('#link-preview-fixture .link-preview-icon', icon => ({ width: icon.clientWidth, height: icon.clientHeight })), { width: 12, height: 12 })
+    for (const url of ['mailto:jan@example.com', 'javascript:void(0)', 'not a URL']) {
+        await page.evaluate(url => window.flushSync(() => { window.data.linkPreviewUrl = url }), url)
+        assert.ok(await page.$('#link-preview-fixture .fallback-favicon'))
+        assert.equal(await page.$('#link-preview-fixture img'), null)
+    }
+    assert.equal(previewRequests.length, 2, 'non-web links must not request a favicon')
     assert.deepEqual(errors, [])
-    console.log('Chromium: shared group height resizes by corner and keyboard with inner overflow preserved; header previews, group menus and favicon regressions pass')
+    console.log('Chromium: shared group height, header previews, group menus, favicon regressions and link preview fallback/recovery pass')
 } finally {
     await browser?.close()
     await server.shutdown()

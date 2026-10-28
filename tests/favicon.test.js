@@ -16,6 +16,7 @@ function component(name, dependencies = {}) {
 
 const SecurityIndicator = component('SecurityIndicator', { origin: url => new URL(url).origin })
 const Favicon = component('Favicon', { SecurityIndicator })
+const LinkPreviewFavicon = component('LinkPreviewFavicon', { Favicon })
 const previewSource = compileModule(Deno.readTextFileSync(new URL('../app/lib/tab-group-preview.svelte.js', import.meta.url)), { generate: 'server' }).js.code
     .replace(/^import .*$/gm, '').replace(/^export /gm, '')
 const getFaviconWindow = new Function(`${previewSource}\nreturn getFaviconWindow`)()
@@ -105,5 +106,23 @@ Deno.test('lightbox uses the shared security indicator', () => {
         assert.match(lightboxFavicon(tab), /Invalid certificate/)
     } finally {
         delete data.origins['https://example.com']
+    }
+})
+
+Deno.test('link previews request only the encoded web origin and use shared favicon handling', () => {
+    const html = render(LinkPreviewFavicon, { props: { url: 'https://example.com/path?q=one&size=999#section' } }).body
+    const src = html.match(/<img src="([^"]+)"/)[1].replaceAll('&amp;', '&')
+    const request = new URL(src)
+    assert.equal(request.searchParams.get('url'), 'https://example.com')
+    assert.equal(request.searchParams.get('size'), '16')
+    assert.equal(request.searchParams.get('drop_404_icon'), 'true')
+    assert.match(html, /favicon-wrapper/)
+})
+
+Deno.test('link previews avoid favicon requests for non-web and malformed links', () => {
+    for (const url of ['', 'not a URL', 'mailto:jan@example.com', 'javascript:void(0)', 'file:///example.html', 'tel:123', 'about:blank']) {
+        const html = render(LinkPreviewFavicon, { props: { url } }).body
+        assert.doesNotMatch(html, /<img/)
+        assert.match(html, /fallback-favicon|new-tab-icon/)
     }
 })

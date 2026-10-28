@@ -4,6 +4,7 @@
 
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
+    import LinkPreviewFavicon from './LinkPreviewFavicon.svelte'
     // import Tooltip from './Tooltip.svelte'
     import AttachmentImage from './AttachmentImage.svelte'
     import LightboxHeader from './LightboxHeader.svelte'
@@ -660,11 +661,7 @@
                             <line x1="10" y1="14" x2="21" y2="3"/>
                         </svg>
                     {/if}
-                    <img 
-                        src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
-                        alt=""
-                        class="link-preview-favicon"
-                    />
+                    <span class="link-preview-favicon"><LinkPreviewFavicon url={hoveredLink?.href || ''} /></span>
                     <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
                 </div>
             {/if}
@@ -718,11 +715,7 @@
                                 <line x1="10" y1="14" x2="21" y2="3"/>
                             </svg>
                         {/if}
-                        <img 
-                            src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
-                            alt=""
-                            class="link-preview-favicon"
-                        />
+                        <span class="link-preview-favicon"><LinkPreviewFavicon url={hoveredLink?.href || ''} /></span>
                         <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
                     </div>
                 {/if}
@@ -817,11 +810,7 @@
                                     <line x1="10" y1="14" x2="21" y2="3"/>
                                 </svg>
                             {/if}
-                            <img 
-                                src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={globalHoverPreview.href}&size=16"
-                                alt=""
-                                class="global-hover-preview-favicon"
-                            />
+                            <span class="global-hover-preview-favicon"><LinkPreviewFavicon url={globalHoverPreview.href} size={14} /></span>
                             <UrlRenderer url={globalHoverPreview.href} variant="compact" />
                         </div>
                         <div class="global-hover-preview-controls">
