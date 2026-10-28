@@ -2078,7 +2078,7 @@
                                                                 onpointerdown={(event) => startGroupResize(event, expansionId)} onpointermove={moveGroupResize}
                                                                 onpointerup={endGroupResize} onpointercancel={endGroupResize} onlostpointercapture={endGroupResize}
                                                                 onkeydown={handleGroupResizeKey}>
-                                                                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor"><path d="M4 10 10 4M8 10l2-2" /></svg>
+                                                                <svg viewBox="0 0 12 4" fill="none" stroke="currentColor"><path d="m4 3 3-3m1 3 2-2" /></svg>
                                                             </button>
                                                         </div>
                                                     {/if}
@@ -4016,6 +4016,16 @@
         background: linear-gradient(to top, var(--tab-group-background), transparent);
     }
 
+    .tab-group-scroll:global([data-scroll-top='true']),
+    .tab-group-scroll:global([data-scroll-bottom='true']),
+    .group-resizing .tab-group-scroll {
+        padding-bottom: 4px;
+    }
+
+    .tab-group-scroll:global([data-scroll-bottom='true'])::after {
+        bottom: 4px;
+    }
+
     /* The action adds these attributes at runtime, outside Svelte's CSS analysis. */
     .tab-group-scroll:global([data-scroll-top='true'])::before,
     .tab-group-scroll:global([data-scroll-bottom='true'])::after {
@@ -4060,16 +4070,18 @@
     }
 
     .tab-group-resize {
+        display: none;
         position: absolute;
         right: 0;
         bottom: 0;
-        width: 16px;
-        height: 16px;
-        padding: 2px;
+        width: 100%;
+        height: 4px;
+        padding: 0;
         border: 0;
-        border-radius: 0 0 10px 0;
-        background: var(--tab-group-background);
-        color: rgb(255 255 255 / 15%);
+        border-radius: 0;
+        background: transparent;
+        color: rgb(255 255 255 / 45%);
+        opacity: 0;
         cursor: ns-resize;
         user-select: none;
         touch-action: none;
@@ -4078,15 +4090,24 @@
     }
 
     .tab-group-resize svg {
-        width: 100%;
-        height: 100%;
+        position: absolute;
+        right: 4px;
+        bottom: 0;
+        width: 12px;
+        height: 4px;
         pointer-events: none;
+    }
+
+    .tab-group-scroll:global([data-scroll-top='true']) > .tab-group-resize,
+    .tab-group-scroll:global([data-scroll-bottom='true']) > .tab-group-resize,
+    .group-resizing .tab-group-resize {
+        display: block;
     }
 
     .tab-group-resize:hover,
     .tab-group-resize:focus-visible,
     .group-resizing .tab-group-resize {
-        color: rgb(255 255 255 / 45%);
+        opacity: 1;
     }
     
     .tab-group-empty-message {

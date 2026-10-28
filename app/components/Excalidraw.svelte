@@ -236,6 +236,7 @@
     },
     onFrameFocus = () => {},
     onFrameBlur = () => {},
+    onClose = () => {},
     getEnabledUserMods = () => { return { css: [], js: [] } },
     controlledFrameSupported
   } = $props()
@@ -414,15 +415,55 @@
 	}
 </script>
 
-<div 
-  out:detach|global
-  bind:this={container} 
-  class="excalidraw-container"
-  class:loaded={loaded}
-  style="width: 100%; height: 100%; --excalidraw-zoom: {currentZoom};"
-></div>
+<div class="canvas-view">
+  <div
+    out:detach|global
+    bind:this={container}
+    class="excalidraw-container"
+    class:loaded={loaded}
+    style="width: 100%; height: 100%; --excalidraw-zoom: {currentZoom};"
+  ></div>
+  <button class="close-canvas" onclick={onClose} aria-label="Close canvas" title="Close canvas">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <path d="m5 5 10 10M15 5 5 15" />
+    </svg>
+  </button>
+</div>
 
 <style>
+    .canvas-view {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        background: black;
+    }
+
+    .close-canvas {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 5;
+        width: 28px;
+        height: 28px;
+        padding: 5px;
+        border: 1px solid rgb(255 255 255 / 8%);
+        border-radius: 8px;
+        background: #1e1e1e;
+        color: rgb(255 255 255 / 70%);
+        cursor: pointer;
+        -webkit-app-region: no-drag;
+    }
+
+    .close-canvas:hover {
+        background: #2a2a2a;
+        color: white;
+    }
+
+    .close-canvas:focus-visible {
+        outline: 2px solid white;
+        outline-offset: 2px;
+    }
+
     :global(.excalidraw-container .undo-redo-buttons) {
         position: fixed !important;
         top: calc(100vh - 153px) !important;
@@ -449,7 +490,6 @@
 
     .excalidraw-container {
         position: relative;
-        border-radius: 10px;
         background-color: #000000;
         opacity: 0;
         transition: opacity 0.2s ease-in-out 0.1s;
@@ -488,7 +528,7 @@
     :global(.excalidraw-container .excalidraw) {
         width: 100%;
         height: 100%;
-        border-radius: 10px;
+        border-radius: 0;
     }
   
   /* Override light theme to use neutral colors */

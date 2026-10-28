@@ -922,55 +922,102 @@ Deno.test('cross-space group moves update both lists, persistence and the source
     assert.equal(writes.filter(write => write.spaceId === otherSpace).length, 2)
 })
 
-Deno.test('converting a group creates a named space with ordered standalone tabs and its remembered selection', async () => {
+Deno.test('ungrouping releases members in place and persists their order without changing selection or pins', async () => {
     const { data, refresh, db, writes } = session({ tabs: [
-        tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0, title: 'First page' }),
-        tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 }),
-        tab('pin', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 2, pinned: 'right', pinScope: 'group', pinOrder: 4 }),
-        tab('outside'),
+        tab('before', defaultSpace, { order: 0 }),
+        tab('two', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 2 }),
+        tab('one', defaultSpace, { order: 30, tabGroupId: 'group', tabGroupOrder: 0 }),
+        tab('pin', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 1, pinned: 'right', pinScope: 'group', pinOrder: 4 }),
+        tab('divider', defaultSpace, { type: 'divider', order: 10 }),
+        tab('other-one', defaultSpace, { order: 15, tabGroupId: 'other-group', tabGroupOrder: 1 }),
+        tab('other-two', defaultSpace, { order: 15, tabGroupId: 'other-group', tabGroupOrder: 0 }),
+        tab('after', defaultSpace, { order: 20 }),
         tab('closed', defaultSpace, { tabGroupId: 'group', archive: 'closed' })
-    ], history: ['outside', 'two', 'one', 'pin'], runtime: 'client' })
+    ], history: ['two', 'before', 'one', 'pin'], runtime: 'client' })
     await refresh()
     await data.updateTabGroup('group', { name: 'Research', color: '#123456', emoji: '🔎' })
-    const space = await data.convertTabGroupToSpace('one')
-    assert.equal(space.name, 'Research')
-    assert.equal(space.color, '#123456')
-    assert.equal(space.glyph, '🔎')
-    assert.deepEqual(Array.from(space.tabs, tab => tab.id), ['one', 'two', 'pin'])
-    assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['outside'])
-    assert.equal(data.spaceMeta.spaceOrder.includes(space._id), true)
-    assert.equal(data.spaceMeta.activeSpace, space._id)
+    const history = JSON.stringify(data.spaces[defaultSpace].activeTabsOrder)
+    const spaceOrder = Array.from(data.spaceMeta.spaceOrder)
+    const expected = ['before', 'one', 'pin', 'two', 'divider', 'other-two', 'after']
+    const sidebarIds = () => Array.from(data.getSidebarItems(), item => item.tabs?.[0].id || item.id)
+    const ungrouping = data.ungroupTabGroup('two')
+    assert.deepEqual(sidebarIds(), expected, 'ungrouping updates the view immediately, before persistence finishes')
+    await ungrouping
+    assert.deepEqual(Array.from(data.spaceMeta.spaceOrder), spaceOrder)
+    assert.equal(data.spaceMeta.activeSpace, defaultSpace)
     assert.equal(data.spaceMeta.activeTabId, 'two')
-    assert.deepEqual(Array.from(data.getSidebarItems(space._id), item => item.tabGroupId), [null, null])
-    assert.equal(data.docs.pin.pinScope, 'space')
+    assert.equal(JSON.stringify(data.spaces[defaultSpace].activeTabsOrder), history)
+    assert.equal(data.docs.pin.pinScope, 'group')
     assert.equal(data.docs.pin.pinned, 'right')
     assert.equal(data.docs.pin.pinOrder, 4)
-    assert.equal(data.docs.closed.spaceId, defaultSpace)
-    for (const [index, id] of ['one', 'two', 'pin'].entries()) {
+    assert.equal(data.docs.closed.tabGroupId, 'group')
+    assert.deepEqual(Array.from(data.getTabGroup('other-one').tabs, tab => tab.id), ['other-two', 'other-one'])
+    for (const [index, id] of ['one', 'pin', 'two'].entries()) {
         const saved = await db.get(id)
-        assert.equal(saved.spaceId, space._id)
+        assert.equal(saved.spaceId, defaultSpace)
         assert.equal(saved.tabGroupId, null)
-        assert.equal(saved.order, index)
+        assert.equal(saved.tabGroupOrder, null)
+        assert.equal(saved.order, index + 1)
     }
+    assert.equal((await db.get('divider')).order, 4)
     assert.equal(writes.some(doc => doc.type === 'tab' && doc.url === 'about:newtab'), false)
     await refresh()
     assert.equal(data.spaceMeta.activeTabId, 'two')
-    assert.deepEqual(Array.from(data.getSidebarItems(space._id), item => item.tabs[0].id), ['one', 'two'])
+    assert.deepEqual(sidebarIds(), expected)
 })
 
-Deno.test('converting the only group leaves one source replacement and uses the first tab title as the space name', async () => {
+Deno.test('ungrouping an inactive group never activates its remembered tab or changes the current top tabs', async () => {
+    for (const targetSpace of [defaultSpace, otherSpace]) {
+        const storage = new Map([[`tabActiveHistory:window-1:${otherSpace}`, JSON.stringify(['inactive-two', 'inactive-one'])]])
+        const { data, refresh } = session({ tabs: [
+            tab('current-one', defaultSpace, { order: 10, tabGroupId: 'current', tabGroupOrder: 0 }),
+            tab('current-two', defaultSpace, { order: 10, tabGroupId: 'current', tabGroupOrder: 1 }),
+            tab('inactive-one', targetSpace, { order: 0, tabGroupId: 'inactive', tabGroupOrder: 0 }),
+            tab('inactive-two', targetSpace, { order: 0, tabGroupId: 'inactive', tabGroupOrder: 1 })
+        ], history: ['current-two', 'inactive-two', 'current-one', 'inactive-one'], storage, runtime: 'client' })
+        await refresh()
+        const readTabs = new Function('$', 'data', 'closed', readTopTabsSource.replace(/\nreadTabs$/, '\nreturn readTabs'))(svelteClient, data, svelteClient.proxy({}))
+        const inactive = data.getTabGroup('inactive-one', targetSpace)
+        assert.equal(data.getGroupActiveTab(inactive, targetSpace).id, 'inactive-two')
+        const history = JSON.stringify(data.spaces[defaultSpace].activeTabsOrder)
+        const targetHistory = JSON.stringify(data.spaces[targetSpace].activeTabsOrder)
+        function assertSelectionUnchanged() {
+            assert.equal(data.spaceMeta.activeSpace, defaultSpace)
+            assert.equal(data.spaceMeta.activeTabId, 'current-two')
+            assert.equal(data.getCurrentGroupTabId(), 'current-two')
+            assert.equal(data.getTabGroup().tabGroupId, 'current')
+            assert.deepEqual(Array.from(readTabs(), tab => tab.id), ['current-one', 'current-two'])
+            assert.equal(JSON.stringify(data.spaces[defaultSpace].activeTabsOrder), history)
+            assert.equal(JSON.stringify(data.spaces[targetSpace].activeTabsOrder), targetHistory)
+        }
+        assertSelectionUnchanged()
+        const ungrouping = data.ungroupTabGroup('inactive-one', targetSpace)
+        assertSelectionUnchanged()
+        await ungrouping
+        assertSelectionUnchanged()
+        await refresh()
+        assertSelectionUnchanged()
+        assert.equal(data.getTabGroup('inactive-one', targetSpace).tabGroupId, null)
+        assert.equal(data.getTabGroup('inactive-two', targetSpace).tabGroupId, null)
+    }
+})
+
+Deno.test('ungrouping the only group creates no space or replacement and repeated calls are harmless', async () => {
     const { data, refresh, writes } = session({ tabs: [
-        tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0, title: 'Reading' }),
+        tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0 }),
         tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 })
     ], history: ['two', 'one'] })
     await refresh()
-    const space = await data.convertTabGroupToSpace('one')
-    assert.equal(space.name, 'Reading')
+    await data.ungroupTabGroup('one')
     assert.equal(data.spaceMeta.activeTabId, 'two')
-    assert.equal(data.spaces[defaultSpace].tabs.length, 1)
-    assert.equal(data.spaces[defaultSpace].tabs[0].url, 'about:newtab')
-    assert.deepEqual(Array.from(space.tabs, tab => tab.id), ['one', 'two'])
-    assert.equal(writes.filter(doc => doc.type === 'tab' && doc.url === 'about:newtab').length, 1)
+    assert.deepEqual(Array.from(data.getSidebarItems(), item => item.tabs[0].id), ['one', 'two'])
+    assert.equal(writes.length, 2)
+    await data.ungroupTabGroup('one')
+    await data.ungroupTabGroup('missing')
+    await data.ungroupTabGroup('one', 'missing-space')
+    assert.equal(writes.length, 2)
+    await refresh()
+    assert.deepEqual(Array.from(data.getSidebarItems(), item => item.tabs[0].id), ['one', 'two'])
 })
 
 Deno.test('closing a group includes its pins, preserves restorable membership and leaves unrelated tabs active', async () => {

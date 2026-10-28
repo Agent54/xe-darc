@@ -2438,7 +2438,6 @@
         }
     }
 
-
     let appsOverlayZenModeWasActive = false
 
     function openAppsOverlay() {
@@ -4409,19 +4408,11 @@
             {spaceTaken}
             spaces={data.spaces}
             activeSpaceId={data.spaceMeta.activeSpace}
-            onSpaceSwitch={(spaceId) => { data.activateSpace(spaceId) }}
-            initialZenModeWasActive={focusModeEnabled}
-            onZenModeChange={(enable) => {
-                if (enable && !focusModeEnabled) {
-                    toggleFocusMode()
-                } else if (!enable && focusModeEnabled) {
-                    toggleFocusMode()
-                }
-            }} />
+            onSpaceSwitch={(spaceId) => { data.activateSpace(spaceId) }} />
     {/if} 
         
     {#if data.ui.viewMode === 'canvas'}
-        <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} />
+        <Excalidraw {controlledFrameSupported} onFrameFocus={handleFrameFocus} onFrameBlur={handleFrameBlur} {getEnabledUserMods} onClose={() => selectViewMode('default')} />
     <!-- {:else if data.ui.viewMode === 'reading'}
         {#each tabs as tab, tabIndex (tab.id)}
                 {#key userModsHash}
@@ -4762,7 +4753,7 @@
 {#if appsOverlayHasOpened}
     <div class="apps-overlay"
          hidden={!showAppsOverlay}
-         style="--left-pinned-width: {leftPinnedWidth}px; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px; --sidebar-width: {rightSidebarWidth}px;"
+         style="--tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px; --sidebar-width: {rightSidebarWidth}px;"
          role="dialog" 
          aria-label="All Apps"
          tabindex="-1"

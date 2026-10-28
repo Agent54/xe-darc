@@ -69,6 +69,19 @@ export function getTabGroup (items, tabId, activeTabIds = [], docs = {}) {
     return getTabGroups(items, activeTabIds, docs).find(group => group.tabs.some(tab => tab.id === tabId)) || null
 }
 
+export function planTabUngroup (items, tabId) {
+    const group = getTabGroup(items, tabId)
+    if (!group?.tabGroupId) return []
+    const entries = getSidebarItems(items).flatMap(entry => entry.id === group.id
+        ? group.tabs.map(tab => ({ tabs: [tab], ungroup: true }))
+        : [entry])
+    // Normalize first-level ranks so even tied/fractional orders and dividers keep their positions.
+    return entries.flatMap((entry, order) => (entry.tabs || [entry]).flatMap(tab => {
+        const update = { order, ...(entry.ungroup ? { tabGroupId: null, tabGroupOrder: null } : {}) }
+        return Object.entries(update).every(([key, value]) => tab[key] === value) ? [] : [{ id: tab.id, ...update }]
+    }))
+}
+
 export function orderBetween (before, after, field = 'order') {
     const first = before?.[field] ?? before?.order
     const second = after?.[field] ?? after?.order

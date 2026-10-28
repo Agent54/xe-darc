@@ -170,10 +170,10 @@
         onHide()
     }
 
-    function convertGroupToSpace() {
+    function ungroup() {
         const group = menu.tab
         onHide()
-        return data.convertTabGroupToSpace(group.tabs[0].id, group.spaceId)
+        return data.ungroupTabGroup(group.tabs[0].id, group.spaceId)
     }
 
     function closeGroup() {
@@ -220,8 +220,8 @@
                         onmouseup={() => showGroupView('emoji')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>Change icon…</button>
                 <button class="context-menu-item" role="menuitem" type="button"
-                        onmouseup={convertGroupToSpace}
-                        onclick={(e) => { if (e.detail === 0) convertGroupToSpace() }}>Convert to space</button>
+                        onmouseup={ungroup}
+                        onclick={(e) => { if (e.detail === 0) ungroup() }}>Ungroup</button>
                 <button class="context-menu-item" role="menuitem" type="button"
                         onmouseup={closeGroup}
                         onclick={(e) => { if (e.detail === 0) closeGroup() }}>Close all</button>

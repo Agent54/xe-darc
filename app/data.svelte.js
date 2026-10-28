@@ -4,7 +4,7 @@ import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
-import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, nextPinOrder, tabGroupMetadataId, planTabMove, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
+import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
@@ -461,7 +461,7 @@ function syncTabPreview(tab, previousOpener = tab.opener) {
 
 function applyDocumentUpdate(tabId, update) {
     const tab = docs[tabId]
-    if (!['tab', 'tabgroup'].includes(tab?.type)) return false
+    if (!['tab', 'tabgroup', 'divider'].includes(tab?.type)) return false
 
     const previousOpener = tab.opener
     Object.assign(tab, update)
@@ -470,7 +470,7 @@ function applyDocumentUpdate(tabId, update) {
     }
 
     const spaceTab = spaces[tab.spaceId]?.tabs?.find(item => item.id === tabId)
-    if (spaceTab && spaceTab !== tab && spaceTab.type === 'tab') {
+    if (spaceTab && spaceTab !== tab && spaceTab.type === tab.type) {
         Object.assign(spaceTab, update)
     }
 
@@ -483,6 +483,7 @@ function applyDocumentUpdate(tabId, update) {
 
 async function persistDocumentUpdate(tabId) {
     await tabCreationTasks.get(tabId)
+    await dividerCreationTasks.get(tabId)
     while (desiredDocumentUpdates.has(tabId)) {
         const update = desiredDocumentUpdates.get(tabId)
         let currentTab
@@ -502,7 +503,7 @@ async function persistDocumentUpdate(tabId) {
             }
         }
 
-        if (!['tab', 'tabgroup'].includes(currentTab.type)) {
+        if (!['tab', 'tabgroup', 'divider'].includes(currentTab.type)) {
             desiredDocumentUpdates.delete(tabId)
             return
         }
@@ -528,7 +529,7 @@ async function persistDocumentUpdate(tabId) {
 }
 
 function queueDocumentUpdate(tabId, update) {
-    if (!['tab', 'tabgroup'].includes(docs[tabId]?.type)) return Promise.resolve()
+    if (!['tab', 'tabgroup', 'divider'].includes(docs[tabId]?.type)) return Promise.resolve()
 
     const desiredUpdate = {
         ...(desiredDocumentUpdates.get(tabId) || {}),
@@ -1442,29 +1443,13 @@ const data = {
         const replacement = ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
         return Promise.all([...closing, replacement])
     },
-    convertTabGroupToSpace: async (tabId, spaceId = docs[tabId]?.spaceId) => {
-        const group = data.getTabGroup(tabId, spaceId)
-        if (!group) return null
-        const selectedTab = data.getGroupActiveTab(group, spaceId)
-        const memberIds = new Set(group.tabs.map(tab => tab.id))
-        const history = getSpaceActiveHistoryEntries(spaceId).filter(entry => memberIds.has(getTabIdFromActiveHistoryEntry(entry)))
-        const space = await data.newSpace({
-            name: group.title,
-            color: group.metadata?.color || spaces[spaceId].color,
-            glyph: group.metadata?.emoji,
-            createTab: false
-        })
-        await data.moveTab(group.tabs[0].id, { scope: 'group', targetSpaceId: space._id })
-        await Promise.all(group.tabs.map((tab, index) => queueDocumentUpdate(tab.id, {
-            tabGroupId: null, tabGroupOrder: null, order: index,
-            ...(tab.pinned ? { pinScope: 'space' } : {})
-        })))
-        spaces[space._id].tabs.sort((a, b) => a.order - b.order)
-        spaces[space._id].activeTabsOrder = history
-        persistTabActiveHistoryForSpace(space._id)
-        activateSpace(space._id)
-        activate(selectedTab.id)
-        return spaces[space._id]
+    ungroupTabGroup: (tabId, spaceId = docs[tabId]?.spaceId) => {
+        const space = spaces[spaceId]
+        if (!space) return Promise.resolve()
+        const updates = planTabUngroup(space.tabs, tabId)
+        const saves = updates.map(({ id, ...update }) => queueDocumentUpdate(id, update))
+        space.tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        return Promise.all(saves)
     },
     newGroupTab: (spaceId = spaceMeta.activeSpace, options = {}) => {
         const tabId = options.groupTabId || getCurrentGroupTabId(spaceId)

@@ -45,7 +45,7 @@ const modules = {
         data.getSidebarItems = spaceId => getSidebarItems(data.spaces[spaceId].tabs, [], data.docs)
         data.getTabGroup = (tabId, spaceId) => getTabGroup(data.spaces[spaceId].tabs, tabId)
         data.getGroupActiveTab = group => data.spaces.space.activeTabsOrder.map(id => group.tabs.find(tab => tab.id === id)).find(Boolean) || group.tabs[0]
-        data.convertTabGroupToSpace = (tabId, spaceId) => data.menuActions.push({ action: 'convert', tabId, spaceId })
+        data.ungroupTabGroup = (tabId, spaceId) => data.menuActions.push({ action: 'ungroup', tabId, spaceId })
         data.closeTabGroup = (tabId, spaceId) => data.menuActions.push({ action: 'close', tabId, spaceId })
         data.getSpacePins = spaceId => data.spaces[spaceId].pinnedTabs
         data.isTabHibernated = () => false
@@ -321,7 +321,7 @@ try {
     await page.$eval('#tab-group-name', input => input.blur())
     assert.deepEqual(await page.$eval('#tab-group-name', input => ({ background: getComputedStyle(input).backgroundColor, border: getComputedStyle(input).borderColor })), { background: 'rgb(21, 21, 21)', border: 'rgba(255, 255, 255, 0.02)' }, 'leaving the field restores only its background')
     await page.mouse.click(600, 500)
-    for (const [label, action] of [['Convert to space', 'convert'], ['Close all', 'close']]) {
+    for (const [label, action] of [['Ungroup', 'ungroup'], ['Close all', 'close']]) {
         for (const keyboard of [false, true]) {
             await page.$eval('.tab-group', header => header.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 100 })))
             const item = await page.waitForSelector(`.context-menu button ::-p-text(${label})`)
@@ -380,12 +380,23 @@ try {
     await page.$eval('[data-tab-group-id="resize"] .tab-group-toggle', button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
     const groupContent = '[data-tab-group-id="group"] .tab-group-content'
     const resizeHandle = '[data-tab-group-id="group"] .tab-group-resize'
+    await page.mouse.move(600, 500)
+    assert.equal(await page.$eval(resizeHandle, button => getComputedStyle(button).opacity), '0', 'the resize grip stays hidden away from the bottom border')
+    await page.hover('[data-tab-group-id="group"] .tab-group-main')
+    assert.equal(await page.$eval(resizeHandle, button => getComputedStyle(button).opacity), '0', 'hovering the group header must not reveal the resize grip')
+    assert.equal(await page.$eval('[data-tab-group-id="resize"] .tab-group-resize', button => getComputedStyle(button).display), 'none', 'a group without overflow must have no resize hit area')
+    assert.equal(await page.$eval(resizeHandle, button => {
+        const rect = button.getBoundingClientRect()
+        const content = button.parentElement.querySelector('.tab-group-content').getBoundingClientRect()
+        return rect.top >= content.bottom && getComputedStyle(button).backgroundColor === 'rgba(0, 0, 0, 0)'
+    }), true, 'the transparent resize strip must sit below the tab content instead of covering the last row')
     const resizeGroup = async delta => {
         const point = await page.$eval(resizeHandle, button => {
             const rect = button.getBoundingClientRect()
             return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
         })
         await page.mouse.move(point.x, point.y)
+        assert.equal(await page.$eval(resizeHandle, button => getComputedStyle(button).opacity), '1', 'the bottom border reveals the resize grip')
         await page.mouse.down()
         await page.mouse.move(point.x, point.y + delta, { steps: 5 })
         assert.equal(await page.evaluate(() => window.tabDrag.active || window.tabDrag.pending), false, 'resizing must not start a tab drag')

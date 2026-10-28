@@ -15,14 +15,11 @@
     rightSidebarWidth = 0,
     tabSidebarWidth = 0,
     spaceTaken = 0,
-    onSpaceSwitch = () => {},
-    onZenModeChange = () => {},
-    initialZenModeWasActive = false
+    onSpaceSwitch = () => {}
   } = $props()
 
   let activeView = $state(localStorage.getItem('gridActiveView') || 'tabs')
   let spaceScope = $state(localStorage.getItem('gridSpaceScope') || 'current')
-  let zenModeWasActiveOnOpen = $state(false)
   let gridWindowId = $state(window.darcWindowId || '')
   let gridInstanceId = $state(window.darcInstanceId || '')
   function setActiveView(view) {
@@ -82,7 +79,7 @@
   // Track collapsed spaces
   let collapsedSpaces = $state(new Set())
   
-  // On mount: enable zen mode (if not already), and ensure current space is expanded
+  // Ensure the current space is expanded when opening the overview.
   onMount(() => {
     gridInstanceId = window.darcInstanceId || ''
     gridWindowId = window.darcWindowId || ''
@@ -96,21 +93,6 @@
         }
       })
       .catch(() => {})
-
-    // Store whether zen mode was active when opening
-    zenModeWasActiveOnOpen = initialZenModeWasActive
-    
-    // Enable zen mode when opening grid view
-    if (!initialZenModeWasActive) {
-      onZenModeChange(true)
-    }
-    
-    // Cleanup: disable zen mode on close (only if it wasn't active before)
-    return () => {
-      if (!zenModeWasActiveOnOpen) {
-        onZenModeChange(false)
-      }
-    }
   })
 
   function toggleSpaceCollapsed(spaceId) {
@@ -609,11 +591,11 @@
 <style>
   .grid-view {
     position: fixed;
-    top: 35px;
+    top: 0;
     left: 0;
     right: 0;
     width: 100%;
-    height: calc(100vh - 35px);
+    height: 100vh;
     background: rgb(0, 0, 0);
     overflow: hidden;
     z-index: 10000;
