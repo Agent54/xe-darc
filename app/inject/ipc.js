@@ -73,6 +73,23 @@ document.addEventListener('keydown', function(event) {
 }, { capture: true, passive: false });
 
 // Global mouse event listeners for controlled frame
+// Capture on window before page handlers can stop the event from reaching document.
+window.addEventListener('click', function(event) {
+    console.log(`iwa:click:${tabId}:` + JSON.stringify({
+        button: event.button,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        screenX: event.screenX,
+        screenY: event.screenY,
+        altKey: event.altKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        detail: event.detail,
+        isTopLevel: window === window.top
+    }));
+}, { capture: true, passive: true });
+
 document.addEventListener('mousedown', function(event) {
     // Track modifier key state with mousedown for link clicks
     // This ensures we capture cmd+click before navigation starts

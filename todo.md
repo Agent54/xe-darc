@@ -3414,3 +3414,23 @@ take unannounced laptop away after seeing the page or product and ask how they f
 
 airfoil agency
 
+replace mac native launcher and factor out app-manager (show app icon in dock?)
+
+bup tab to top feature
+
+startpage per space
+
+switch data container per space and open space setup menu on new space create
+
+checkout tracking and long running watch mode docker support in forgejo!
+
+feedback menu without friction
+
+payback system for bug reports and telemetry supply
+
+Air Traffic Control
+
+hud video pip
+
+double click to rename?
+

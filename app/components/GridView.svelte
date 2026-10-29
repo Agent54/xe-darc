@@ -1,6 +1,7 @@
 <script>
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
+  import GridTabStack from './GridTabStack.svelte'
   import data from '../data.svelte.js'
   import { colors as spaceColors } from '../lib/utils.js'
   import { onMount } from 'svelte'
@@ -14,17 +15,14 @@
     rightSidebarWidth = 0,
     tabSidebarWidth = 0,
     spaceTaken = 0,
-    onSpaceSwitch = () => {},
-    onZenModeChange = () => {},
-    initialZenModeWasActive = false
+    onSpaceSwitch = () => {}
   } = $props()
 
   let activeView = $state(localStorage.getItem('gridActiveView') || 'tabs')
-  let spaceScope = $state(localStorage.getItem('gridSpaceScope') || 'current')
-  let zenModeWasActiveOnOpen = $state(false)
+  let spaceScope = $state('current')
+  let spacesContainer = $state(null)
   let gridWindowId = $state(window.darcWindowId || '')
   let gridInstanceId = $state(window.darcInstanceId || '')
-
   function setActiveView(view) {
     activeView = view
     localStorage.setItem('gridActiveView', view)
@@ -32,7 +30,6 @@
 
   function toggleSpaceScope() {
     spaceScope = spaceScope === 'current' ? 'all' : 'current'
-    localStorage.setItem('gridSpaceScope', spaceScope)
   }
 
   function getGridCollapsedSpacesStorageKey(windowId = gridWindowId || window.darcWindowId) {
@@ -82,7 +79,7 @@
   // Track collapsed spaces
   let collapsedSpaces = $state(new Set())
   
-  // On mount: enable zen mode (if not already), and ensure current space is expanded
+  // Ensure the current space is expanded when opening the overview.
   onMount(() => {
     gridInstanceId = window.darcInstanceId || ''
     gridWindowId = window.darcWindowId || ''
@@ -96,21 +93,6 @@
         }
       })
       .catch(() => {})
-
-    // Store whether zen mode was active when opening
-    zenModeWasActiveOnOpen = initialZenModeWasActive
-    
-    // Enable zen mode when opening grid view
-    if (!initialZenModeWasActive) {
-      onZenModeChange(true)
-    }
-    
-    // Cleanup: disable zen mode on close (only if it wasn't active before)
-    return () => {
-      if (!zenModeWasActiveOnOpen) {
-        onZenModeChange(false)
-      }
-    }
   })
 
   function toggleSpaceCollapsed(spaceId) {
@@ -190,21 +172,45 @@
     for (const id of spaceOrder) {
       const space = data.spaces[id]
       if (space) {
-        const tabs = space.tabs || []
+        const pins = data.getSpacePins(id)
+        const groups = data.getTabGroups(id)
         result[id] = {
           ...space,
-          leftPinnedTabs: tabs.filter(tab => tab.pinned === true || tab.pinned === 'left'),
-          rightPinnedTabs: tabs.filter(tab => tab.pinned === 'right'),
-          unpinnedTabs: tabs.filter(tab => !tab.pinned)
+          leftPinnedTabs: pins.filter(tab => tab.pinned === true || tab.pinned === 'left'),
+          rightPinnedTabs: pins.filter(tab => tab.pinned === 'right'),
+          tabGroups: groups,
+          memberTabs: groups.flatMap(group => group.tabs)
         }
       }
     }
     return result
   })
 
-  let displayedSpaceOrder = $derived(
-    spaceScope === 'current' ? spaceOrder.filter(id => id === activeSpaceId) : spaceOrder
-  )
+  // Open on the active space, while leaving its neighbors available to swipe to.
+  // Native snapping keeps the browsed space aligned when the viewport resizes.
+  $effect(() => {
+    const container = spacesContainer
+    const currentSpaceId = activeSpaceId
+    const order = spaceOrder.join(',')
+    if (!container || spaceScope !== 'current' || !order) return
+
+    const frame = requestAnimationFrame(() => {
+      const section = [...container.children].find(node => node.dataset.spaceId === currentSpaceId)
+      if (section) container.scrollTo({ left: section.offsetLeft, behavior: 'instant' })
+    })
+    return () => cancelAnimationFrame(frame)
+  })
+
+  function handleSpacesKeydown(event) {
+    if (spaceScope !== 'current' || event.target !== event.currentTarget) return
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+
+    event.preventDefault()
+    const container = event.currentTarget
+    const direction = event.key === 'ArrowRight' ? 1 : -1
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
+    container.scrollBy({ left: direction * (container.clientWidth + 20), behavior })
+  }
   
   // Handle new tab creation in specific space
   function handleNewTabInSpace(spaceId) {
@@ -279,6 +285,7 @@
     // Interactive elements: clicking these should NOT close the grid view
     const isInteractiveElement = (
       target.closest('.grid-frame') ||
+      target.closest('.grid-tab-group') ||
       target.closest('.new-tab-button') ||
       target.closest('.grid-view-tab') ||
       target.closest('.grid-scope-toggle') ||
@@ -289,7 +296,7 @@
       target.closest('.grid-color-picker-dropdown') ||
       target.closest('.grid-rename-overlay') ||
       target.closest('.grid-instance-meta') ||
-      target.closest('.space-group-left')
+      target.closest('.space-group-header')
     )
     
     if (gridContextMenuId || gridColorPickerSpaceId || gridRenamingSpaceId) return
@@ -324,7 +331,7 @@
         Resources
       </button>
     </div>
-    <button class="grid-scope-toggle" class:active={spaceScope === 'all'} onmousedown={toggleSpaceScope}>
+    <button class="grid-scope-toggle" class:active={spaceScope === 'all'} onclick={toggleSpaceScope} aria-pressed={spaceScope === 'all'}>
       <span class="grid-scope-track"><span class="grid-scope-thumb"></span></span>
       <span class="grid-scope-label">All Spaces</span>
     </button>
@@ -376,7 +383,7 @@
   {/if}
   
   {#if activeView === 'tabs'}
-    <div class="spaces-vertical-container">
+    <div class="spaces-vertical-container" class:paged={spaceScope === 'current'}>
       <div class="grid-instance-meta" title="Per-window and per-instance identifiers">
         <div class="grid-instance-meta-pill" title={`Window ID: ${gridWindowId || 'pending assignment'}`}>
           <span class="grid-instance-meta-label">Window ID</span>
@@ -387,28 +394,32 @@
           <span class="grid-instance-meta-value">{gridInstanceId || 'missing'}</span>
         </div>
       </div>
-      <div class="spaces-content">
-      {#each displayedSpaceOrder as spaceId (spaceId)}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions (Scrollable region supports keyboard space navigation.) -->
+      <div class="spaces-content" bind:this={spacesContainer} onkeydown={handleSpacesKeydown} role="region" aria-label="Spaces" tabindex="0">
+      {#each spaceOrder as spaceId (spaceId)}
         {@const space = spacesData[spaceId]}
-        {@const tabs = space?.unpinnedTabs || []}
+        {@const tabs = space?.memberTabs || []}
+        {@const groups = space?.tabGroups || []}
         {@const leftPins = space?.leftPinnedTabs || []}
         {@const rightPins = space?.rightPinnedTabs || []}
         {@const isCollapsed = collapsedSpaces.has(spaceId)}
         {@const tabCount = leftPins.length + tabs.length + rightPins.length}
-        <div class="space-section">
-          {#if spaceScope === 'all'}
+        <div class="space-section" data-space-id={spaceId}>
+          <div class="space-section-content">
             <button
               class="space-group-header"
-              class:collapsed={isCollapsed}
+              class:collapsed={isCollapsed && spaceScope === 'all'}
               class:active={spaceId === activeSpaceId}
               style="--space-color: {space?.color || '#5b5b5b'}"
               data-space-id={spaceId}
-              onmousedown={(e) => { if (e.button === 0 && e.target.closest('.space-group-left')) toggleSpaceCollapsed(spaceId) }}
+              onclick={(e) => { if (spaceScope === 'all' && (e.detail === 0 || e.target.closest('.space-group-left'))) toggleSpaceCollapsed(spaceId) }}
               oncontextmenu={(e) => handleSpaceHeaderContext(e, spaceId)}
               type="button"
             >
               <span class="space-group-left">
-                <svg class="collapse-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+                {#if spaceScope === 'all'}
+                  <svg class="collapse-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+                {/if}
                 {#if space?.glyph}
                   <span class="space-group-glyph" style="color: {space.color || '#5b5b5b'}" aria-hidden="true">{@html space.glyph}</span>
                 {:else}
@@ -419,7 +430,6 @@
               </span>
               <span class="space-group-line"></span>
             </button>
-          {/if}
           {#if !isCollapsed || spaceScope === 'current'}
             {#if tabCount === 0}
               <div class="empty-space">
@@ -472,15 +482,23 @@
                     </div>
                   </div>
                 {/each}
-                {#each tabs as tab, index (tab.id)}
+                {#each groups as group (group.id)}
                   {@const firstActiveHistoryEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                   {@const firstActiveTabId = typeof firstActiveHistoryEntry === 'string' ? firstActiveHistoryEntry : firstActiveHistoryEntry?.id}
+                  {#if group.tabGroupId}
+                    <GridTabStack {group} {activeTabId}
+                      spaceActiveTabId={spaceId !== activeSpaceId ? firstActiveTabId : null}
+                      defaultTabId={data.getGroupActiveTab(group, spaceId)?.id}
+                      onActivate={(tab, index) => handleFrameClick(tab, index, spaceId)}
+                      onClose={(event, tab, index) => handleCloseTab(event, tab, index, spaceId)}
+                      onWheel={handleFrameWheel} />
+                  {:else}
+                    {#each group.tabs as tab, index (tab.id)}
                   {@const isSpaceActiveTab = spaceId !== activeSpaceId && tab.id === firstActiveTabId}
                   <div 
                     class="grid-frame"
                     class:active={tab.id === activeTabId}
                     class:space-active-tab={isSpaceActiveTab}
-                    class:pinned-last={index === tabs.length - 1 && rightPins.length > 0}
                   >
                     <div class="tab-header">
                       <div class="tab-info clickable"
@@ -523,6 +541,8 @@
                       {/if}
                     </div>
                   </div>
+                {/each}
+                  {/if}
                 {/each}
                 {#each rightPins as tab, index (tab.id)}
                   <div 
@@ -569,6 +589,7 @@
               </div>
             {/if}
           {/if}
+          </div>
         </div>
       {/each}
       </div>
@@ -595,11 +616,11 @@
 <style>
   .grid-view {
     position: fixed;
-    top: 35px;
+    top: 0;
     left: 0;
     right: 0;
     width: 100%;
-    height: calc(100vh - 35px);
+    height: 100vh;
     background: rgb(0, 0, 0);
     overflow: hidden;
     z-index: 10000;
@@ -833,6 +854,55 @@
     margin: auto 0;
   }
 
+  .spaces-vertical-container.paged {
+    overflow: hidden;
+  }
+
+  .paged .spaces-content {
+    position: relative;
+    display: flex;
+    gap: 20px;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: none;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .paged .spaces-content::-webkit-scrollbar {
+    display: none;
+  }
+
+  .paged .space-section {
+    flex: 0 0 100%;
+    min-width: 0;
+    height: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 60px 40px 40px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
+  .paged .space-section-content {
+    margin: auto 0;
+  }
+
+  .spaces-content:focus-visible {
+    outline: 1px solid rgba(255, 255, 255, 0.4);
+    outline-offset: -2px;
+  }
+
   .spaces-vertical-container::-webkit-scrollbar {
     width: 6px;
   }
@@ -982,8 +1052,8 @@
 
   .space-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, 320px);
-    grid-auto-rows: 180px;
+    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 320px));
+    grid-auto-rows: minmax(180px, auto);
     gap: 20px;
     width: 100%;
     will-change: auto;

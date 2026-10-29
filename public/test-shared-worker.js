@@ -3,11 +3,95 @@ const HEARTBEAT_MS = 2000
 const STALE_WINDOW_MS = HEARTBEAT_MS * 2
 const CLOSE_GRACE_MS = 2000
 const STALE_SCAN_MS = 1000
-const REOPEN_MATCH_MS = 30000
-const REOPEN_POSITION_TOLERANCE = 80
-
 const windows = new Map()
 const clientWindows = new Map()
+const pendingRestore = new Map()
+let activeWindowId = null
+let restoreOwner = null
+let startupHandled = false
+let lastSavedSession = ''
+let saveTask = Promise.resolve()
+
+const sessionDB = new Promise((resolve, reject) => {
+  const request = indexedDB.open('darc-window-sessions', 1)
+  request.onupgradeneeded = () => request.result.createObjectStore('session')
+  request.onerror = () => reject(request.error)
+  request.onsuccess = () => resolve(request.result)
+}).catch(error => {
+  console.warn('Window session storage is unavailable', error)
+  return null
+})
+
+const sessionReady = sessionDB.then(db => new Promise((resolve, reject) => {
+  if (!db) {
+    resolve()
+    return
+  }
+  const request = db.transaction('session').objectStore('session').get('windows')
+  request.onerror = () => reject(request.error)
+  request.onsuccess = () => {
+    const saved = request.result
+    if (Array.isArray(saved?.windows)) {
+      for (const entry of saved.windows) {
+        const windowId = parseId(entry?.windowId)
+        if (windowId) {
+          pendingRestore.set(windowId, { windowId, bounds: boundsFromPayload({ placement: entry.bounds, outer: entry.bounds }) })
+        }
+      }
+      activeWindowId = parseId(saved.activeWindowId)
+    }
+    resolve()
+  }
+})).catch(error => console.warn('Failed to load window sessions', error))
+
+function boundsFromPayload(payload) {
+  const bounds = {
+    x: payload.placement?.x,
+    y: payload.placement?.y,
+    width: payload.outer?.width,
+    height: payload.outer?.height
+  }
+  if (Object.values(bounds).every(Number.isFinite) && bounds.width > 0 && bounds.height > 0) {
+    return bounds
+  }
+  return null
+}
+
+function saveWindowSession() {
+  const liveWindows = [...windows.values()].filter(state => state.status !== 'closed')
+  // Keep the last complete set when every window is closing during app quit.
+  if (!liveWindows.some(state => state.status === 'open')) {
+    return
+  }
+  const saved = {
+    activeWindowId,
+    windows: [
+      ...pendingRestore.values(),
+      ...liveWindows.map(state => ({ windowId: state.windowId, bounds: boundsFromPayload(state.meta) }))
+    ]
+  }
+  const serialized = JSON.stringify(saved)
+  if (serialized === lastSavedSession) {
+    return
+  }
+  lastSavedSession = serialized
+  saveTask = saveTask.then(async () => {
+    const db = await sessionDB
+    if (!db) {
+      return
+    }
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction('session', 'readwrite')
+      transaction.oncomplete = resolve
+      transaction.onerror = () => reject(transaction.error)
+      transaction.onabort = () => reject(transaction.error)
+      transaction.objectStore('session').put(saved, 'windows')
+    })
+  }).catch(error => {
+    lastSavedSession = ''
+    console.warn('Failed to save window sessions', error)
+  })
+}
 
 let workerAlive = true
 
@@ -24,61 +108,43 @@ function parseId(value) {
 
 function resolvePayloadWindowId(payload = {}) {
   const directWindowId = parseId(payload.windowId)
-  if (directWindowId) return directWindowId
-
   const clientId = parseId(payload.clientId)
-  if (clientId && clientWindows.has(clientId)) {
-    return clientWindows.get(clientId)
+  const assignedWindowId = clientWindows.get(clientId)
+  if (assignedWindowId && (!directWindowId || directWindowId === assignedWindowId)) {
+    return assignedWindowId
+  }
+  if (!assignedWindowId && directWindowId && clientId && windows.get(directWindowId)?.meta.clientId === clientId) {
+    // A throttled/sleeping page may return after disappearance detection.
+    clientWindows.set(clientId, directWindowId)
+    return directWindowId
   }
 
   return null
 }
 
-function placementsAreClose(previousPlacement, nextPlacement) {
-  if (!previousPlacement || !nextPlacement) return true
-
-  return Math.abs((previousPlacement.x || 0) - (nextPlacement.x || 0)) <= REOPEN_POSITION_TOLERANCE
-    && Math.abs((previousPlacement.y || 0) - (nextPlacement.y || 0)) <= REOPEN_POSITION_TOLERANCE
-}
-
 function resolveConnectWindow(payload = {}) {
+  const assignedWindowId = clientWindows.get(parseId(payload.clientId))
+  if (assignedWindowId) {
+    return { windowId: assignedWindowId, reused: true, reason: 'already-connected' }
+  }
   const hintedWindowId = parseId(payload.hintWindowId)
     || parseId(payload.windowId)
 
-  if (hintedWindowId) {
-    if (windows.has(hintedWindowId)) {
-      return {
-        windowId: hintedWindowId,
-        reused: true,
-        reason: 'hint-existing'
-      }
-    }
-
+  if (hintedWindowId && !['open', 'missing'].includes(windows.get(hintedWindowId)?.status)) {
     return {
       windowId: hintedWindowId,
-      reused: false,
-      reason: 'hint-new'
+      reused: true,
+      reason: 'hint',
+      bounds: pendingRestore.get(hintedWindowId)?.bounds
     }
   }
 
-  const now = Date.now()
-  const candidates = []
-
-  windows.forEach(state => {
-    if (state.status !== 'closed') return
-    if (!state.closedAt || (now - state.closedAt) > REOPEN_MATCH_MS) return
-    if (!state.meta?.url || !payload.url || state.meta.url !== payload.url) return
-    if (!placementsAreClose(state.meta?.placement, payload.placement)) return
-
-    candidates.push(state)
-  })
-
-  if (candidates.length > 0) {
-    candidates.sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0))
+  if (!hintedWindowId && !payload.newWindow && pendingRestore.size > 0) {
+    const saved = pendingRestore.get(activeWindowId) || pendingRestore.values().next().value
     return {
-      windowId: candidates[0].windowId,
+      ...saved,
       reused: true,
-      reason: 'recent-match'
+      reason: 'saved-session'
     }
   }
 
@@ -137,10 +203,17 @@ function scheduleCloseCandidate(windowId, reason) {
 
     if (!stillMissing) return
 
+    if (!hasGoodbye) {
+      // Background throttling and sleep are not proof that a window was closed.
+      latestState.status = 'missing'
+      return
+    }
+
     latestState.status = 'closed'
     latestState.closedAt = now
     latestState.closeReason = hasGoodbye ? 'goodbye' : 'disappeared'
     cleanupClientMappings(windowId)
+    saveWindowSession()
   }, CLOSE_GRACE_MS)
 }
 
@@ -165,17 +238,51 @@ function markWindowOpen(windowId, patch = {}) {
   }
 }
 
-function handleConnect(port, payload = {}) {
+async function handleConnect(port, payload = {}) {
   const clientId = parseId(payload.clientId) || makeWindowId()
-  const resolution = resolveConnectWindow(payload)
+  const restarting = windows.size > 0 && [...windows.values()].every(state => ['closing', 'closed'].includes(state.status))
+  if (restarting && lastSavedSession) {
+    const saved = JSON.parse(lastSavedSession)
+    windows.clear()
+    clientWindows.clear()
+    pendingRestore.clear()
+    for (const entry of saved.windows) {
+      pendingRestore.set(entry.windowId, entry)
+    }
+    activeWindowId = saved.activeWindowId
+    startupHandled = false
+  }
+  if (!startupHandled) {
+    startupHandled = true
+    restoreOwner = clientId
+    for (const [windowId, saved] of pendingRestore) {
+      const bounds = payload.savedWindowBounds?.[windowId]
+      if (bounds && boundsFromPayload({ placement: bounds, outer: bounds })) {
+        saved.bounds = bounds
+      }
+    }
+  }
+  const resolution = resolveConnectWindow({ ...payload, clientId })
   const windowId = resolution.windowId
 
+  pendingRestore.delete(windowId)
+  cleanupClientMappings(windowId)
   clientWindows.set(clientId, windowId)
+  if (!clientWindows.has(restoreOwner)) {
+    restoreOwner = clientId
+  }
 
   markWindowOpen(windowId, {
     ...payload,
-    clientId
+    clientId,
+    ...(resolution.bounds ? {
+      placement: { x: resolution.bounds.x, y: resolution.bounds.y },
+      outer: { width: resolution.bounds.width, height: resolution.bounds.height }
+    } : {})
   })
+  activeWindowId ??= windowId
+  saveWindowSession()
+  await saveTask
 
   port.postMessage({
     type: 'CONNECTED_ACK',
@@ -184,6 +291,8 @@ function handleConnect(port, payload = {}) {
       windowId,
       reused: resolution.reused,
       resolutionReason: resolution.reason,
+      bounds: resolution.bounds,
+      restoreSession: clientId === restoreOwner,
       timestamp: Date.now(),
       knownWindows: windows.size
     }
@@ -239,6 +348,7 @@ function handleHeartbeat(payload = {}) {
     ...payload
   }
   state.closeCandidateToken += 1
+  saveWindowSession()
 }
 
 function handleGoodbye(payload = {}) {
@@ -265,13 +375,25 @@ function handlePortMessage(port, message) {
 
   switch (message.type) {
     case 'CONNECT':
-      handleConnect(port, message.payload)
-      break
+      return handleConnect(port, message.payload)
     case 'HEARTBEAT':
       handleHeartbeat(message.payload)
       break
     case 'GOODBYE':
       handleGoodbye(message.payload)
+      break
+    case 'FOCUS': {
+      const windowId = resolvePayloadWindowId(message.payload)
+      if (windowId) {
+        activeWindowId = windowId
+        saveWindowSession()
+      }
+      break
+    }
+    case 'RESTORE_WINDOWS':
+      if (message.payload?.clientId === restoreOwner) {
+        port.postMessage({ type: 'RESTORE_WINDOWS', payload: { windows: [...pendingRestore.values()] } })
+      }
       break
     default:
       port.postMessage({
@@ -299,13 +421,17 @@ function scanForDisappearedWindows() {
   })
 }
 
-setInterval(scanForDisappearedWindows, STALE_SCAN_MS)
+sessionReady.then(() => setInterval(scanForDisappearedWindows, STALE_SCAN_MS))
+
+let messageQueue = sessionReady
 
 self.onconnect = function (event) {
   const port = event.ports[0]
 
   port.onmessage = function (messageEvent) {
-    handlePortMessage(port, messageEvent.data)
+    messageQueue = messageQueue.then(() => handlePortMessage(port, messageEvent.data)).catch(error => {
+      console.error('Failed to handle window session message', error)
+    })
   }
 
   port.start()

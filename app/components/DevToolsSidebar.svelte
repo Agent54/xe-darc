@@ -1,5 +1,6 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
+    import { cdpFetch } from '../lib/cdp.js'
     
     let {
         onClose,
@@ -29,7 +30,7 @@
                 error = null
             }
             
-            const response = await fetch('/devtools-api/json/list')
+            const response = await cdpFetch('/json/list')
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`)
             }
@@ -97,9 +98,8 @@
     
     function openDevTools(item) {
         if (item.devtoolsFrontendUrl && data && currentSpaceId) {
-            // Replace the remote DevTools frontend with local one while keeping WebSocket params
-            const originalUrl = new URL(item.devtoolsFrontendUrl)
-            const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html?wss=localhost:5194/devtools-api/devtools/${originalUrl.search.split('/devtools/')[1]}`
+            // The API supplies the matching frontend and the launcher's debugger URL.
+            const localDevToolsUrl = item.devtoolsFrontendUrl
             
             data.newTab(currentSpaceId, { 
                 url: localDevToolsUrl, 
@@ -111,7 +111,7 @@
     
     function closeFrame(item) {
         if (item.id) {
-            fetch(`/devtools-api/json/close/${item.id}`)
+            cdpFetch(`/json/close/${item.id}`)
                 .then(() => {
                     // Refresh the data after closing
                     fetchDevToolsData()
@@ -122,7 +122,7 @@
     
     function focusFrame(item) {
         if (item.id) {
-            fetch(`/devtools-api/json/activate/${item.id}`)
+            cdpFetch(`/json/activate/${item.id}`)
                 .catch(err => console.warn('Failed to focus frame:', err))
         }
     }
@@ -172,7 +172,7 @@
     fetchDevToolsData()
 </script>
 
-<RightSidebar title="Dev Tools" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
+<RightSidebar title="Dev Tools" padding={false} {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
         <div class="devtools-content">
             <div class="devtools-header">
@@ -224,7 +224,7 @@
     {/snippet}
     
     {#snippet hierarchyItem(item, depth)}
-        <div class="devtools-item" class:root-item={depth === 0} class:child-item={depth > 0} style="margin-left: {depth * 20}px">
+        <div class="devtools-item" class:root-item={depth === 0} class:child-item={depth > 0} style="margin-left: {depth * 8}px">
             <div class="item-header" 
                  class:clickable={item.children.length > 0} 
                  role={item.children.length > 0 ? "button" : undefined}
@@ -308,7 +308,7 @@
 <style>
     .devtools-content {
         color: #fff;
-        padding-top: 20px;
+        padding: 20px 8px;
     }
     
     .devtools-header {

@@ -1,11 +1,29 @@
+:root {
+    /* Shared header/sidebar tab colors, midway between their original values. */
+    --tab-hover-background: #181818;
+    --tab-hover-border: rgb(255 255 255 / 2.5%);
+    --tab-active-background: #212121;
+    --tab-active-border: rgb(255 255 255 / 4%);
+    --tab-active-hover-background: #2a2a2a;
+    --tab-active-hover-border: rgb(255 255 255 / 5.5%);
+    --tab-group-tab-hover-background: color-mix(in srgb, var(--tab-hover-background), white 5%);
+    --hovercard-active-header-background: #101010;
+}
+
 #backgroundFrames {
     display: none;
 }
 header {
+    /* The sidebar occupies the window-controls reserve rather than adding to it. */
+    --header-sidebar-gap: 0px;
+    --header-left: max(env(titlebar-area-x, 0px), calc(var(--tab-sidebar-width, 0px) + var(--header-sidebar-gap)));
+    --header-navigation-left: max(0px, calc(env(titlebar-area-x, 0px) + 86px - var(--header-left)));
+    --header-tabs-left: max(0px, calc(env(titlebar-area-x, 0px) + 110px - var(--header-left)));
+    --header-left-drag-width: max(0px, calc(var(--header-tabs-left) - 5px));
     position: fixed;
-    left: env(titlebar-area-x, 0);
+    left: var(--header-left);
     top: env(titlebar-area-y, 0);
-    width: env(titlebar-area-width, 100%);
+    width: calc(env(titlebar-area-width, 100%) + env(titlebar-area-x, 0px) - var(--header-left));
     height: env(titlebar-area-height, 35px);
     z-index: 2100;
     background-color: #000;
@@ -23,6 +41,15 @@ header {
     align-items: flex-start;
     opacity: 1;
     transition: opacity 0s;
+}
+
+header.has-tab-sidebar {
+    --header-sidebar-gap: 9px;
+}
+
+header.has-navigation-toolbar {
+    --header-tabs-left: calc(var(--header-navigation-left) + 89px);
+    --header-left-drag-width: max(0px, calc(var(--header-navigation-left) - 1px));
 }
 
 header.window-background {
@@ -60,9 +87,13 @@ header.focus-mode {
     z-index: 1;
 }
 
+.header-drag-handle-left {
+    width: var(--header-left-drag-width);
+}
+
 .navigation-toolbar {
     position: absolute;
-    left: 86px;
+    left: var(--header-navigation-left);
     top: 9px;
     display: flex;
     align-items: center;
@@ -266,7 +297,7 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
     -webkit-app-region: no-drag;
     z-index: 1;
     top: 6px;
-    left: 110px;
+    left: var(--header-tabs-left);
     display: flex;
     align-items: flex-start;
     gap: 0;
@@ -449,8 +480,8 @@ ul::-webkit-scrollbar {
     /* background-color: rgb(255 255 255 / 6%); */
     /* background-color: #ffffff0f; */
     min-width: 130px;
-    max-width: 200px;
-    flex: 0 1 200px; /* Don't grow, can shrink from 200px basis */
+    max-width: 263px;
+    flex: 0 1 263px; /* Don't grow, can shrink from 263px basis */
     -webkit-app-region: no-drag;
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
     -webkit-font-smoothing: subpixel-antialiased;
@@ -459,15 +490,12 @@ ul::-webkit-scrollbar {
     /* hsl(0deg 0% 100% / 2%); */
 }
 .tab-container:hover, .tab-container.hovered, .tab-container.menu-open {
-    background-color: rgb(255 255 255 / 12%);
-    border: 1px solid hsl(0deg 0% 100% / 3%);
+    background-color: var(--tab-hover-background);
+    border: 1px solid var(--tab-hover-border);
 }
 .tab-container.active {
-    /* background-color: rgb(255 255 255 / 17%);
-    border: 1px solid hsl(0deg 0% 100% / 6.5%); */
-
-    background: #262626;
-    border: 1px solid hsl(0deg 0% 100% / 5%);
+    background: var(--tab-active-background);
+    border: 1px solid var(--tab-active-border);
     position: sticky;
     left: 0;
     right: 0;
@@ -475,8 +503,8 @@ ul::-webkit-scrollbar {
     box-shadow: -8px 0 8px -2px black, 8px 0 8px -2px black;
 }
 .tab-container.active:hover, .tab-container.active.hovered, .tab-container.active.menu-open {
-    background-color: #2b2b2b;
-    border: 1px solid hsl(0deg 0% 100% / 7%);
+    background-color: var(--tab-active-hover-background);
+    border: 1px solid var(--tab-active-hover-border);
 
 }
 .tab-container .tab {
@@ -533,15 +561,6 @@ ul::-webkit-scrollbar {
 }
 .tab-container .tab span {
     overflow: hidden;
-}
-.tab-loading-spinner {
-    position: absolute;
-    top: 2px;
-    left: 4px;
-    width: 16px;
-    height: 16px;
-    animation: spin 1s linear infinite;
-    z-index: 2;
 }
 @keyframes spin {
     0% { transform: rotate(0deg); }
@@ -794,6 +813,20 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.settings-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.settings-menu-version {
+    color: rgba(255, 255, 255, 0.22);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+    text-transform: none;
 }
 
 .menu-item {
@@ -1194,6 +1227,11 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 .tab-hovercard.nav-button-hovercard {
     transform: none;
     animation: hovercard-fade-in-left 0.2s ease-out forwards;
+}
+
+.tab-hovercard.navigation-hovercard {
+    opacity: 1;
+    animation: none;
 }
 
 @keyframes hovercard-fade-in-left {
@@ -1785,6 +1823,12 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 .fixed-pinned-tabs.hidden {
     opacity: 0;
     pointer-events: none;
+}
+
+/* Anchor left pins to the header so they follow its sidebar offset. */
+.fixed-pinned-tabs-left {
+    position: absolute;
+    left: var(--header-tabs-left);
 }
 
 /* Right pinned tabs - positioned inside tab-wrapper, not fixed */
@@ -2591,6 +2635,12 @@ header:hover .hover-menu {
     z-index: 99999;
     pointer-events: none;
     transform: translate(-50%, -50%);
+}
+
+.tab-drag-indicator.joining-group {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    border-radius: 10px;
 }
 
 /* Sidepin drop zone overlay */

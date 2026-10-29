@@ -6,12 +6,17 @@
     import data from '../data.svelte.js'
     
     let { 
-        tab, 
+        tab: previewTab,
         onMouseLeave, 
         isClosedTab = false, 
         showHistoryImmediately = false,
+        showHistory = $bindable(false),
         instantMode = false,
+        stacked = false,
+        historyBeside = false,
+        active = undefined,
         showDevTools = false,
+        onActivate = null,
         onGoBack = null,
         onGoForward = null,
         onReload = null,
@@ -21,11 +26,23 @@
         onHistoryVisibilityChange = null,
         availableHeight = null
     } = $props()
+
+    const tab = $derived(data.docs[previewTab.id] || previewTab)
+    const headerFocused = $derived(!isClosedTab && (active ?? tab.id === data.spaceMeta.activeTabId))
     
     const HEADER_HEIGHT = 100
     const SCREENSHOT_HEIGHT = 180
     const HISTORY_TITLE_HEIGHT = 30
     const MIN_HISTORY_HEIGHT = 100
+    const title = $derived(tab.title || 'Untitled')
+    const activationLabel = $derived(`${isClosedTab ? 'Restore' : 'Open'} ${title}`)
+
+    function activateTab() {
+        if (isClosedTab) return data.restoreClosedTab(tab.id)
+        if (onActivate) return onActivate(tab)
+        if (tab.spaceId && data.spaceMeta.activeSpace !== tab.spaceId) data.activateSpace(tab.spaceId)
+        data.activate(tab.id)
+    }
     
     let historyMaxHeight = $derived(() => {
         const maxFromVh = window.innerHeight * 0.5
@@ -37,23 +54,32 @@
     })
     
     async function openTabHistory() {
-        const historyTab = await data.newTab(data.spaceMeta.activeSpace, {
+        const historyTab = await data.newTab(tab.spaceId || data.spaceMeta.activeSpace, {
             url: `about:tabhistory#${tab.id}`,
             title: `History - ${tab.title || 'Untitled'}`,
-            pinned: 'right'
+            pinned: 'right',
+            groupTabId: tab.id
         })
         if (historyTab) {
+            data.activateSpace(historyTab.spaceId)
             data.activate(historyTab.id)
         }
     }
     
     let hovercardHovered = $state(false)
-    let showHistory = $state(false)
     let showDelayedElements = $state(false)
     let historyShowTimer = null
     let delayedElementsTimer = null
     let hoveredHistoryEntry = $state(null)
     let hoveredEntryIndex = $state(null)
+    const screenshotTab = $derived(hoveredHistoryEntry?.screenshot ? hoveredHistoryEntry : tab)
+
+    $effect(() => {
+        if (!showHistory) {
+            hoveredHistoryEntry = null
+            hoveredEntryIndex = null
+        }
+    })
     
     // Check if an entry is in the direct lineage (predecessor) of the hovered entry
     function isInLineage(entryIndex) {
@@ -310,7 +336,8 @@
     })
 </script>
 
-<div class="hovercard-content"
+<div class="hovercard-content" class:stacked class:active={headerFocused}
+     class:history-beside={historyBeside && showHistory && historyEntries.length > 0}
      role="tooltip"
      onmouseenter={() => hovercardHovered = true}
      onmouseleave={() => { hovercardHovered = false; onMouseLeave?.() }}>
@@ -320,7 +347,7 @@
             <div class="hovercard-text">
                 <div class="hovercard-title-wrapper" use:initScrollFade>
                     <div class="fade-left"></div>
-                    <div class="hovercard-title" onscroll={handleScrollFade}>{data.docs[tab.id]?.title || tab.title || 'Untitled'}</div>
+                    <button type="button" class="hovercard-title" aria-label={activationLabel} onclick={activateTab} onscroll={handleScrollFade}>{title}</button>
                     <div class="fade-right"></div>
                 </div>
             </div>
@@ -336,7 +363,8 @@
         </div>
         
         <UrlBar 
-            url={data.docs[tab.id]?.url || tab.url}
+            escapeOverflow={stacked}
+            url={tab.url}
             tabId={tab.id}
             {isClosedTab}
             {showDevTools}
@@ -351,32 +379,17 @@
             enableHoverExpand={showDelayedElements}
         />
     </div>
-    {#if hoveredHistoryEntry?.screenshot}
-        <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
-            {#key hoveredHistoryEntry.id}
-                <AttachmentImage src={hoveredHistoryEntry.screenshot} digest={hoveredHistoryEntry._attachments?.screenshot?.digest} alt="Page preview" />
-            {/key}
+    {#if screenshotTab.screenshot}
+        <button type="button" class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0} aria-label={activationLabel} onclick={activateTab}>
+            <AttachmentImage src={screenshotTab.screenshot} digest={screenshotTab._attachments?.screenshot?.digest} alt="Page preview" />
             {#if showDelayedElements}
-                <button class="expand-button" aria-label="Expand screenshot">
+                <span class="expand-button" aria-hidden="true">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                     </svg>
-                </button>
+                </span>
             {/if}
-        </div>
-    {:else if tab.screenshot}
-        <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
-            {#key tab.id}
-                <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Page preview" />
-            {/key}
-            {#if showDelayedElements}
-                <button class="expand-button" aria-label="Expand screenshot">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                    </svg>
-                </button>
-            {/if}
-        </div>
+        </button>
     {/if}
     {#if showHistory && historyEntries.length > 0}
         <div class="history-section">
@@ -394,7 +407,7 @@
                     Clear all
                 </button>
             </div>
-            <div class="history-list" style="max-height: {historyMaxHeight()};">
+            <div class="history-list" style:max-height={historyBeside ? 'none' : historyMaxHeight()}>
                 <div class="history-connector-line"></div>
                 {#each historyEntries as historyTab, index}
                 <div class="history-item"
@@ -471,6 +484,7 @@
 <style>
     /* Ensure these styles are scoped to this component */
     .hovercard-content {
+        --hovercard-title-fade-color: rgba(0, 0, 0, 0.95);
         background: rgba(0, 0, 0, 0.95);
         backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -491,10 +505,55 @@
         max-height: 100%;
     }
 
+    .hovercard-content.stacked {
+        width: 320px;
+        max-width: 100%;
+        margin: 0;
+        flex-shrink: 0;
+        max-height: none;
+        box-shadow: none;
+    }
+
+    .hovercard-content.history-beside {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        width: 640px;
+        min-height: 130px;
+    }
+
+    .history-beside .hovercard-info {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .hovercard-content.history-beside.active .hovercard-info {
+        border-top-right-radius: 0;
+    }
+
+    .history-beside .hovercard-screenshot.has-history {
+        grid-column: 1;
+        grid-row: 2;
+        border-bottom-left-radius: 11px;
+        border-bottom-right-radius: 0;
+    }
+
+    .history-beside .history-section {
+        grid-column: 2;
+        grid-row: 1 / 3;
+        contain: size;
+        border-top: none;
+        border-left: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .history-beside .history-list {
+        min-height: 0;
+    }
+
     .hovercard-info {
         padding: 16px;
         font-family: 'Inter', sans-serif;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
         overflow: visible;
         position: relative;
         z-index: 5;
@@ -503,6 +562,19 @@
 
     .hovercard-info:last-child {
         border-bottom: none;
+    }
+
+    .hovercard-content.active {
+        --hovercard-title-fade-color: var(--hovercard-active-header-background, #101010);
+    }
+
+    .hovercard-content.active .hovercard-info {
+        background: var(--hovercard-active-header-background, #101010);
+        border-radius: 11px 11px 0 0;
+    }
+
+    .hovercard-content.active .hovercard-info:last-child {
+        border-radius: 11px;
     }
 
     .hovercard-header {
@@ -525,6 +597,14 @@
     }
     
     .hovercard-title {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: none;
+        background: transparent;
+        text-align: left;
+        font-family: inherit;
+        cursor: pointer;
         font-size: 14px;
         font-weight: 600;
         color: rgba(255, 255, 255, 0.9);
@@ -551,15 +631,20 @@
     
     .hovercard-title-wrapper .fade-left {
         left: 0;
-        background: linear-gradient(to left, transparent, rgba(0, 0, 0, 0.95));
+        background: linear-gradient(to left, transparent, var(--hovercard-title-fade-color));
     }
     
     .hovercard-title-wrapper .fade-right {
         right: 0;
-        background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.95));
+        background: linear-gradient(to right, transparent, var(--hovercard-title-fade-color));
     }
 
     .hovercard-screenshot {
+        display: block;
+        padding: 0;
+        border: none;
+        background: #1a1a1a;
+        cursor: pointer;
         width: 100%;
         height: 180px;
         overflow: hidden;

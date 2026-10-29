@@ -1,6 +1,7 @@
 <script>
     import UrlRenderer from './UrlRenderer.svelte'
     import data from '../data.svelte.js'
+    import { overflowPopover } from '../lib/overflow-popover.js'
     
     let { 
         url = '',
@@ -18,7 +19,8 @@
         onSettings = null,
         onExpandedChange = null,
         variant = 'default',
-        enableHoverExpand = true
+        enableHoverExpand = true,
+        escapeOverflow = false
     } = $props()
     
     let urlBarExpanded = $state(expanded)
@@ -31,6 +33,7 @@
     let urlButtonEl = $state(null)
     let showLeftFade = $state(false)
     let showRightFade = $state(true)
+    let urlBarSection = $state(null)
     
     function calculateMaxWidth() {
         if (urlBarContainer && variant === 'hovercard') {
@@ -192,13 +195,15 @@
 </script>
 
 <div class="url-bar-section" class:hovercard={variant === 'hovercard'} class:hover-expand-enabled={enableHoverExpand}
+     bind:this={urlBarSection}
      role="group"
      onmouseenter={handleMouseEnter}
      onmouseleave={handleMouseLeave}>
-    <div class="url-bar-wrapper">
+    <div class="url-bar-wrapper" use:overflowPopover={{ open: escapeOverflow && (urlBarExpanded || (isHovered && enableHoverExpand)), anchor: urlBarSection }}>
         <div class="url-bar-container" 
              bind:this={urlBarContainer}
              class:expanded={urlBarExpanded}
+             class:hover-expanded={isHovered && enableHoverExpand}
              style={maxExpandedWidth ? `width: ${maxExpandedWidth}px;` : ''}
              role="toolbar"
              tabindex="0"
@@ -293,6 +298,7 @@
         margin-top: 8px;
         position: relative;
         z-index: 10;
+        min-height: 32px;
     }
     
     .url-bar-wrapper {
@@ -301,6 +307,17 @@
     
     .hovercard .url-bar-wrapper {
         margin-left: -10px;
+    }
+
+    .url-bar-wrapper:popover-open {
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        overflow: visible;
     }
     
     .url-bar-container {
@@ -330,7 +347,8 @@
         height: 32px;
         border-radius: 8px;
         z-index: 20;
-        background: rgb(255 255 255 / 5%);
+        background: var(--url-bar-idle-background, rgb(255 255 255 / 5%));
+        border-color: var(--url-bar-idle-border, rgb(255 255 255 / 2%));
     }
     
     .url-bar-container:not(.expanded):not(:hover) {
@@ -347,11 +365,13 @@
     }
     
     .hovercard .url-bar-container.expanded {
-        background: rgba(0, 0, 0, 0.95);
+        background: #161616;
+        border-color: rgb(255 255 255 / 4%);
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        transition-property: width, box-shadow, border-color;
     }
     
-    .url-bar-section.hover-expand-enabled:hover .url-bar-container:not(.expanded) {
+    .url-bar-section.hover-expand-enabled .url-bar-container.hover-expanded:not(.expanded) {
         width: min(600px, 90vw);
         background: rgba(0, 0, 0, 0.98);
         backdrop-filter: blur(20px);
@@ -361,11 +381,12 @@
         transition-delay: 200ms;
     }
     
-    .url-bar-section.hovercard.hover-expand-enabled:hover .url-bar-container:not(.expanded) {
-        background: rgba(0, 0, 0, 0.95);
+    .url-bar-section.hovercard.hover-expand-enabled .url-bar-container.hover-expanded:not(.expanded) {
+        background: #161616;
         backdrop-filter: blur(20px);
-        border: 1px solid hsl(0deg 0% 100% / 10%);
+        border: 1px solid rgb(255 255 255 / 4%);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        transition-property: width, box-shadow, border-color;
         transition-delay: 0ms;
         overflow: visible;
     }
