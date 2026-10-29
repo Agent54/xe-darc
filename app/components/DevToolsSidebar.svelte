@@ -1,4 +1,5 @@
 <script>
+    import { onMount, tick } from 'svelte'
     import RightSidebar from './RightSidebar.svelte'
     import { cdpFetch } from '../lib/cdp.js'
     
@@ -21,28 +22,43 @@
     let error = $state(null)
     let initialLoad = $state(true)
     let expandedItems = $state(new Set())
+    let contentElement = $state(null)
+    let refreshController = null
+    let destroyed = false
     
-    // Fetch dev tools data on mount
     async function fetchDevToolsData() {
+        // Manual refresh and polling share one request so stale responses cannot win.
+        if (destroyed || refreshController) return
+        const controller = new AbortController()
+        refreshController = controller
+
         try {
             if (initialLoad) {
                 loading = true
                 error = null
             }
             
-            const response = await cdpFetch('/json/list')
+            const response = await cdpFetch('/json/list', { signal: controller.signal })
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`)
             }
             const newData = await response.json()
+            if (controller.signal.aborted) return
             
-            // Update existing items or add new ones without full re-render
+            // Keep the keyed cards and expansion state while updating their data.
+            const scrollContainer = contentElement?.parentElement
+            const scrollTop = scrollContainer?.scrollTop
+            const scrollLeft = scrollContainer?.scrollLeft
             updateDevToolsData(newData)
+            error = null
+            await tick()
             
-            if (initialLoad) {
-                error = null
+            if (!controller.signal.aborted && scrollContainer) {
+                scrollContainer.scrollTop = scrollTop
+                scrollContainer.scrollLeft = scrollLeft
             }
         } catch (err) {
+            if (controller.signal.aborted) return
             if (initialLoad) {
                 error = err.message
                 console.error('Failed to fetch dev tools data:', err)
@@ -51,6 +67,7 @@
                 console.warn('Background dev tools update failed:', err)
             }
         } finally {
+            refreshController = null
             if (initialLoad) {
                 loading = false
                 initialLoad = false
@@ -168,13 +185,21 @@
         }
     }
     
-    // Fetch data on component mount
-    fetchDevToolsData()
+    onMount(() => {
+        fetchDevToolsData()
+        const interval = setInterval(fetchDevToolsData, 5000)
+
+        return () => {
+            destroyed = true
+            clearInterval(interval)
+            refreshController?.abort()
+        }
+    })
 </script>
 
 <RightSidebar title="Dev Tools" padding={false} {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
-        <div class="devtools-content">
+        <div class="devtools-content" bind:this={contentElement}>
             <div class="devtools-header">
                 <div class="section-title"></div>
                 

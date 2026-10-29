@@ -67,8 +67,8 @@ async function composeFetch(path, options = {}) {
     }
 }
 
-async function composeRequest(path, { signal } = {}) {
-    const response = await composeFetch(path, { signal })
+async function composeRequest(path, options = {}) {
+    const response = await composeFetch(path, options)
     const text = await response.text()
     let result = null
     try {
@@ -83,6 +83,58 @@ async function composeRequest(path, { signal } = {}) {
         throw error
     }
     return result
+}
+
+export async function runComposeAction(action, app, container = null) {
+    const project = encodeURIComponent(app.project)
+    const path = app.configFiles || ''
+    const services = [app.name]
+    const post = (endpoint, body) => composeRequest(`/v1.24/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    })
+    const stopWatch = async () => {
+        try {
+            await composeRequest(`/v1.24/watch/${project}`, { method: 'DELETE' })
+        } catch (error) {
+            if (error.status !== 404) {
+                throw error
+            }
+        }
+    }
+
+    if (action === 'stop-watch') {
+        return await stopWatch()
+    }
+    if (action === 'start' && container) {
+        return await post(`start/${project}/container`, { path, container: container.id })
+    }
+    if (action === 'start' && app.containers?.length) {
+        return await post(`start/${project}`, { path, services, wait: false })
+    }
+    if (['start', 'restart', 'watch', 'up-no-build'].includes(action)) {
+        if (!path) {
+            throw new Error(`No Compose file path available for ${app.name}`)
+        }
+        return await post('up', {
+            path, services,
+            build: action !== 'up-no-build',
+            watch: action === 'watch' || Boolean(app.watching),
+            removeOrphans: true
+        })
+    }
+    if (action === 'stop' || action === 'remove') {
+        await stopWatch()
+        return await post(`${action === 'remove' ? 'rm' : 'stop'}/${project}`, {
+            path, services,
+            ...(action === 'remove' ? { force: true, stop: true } : { removeOrphans: true })
+        })
+    }
+    if (action === 'pause' || action === 'unpause') {
+        return await post(`${action}/${project}`, { path, services })
+    }
+    throw new Error(`Unknown Docker action: ${action}`)
 }
 
 function projectVariants(project) {

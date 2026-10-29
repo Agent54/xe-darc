@@ -411,6 +411,15 @@
         z-index: 100;
         box-shadow: 1px 16px 10px 10px #000000bf;
     }
+
+    .url-bar-controls::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: -6px;
+        height: 6px;
+    }
     
     .hovercard .url-bar-controls {
         left: 0;

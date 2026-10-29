@@ -4,6 +4,7 @@
     import Frame from './components/Frame.svelte'
     import Resources from './components/ResourcesPanel.svelte'
     import Settings from './components/Settings.svelte'
+    import { openTabDevTools } from './lib/tab-devtools.js'
     import UserMods from './components/UserMods.svelte'
     import Activity from './components/Activity.svelte'
     import AgentSidebar from './components/AgentSidebar.svelte'
@@ -4207,11 +4208,12 @@
                           }}
                           onReload={() => {
                               if (!hoveredTab?.id) return
-                              if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                  data.activate(hoveredTab.id)
+                              const tabId = hoveredTab.id
+                              if (data.spaceMeta.activeTabId !== tabId) {
+                                  data.activate(tabId)
                               }
                               setTimeout(() => {
-                                  data.reloadTab(hoveredTab?.id)
+                                  data.reloadTab(tabId)
                               }, 50)
                           }}
                           onCloseTab={() => {
@@ -4224,10 +4226,9 @@
                           }}
                           onDevTools={() => {
                                if (!hoveredTab?.id) return
-                               if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                   data.activate(hoveredTab.id)
-                               }
+                               openTabDevTools(data, hoveredTab.id)
                            }}
+                          onSettings={switchToSettings}
                           onOpenTabHistory={(tabId) => {
                                if (!tabId) return
                                // Open a new tab with the tab history page
@@ -4300,9 +4301,11 @@
                       instantMode={true}
                       showDevTools={devModeEnabled}
                       availableHeight={window.innerHeight - navButtonHovercardPosition.y - 20}
-                      onGoBack={goBack}
-                      onGoForward={goForward}
-                      onReload={reloadActiveTab}
+                      onGoBack={() => navigateTabHistory(activeTab.id, 'back')}
+                      onGoForward={() => navigateTabHistory(activeTab.id, 'forward')}
+                      onReload={() => data.reloadTab(activeTab.id)}
+                      onDevTools={() => openTabDevTools(data, activeTab.id)}
+                      onSettings={switchToSettings}
                       onCloseTab={() => {
                           closeTab(activeTab)
                           navButtonHovered = false
@@ -4312,6 +4315,7 @@
 {/if}
 
 <TabSidebar {isDragEnabled} onShowApps={toggleAppsOverlay} 
+           onSettings={switchToSettings}
            onNavigateHistory={navigateTabHistory}
            {customTabSidebarWidth} 
            {tabSidebarVisible} 
@@ -5117,7 +5121,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 80px 60px 20px 60px;
+        padding: 70px 24px 24px;
     }
 
     .apps-overlay[hidden] {
@@ -5125,8 +5129,10 @@
     }
 
     .apps-overlay-content {
+        container-type: inline-size;
         width: 67%;
         height: 67%;
+        top: max(70px, calc((100% - min(67%, 1125px)) * 0.382));
         background: rgb(0, 0, 0);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 16px;
@@ -5136,6 +5142,13 @@
         overflow: visible;
         max-width: 1250px;
         max-height: 1125px;
+    }
+
+    @media (max-width: 760px) {
+        .apps-overlay-content {
+            width: calc(100% - 32px);
+            height: min(67%, calc(100% - 94px));
+        }
     }
 
     /* LED Indicator Array - positioned in hover sidebar */

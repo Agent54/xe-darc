@@ -24,6 +24,13 @@ const modules = {
             document.body.append(target)
             return mount(TabHoverCard, { target, props: { tab: data.docs.outside, showHistoryImmediately: true } })
         }
+        window.mountMetadataHovercard = () => {
+            const target = document.createElement('div')
+            target.id = 'metadata-hovercard-fixture'
+            target.style.cssText = 'position: fixed; z-index: 20000; top: 12px; left: 12px'
+            document.body.append(target)
+            mount(TabHoverCard, { target, props: { tab: data.docs['closed-two'], isClosedTab: true, showHistoryImmediately: true } })
+        }
         window.mountLinkPreview = () => {
             const target = document.createElement('div')
             target.id = 'link-preview-fixture'
@@ -41,13 +48,13 @@ const modules = {
     `,
     'fixture-data': compileModule(`
         import { getSidebarItems, getTabGroup } from './app/lib/tab-groups.js'
-        const tab = (id, favicon, extra = {}) => ({ id, title: id, url: 'https://example.com', type: 'tab', spaceId: 'space', favicon: location.origin + favicon, ...extra })
+        const tab = (id, favicon, extra = {}) => ({ id, title: id, url: 'https://example.com', type: 'tab', spaceId: 'space', created: Date.now() - 3600000, favicon: location.origin + favicon, ...extra })
         const data = $state({
             docs: {}, frames: {}, origins: {}, menuActions: [], linkPreviewUrl: '',
             ui: { sidebarVisible: true, dragEnabled: true, sidebarWidth: 263 },
             spaceMeta: {
                 globalPins: [tab('pin-one', '/one.svg'), tab('pin-two', '/two.svg')],
-                closedTabs: [tab('closed-one', '/one.svg'), tab('closed-missing', '/missing.svg'), tab('closed-two', '/two.svg')],
+                closedTabs: [tab('closed-one', '/one.svg'), tab('closed-missing', '/missing.svg'), tab('closed-two', '/two.svg', { closedAt: Date.now() - 120000, modified: Date.now() })],
                 spaceOrder: ['space'], activeSpace: 'space', activeTabId: null
             },
             spaces: { space: { name: 'Space', pinnedTabs: [], activeTabsOrder: ['outside', 'group-two'], tabs: [
@@ -65,6 +72,7 @@ const modules = {
         data.closeTabGroup = (tabId, spaceId) => data.menuActions.push({ action: 'close', tabId, spaceId })
         data.getSpacePins = spaceId => data.spaces[spaceId].pinnedTabs
         data.isTabHibernated = () => false
+        data.getTabLastActiveAt = id => data.docs[id]?.lastActiveAt || 0
         data.getAttachmentUrl = async src => src
         data.removeClosedTab = id => { data.spaceMeta.closedTabs = data.spaceMeta.closedTabs.filter(tab => tab.id !== id) }
         export default data
@@ -195,7 +203,7 @@ try {
         capsule: getComputedStyle(header, '::before').content,
         topBorder: getComputedStyle(header).borderTopWidth,
         bottomBorder: getComputedStyle(header).borderBottomWidth
-    })), { background: 'rgb(16, 16, 16)', capsule: 'none', topBorder: '0px', bottomBorder: '0px' }, 'the whole active header uses a subtle surface with no inset capsule or enclosing border')
+    })), { background: 'rgb(16, 16, 16)', capsule: 'none', topBorder: '0px', bottomBorder: '1px' }, 'the active header keeps its subtle surface and the same preview divider as screenshot cards')
     await (await page.$('.tab-hovercard-sidebar')).screenshot({ path: `${root}.cache/tab-hovercard-header.png` })
     await page.hover('.hovercard-content.active .hovercard-title')
     await page.waitForSelector('.hovercard-content.active .url-bar-section.hover-expand-enabled')
@@ -234,7 +242,8 @@ try {
     assert.equal(await page.$('.hovercard-content.active'), null)
     await page.evaluate(() => window.flushSync(() => { window.data.spaceMeta.activeTabId = 'outside' }))
     await page.waitForSelector('.hovercard-content.active')
-    await page.mouse.move(600, 500)
+    await page.mouse.move(790, 590)
+    await page.waitForSelector('.tab-hovercard-sidebar', { hidden: true })
     await page.evaluate(() => {
         window.closedRows = [...document.querySelectorAll('.closed-tab-item')]
         window.closedIcons = window.closedRows.map(row => row.querySelector('.favicon, .fallback-favicon'))
@@ -490,6 +499,13 @@ try {
         window.data.docs.outside.screenshot = location.origin + '/one.svg'
     }))
     await hovercardLeft('.tabs-list > [data-tab-id="outside"]', false)
+    await page.waitForFunction(() => document.querySelector('.tab-hovercard-sidebar .attachment-image')?.naturalWidth > 0)
+    const screenshotBeforeHistory = await page.$eval('.tab-hovercard-sidebar .hovercard-screenshot', screenshot => {
+        window.previewImage = screenshot.querySelector('img')
+        window.previewImageLoads = 0
+        window.previewImage.addEventListener('load', () => window.previewImageLoads++)
+        return screenshot.getBoundingClientRect().toJSON()
+    })
     await page.hover('.tab-hovercard-sidebar .hovercard-title')
     await page.waitForSelector('.tab-hovercard-sidebar .history-beside')
     const historyIsBesideScreenshot = () => {
@@ -501,13 +517,13 @@ try {
             history.bottom <= bounds.bottom && bounds.right <= window.innerWidth - 10
     }
     await page.waitForFunction(historyIsBesideScreenshot)
+    assert.deepEqual(await page.$eval('.tab-hovercard-sidebar .hovercard-screenshot', screenshot => screenshot.getBoundingClientRect().toJSON()), screenshotBeforeHistory, 'opening side history must preserve the screenshot position and dimensions')
+    assert.equal(await page.evaluate(() => window.previewImage === document.querySelector('.tab-hovercard-sidebar .attachment-image') && window.previewImageLoads === 0), true, 'opening history must retain the decoded screenshot without reloading it')
     assert.equal(await page.$eval('.history-beside .history-list', list => list.scrollHeight > list.clientHeight), true, 'wide history must scroll within the preview height')
     await (await page.$('.tab-hovercard-sidebar')).screenshot({ path: `${root}.cache/sidebar-history-wide.png` })
+    await page.evaluate(() => window.dispatchEvent(new Event('darc-dismiss-hovercards')))
     await page.setViewport({ width: 800, height: 800 })
-    await page.waitForFunction(() => {
-        const card = document.querySelector('.tab-hovercard-sidebar .hovercard-content')
-        return card && !card.classList.contains('history-beside')
-    })
+    await hovercardLeft('.tabs-list > [data-tab-id="outside"]', false)
     await page.hover('.tab-hovercard-sidebar .hovercard-title')
     await page.waitForFunction(() => {
         const card = document.querySelector('.tab-hovercard-sidebar .hovercard-content')
@@ -516,12 +532,51 @@ try {
         return card && !card.classList.contains('history-beside') && history?.top >= screenshot?.bottom
     })
     await (await page.$('.tab-hovercard-sidebar')).screenshot({ path: `${root}.cache/sidebar-history-narrow.png` })
+    await page.evaluate(() => window.dispatchEvent(new Event('darc-dismiss-hovercards')))
     await page.setViewport({ width: 1200, height: 800 })
+    await hovercardLeft('.tabs-list > [data-tab-id="outside"]', false)
+    await page.hover('.tab-hovercard-sidebar .hovercard-title')
     await page.waitForFunction(historyIsBesideScreenshot)
     await page.mouse.move(1100, 750)
+    await page.evaluate(() => {
+        window.dispatchEvent(new Event('darc-dismiss-hovercards'))
+        window.flushSync(() => {
+            window.data.docs['group-missing'].screenshot = location.origin + '/one.svg'
+            window.data.docs['group-two'].screenshot = location.origin + '/two.svg'
+            window.data.docs['group-tail-0'].lastActiveAt = Date.now() - 300000
+        })
+        window.previewGeometry = () => [...document.querySelectorAll('.group-hovercards .hovercard-info, .group-hovercards .hovercard-preview')].map(element => element.getBoundingClientRect().toJSON())
+    })
     await hovercardLeft('.tab-group-main', true)
-    await page.hover('.tab-hovercard-sidebar .hovercard-title')
+    await page.waitForFunction(() => [...document.querySelectorAll('.group-hovercards .attachment-image')].length === 2 && [...document.querySelectorAll('.group-hovercards .attachment-image')].every(image => image.naturalWidth > 0))
+    assert.deepEqual(await page.$$eval('.group-hovercards .hovercard-preview', previews => [...new Set(previews.map(preview => `${preview.clientWidth}x${preview.clientHeight}`))]), ['318x180'], 'metadata panels must occupy the same preview area as screenshots')
+    assert.equal(await page.$$eval('.group-hovercards .hovercard-metadata', panels => panels.some(metadata => metadata.textContent.includes('Not recorded'))), true, 'missing timestamps must be identified instead of invented')
+    const groupGeometry = await page.evaluate(() => window.previewGeometry())
+    const firstGroupCard = '.group-hovercards .hovercard-content:nth-child(1)'
+    const secondGroupCard = '.group-hovercards .hovercard-content:nth-child(2)'
+    await page.hover(`${firstGroupCard} .hovercard-title`)
+    await page.waitForNetworkIdle({ idleTime: 400 })
+    assert.equal(await page.$('.group-hovercards .history-section'), null, 'the first card must still wait before showing history')
     await page.waitForSelector('.group-hovercards .history-beside')
+    assert.deepEqual(await page.evaluate(() => window.previewGeometry()), groupGeometry, 'opening group history must leave all preview headers and screenshots in place')
+    await page.hover(`${secondGroupCard} .hovercard-title`)
+    await page.waitForSelector(`${secondGroupCard} .history-section`, { timeout: 500 })
+    assert.equal(await page.$$eval('.group-hovercards .history-section', sections => sections.length), 1, 'moving between cards must move the single history panel immediately')
+    assert.deepEqual(await page.evaluate(() => window.previewGeometry()), groupGeometry, 'moving history to another card must preserve the stack layout')
+    await (await page.$('.tab-hovercard-sidebar')).screenshot({ path: `${root}.cache/group-history-stable.png` })
+    const metadataGroupCard = '.group-hovercards .hovercard-content:nth-child(3)'
+    await page.hover(`${metadataGroupCard} .hovercard-title`)
+    await page.waitForSelector(`${metadataGroupCard} .history-section`, { timeout: 500 })
+    assert.deepEqual(await page.$eval(`${metadataGroupCard} .hovercard-metadata`, metadata => [...metadata.querySelectorAll('time')].map(time => time.dateTime)), await page.evaluate(() => [window.data.docs['group-tail-0'].created, window.data.docs['group-tail-0'].lastActiveAt].map(timestamp => new Date(timestamp).toISOString())), 'metadata must use the recorded opening and activity times')
+    assert.deepEqual(await page.evaluate(() => window.previewGeometry()), groupGeometry, 'metadata previews must retain their geometry when side history opens')
+    await (await page.$(metadataGroupCard)).screenshot({ path: `${root}.cache/tab-metadata-history.png` })
+    await page.mouse.move(1100, 750)
+    await page.waitForSelector('.tab-hovercard-sidebar', { hidden: true })
+    await hovercardLeft('.tab-group-main', true)
+    await page.hover(`${firstGroupCard} .hovercard-title`)
+    await page.waitForNetworkIdle({ idleTime: 400 })
+    assert.equal(await page.$('.group-hovercards .history-section'), null, 'closing the hovercards must restore the initial history delay')
+    await page.waitForSelector(`${firstGroupCard} .history-section`)
     assert.equal(await page.$eval('.group-hovercards .tab-hovercard-stack', stack => {
         const wideCard = stack.querySelector('.history-beside').getBoundingClientRect()
         const otherCard = stack.querySelector('.hovercard-content:not(.history-beside)').getBoundingClientRect()
@@ -548,6 +603,12 @@ try {
         const history = card.querySelector('.history-section').getBoundingClientRect()
         return !card.classList.contains('history-beside') && card.offsetWidth === 320 && history.top >= screenshot.bottom
     }), true, 'top-bar hovercards keep history below the screenshot on wide windows')
+    await page.evaluate(() => window.mountMetadataHovercard())
+    await page.waitForSelector('#metadata-hovercard-fixture .history-section')
+    assert.deepEqual(await page.$eval('#metadata-hovercard-fixture .hovercard-metadata', metadata => [...metadata.querySelectorAll('time')].map(time => time.dateTime)), await page.evaluate(() => [window.data.docs['closed-two'].created, window.data.docs['closed-two'].closedAt].map(timestamp => new Date(timestamp).toISOString())), 'closed metadata must prefer its recorded close time over later modifications')
+    await page.setViewport({ width: 375, height: 800 })
+    assert.equal(await page.$eval('#metadata-hovercard-fixture .hovercard-metadata', metadata => metadata.clientHeight === 180 && metadata.scrollWidth === metadata.clientWidth && metadata.textContent.includes('Closed')), true, 'closed-tab details must fit the same preview area on narrow screens')
+    await (await page.$('#metadata-hovercard-fixture .hovercard-content')).screenshot({ path: `${root}.cache/closed-tab-metadata.png` })
 
     const previewRequests = []
     await page.setRequestInterception(true)

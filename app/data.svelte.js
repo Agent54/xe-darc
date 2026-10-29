@@ -1169,6 +1169,7 @@ function closeTab (spaceId, tabId, { createReplacement = true } = {}) {
     ]
     return queueDocumentUpdate(tabId, {
         closed: true, // legacy > make timestamp
+        closedAt: Date.now(),
         archive: discard ? 'deleted' : 'closed',
         ...(discard ? { deleted: true } : {}),
         modified: Date.now()
@@ -1791,6 +1792,7 @@ const data = {
             _id,
             id: _id,
             type: 'tab',
+            created: Date.now(),
             spaceId,
             favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64` : undefined,
             url: url || 'about:newtab',

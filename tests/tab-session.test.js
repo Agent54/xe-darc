@@ -558,9 +558,11 @@ Deno.test('new tabs activate and show their buttons before the first async bound
     assert.equal(data.spaceMeta.activeTabId, newId)
     assert.equal(data.ui.tabActivation.tabId, newId)
     assert.equal(data.docs[newId].url, 'about:newtab')
+    assert.ok(data.docs[newId].created > 0)
     assert.equal(data.isTabHibernated(newId), false)
     finishCreation()
     await creating
+    assert.equal((await db.get(newId)).created, data.docs[newId].created)
 })
 
 Deno.test('new tab navigation publishes URL and loading state while storage and the frame are unavailable', async () => {
@@ -919,6 +921,8 @@ Deno.test('closing new tab pages with back or forward history and regular pages 
         await data.closeTab(defaultSpace, 'closing')
         assert.equal(data.spaceMeta.closedTabs.some(tab => tab.id === 'closing'), true)
         assert.equal(writes.findLast(doc => doc._id === 'closing').archive, 'closed')
+        assert.ok(data.docs.closing.closedAt > 0)
+        assert.equal(writes.findLast(doc => doc._id === 'closing').closedAt, data.docs.closing.closedAt)
         await data.restoreClosedTab('closing')
         assert.equal(data.spaces[defaultSpace].tabs.some(tab => tab.id === 'closing'), true)
     }

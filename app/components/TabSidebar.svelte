@@ -5,7 +5,7 @@
 </script>
 
 <script>
-    import { cdpFetch } from '../lib/cdp.js'
+    import { openTabDevTools } from '../lib/tab-devtools.js'
     // Tab sidebar component with Firefox-like hover behavior
     let { 
         isDragEnabled = true,
@@ -20,6 +20,7 @@
         onNavigateHistory = null,
         onReload = null,
         onCloseTab = null,
+        onSettings = null,
         showUrl = true
     } = $props()
     import data from '../data.svelte.js'
@@ -96,6 +97,7 @@
     let hovercardUrlBarExpanded = $state(false)
     let expandedHovercardTabs = $state({})
     let expandedHovercardHistoryTabId = $state(null)
+    let hovercardHistoryReady = $state(false)
     let menuCloseTimeout = null
     
     // Resize handle visibility - only enable after sidebar is fully shown
@@ -152,6 +154,7 @@
         hovercardAnchor = null
         hovercardShowTime = null
         expandedHovercardHistoryTabId = null
+        hovercardHistoryReady = false
     }
     
     onMount(() => {
@@ -161,6 +164,7 @@
             hovercardAnchor = null
             hovercardShowTime = null
             expandedHovercardHistoryTabId = null
+            hovercardHistoryReady = false
             if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
         }
         window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
@@ -1154,7 +1158,7 @@
         hovercardHistoryBeside = canFitSidebarHovercardHistory(hovercardAnchor.getBoundingClientRect(), window.innerWidth)
         hovercardPosition = getSidebarHovercardPosition(
             hovercardAnchor.getBoundingClientRect(), target.group ? 336 : 328,
-            target.tabs.reduce((height, tab) => height + (tab.screenshot ? 260 : 80) + 8, 0), window.innerWidth, window.innerHeight
+            target.tabs.length * 268, window.innerWidth, window.innerHeight
         )
         hoveredGroupTarget = target.group
         hoveredTab = target.tab
@@ -1521,81 +1525,8 @@
         }
     }
 
-    async function handleDevToolsClick() {
-        try {
-            // Get dev tools list to find the correct context ID
-            const response = await cdpFetch('/json/list')
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-            }
-            const devToolsData = await response.json()
-            
-            const activeTab = data.docs[data.spaceMeta.activeTabId]
-            if (!activeTab?.url) return
-            
-            // Find matching dev tools entry for current tab URL
-            let matchingItem = devToolsData.find(item => {
-                return item.url === activeTab.url || item.title === activeTab.title
-            })
-            
-            // If multiple URLs exist for the same site, use hash trick to find correct ID
-            if (!matchingItem && devToolsData.length > 1) {
-                const originalUrl = activeTab.url
-                const randomHash = Math.random().toString(36).substring(2, 15)
-                
-                try {
-                    // Change URL hash to identify this specific tab
-                    const urlWithHash = originalUrl.includes('#') 
-                        ? originalUrl.replace(/#.*$/, `#${randomHash}`)
-                        : `${originalUrl}#${randomHash}`
-                    
-                    // Navigate to the URL with hash
-                    data.navigate(data.spaceMeta.activeTabId, urlWithHash)
-                    
-                    // Wait a moment for the change to register
-                    await new Promise(resolve => setTimeout(resolve, 1))
-                    
-                    // Fetch updated dev tools list
-                    const updatedResponse = await cdpFetch('/json/list')
-                    if (updatedResponse.ok) {
-                        const updatedData = await updatedResponse.json()
-                        matchingItem = updatedData.find(item => item.url?.includes(randomHash))
-                    }
-                    
-                    // Restore original URL
-                    data.navigate(data.spaceMeta.activeTabId, originalUrl)
-                } catch (err) {
-                    console.warn('Hash trick failed:', err)
-                }
-            }
-            
-            // Default to first item if still no match
-            if (!matchingItem && devToolsData.length > 0) {
-                matchingItem = devToolsData[0]
-            }
-            
-            if (matchingItem?.devtoolsFrontendUrl) {
-                // The API supplies the matching frontend and the launcher's debugger URL.
-                const localDevToolsUrl = matchingItem.devtoolsFrontendUrl
-                
-                await data.newTab(data.spaceMeta.activeSpace, { 
-                    url: localDevToolsUrl, 
-                    title: `DevTools - ${activeTab.title || 'Untitled'}`,
-                    shouldFocus: true,
-                    pinned: 'right'
-                })
-                
-                // if (devToolsTab) {
-                //     // Pin the dev tools tab to the right after a small delay to ensure DB persistence
-                //     setTimeout(() => {
-                //         data.pin({ tabId: devToolsTab.id, pinned: 'right' })
-                //     }, 1)
-                //     data.activate(devToolsTab.id)
-                // }
-            }
-        } catch (err) {
-            console.error('Failed to open dev tools:', err)
-        }
+    function handleDevToolsClick() {
+        return openTabDevTools(data, data.spaceMeta.activeTabId)
     }
 
     function handleBackgroundDoubleClick() {
@@ -1672,6 +1603,7 @@
                     onReload={handleReloadClick}
                     onCloseTab={handleCloseTabClick}
                     onDevTools={handleDevToolsClick}
+                    {onSettings}
                     onExpandedChange={(v) => urlBarExpanded = v}
                 />
             {/if}
@@ -2190,16 +2122,21 @@
                         bind:showHistory={
                             () => expandedHovercardHistoryTabId === previewTab.id,
                             (visible) => {
-                                if (visible) expandedHovercardHistoryTabId = previewTab.id
+                                if (visible) {
+                                    expandedHovercardHistoryTabId = previewTab.id
+                                    hovercardHistoryReady = true
+                                }
                                 else if (expandedHovercardHistoryTabId === previewTab.id) expandedHovercardHistoryTabId = null
                             }
                         }
                         isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === previewTab.id)}
                         showHistoryImmediately={!hoveredGroupTarget && closeButtonHoveredDelayed}
+                        historyDelay={hovercardHistoryReady ? 0 : 1500}
                         instantMode={instantHovercardsMode}
                         showDevTools={devModeEnabled}
                         availableHeight={window.innerHeight - hovercardPosition.y - 20}
-                        onDevTools={() => { activateHovercardTab(previewTab); handleDevToolsClick() }}
+                        onDevTools={() => openTabDevTools(data, previewTab.id)}
+                        {onSettings}
                         onGoBack={() => {
                             activateHovercardTab(previewTab)
                             setTimeout(() => {
