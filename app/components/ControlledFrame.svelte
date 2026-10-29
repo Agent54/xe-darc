@@ -10,6 +10,8 @@
     import { generateDiff, throttle } from '../lib/utils.js'
     import select from '../inject/select-patch.js?raw'
     import ipc from '../inject/ipc.js?raw'
+    import { connectFrameIPC } from '../lib/frame-ipc.js'
+    import { getFrameShortcutScript } from '../lib/shortcuts.js'
     import contextMenu from '../inject/context-menu.js?raw'
     import zoomControl from '../inject/zoom-control.js?raw'
 
@@ -412,7 +414,47 @@
         tab.audioPlaying = event.audible
     }
 
+    function isDirectNavigation(url, requestId = null) {
+        const navigation = data.frames[tab.id]?.directNavigation
+        if (!navigation || !url || !navigation.urls.includes(url.split('#')[0])) {
+            return false
+        }
+        if (requestId !== null && navigation.requestId !== null && navigation.requestId !== requestId) {
+            return false
+        }
+        if (requestId !== null) {
+            navigation.requestId = requestId
+        }
+        return true
+    }
+
+    function handleLoadRedirect(tab, event) {
+        const info = event.loadRedirectInfo || event
+        if (info.isTopLevel === false) {
+            return
+        }
+        const oldUrl = info.oldUrl || event.request?.url || event.url
+        const newUrl = info.newUrl || event.response?.redirectURL || event.redirectUrl
+        const requestId = event.request?.id ?? event.requestId ?? null
+        if (newUrl && isDirectNavigation(oldUrl, requestId)) {
+            data.frames[tab.id].directNavigation.urls.push(newUrl.split('#')[0])
+        }
+    }
+
+    function handleLoadCommit(tab, event) {
+        const info = event.loadInfo || event
+        if (!info.isTopLevel || !data.frames[tab.id]) {
+            return
+        }
+        data.frames[tab.id].committedUrl = info.url
+        if (isDirectNavigation(info.url)) {
+            data.frames[tab.id].directNavigation = null
+        }
+        updateTabMeta(tab)
+    }
+
     function handleLoadAbort(tab, event) {
+        event = event.loadAbortInfo || event
         if (!event.isTopLevel) {
             return
         }
@@ -420,6 +462,10 @@
         console.log('🚨 onloadabort', event)
         if (!tab) {
             return
+        }
+
+        if (isDirectNavigation(event.url)) {
+            data.frames[tab.id].directNavigation = null
         }
 
         // Load failed, stop loading immediately
@@ -542,6 +588,7 @@
     // }
 
     function handleLoadStart(tab, event) {
+        event = event.loadInfo || event
         if (!event.isTopLevel) {
             return
         }
@@ -558,8 +605,9 @@
 
         // Fallback off-origin blocking in loadstart (main blocking is in onBeforeRequest)
         // This catches edge cases where the request handler didn't fire
-        if (event?.url && tab.url && data.frames[tab.id]?.navigationSource !== 'browser') {
-            const currentOrigin = origin(tab.url)
+        if (event?.url && tab.url && !isDirectNavigation(event.url)) {
+            const currentTabUrl = data.frames[tab.id]?.committedUrl || tab.url
+            const currentOrigin = origin(currentTabUrl)
             const targetOrigin = origin(event.url)
             
             // Skip origin check for about: pages and same-origin navigation
@@ -587,7 +635,7 @@
                 // Create new tab/lightbox for off-origin navigation
                 // Command+click always opens in new tab (not lightbox), in background
                 // Otherwise check if origin has 'navigate-off-origin' permission
-                const useLightbox = shouldUseLightboxForOffOrigin(tab.url, isCommandKeyDown)
+                const useLightbox = shouldUseLightboxForOffOrigin(currentTabUrl, isCommandKeyDown)
                 const shouldFocus = !isCommandKeyDown
                 
                 data.newTab(data.spaceMeta.activeSpace, {
@@ -604,14 +652,12 @@
         }
 
         evaluateSecurityState(tab)
-        updateTabMeta(tab)
     }
 
     function handleLoadStop(tab) {
         // console.log('stopped', {tab})
         // console.log('handleLoadStop', data.frames[tab.id]?.frame?.src)
         if (!data.frames[tab.id]) return
-        data.frames[tab.id].navigationSource = null
         const wasLoading = data.frames[tab.id].loading
         data.frames[tab.id].loading = false
         data.frames[tab.id].initialLoad = true
@@ -623,7 +669,7 @@
         // console.log(`handleLoadStop called for`, {tab, e, currentNetworkErr})
 
         // Get actual URL from frame if available (more reliable than tab.url during navigation)
-        const frameUrl = data.frames[tab.id]?.frame?.src || tab.url
+        const frameUrl = data.frames[tab.id]?.committedUrl || data.frames[tab.id]?.frame?.src || tab.url
         
         // Don't set favicon for about: URLs - let Favicon.svelte handle it
         if (!frameUrl?.startsWith('about:')) {
@@ -676,6 +722,7 @@
     }
 
     function handleNewWindow(tab, e) {
+        e = e.newWindow || e
         // Check for modifier keys in the event
         // windowOpenDisposition can be: "new_foreground_tab", "new_background_tab", "new_popup", "new_window"
         // Cmd+click typically sets this to "new_background_tab"
@@ -742,7 +789,7 @@
         console.log('Creating OAuth popup for:', e.targetUrl)
         
         // Create the popup frame immediately
-        const popupFrame = document.createElement('controlledframe')
+        const popupFrame = createControlledFrame()
         popupFrame.classList.add('oauth-popup-frame')
         popupFrame.partition = parentTab.partition || 'persist:myapp'
         popupFrame.src = e.targetUrl
@@ -783,6 +830,7 @@
 
     async function updateTabMeta(tab) {
         if (isNewTabUrl(tab?.url) || isTabHistoryUrl(tab?.url)) return
+        if (data.frames[tab.id]?.directNavigation) return
         
         let frame = null
         if (!frame) {
@@ -790,7 +838,7 @@
         }
         if (!frame) return
 
-        let url = frame.src || tab.url
+        let url = data.frames[tab.id]?.committedUrl || frame.src || tab.url
         const requestedUrl = data.docs[tab.id]?.url
 
         // For about: URLs, clear favicon but preserve existing title
@@ -829,7 +877,7 @@
             }
 
             // console.log('updateTabMeta', {favicon, title, url})
-            if (data.frames[tab.id]?.frame !== frame || frame.src !== url || data.docs[tab.id]?.url !== requestedUrl) {
+            if (data.frames[tab.id]?.frame !== frame || (data.frames[tab.id]?.committedUrl || frame.src) !== url || data.docs[tab.id]?.url !== requestedUrl) {
                 return
             }
             data.updateTab(tab.id, { favicon, title, url })
@@ -859,6 +907,8 @@ function setupContentScripts(frame) {
             js: {
                 code: `
 const tabId = '${tab?.id || tabId}';
+
+${getFrameShortcutScript(tab?.id || tabId)}
 
 ${ipc}
 
@@ -1143,12 +1193,13 @@ document.addEventListener('input', function(event) {
             frame.src = untrack(() => tab.url)
         } else {
             frame.addContentScripts([...systemInjections, ...userInjections]).then((res) => {
-            console.log('####### 💉 [INJECT] Successful script injection | tabId:', tab?.id || tabId, '| res:', res)
+                if (frame.src === 'about:blank') return
+                console.log('####### 💉 [INJECT] Successful script injection | tabId:', tab?.id || tabId, '| res:', res)
 
-            frame.src  = untrack(() => tab.url)
+                frame.src = untrack(() => tab.url)
             
-            // Now add the focus/blur script
-            // return frame.addContentScripts([contentScript])
+                // Now add the focus/blur script
+                // return frame.addContentScripts([contentScript])
             }).catch((err) => {
                 console.error('❌ inject error:', err)
             })
@@ -1203,11 +1254,12 @@ document.addEventListener('input', function(event) {
         // Log all request events with full details
         frame.request.onBeforeRequest.addListener((details) => {
             const url = new URL(details.url || details.request.url)
-            const requestType = details.type || details.request?.type
+            const requestType = (details.request?.type || details.type)?.replaceAll('_', '-')
+            const requestId = details.request?.id ?? details.requestId ?? null
             
             // Block off-origin main_frame navigations BEFORE they start (more reliable than frame.stop())
-            if (requestType === 'main_frame' && data.frames[tab.id]?.navigationSource !== 'browser') {
-                const currentTabUrl = tab?.url
+            if (requestType === 'main-frame' && !isDirectNavigation(url.href, requestId)) {
+                const currentTabUrl = data.frames[tab.id]?.committedUrl || tab?.url
                 if (currentTabUrl) {
                     const currentOrigin = origin(currentTabUrl)
                     const targetOrigin = origin(url.href)
@@ -1395,6 +1447,10 @@ document.addEventListener('input', function(event) {
         }, allUrlsFilter)
 
         frame.request.onBeforeRedirect.addListener((details) => {
+            const requestType = (details.request?.type || details.type)?.replaceAll('_', '-')
+            if (requestType === 'main-frame') {
+                handleLoadRedirect(tab, details)
+            }
             console.log('🔄 Redirect:', {
                 requestId: details.requestId,
                 url: details.url,
@@ -1416,6 +1472,11 @@ document.addEventListener('input', function(event) {
         // }, allUrlsFilter)
 
         frame.request.onCompleted.addListener((details) => {
+            const requestId = details.request?.id ?? details.requestId ?? null
+            const requestType = (details.request?.type || details.type)?.replaceAll('_', '-')
+            if (requestType === 'main-frame' && requestId !== null && isDirectNavigation(details.request?.url || details.url, requestId)) {
+                data.frames[tab.id].directNavigation = null
+            }
             // console.log('✅ Request Completed:', {
             //     requestId: details.requestId,
             //     url: details.url,
@@ -1426,6 +1487,11 @@ document.addEventListener('input', function(event) {
         }, allUrlsFilter)
 
         frame.request.onErrorOccurred.addListener((details) => {
+            const requestId = details.request?.id ?? details.requestId ?? null
+            const requestType = (details.request?.type || details.type)?.replaceAll('_', '-')
+            if (requestType === 'main-frame' && requestId !== null && isDirectNavigation(details.request?.url || details.url, requestId)) {
+                data.frames[tab.id].directNavigation = null
+            }
             // details.error !== 'net::ERR_BLOCKED_BY_ORB' &&
             if (details.error !== 'net::ERR_BLOCKED_BY_CLIENT') {
                     console.error('❌ Request Error:', {
@@ -1568,7 +1634,9 @@ document.addEventListener('input', function(event) {
             // console.log('consolemessage', event)
             const message = event.message
             
-            if (message === 'iwa:focus') {
+            if (message === `iwa:ipc-ready:${mytab.id}`) {
+                connectFrameIPC(frame, mytab.id)
+            } else if (message === 'iwa:focus') {
                 // console.log('####### 🎯 [FOCUS-RECV] Received iwa:focus from inside frame | tabId:', tab?.id || tabId)
                 onFrameFocus(tab?.id || tabId)
             } else if (message === 'iwa:blur') {
@@ -1588,52 +1656,13 @@ document.addEventListener('input', function(event) {
                     isCommandKeyDown = false
                     commandKeyPressed = false
                 }
-            } else if (message.startsWith('iwa:close-tab:')) {
-                // Extract tab ID from message - handle colons in tab ID
-                const tabId = message.substring('iwa:close-tab:'.length)
-                console.log(`Controlled frame ${tabId} requested tab close`)
-                
-                // Dispatch custom event to app shell to close this tab
-                window.dispatchEvent(new CustomEvent('darc-close-tab-from-frame', {
-                    detail: { 
-                        tabId: tabId,
-                        sourceFrame: `tab_${tabId}`
-                    }
-                })) 
-            } else if (message.startsWith('iwa:new-tab:')) {
-                // Extract tab ID from message - handle colons in tab ID
-                const tabId = message.substring('iwa:new-tab:'.length)
-                console.log(`Controlled frame ${tabId} requested new tab`)
-                
-                // Dispatch custom event to app shell to open new tab
-                window.dispatchEvent(new CustomEvent('darc-new-tab-from-frame', {
-                    detail: { 
-                        tabId: tabId,
-                        sourceFrame: `tab_${mytab.id}`
-                    }
-                }))
-            } else if (message.startsWith('iwa:reload-tab:')) {
-                // Extract tab ID from message - handle colons in tab ID
-                const tabId = message.substring('iwa:reload-tab:'.length)
-                
-                // Dispatch custom event to app shell to reload this tab
-                window.dispatchEvent(new CustomEvent('darc-reload-tab-from-frame', {
-                    detail: { 
-                        tabId: tabId,
-                        sourceFrame: `tab_${mytab.id}`
-                    }
-                }))
-            } else if (message.startsWith('iwa:key:')) {
-                // Generic key event from frame - format: iwa:key:{keyName}:{tabId}
-                const parts = message.split(':')
-                const keyName = parts[2]
-                window.dispatchEvent(new CustomEvent('darc-key-from-frame', {
-                    detail: { 
-                        key: keyName,
-                        tabId: mytab.id,
-                        sourceFrame: `tab_${mytab.id}`
-                    }
-                }))
+            } else if (message.startsWith('iwa:shortcut:')) {
+                try {
+                    const detail = JSON.parse(message.slice('iwa:shortcut:'.length))
+                    if (detail.tabId === mytab.id) window.dispatchEvent(new CustomEvent('darc-shortcut', { detail }))
+                } catch (error) {
+                    console.warn('Invalid frame shortcut message', error)
+                }
             } else if (message.startsWith('iwa:link-enter:')) {
                 const prefix = 'iwa:link-enter:'
                 const remainingMessage = message.substring(prefix.length)
@@ -2062,11 +2091,12 @@ document.addEventListener('input', function(event) {
 
         let addNode = false
         if (!controlledFrame && currentTab && !isInternalPage) {
-            controlledFrame = document.createElement('controlledframe')
+            controlledFrame = createControlledFrame()
             const mytab = untrack(() => tab)
 
             data.frames[tabId].frame = controlledFrame
             data.frames[tabId].pendingLoad = false
+            data.frames[tabId].directNavigation = { urls: [mytab.url.split('#')[0]], requestId: null }
             addNode = true
 
             controlledFrame.classList.add('frame-instance')
@@ -2077,11 +2107,12 @@ document.addEventListener('input', function(event) {
             controlledFrame.onaudiostatechanged = throttle(e => handleAudioStateChanged(mytab, e), 500, {leading: false})
             
             // fired when navigation (including reloads and traversals) starts, for every navigable of the embedded document, but not same document navigation.
-            // Navigation policy must run before loadstop clears the direct-navigation exemption.
+            // Navigation policy must run before metadata can advance to the destination.
             controlledFrame.onloadstart = e => handleLoadStart(mytab, e)
             
             // fired when navigation has been completed.
             // controlledFrame.onloadcommit =  throttle(e => handleLoadCommit(mytab, e), 500, {leading: false})
+            controlledFrame.onloadcommit = e => handleLoadCommit(mytab, e)
             
             // fired when all pending navigations finish(either commit or abort). If a new navigation starts after, loadstop may fire again.
             controlledFrame.onloadstop = e => handleLoadStop(mytab, e)
@@ -2090,13 +2121,13 @@ document.addEventListener('input', function(event) {
             // controlledFrame.oncontentload =  throttle(e => handleContentLoad(mytab, e), 500, {leading: false})
 
             // fired when navigation has exited before completion.
-            controlledFrame.onloadabort =  throttle(e => handleLoadAbort(mytab, e), 500, {leading: false})
+            controlledFrame.onloadabort = e => handleLoadAbort(mytab, e)
 
             controlledFrame.onclose = e => handleEvent('onclose', mytab, e)
             controlledFrame.oncontentresize = e => handleEvent('oncontentresize',mytab, e)
             controlledFrame.ondialog = e => handleEvent('ondialog',mytab, e)
             controlledFrame.onexit = e => handleEvent('onexit',mytab, e)
-            controlledFrame.onloadredirect = e => handleEvent('onloadredirect',mytab, e)
+            controlledFrame.onloadredirect = e => handleLoadRedirect(mytab, e)
             // controlledFrame.onloadredirect= (e) => { 
             //     console.log(onloadredirect', e)
             //     //         handleEvent('onloadredirect',tab, e)
@@ -2166,7 +2197,40 @@ document.addEventListener('input', function(event) {
         }
     })
     
-    function detach () {
+    function createControlledFrame() {
+        const frame = document.createElement('controlledframe')
+        const remove = frame.remove.bind(frame)
+        // Hibernation can remove a parked frame after its wrapper has unmounted.
+        frame.remove = () => {
+            releaseControlledFrame(frame)
+            remove()
+        }
+        return frame
+    }
+
+    function releaseControlledFrame(frame) {
+        frame.ipcPort?.close()
+        frame.ipcPort = null
+        // Keep the final navigation out of tab metadata and cancel queued callbacks.
+        for (const event of [
+            'newwindow', 'audiostatechanged', 'loadstart', 'loadstop', 'loadabort', 'loadcommit',
+            'close', 'contentresize', 'dialog', 'exit', 'loadredirect',
+            'permissionrequest', 'resize', 'responsive', 'sizechanged',
+            'unresponsive', 'consolemessage'
+        ]) {
+            frame[`on${event}`]?.cancel?.()
+            frame[`on${event}`] = null
+        }
+        // Release the guest page before its element leaves the DOM.
+        frame.src = 'about:blank'
+    }
+
+    function detach (node) {
+        const instance = node.querySelector('controlledframe')
+        if (instance && (!tab?._id || instance !== data.frames[tabId]?.frame)) {
+            releaseControlledFrame(instance)
+        }
+
         if (!tab?._id) {
             tab?.id && delete data.frames[tab.id]
             return {
@@ -2198,6 +2262,7 @@ document.addEventListener('input', function(event) {
         if (oauthPopup?.frame) {
             try {
                 if (oauthPopup.frame.parentNode) {
+                    releaseControlledFrame(oauthPopup.frame)
                     oauthPopup.frame.parentNode.removeChild(oauthPopup.frame)
                 }
             } catch (error) {
@@ -2345,6 +2410,7 @@ document.addEventListener('input', function(event) {
         return {
             destroy() {
                 if (frame && frame.parentNode) {
+                    releaseControlledFrame(frame)
                     frame.parentNode.removeChild(frame)
                 }
             }

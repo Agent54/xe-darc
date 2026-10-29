@@ -13,11 +13,13 @@ const modules = {
         import Sidebar from './app/components/TabSidebar.svelte'
         import TabHoverCard from './app/components/TabHoverCard.svelte'
         import LinkPreviewFavicon from './app/components/LinkPreviewFavicon.svelte'
-        import { tabDrag } from './app/lib/tab-drag.svelte.js'
+        import { tabDrag, onDrop } from './app/lib/tab-drag.svelte.js'
         import data from 'fixture-data'
         window.data = data
         window.flushSync = flushSync
         window.tabDrag = tabDrag
+        window.pinDrops = []
+        onDrop(drop => window.pinDrops.push(drop))
         window.mountTopbarHovercard = () => {
             const target = document.createElement('div')
             target.id = 'topbar-hovercard-fixture'
@@ -70,7 +72,18 @@ const modules = {
         data.getGroupActiveTab = group => data.spaces.space.activeTabsOrder.map(id => group.tabs.find(tab => tab.id === id)).find(Boolean) || group.tabs[0]
         data.ungroupTabGroup = (tabId, spaceId) => data.menuActions.push({ action: 'ungroup', tabId, spaceId })
         data.closeTabGroup = (tabId, spaceId) => data.menuActions.push({ action: 'close', tabId, spaceId })
+        data.updateTabOverrides = async (tabId, update) => Object.assign(data.docs[tabId], update)
         data.getSpacePins = spaceId => data.spaces[spaceId].pinnedTabs
+        data.pinSidebarTab = options => data.menuActions.push({ action: 'sidebar-pin', ...options })
+        data.newTab = async spaceId => {
+            const newTab = tab('new-normal', '/one.svg', { spaceId })
+            data.spaces[spaceId].tabs.unshift(newTab)
+            data.docs[newTab.id] = newTab
+            return newTab
+        }
+        data.activateSpace = spaceId => { data.spaceMeta.activeSpace = spaceId }
+        data.activate = tabId => { data.spaceMeta.activeTabId = tabId }
+        data.previous = () => {}
         data.isTabHibernated = () => false
         data.getTabLastActiveAt = id => data.docs[id]?.lastActiveAt || 0
         data.getAttachmentUrl = async src => src
@@ -158,14 +171,283 @@ try {
     await page.goto(`http://127.0.0.1:${server.addr.port}`)
     await page.waitForFunction(() => document.querySelector('.closed-tab-item .fallback-favicon'))
     assert.deepEqual(errors, [])
+    assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), false, 'loading closed history must not flash the preview')
+    await page.evaluate(() => {
+        window.previewFixtureClosedTabs = [...window.data.spaceMeta.closedTabs]
+        window.closePreviewFixtureTab = (id, age = 0) => window.flushSync(() => {
+            const tab = { id, title: id, type: 'tab', spaceId: 'space', url: 'https://example.com', closedAt: Date.now() - age }
+            window.data.docs[id] = tab
+            window.data.spaceMeta.closedTabs = [tab, ...window.data.spaceMeta.closedTabs.filter(tab => tab.id !== id)]
+        })
+        // A freshly modified old entry must not qualify as a fresh close.
+        window.flushSync(() => { window.data.spaceMeta.closedTabs[2].modified = Date.now() })
+    })
+    assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), false)
+    await page.evaluate(() => window.closePreviewFixtureTab('preview-first'))
+    assert.deepEqual(await page.$$eval('.closed-tab-item', rows => rows.map(row => row.dataset.tabId)), ['preview-first'], 'the automatic preview must exclude older history')
+    await new Promise(resolve => setTimeout(resolve, 600))
+    await page.evaluate(() => window.closePreviewFixtureTab('preview-second'))
+    assert.deepEqual(await page.$$eval('.closed-tab-item', rows => rows.map(row => row.dataset.tabId)), ['preview-second', 'preview-first'])
+    await new Promise(resolve => setTimeout(resolve, 600))
+    assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), true, 'another close must restart the one-second preview')
+    await page.evaluate(() => window.closePreviewFixtureTab('preview-second'))
+    await new Promise(resolve => setTimeout(resolve, 600))
+    assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), true, 'closing the same tab again must restart the timer even when the history length stays the same')
+    await page.waitForFunction(() => !document.querySelector('.closed-tabs-content').classList.contains('expanded'))
+    await page.evaluate(() => window.flushSync(() => { window.data.ui.sidebarVisible = false }))
+    await page.mouse.move(700, 100)
+    await new Promise(resolve => setTimeout(resolve, 650))
+    await page.evaluate(() => {
+        window.closePreviewFixtureTab('preview-expiring', 9800)
+        window.closePreviewFixtureTab('preview-hidden')
+    })
+    assert.equal(await page.$eval('.sidebar-box', el => el.getBoundingClientRect().left < -100), true, 'the rest of the sidebar must remain tucked away')
+    assert.equal(await page.$eval('.closed-tabs-content', el => {
+        const rect = el.getBoundingClientRect()
+        return rect.left >= 0 && rect.right > 200 && getComputedStyle(el).visibility === 'visible'
+    }), true, 'the preview must be visible even with a hidden sidebar')
+    await page.waitForFunction(() => !document.querySelector('.closed-tab-item[data-tab-id="preview-expiring"]'))
+    assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), true, 'rows must expire at ten seconds while the preview is still open')
+    assert.equal(await page.$eval('.closed-tab-item[data-tab-id="preview-hidden"]', row => {
+        const rect = row.getBoundingClientRect()
+        return row.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))
+    }), true, 'the tucked-away sidebar preview must allow clicking a closed tab')
+    await page.hover('.closed-tabs-header')
+    await page.waitForFunction(() => document.querySelector('.closed-tab-item[data-tab-id="closed-two"]'))
+    await page.waitForFunction(() => !document.querySelector('.sidebar-box').classList.contains('closed-tabs-preview'))
+    assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), true, 'hovering must keep the full history open after the preview expires')
+    await page.mouse.move(700, 100)
+    await page.waitForFunction(() => !document.querySelector('.closed-tabs-content').classList.contains('expanded'))
+    await page.evaluate(() => window.flushSync(() => {
+        window.data.spaceMeta.closedTabs = window.previewFixtureClosedTabs
+        window.data.ui.sidebarVisible = true
+    }))
+    await new Promise(resolve => setTimeout(resolve, 250))
     assert.deepEqual(await page.$eval('.sidebar-window-drag', strip => {
         const rect = strip.getBoundingClientRect()
-        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, region: getComputedStyle(strip).getPropertyValue('-webkit-app-region'), reachable: document.elementFromPoint(200, 17) === strip, clearsControls: document.querySelector('.search-toggle-tab').getBoundingClientRect().top >= rect.bottom }
-    }), { left: 0, top: 0, width: 263, height: 35, region: 'drag', reachable: true, clearsControls: true }, 'the open sidebar must provide its own unobstructed title-bar drag strip')
+        const button = document.querySelector('.search-toggle-tab')
+        const control = button.getBoundingClientRect()
+        const header = document.querySelector('.sidebar-header')
+        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, region: getComputedStyle(strip).getPropertyValue('-webkit-app-region'), reachable: document.elementFromPoint(200, 4) === strip, sidebarTop: document.querySelector('.sidebar-box').getBoundingClientRect().top, controlsTop: control.top, controlsReachable: button.contains(document.elementFromPoint(control.left + control.width / 2, control.top + control.height / 2)), controlsRegion: getComputedStyle(button).getPropertyValue('-webkit-app-region'), headerRegion: getComputedStyle(header).getPropertyValue('-webkit-app-region'), headerReachable: header.contains(document.elementFromPoint(200, 24)) }
+    }), { left: 0, top: 0, width: 263, height: 9, region: 'drag', reachable: true, sidebarTop: 9, controlsTop: 17, controlsReachable: true, controlsRegion: 'no-drag', headerRegion: 'drag', headerReachable: true }, 'the original sidebar layout must stay in place while existing header space remains draggable and controls stay reachable')
     await page.evaluate(() => window.flushSync(() => { window.data.ui.dragEnabled = false; window.data.ui.sidebarWidth = 320 }))
     assert.equal(await page.$eval('.sidebar-window-drag', strip => getComputedStyle(strip).getPropertyValue('-webkit-app-region')), 'no-drag')
+    assert.equal(await page.$eval('.sidebar-header', header => getComputedStyle(header).getPropertyValue('-webkit-app-region')), 'no-drag')
     assert.equal(await page.$eval('.sidebar-window-drag', strip => strip.getBoundingClientRect().width), 320)
     await page.evaluate(() => window.flushSync(() => { window.data.ui.dragEnabled = true; window.data.ui.sidebarWidth = 263 }))
+    const testPinDragging = async () => {
+    const beginPinDrag = async selector => {
+        const source = await page.$eval(selector, el => {
+            const r = el.getBoundingClientRect()
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        })
+        await page.mouse.move(source.x, source.y)
+        await page.mouse.down()
+        await page.mouse.move(source.x + 8, source.y + 8)
+        await page.waitForFunction(() => window.tabDrag.active)
+    }
+    const moveToPinTarget = async (selector, edge = false) => {
+        const target = await page.$eval(selector, el => {
+            const r = el.getBoundingClientRect()
+            return { x: r.left + r.width / 2, y: r.top, height: r.height }
+        })
+        await page.mouse.move(target.x, target.y + (edge ? 2 : target.height / 2))
+    }
+    await beginPinDrag('[data-tab-id="outside"] .tab-item-main')
+    await moveToPinTarget('[data-pin-scope="space"] .pin-drop-placeholder')
+    assert.equal(await page.evaluate(() => window.tabDrag.dropTarget?.pinScope), 'space')
+    await page.mouse.up()
+    assert.deepEqual(await page.evaluate(() => ({ type: window.pinDrops.at(-1).type, tabId: window.pinDrops.at(-1).tabId, space: window.pinDrops.at(-1).targetSpaceId })), { type: 'pin', tabId: 'outside', space: 'space' })
+
+    await beginPinDrag('[data-tab-id="outside"] .tab-item-main')
+    await moveToPinTarget('[data-pin-scope="global"] [data-tab-id="pin-two"]')
+    await page.mouse.up()
+    assert.equal(await page.evaluate(() => window.pinDrops.at(-1).pinScope), 'global')
+    await page.evaluate(() => window.flushSync(() => {
+        const tab = { ...window.data.docs.outside, id: 'space-pin', pinned: 'left', pinScope: 'space' }
+        window.data.docs[tab.id] = tab
+        window.data.spaces.space.pinnedTabs = [tab]
+    }))
+    await beginPinDrag('[data-pin-scope="space"] [data-tab-id="space-pin"]')
+    await moveToPinTarget('[data-pin-scope="global"] [data-tab-id="pin-two"]')
+    await page.mouse.up()
+    assert.equal(await page.evaluate(() => window.pinDrops.at(-1).tabId), 'space-pin')
+    assert.equal(await page.evaluate(() => window.pinDrops.at(-1).pinScope), 'global')
+
+    await beginPinDrag('[data-pin-scope="global"] [data-tab-id="pin-one"]')
+    await moveToPinTarget('.tabs-list > [data-tab-id="outside"]', true)
+    await page.mouse.up()
+    assert.equal(await page.evaluate(() => window.pinDrops.at(-1).type), 'reorder')
+    assert.equal(await page.evaluate(() => window.pinDrops.at(-1).tabId), 'pin-one')
+    await beginPinDrag('[data-pin-scope="space"] [data-tab-id="space-pin"]')
+    await moveToPinTarget('.tabs-list > [data-tab-id="outside"]', true)
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    assert.equal(await page.evaluate(() => window.pinDrops.length), 4)
+    await page.evaluate(() => window.flushSync(() => {
+        window.savedGlobalPins = window.data.spaceMeta.globalPins
+        window.data.spaceMeta.globalPins = []
+        window.data.spaces.space.pinnedTabs = []
+    }))
+    await beginPinDrag('[data-tab-id="outside"] .tab-item-main')
+    await moveToPinTarget('[data-pin-scope="global"] .pin-drop-placeholder')
+    assert.equal(await page.evaluate(() => window.tabDrag.dropTarget?.pinScope), 'global')
+    await page.mouse.up()
+    await page.evaluate(() => window.flushSync(() => {
+        window.data.spaceMeta.globalPins = window.savedGlobalPins
+        window.data.spaceMeta.activeTabId = null
+    }))
+    await page.mouse.move(790, 590)
+    assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), null, 'dragging pins must not activate them')
+    await page.click('[data-pin-scope="global"] [data-tab-id="pin-one"]')
+    await page.waitForFunction(() => window.data.spaceMeta.activeTabId === 'pin-one')
+    await beginPinDrag('[data-tab-id="outside"] .tab-item-main')
+    await moveToPinTarget('.sidebar-pins-placeholder')
+    assert.equal(await page.evaluate(() => window.tabDrag.dropTarget?.pinScope), 'sidebar')
+    assert.equal(await page.evaluate(() => window.tabDrag.indicator.height), 2)
+    await page.mouse.up()
+    assert.equal(await page.evaluate(() => window.pinDrops.at(-1).pinScope), 'sidebar')
+    await page.evaluate(() => window.flushSync(() => { window.data.docs.outside.sidebarPinned = true }))
+    await page.waitForSelector('.sidebar-pinned-tabs [data-tab-id="outside"] .tab-title')
+    assert.equal(await page.$eval('.sidebar-pinned-tabs .tab-title', title => title.textContent), 'outside')
+    assert.equal(await page.$('.tabs-list [data-tab-id="outside"]'), null, 'sidebar pins must not also appear in normal tabs')
+    assert.equal(await page.$eval('.pinned-tabs-divider', divider => {
+        const newTab = document.querySelector('.new-tab-row').getBoundingClientRect()
+        const pins = document.querySelector('.sidebar-pinned-tabs').getBoundingClientRect()
+        const normal = document.querySelector('.tabs-list').getBoundingClientRect()
+        const rect = divider.getBoundingClientRect()
+        return newTab.bottom <= pins.top && pins.bottom <= rect.top && rect.bottom <= normal.top && !divider.querySelector('button') && !divider.hasAttribute('data-tab-id')
+    }), true, 'the titled pinned section must sit below New Tab with a permanent divider above normal tabs')
+    await page.click('.new-tab-button')
+    await page.waitForSelector('.tabs-list > [data-tab-id="new-normal"]')
+    assert.equal(await page.$('.sidebar-pinned-tabs [data-tab-id="new-normal"]'), null)
+    await page.$eval('.space-content', space => { space.scrollTop = 0 })
+    await page.screenshot({ path: `${root}.cache/sidebar-pinned-tabs.png` })
+    await page.$eval('.sidebar-pinned-tabs [data-tab-id="outside"]', el => el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 100 })))
+    await (await page.waitForSelector('button ::-p-text(Unpin from Sidebar)')).click()
+    assert.deepEqual(await page.evaluate(() => ({ ...window.data.menuActions.at(-1) })), { action: 'sidebar-pin', tabId: 'outside', pinned: false })
+    await beginPinDrag('.sidebar-pinned-tabs [data-tab-id="outside"] .tab-item-main')
+    await moveToPinTarget('.tabs-list > [data-tab-id="new-normal"]', true)
+    await page.mouse.up()
+    assert.equal(await page.evaluate(() => window.pinDrops.at(-1).type), 'reorder')
+    await page.evaluate(() => window.flushSync(() => { window.data.docs.outside.sidebarPinned = null }))
+    await page.waitForSelector('.tabs-list > [data-tab-id="outside"]')
+    assert.ok(await page.$('.pinned-tabs-divider'), 'unpinning the last tab must retain the fixed divider')
+    console.log('Chromium: drag into empty space/global pins, transfer space pins to global pins, drag out and Escape cancellation pass')
+    console.log('Chromium: titled sidebar pins, fixed section ordering/divider, new-tab placement, context menu unpin and drag out pass')
+    }
+
+    const testSidebarScroll = async () => {
+        await page.evaluate(() => window.flushSync(() => {
+            const data = window.data
+            const makeTab = (id, index) => ({ ...data.docs.outside, id, title: id, tabGroupId: null, order: 100 + index })
+            data.spaceMeta.globalPins = Array.from({ length: 80 }, (_, index) => makeTab('global-' + index, index))
+            data.spaces.space.pinnedTabs = Array.from({ length: 80 }, (_, index) => makeTab('app-' + index, index))
+            const tabs = Array.from({ length: 60 }, (_, index) => makeTab('normal-' + index, index))
+            data.spaces.space.tabs.push(...tabs)
+            for (const tab of [...data.spaceMeta.globalPins, ...data.spaces.space.pinnedTabs, ...tabs]) data.docs[tab.id] = tab
+        }))
+        const buttonVisible = () => page.$eval('.new-tab-row', button => {
+            const rect = button.getBoundingClientRect()
+            const space = button.closest('.space-content').getBoundingClientRect()
+            const closed = document.querySelector('.closed-tabs-header').getBoundingClientRect()
+            return rect.top >= space.top - 1 && rect.bottom <= Math.min(space.bottom, closed.top) + 1 && rect.height >= 36
+        })
+        for (const height of [600, 360]) {
+            await page.setViewport({ width: 800, height })
+            await page.$eval('.space-content', space => { space.scrollTop = 0 })
+            assert.equal(await buttonVisible(), true, `New Tab must stay fully visible with crowded pins at ${height}px height`)
+            for (const selector of ['[data-pin-scope="global"]', '[data-pin-scope="space"]']) {
+                assert.equal(await page.$eval(selector, grid => grid.scrollHeight > grid.clientHeight), true, 'crowded app pins must scroll within a limited height')
+                await page.$eval(selector, grid => { grid.scrollTop = grid.scrollHeight })
+                assert.equal(await page.$eval(selector, grid => {
+                    const pin = grid.querySelector('[data-tab-id]:last-child').getBoundingClientRect()
+                    const bounds = grid.getBoundingClientRect()
+                    return pin.bottom <= bounds.bottom + 1 && pin.top >= bounds.top - 1
+                }), true, 'the last app pin must remain reachable')
+                assert.equal(await buttonVisible(), true)
+            }
+        }
+        await page.setViewport({ width: 800, height: 600 })
+        await page.$eval('.space-content', space => { space.scrollTop = 0 })
+        await page.hover('.new-tab-button')
+        await page.mouse.wheel({ deltaY: 500 })
+        await page.waitForFunction(() => document.querySelector('.space-content').scrollTop > 0)
+        assert.equal(await page.$eval('.new-tab-row', row => Math.abs(row.getBoundingClientRect().top - row.closest('.space-content').getBoundingClientRect().top) <= 1), true, 'New Tab must stick at the top when scrolling down')
+        await page.evaluate(() => window.flushSync(() => { window.data.spaceMeta.activeTabId = 'normal-59' }))
+        await page.waitForFunction(() => {
+            const row = document.querySelector('[data-tab-id="normal-59"]').getBoundingClientRect()
+            const space = document.querySelector('.space-content').getBoundingClientRect()
+            return row.bottom <= space.bottom + 1 && row.top >= document.querySelector('.new-tab-row').getBoundingClientRect().bottom
+        })
+        assert.equal(await buttonVisible(), true, 'revealing the active tab must keep New Tab visible')
+        const previousScroll = await page.$eval('.space-content', space => space.scrollTop)
+        await page.click('.new-tab-button')
+        await page.waitForFunction(() => {
+            const row = document.querySelector('.tabs-list > [data-tab-id="new-normal"]')?.getBoundingClientRect()
+            return row && row.top >= document.querySelector('.new-tab-row').getBoundingClientRect().bottom && row.bottom <= document.querySelector('.space-content').getBoundingClientRect().bottom
+        })
+        assert.equal(await page.$eval('.space-content', (space, previous) => space.scrollTop < previous, previousScroll), true, 'creating a tab must return to the top of the normal tab list')
+        assert.equal(await buttonVisible(), true)
+        await page.screenshot({ path: `${root}.cache/sidebar-new-tab-scroll.png` })
+        console.log('Chromium: sticky New Tab, crowded global/space pins, small-window limits, active-tab scrolling and new-tab scroll reset pass')
+    }
+
+    const testTabOverrides = async () => {
+        await page.$eval('.tab-group-toggle', button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
+        for (const tabId of ['outside', 'group-two']) {
+            const row = `.tab-item-container[data-tab-id="${tabId}"]`
+            const openMenu = async () => {
+                await page.$eval(row, element => element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 100 })))
+            }
+            await openMenu()
+            await (await page.waitForSelector('.context-menu button ::-p-text(Rename…)')).click()
+            await page.waitForFunction(() => document.activeElement?.id === 'tab-group-name')
+            await page.type('#tab-group-name', `Custom ${tabId}`)
+            await page.keyboard.press('Enter')
+            await page.waitForSelector('.context-menu', { hidden: true })
+            assert.equal(await page.$eval(`${row} .tab-title`, el => el.textContent), `Custom ${tabId}`)
+            await openMenu()
+            await (await page.waitForSelector('.context-menu button ::-p-text(Change icon…)')).click()
+            await page.waitForSelector('.emoji-grid')
+            await page.click('.emoji-grid button[aria-label="Science experiments"]')
+            await page.waitForSelector('.context-menu', { hidden: true })
+            assert.equal(await page.$eval(`${row} .favicon-emoji`, el => el.textContent), '🧪')
+            assert.equal(await page.evaluate(() => window.data.docs['group-missing'].emojiOverride), undefined, 'member edits must not change sibling tabs')
+            await openMenu()
+            await (await page.waitForSelector('.context-menu button ::-p-text(Change icon…)')).click()
+            await page.type('#tab-icon-url', `http://127.0.0.1:${server.addr.port}/custom.svg`)
+            await page.$eval('#tab-icon-url', input => input.form.requestSubmit())
+            await page.waitForSelector('.context-menu', { hidden: true })
+            await page.waitForFunction(selector => document.querySelector(selector)?.src.endsWith('/custom.svg'), {}, `${row} .favicon`)
+            await openMenu()
+            await (await page.waitForSelector('.context-menu button ::-p-text(Change icon…)')).click()
+            await page.click('.reset-emoji')
+            await page.waitForSelector('.context-menu', { hidden: true })
+            assert.equal(await page.$(`${row} .favicon-emoji`), null)
+            await openMenu()
+            await (await page.waitForSelector('.context-menu button ::-p-text(Rename…)')).click()
+            await (await page.waitForSelector('.context-menu button ::-p-text(Use page title)')).click()
+            await page.waitForSelector('.context-menu', { hidden: true })
+            assert.equal(await page.$eval(`${row} .tab-title`, el => el.textContent), tabId)
+        }
+        await page.$eval('.tab-group-toggle', button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
+        console.log('Chromium: standalone and grouped tab title, emoji, image URL overrides and resets pass')
+    }
+
+    if (Deno.args.includes('--closed-tabs-preview-only')) {
+        assert.deepEqual(errors, [])
+        console.log('Chromium: closed-tab preview filtering, one-second expiry, repeated closes, ten-second cutoff, hidden sidebar and hover retention pass')
+    } else if (Deno.args.includes('--tab-overrides-only')) {
+        await testTabOverrides()
+        assert.deepEqual(errors, [])
+    } else if (Deno.args.includes('--pins-only')) {
+        await testPinDragging()
+        assert.deepEqual(errors, [])
+    } else if (Deno.args.includes('--sidebar-scroll-only')) {
+        await testSidebarScroll()
+        assert.deepEqual(errors, [])
+    } else {
     const hovercardLeft = async (trigger, grouped) => {
         await page.hover(trigger)
         await page.waitForFunction(grouped => {
@@ -464,6 +746,16 @@ try {
     assert.equal(await page.$eval(groupContent, content => content.clientHeight), initialHeight + 80, 'dragging the corner increases the expanded list height')
     assert.deepEqual(await page.$$eval('.tab-group-content', lists => lists.map(content => getComputedStyle(content).maxHeight)), ['286px', '286px'], 'all groups share the session height limit')
     assert.ok(await page.$eval('[data-tab-group-id="resize"] .tab-group-content', content => content.clientHeight < 286), 'short groups must retain their natural height')
+    await resizeGroup(160)
+    await page.waitForFunction(() => {
+        const content = document.querySelector('[data-tab-group-id="group"] .tab-group-content')
+        return content.scrollHeight <= content.clientHeight + 1 && content.parentElement.dataset.scrollTop === 'false' && content.parentElement.dataset.scrollBottom === 'false'
+    })
+    assert.equal(await page.$eval(resizeHandle, button => getComputedStyle(button).display), 'block', 'a height above the default must remain resizable after overflow disappears')
+    await page.mouse.move(600, 500)
+    assert.equal(await page.$eval(resizeHandle, button => getComputedStyle(button).opacity), '0', 'a custom height still reveals its grip only on bottom-border hover')
+    await resizeGroup(-40)
+    assert.equal(await page.$eval(groupContent, content => content.clientHeight), initialHeight + 80, 'a fully visible group can be dragged smaller again')
     await resizeGroup(-120)
     await page.waitForFunction(() => document.querySelector('[data-tab-group-id="group"] .tab-group-scroll').dataset.scrollBottom === 'true')
     assert.equal(await page.$eval(groupContent, content => content.clientHeight), initialHeight - 40, 'shrinking restores inner overflow and its fade')
@@ -472,6 +764,7 @@ try {
     await page.focus(resizeHandle)
     await page.keyboard.press('Home')
     assert.equal(await page.$eval(groupContent, content => getComputedStyle(content).maxHeight), '206px', 'Home restores the original five-tab cap')
+    assert.equal(await page.$eval('[data-tab-group-id="resize"] .tab-group-resize', button => getComputedStyle(button).display), 'none', 'resetting to the default hides the handle again for groups without overflow')
     await page.keyboard.press('ArrowDown')
     assert.equal(await page.$eval(groupContent, content => getComputedStyle(content).maxHeight), '226px', 'the handle supports keyboard resizing')
     for (let i = 0; i < 2; i++) {
@@ -645,8 +938,14 @@ try {
         assert.equal(await page.$('#link-preview-fixture img'), null)
     }
     assert.equal(previewRequests.length, 2, 'non-web links must not request a favicon')
+    await page.setViewport({ width: 800, height: 600 })
+    await page.reload()
+    await page.waitForSelector('.tabs-list > [data-tab-id="outside"]')
+    await testPinDragging()
+    await testTabOverrides()
     assert.deepEqual(errors, [])
     console.log('Chromium: responsive sidebar history, top-bar layout, shared group height, header previews, group menus, favicon regressions and link preview fallback/recovery pass')
+    }
 } finally {
     await browser?.close()
     await server.shutdown()

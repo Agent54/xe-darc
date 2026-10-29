@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { compileModule, parse } from 'svelte/compiler'
 import * as svelteClient from 'svelte/internal/client'
-import { getSidepins } from '../app/lib/tab-groups.js'
+import { getSidepins, getGlobalPins, getPinScope } from '../app/lib/tab-groups.js'
 import { resolveSidepinVisibility } from '../app/lib/sidepin-visibility.js'
 
 // Exercise the actual App visibility state, including restoration and reactive membership changes.
@@ -37,7 +37,11 @@ const pins = () => [
 function harness (initialHidden = {}, { loaded = true, tabs = pins() } = {}) {
     const state = svelteClient.proxy({ tabs, groupTabId: 'center-a', spaceId: 'space', loaded })
     const storage = new Map()
-    const data = { getSidepins: () => getSidepins(state.tabs.filter(tab => tab.spaceId === state.spaceId), state.groupTabId) }
+    const data = {
+        getPinScope,
+        spaceMeta: { get globalPins() { return getGlobalPins(state.tabs) } },
+        getSidepins: () => [...getSidepins(state.tabs.filter(tab => tab.spaceId === state.spaceId), state.groupTabId), ...getGlobalPins(state.tabs)]
+    }
     const observe = new Function('$', 'resolveSidepinVisibility', 'localStorage', `${source}\nreturn observe`)(
         svelteClient, resolveSidepinVisibility, { setItem: (key, value) => storage.set(key, value) }
     )
@@ -52,6 +56,19 @@ function harness (initialHidden = {}, { loaded = true, tabs = pins() } = {}) {
         saved () { return JSON.parse(storage.get('invisiblePins')) }
     }
 }
+
+Deno.test('global pins share visibility across their owning spaces and stay available on space switches', () => {
+    const h = harness({}, { tabs: [tab('center-a'), pin('global-one', 'left', 'global'), pin('global-two', 'left', 'global', { spaceId: 'other' })] })
+    try {
+        assert.deepEqual(h.visible(), ['global-two'])
+        h.toggle('global-one')
+        assert.deepEqual(h.visible(), ['global-one'])
+        h.change(state => { state.spaceId = 'other' })
+        assert.deepEqual(h.visible(), ['global-one'])
+    } finally {
+        h.destroy()
+    }
+})
 
 Deno.test('restoring multiple open pins allows one on each side for each scope', () => {
     const h = harness({}, { loaded: false })

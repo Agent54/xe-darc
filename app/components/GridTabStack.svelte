@@ -85,7 +85,7 @@
   {:else}
     <span class="empty-preview">
       <span class="empty-favicon"><Favicon {tab} showButton={false} /></span>
-      <span class="empty-title">{tab.title || tab.url || 'Untitled'}</span>
+      <span class="empty-title">{tab.titleOverride || tab.title || tab.url || 'Untitled'}</span>
     </span>
   {/if}
 {/snippet}
@@ -95,7 +95,7 @@
   <div class="stack-layer stack-middle" aria-hidden="true"></div>
   <div class="stack-front" class:active={selectedTab.id === activeTabId} class:space-active-tab={selectedTab.id === spaceActiveTabId}>
     <div class="stack-header">
-      <button class="stack-title" onclick={() => onActivate(selectedTab, selectedIndex)} onkeydown={handleStackKey} aria-label="Activate {selectedTab.title || 'Untitled'}. Use left and right arrows to browse tabs.">
+      <button class="stack-title" onclick={() => onActivate(selectedTab, selectedIndex)} onkeydown={handleStackKey} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}. Use left and right arrows to browse tabs.">
         <span class="group-favicons" aria-hidden="true" style:width="{faviconWindow.visible * 18}px">
           <span class="group-favicon-track" style:transform="translateX({-faviconWindow.offset * 18}px)">
             {#each group.tabs.slice(faviconWindow.start, faviconWindow.end) as tab (tab.id)}
@@ -103,14 +103,14 @@
             {/each}
           </span>
         </span>
-        <span class="title-text">{selectedTab.title || 'Untitled'}</span>
+        <span class="title-text">{selectedTab.titleOverride || selectedTab.title || 'Untitled'}</span>
       </button>
       <span class="stack-count">{group.tabs.length}</span>
       <button class="icon-button expand-button" onmousedown={handleExpandMouseDown} onclick={(event) => { if (event.detail === 0) openGroup() }} aria-label="Expand {group.title}" aria-haspopup="dialog" aria-expanded={expanded} title="Expand group">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6m0-6-7 7M10 20H4v-6m0 6 7-7" /></svg>
       </button>
     </div>
-    <button class="stack-preview" onclick={() => onActivate(selectedTab, selectedIndex)} onkeydown={handleStackKey} onwheel={(event) => onWheel(event, selectedTab, selectedIndex)} aria-label="Activate {selectedTab.title || 'Untitled'}">
+    <button class="stack-preview" onclick={() => onActivate(selectedTab, selectedIndex)} onkeydown={handleStackKey} onwheel={(event) => onWheel(event, selectedTab, selectedIndex)} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}">
       {#key selectedTab.id}
         <span class="preview-image">{@render thumbnail(selectedTab)}</span>
       {/key}
@@ -137,15 +137,15 @@
     {#each group.tabs as tab, index (tab.id)}
       <div class="dialog-card" class:active={tab.id === activeTabId} class:space-active-tab={tab.id === spaceActiveTabId} data-tab-id={tab.id} use:observePreview>
         <div class="card-header">
-          <button class="stack-title" onclick={() => onActivate(tab, index)} aria-label="Activate {tab.title || 'Untitled'}">
+          <button class="stack-title" onclick={() => onActivate(tab, index)} aria-label="Activate {tab.titleOverride || tab.title || 'Untitled'}">
             <span class="tab-favicon">{#if visiblePreviews.has(tab.id)}<Favicon {tab} showButton={false} />{/if}</span>
-            <span class="title-text">{tab.title || 'Untitled'}</span>
+            <span class="title-text">{tab.titleOverride || tab.title || 'Untitled'}</span>
           </button>
-          <button class="icon-button close-tab" onclick={(event) => onClose(event, tab, index)} aria-label="Close {tab.title || 'Untitled'}">
+          <button class="icon-button close-tab" onclick={(event) => onClose(event, tab, index)} aria-label="Close {tab.titleOverride || tab.title || 'Untitled'}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
           </button>
         </div>
-        <button class="card-preview" onclick={() => onActivate(tab, index)} onwheel={(event) => onWheel(event, tab, index)} aria-label="Activate {tab.title || 'Untitled'}">
+        <button class="card-preview" onclick={() => onActivate(tab, index)} onwheel={(event) => onWheel(event, tab, index)} aria-label="Activate {tab.titleOverride || tab.title || 'Untitled'}">
           {#if visiblePreviews.has(tab.id)}{@render thumbnail(tab, false)}{/if}
         </button>
       </div>

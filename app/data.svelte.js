@@ -4,7 +4,7 @@ import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
-import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
+import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
@@ -657,7 +657,7 @@ const spaceMeta = $state({
     spaceOrder: [],
     closedTabs: [],
     activeTabId: null,
-    globalPins: [],
+    get globalPins() { return getGlobalPins(Object.values(docs)) },
     config: {
         leftPinnedTabWidth: 400,
         rightPinnedTabWidth: 350,
@@ -1002,7 +1002,7 @@ live: true,
         }
 
         // fixme: deep comp
-        for (const key of ['canvas', 'element', 'files', 'pinned', 'pinScope', 'pinOrder', 'tabGroupId', 'tabGroupOrder', ...sortOrder]) { // force reload until using docs store
+        for (const key of ['canvas', 'element', 'files', 'pinned', 'pinScope', 'pinOrder', 'sidebarPinned', 'sidebarPinOrder', 'tabGroupId', 'tabGroupOrder', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
                 if (change.doc.spaceId && change.doc.type !== 'space' && change.doc.type !== 'activity') {
                     console.log('refreshing', change.doc.spaceId)
@@ -1410,7 +1410,7 @@ const data = {
     getLastActiveNonPinnedTabId,
     getCurrentGroupTabId,
     getPinScope,
-    getSidepins: (spaceId = spaceMeta.activeSpace, groupTabId = getCurrentGroupTabId(spaceId)) => getSidepins(spaces[spaceId]?.tabs, groupTabId),
+    getSidepins: (spaceId = spaceMeta.activeSpace, groupTabId = getCurrentGroupTabId(spaceId)) => [...getSidepins(spaces[spaceId]?.tabs, groupTabId), ...spaceMeta.globalPins],
     getSpacePins: (spaceId = spaceMeta.activeSpace) => getSidepins(spaces[spaceId]?.tabs, null),
     getTabLastActiveAt,
     getTabGroups: (spaceId = spaceMeta.activeSpace) => getTabGroups(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId), docs),
@@ -1426,6 +1426,15 @@ const data = {
         if (!docs[_id] && Object.values(update).every(value => value === null)) return Promise.resolve()
         docs[_id] ??= { _id, type: 'tabgroup', tabGroupId, spaceId, created: Date.now() }
         return queueDocumentUpdate(_id, { ...update, modified: Date.now() })
+    },
+    updateTabOverrides: (tabId, properties) => {
+        if (docs[tabId]?.type !== 'tab') {
+            return Promise.resolve()
+        }
+        const update = Object.fromEntries(['titleOverride', 'faviconOverride', 'emojiOverride']
+            .filter(key => Object.hasOwn(properties, key))
+            .map(key => [key, typeof properties[key] === 'string' ? properties[key].trim() || null : null]))
+        return queueDocumentUpdate(tabId, update)
     },
     getGroupActiveTab: (group, spaceId = spaceMeta.activeSpace) => {
         const history = spaces[spaceId]?.activeTabsOrder || []
@@ -1675,6 +1684,29 @@ const data = {
         db.put(updated)
     },
 
+    pinSidebarTab({ tabId, pinned = true, beforeTabId, afterTabId, targetSpaceId }) {
+        const tab = docs[tabId]
+        if (tab?.type !== 'tab' || tab.archive || tab.preview || tab.lightbox) {
+            return Promise.resolve()
+        }
+        if (!pinned) {
+            return queueDocumentUpdate(tabId, { sidebarPinned: null, sidebarPinOrder: null })
+        }
+        if (targetSpaceId && targetSpaceId !== tab.spaceId) {
+            if (!spaces[targetSpaceId]) {
+                return Promise.resolve()
+            }
+            const moving = data.moveTab(tabId, { targetSpaceId })
+            const pinning = data.pinSidebarTab({ tabId, beforeTabId, afterTabId })
+            return Promise.all([moving, pinning])
+        }
+        const pins = getSidebarPinnedTabs(spaces[tab.spaceId]?.tabs)
+        const sidebarPinOrder = beforeTabId || afterTabId
+            ? orderBetween(docs[beforeTabId], docs[afterTabId], 'sidebarPinOrder')
+            : tab.sidebarPinOrder ?? Math.max(0, ...pins.map(pin => pin.sidebarPinOrder ?? pin.order ?? 0)) + 1
+        return queueDocumentUpdate(tabId, { sidebarPinned: true, sidebarPinOrder, pinned: null, pinScope: null, pinOrder: null })
+    },
+
     pin({ tabId, pinned, scope, groupTabId, beforeTabId, afterTabId, targetSpaceId }) {
         const tab = docs[tabId]
         if (tab?.type !== 'tab') return Promise.resolve()
@@ -1699,10 +1731,11 @@ const data = {
                 else saves.push(queueDocumentUpdate(id, update))
             }
         }
+        const pinItems = pinScope === 'global' ? spaceMeta.globalPins : items
         const pinOrder = beforeTabId || afterTabId
             ? orderBetween(docs[beforeTabId], docs[afterTabId], 'pinOrder')
-            : tab.pinOrder ?? (tab.pinned ? tab.order ?? 0 : nextPinOrder(items))
-        saves.push(queueDocumentUpdate(tabId, { ...membership, pinned: pinned === true ? 'left' : pinned, pinScope, pinOrder }))
+            : tab.pinned && getPinScope(tab) === pinScope ? tab.pinOrder ?? tab.order ?? 0 : nextPinOrder(pinItems)
+        saves.push(queueDocumentUpdate(tabId, { ...membership, pinned: pinned === true ? 'left' : pinned, pinScope, pinOrder, sidebarPinned: null, sidebarPinOrder: null }))
 
         if (spaceMeta.activeSpace === tab.spaceId && spaceMeta.activeTabId === tabId) {
             const candidates = (pinScope === 'group' ? getTabGroup(items, tabId)?.tabs || [] : items)
@@ -1719,12 +1752,15 @@ const data = {
             return
         }
         const frame = frames[tabId] ??= {}
+        if (frame.frame && !frame.committedUrl) {
+            frame.committedUrl = tab.url
+        }
 
         // TODO: central dataside favicon handling and title invalidation
 
         frame.pendingLoad = !frame.frame && !isInternalPage(url)
         frame.loading = !isInternalPage(url)
-        frame.navigationSource = isInternalPage(url) ? null : 'browser'
+        frame.directNavigation = isInternalPage(url) ? null : { urls: [url.split('#')[0]], requestId: null }
         frame.forceHibernated = false
         frame.initialLoad = true
         const saving = queueDocumentUpdate(tabId, {
@@ -2359,6 +2395,12 @@ const data = {
             const updates = planTabMove(spaces[sourceSpaceId]?.tabs || [], spaces[destSpaceId].tabs || [], tabId,
                 { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope }, () => crypto.randomUUID())
             const saves = []
+            const sourceGroup = data.getTabGroup(tabId, sourceSpaceId)
+            const targetGroup = targetGroupTabId ? data.getTabGroup(targetGroupTabId, destSpaceId) : null
+            if (updates.length && scope === 'group' && sourceGroup?.tabGroupId && targetGroup?.tabGroupId && sourceGroup.tabGroupId !== targetGroup.tabGroupId) {
+                const name = [targetGroup.name, sourceGroup.name].filter(Boolean).join(' + ') || null
+                saves.push(data.updateTabGroup(targetGroup.tabGroupId, { name }, destSpaceId))
+            }
             for (const { id, ...update } of updates) {
                 const member = docs[id]
                 if (!member) continue

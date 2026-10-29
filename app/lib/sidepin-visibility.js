@@ -2,7 +2,7 @@ import { getPinScope, tabGroupKey } from './tab-groups.js'
 
 function visibilityKey (tab) {
     const scope = getPinScope(tab)
-    return JSON.stringify([tab.spaceId, tab.pinned === true ? 'left' : tab.pinned, scope,
+    return JSON.stringify([scope === 'global' ? null : tab.spaceId, tab.pinned === true ? 'left' : tab.pinned, scope,
         scope === 'group' ? tabGroupKey(tab) : null])
 }
 

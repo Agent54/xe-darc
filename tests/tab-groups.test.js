@@ -1,10 +1,28 @@
 import assert from 'node:assert/strict'
-import { getTabGroups, getTabGroup, getTabGroupPreviewTabs, tabGroupMetadataId, getSidebarItems, getSidepins, planTabMove, addTabGroupFrames } from '../app/lib/tab-groups.js'
+import { getTabGroups, getTabGroup, getTabGroupPreviewTabs, tabGroupMetadataId, getSidebarItems, getSidebarPinnedTabs, getSidepins, planTabMove, addTabGroupFrames } from '../app/lib/tab-groups.js'
 
 const tab = (id, order, extra = {}) => ({ id, type: 'tab', spaceId: 'space', order, title: id, ...extra })
 const grouped = (id, rank, extra = {}) => tab(id, 10, { tabGroupId: 'research', tabGroupOrder: rank, ...extra })
 const move = (items, id, options, targets = items) => planTabMove(items, targets, id, { targetSpaceId: 'space', ...options }, () => 'new-group')
 const apply = (items, updates) => items.map(item => ({ ...item, ...updates.find(update => update.id === item.id) }))
+
+Deno.test('sidebar pins remain ordinary group members while appearing only in their own ordered section', () => {
+    const items = [grouped('one', 0), grouped('pin', 1, { sidebarPinned: true, sidebarPinOrder: 2 }),
+        tab('first-pin', 20, { sidebarPinned: true, sidebarPinOrder: 1 }),
+        tab('closed-pin', 30, { sidebarPinned: true, archive: 'closed' }),
+        tab('app-pin', 40, { sidebarPinned: true, pinned: 'left', pinScope: 'space' })]
+    assert.deepEqual(getSidebarPinnedTabs(items).map(tab => tab.id), ['first-pin', 'pin'])
+    assert.deepEqual(getSidebarItems(items).flatMap(item => item.tabs?.map(tab => tab.id) || []), ['one'])
+    assert.deepEqual(getTabGroup(items, 'pin').tabs.map(tab => tab.id), ['one', 'pin'])
+})
+
+Deno.test('dragging a sidebar pin into the normal section clears its sidebar pin metadata', () => {
+    const items = [tab('pin', 1, { sidebarPinned: true, sidebarPinOrder: 2 }), tab('normal', 20)]
+    const moved = apply(items, move(items, 'pin', { afterTabId: 'normal', targetGroupTabId: null }))
+    assert.equal(moved[0].sidebarPinned, null)
+    assert.equal(moved[0].sidebarPinOrder, null)
+    assert.deepEqual(getSidebarItems(moved).map(item => item.id), ['tab:pin', 'tab:normal'])
+})
 
 Deno.test('standalone tabs each derive their own group and non-browsing entries never become members', () => {
     const items = [tab('one', 1), tab('two', 2), tab('pin', 3, { pinned: 'left' }), tab('preview', 4, { preview: true }),

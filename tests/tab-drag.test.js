@@ -18,7 +18,7 @@ function element (id, x, y, width, height, dataset = {}, classes = []) {
     }
 }
 
-function dragHarness ({ topbar = null, lists = [] } = {}) {
+function dragHarness ({ topbar = null, lists = [], pinLists = [] } = {}) {
     const listeners = new Map()
     const drops = []
     const expansions = []
@@ -29,7 +29,7 @@ function dragHarness ({ topbar = null, lists = [] } = {}) {
     const document = {
         body: { classList: { add() {}, remove() {} } },
         querySelector: selector => selector === '.tab-list.tabs' ? topbar : null,
-        querySelectorAll: selector => selector === '.tabs-list' ? lists : selector === '.tab-group-content' ? lists.flatMap(list => list.querySelectorAll(selector)) : []
+        querySelectorAll: selector => selector === '[data-pin-scope]' ? pinLists : selector === '.tabs-list' ? lists : selector === '.tab-group-content' ? lists.flatMap(list => list.querySelectorAll(selector)) : []
     }
     const api = vm.runInNewContext(source, {
         document,
@@ -64,6 +64,109 @@ function sidebar (children) {
     list.selectors[':scope > .tab-item-container, :scope > .tab-divider-item, :scope > .tab-group-wrapper'] = children
     return list
 }
+
+function pinList (scope, children = []) {
+    const list = element('', 0, 0, 250, 80, { pinScope: scope })
+    list.parents['.space-content'] = scope !== 'global' ? element('', 0, 0, 250, 680, { spaceId: 'target-space' }) : null
+    list.selectors[':scope > [data-tab-id]'] = children
+    list.selectors['.pin-drop-placeholder'] = element('', 4, 4, 36, 36)
+    return list
+}
+
+Deno.test('the titled pinned section accepts empty drops and reorders vertically', () => {
+    const list = pinList('sidebar')
+    list.dataset.pinLayout = 'rows'
+    list.selectors['.sidebar-pins-placeholder'] = element('', 4, 4, 242, 36)
+    const harness = dragHarness({ pinLists: [list] })
+    harness.start('source', element('source', 300, 100, 100, 36))
+    harness.move(120, 20)
+    assert.equal(harness.tabDrag.indicator.height, 2)
+    assert.equal(harness.tabDrag.indicator.width, 242)
+    harness.release()
+    assert.equal(harness.drops[0].pinScope, 'sidebar')
+    assert.equal(harness.drops[0].targetSpaceId, 'target-space')
+    list.selectors[':scope > [data-tab-id]'] = [element('one', 4, 4, 242, 32), element('two', 4, 44, 242, 32)]
+    harness.start('source', element('source', 300, 100, 100, 36))
+    harness.move(120, 38)
+    assert.equal(harness.tabDrag.indicator.height, 2)
+    harness.release()
+    assert.equal(harness.drops[1].beforeTabId, 'one')
+    assert.equal(harness.drops[1].afterTabId, 'two')
+})
+
+Deno.test('tabs can enter empty space and global pin sections', () => {
+    for (const scope of ['space', 'global']) {
+        const harness = dragHarness({ pinLists: [pinList(scope)] })
+        harness.start('source', element('source', 300, 100, 100, 36))
+        harness.move(20, 20)
+        assert.equal(harness.tabDrag.indicator.visible, true)
+        assert.equal(harness.tabDrag.indicator.width, 2)
+        harness.release()
+        assert.equal(harness.drops[0].type, 'pin')
+        assert.equal(harness.drops[0].pinScope, scope)
+        assert.equal(harness.drops[0].targetSpaceId, scope === 'space' ? 'target-space' : undefined)
+    }
+})
+
+Deno.test('wrapped pin grids insert between the correct neighbors', () => {
+    const pins = [element('one', 4, 4, 36, 36), element('two', 45, 4, 36, 36), element('three', 4, 43, 36, 36), element('four', 45, 43, 36, 36)]
+    const harness = dragHarness({ pinLists: [pinList('global', pins)] })
+    harness.start('source', element('source', 300, 100, 100, 36))
+    harness.move(5, 60)
+    harness.release()
+    assert.equal(harness.drops[0].beforeTabId, 'two')
+    assert.equal(harness.drops[0].afterTabId, 'three')
+    assert.equal(harness.drops[0].pinScope, 'global')
+})
+
+Deno.test('pins can reorder, leave pin sections, and cancel without a drop', () => {
+    const pins = [element('one', 4, 4, 36, 36), element('two', 45, 4, 36, 36), element('three', 86, 4, 36, 36)]
+    const harness = dragHarness({ pinLists: [pinList('space', pins)], lists: [sidebar([element('target', 0, 100, 250, 36)])] })
+    harness.start('one', pins[0])
+    harness.move(110, 20)
+    harness.release()
+    assert.equal(harness.drops[0].beforeTabId, 'three')
+    harness.start('one', pins[0])
+    harness.move(120, 102)
+    harness.release()
+    assert.equal(harness.drops[1].type, 'reorder')
+    assert.equal(harness.drops[1].targetGroupTabId, null)
+    harness.start('one', pins[0])
+    harness.move(110, 20)
+    harness.cancelDrag()
+    assert.equal(harness.drops.length, 2)
+})
+
+Deno.test('dropping a pin back in its own position does nothing', () => {
+    const pin = element('one', 4, 4, 36, 36)
+    const harness = dragHarness({ pinLists: [pinList('space', [pin])] })
+    harness.start('one', pin)
+    harness.move(20, 20)
+    harness.release()
+    assert.equal(harness.drops.length, 0)
+})
+
+Deno.test('global pin targets exclude the app and search controls', () => {
+    const list = pinList('global')
+    list.selectors['.all-apps-tab'] = element('', 45, 4, 36, 36)
+    const harness = dragHarness({ pinLists: [list] })
+    harness.start('source', element('source', 300, 100, 100, 36))
+    harness.move(60, 20)
+    assert.equal(harness.tabDrag.dropTarget, null)
+    harness.move(100, 20)
+    assert.equal(harness.tabDrag.dropTarget.pinScope, 'global')
+    harness.cancelDrag()
+})
+
+Deno.test('groups and dividers cannot enter pin sections', () => {
+    for (const type of ['group', 'divider']) {
+        const harness = dragHarness({ pinLists: [pinList('space')] })
+        harness.start('source', element('source', 300, 100, 100, 36), 'sidebar', type)
+        harness.move(20, 20)
+        harness.release()
+        assert.equal(harness.drops.some(drop => drop.type === 'pin'), false)
+    }
+})
 
 Deno.test('sidebar-to-topbar drops preserve the same neighbor order as the sidebar', () => {
     const topbar = element('', 260, 0, 600, 40, { groupTabId: 'one', spaceId: 'target-space' })

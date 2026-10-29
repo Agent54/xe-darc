@@ -15,8 +15,8 @@
 </script>
 
 <div class="lightbox-header-wrapper">
-    {#if tab.title}
-        <div class="lightbox-title">{tab.title}</div>
+    {#if tab.titleOverride || tab.title}
+        <div class="lightbox-title">{tab.titleOverride || tab.title}</div>
     {/if}
     <div class="lightbox-header">
     <div class="lightbox-info">

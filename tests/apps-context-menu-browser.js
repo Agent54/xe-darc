@@ -2,17 +2,27 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { rollup } from 'rollup'
-import { compile } from 'svelte/compiler'
+import { compile, parse } from 'svelte/compiler'
 import puppeteer from 'puppeteer'
 
 const root = new URL('../', import.meta.url).pathname
 const require = createRequire(import.meta.url)
+const appSource = Deno.readTextFileSync(`${root}app/App.svelte`)
+const keyHandler = parse(appSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'handleShortcutEscape')
 const modules = {
     entry: `
         import { mount } from 'svelte'
         import Apps from './app/components/Apps.svelte'
+        import { shortcuts, createShortcutMatcher, createShortcutHandler } from './app/lib/shortcuts.js'
         window.requests = []
         window.opened = []
+        window.overlayClosed = false
+        const tabDrag = { active: false }
+        const showAppsOverlay = true
+        const hovercardUrlBarExpanded = false, hoveredTab = null
+        const closeAppsOverlay = () => { window.overlayClosed = true; window.apps.close() }
+        ${appSource.slice(keyHandler.start, keyHandler.end)}
+        window.addEventListener('keydown', createShortcutHandler(createShortcutMatcher(shortcuts, true), (id, event) => id === 'escape' && handleShortcutEscape(event)), true)
         const containers = [
             { ID: 'web-1', Name: 'demo-web-1', Service: 'web', State: 'running', Publishers: [{ TargetPort: 80, PublishedPort: 8080 }] },
             { ID: 'web-2', Name: 'demo-web-2', Service: 'web', State: 'exited', Publishers: [{ TargetPort: 80, PublishedPort: 8080 }] }
@@ -118,6 +128,7 @@ try {
     assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Start')
     await page.keyboard.press('Escape')
     assert.equal(await page.$('.app-context-menu'), null)
+    assert.equal(await page.evaluate(() => window.overlayClosed), false)
     assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'Actions for web')
 
     await page.click('[aria-label="Open demo-web-2 on port 80"]', { button: 'right' })
@@ -164,6 +175,9 @@ try {
     }))
     assert.ok(bounds.every(rect => rect.left >= 0 && rect.top >= 0 && rect.right <= 430 && rect.bottom <= 300), JSON.stringify(bounds))
     await page.keyboard.press('Escape')
+    assert.equal(await page.evaluate(() => window.overlayClosed), false)
+    await page.keyboard.press('Escape')
+    assert.equal(await page.evaluate(() => window.overlayClosed), true)
     assert.deepEqual(errors, [])
     console.log('Apps Docker menus: service/container actions, keyboard, dismissal, errors and viewport bounds passed')
 } finally {

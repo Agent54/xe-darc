@@ -2,6 +2,7 @@
     import UrlRenderer from './UrlRenderer.svelte'
     import data from '../data.svelte.js'
     import { overflowPopover } from '../lib/overflow-popover.js'
+    import { tick } from 'svelte'
     
     let { 
         url = '',
@@ -78,11 +79,13 @@
     
     $effect(() => {
         if (urlBarExpanded && urlInput) {
+            const input = urlInput
             urlInputValue = url || ''
-            setTimeout(() => {
-                urlInput.focus()
-                urlInput.select()
-            }, 1)
+            tick().then(() => {
+                if (urlInput !== input || !urlBarExpanded) return
+                input.focus()
+                input.select()
+            })
         }
     })
     
@@ -95,6 +98,14 @@
         }
         urlBarExpanded = value
         if (onExpandedChange) onExpandedChange(value)
+    }
+
+    export async function focusLocation() {
+        urlInputValue = url || ''
+        setExpanded(true)
+        await tick()
+        urlInput?.focus()
+        urlInput?.select()
     }
     
     function handleUrlSubmit() {
@@ -211,6 +222,7 @@
             
             {#if urlBarExpanded}
                 <input bind:this={urlInput} 
+                       aria-label="Tab URL"
                        bind:value={urlInputValue} 
                        class="url-bar-input"
                        onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUrlSubmit(); } else if (e.key === 'Escape') { e.preventDefault(); setExpanded(false); } }} 

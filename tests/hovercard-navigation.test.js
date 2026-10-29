@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
+import { getFrameShortcutScript } from '../app/lib/shortcuts.js'
 
 const source = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
 const functions = ['closeHovercard', 'dismissHovercards', 'handleHovercardPointerDown', 'navigateTabHistory', 'handleFrameMouseDown', 'handleFrameClick']
@@ -71,7 +72,7 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
     const messages = []
     const errors = []
     const frame = { addContentScripts(injections) { scripts.push(...injections); return Promise.resolve() } }
-    const setup = new Function('frame', 'window', 'CustomEvent', 'tab', 'tabId', 'ipc', 'console', `
+    const setup = new Function('frame', 'window', 'CustomEvent', 'tab', 'tabId', 'ipc', 'console', 'getFrameShortcutScript', 'connectFrameIPC', `
         const untrack = callback => callback()
         const userMods = { css: [], js: [] }, select = '', zoomControl = '', contextMenu = ''
         let isCommandKeyDown = false, commandKeyPressed = false
@@ -79,7 +80,7 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
         setupMessageListener(frame)
         setupContentScripts(frame)
     `)
-    setup(frame, shellWindow, CustomEvent, { id: tabId, url: 'https://example.com' }, tabId, ipc, { log() {}, error: error => errors.push(error) })
+    setup(frame, shellWindow, CustomEvent, { id: tabId, url: 'https://example.com' }, tabId, ipc, { log() {}, error: error => errors.push(error) }, getFrameShortcutScript, () => {})
     const script = scripts.find(script => script.name === 'system-script')
     assert.equal(script.allFrames, true, 'the click bridge is injected into nested frames')
     assert.equal(script.matchAboutBlank, true)
@@ -219,4 +220,19 @@ Deno.test('the click bridge ignores malformed payloads and messages for other ta
     }
     assert.equal(h.api.visible, 'tab')
     assert.equal(clicks.length, 0)
+})
+
+Deno.test('shortcuts cross the injected frame bridge once and retain the source tab', () => {
+    const h = navigationHarness()
+    const tabId = 'darc:tab:keyboard'
+    const bridge = contentClickBridge(h.window, tabId, true)
+    const requests = []
+    h.window.addEventListener('darc-shortcut', event => requests.push(event.detail))
+    const event = new Event('keydown', { cancelable: true })
+    Object.assign(event, { key: 'l', metaKey: /Mac|iPhone|iPad|iPod/.test(navigator.platform), ctrlKey: !/Mac|iPhone|iPad|iPod/.test(navigator.platform) })
+    bridge.contentWindow.dispatchEvent(event)
+    assert.equal(event.defaultPrevented, true)
+    assert.deepEqual(requests, [{ id: 'open-location', tabId }])
+    bridge.frame.onconsolemessage({ message: 'iwa:shortcut:' + JSON.stringify({ id: 'close-tab', tabId: 'another-tab' }) })
+    assert.equal(requests.length, 1)
 })

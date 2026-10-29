@@ -9,19 +9,34 @@ const root = new URL('../', import.meta.url).pathname
 const require = createRequire(import.meta.url)
 const modules = {
     entry: `
-        import { mount } from 'svelte'
+        import { mount, unmount } from 'svelte'
         import TabHoverCard from './app/components/TabHoverCard.svelte'
+        import ShortcutOverlay from './app/components/ShortcutOverlay.svelte'
         import { openTabDevTools } from './app/lib/tab-devtools.js'
         import data from 'fixture-data'
+        import { shortcuts, createShortcutMatcher, createShortcutHandler } from './app/lib/shortcuts.js'
         window.actions = []
+        window.shortcutActions = []
         window.data = data
+        const cards = {}
+        let overlay = null
+        const handle = createShortcutHandler(createShortcutMatcher(shortcuts, true), id => {
+            if (id === 'open-location') cards.single.focusLocation()
+            else if (id === 'show-shortcuts') overlay ||= mount(ShortcutOverlay, { target: document.body })
+            else if (id === 'hide-shortcuts') { if (overlay) unmount(overlay); overlay = null }
+            else if (id === 'new-tab' || id === 'new-tab-group') window.shortcutActions.push(id)
+            else return false
+        })
+        window.addEventListener('keydown', handle, true)
+        window.addEventListener('keyup', handle.keyup, true)
+        window.addEventListener('blur', handle.reset)
         Object.defineProperty(navigator, 'clipboard', { value: { writeText: async url => window.actions.push(['copy', url]) } })
         for (const stacked of [false, true]) {
             const id = stacked ? 'grouped' : 'single'
             const target = document.createElement('div')
             target.id = id
             document.body.append(target)
-            mount(TabHoverCard, { target, props: {
+            cards[id] = mount(TabHoverCard, { target, props: {
                 tab: data.docs[id], stacked, showDevTools: true,
                 onGoBack: () => window.actions.push(['back', id]),
                 onGoForward: () => window.actions.push(['forward', id]),
@@ -139,8 +154,73 @@ try {
             ['close', id]
         ])
     }
+    const checkLocation = async () => {
+        await page.waitForFunction(() => {
+            const input = document.querySelector('#single [aria-label="Tab URL"]')
+            return input && document.activeElement === input && input.selectionStart === 0 && input.selectionEnd === input.value.length
+        })
+        assert.equal(await page.$eval('#single [aria-label="Tab URL"]', input => input.value), 'https://single.example/path')
+    }
+    await page.keyboard.down('Meta')
+    await page.keyboard.press('l')
+    await page.keyboard.up('Meta')
+    await checkLocation()
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.down('Meta')
+    await page.keyboard.press('l')
+    await page.keyboard.up('Meta')
+    await checkLocation()
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => !document.querySelector('#single [aria-label="Tab URL"]'))
+
+    await page.keyboard.down('Meta')
+    await page.keyboard.down('t')
+    await page.keyboard.up('t')
+    await page.keyboard.up('Meta')
+    assert.deepEqual(await page.evaluate(() => window.shortcutActions), ['new-tab'])
+    await page.keyboard.down('Meta')
+    await page.keyboard.down('t')
+    await page.waitForFunction(() => window.shortcutActions.includes('new-tab-group'))
+    await page.keyboard.up('t')
+    await page.keyboard.up('Meta')
+    assert.deepEqual(await page.evaluate(() => window.shortcutActions), ['new-tab', 'new-tab-group'])
+
+    await page.evaluate(() => {
+        const input = document.createElement('input')
+        input.id = 'focus-reference'
+        document.body.append(input)
+        input.focus()
+    })
+    await page.keyboard.down('Meta')
+    await new Promise(resolve => setTimeout(resolve, 1800))
+    assert.equal(await page.$('.shortcut-overlay'), null)
+    await page.waitForSelector('.shortcut-overlay:popover-open')
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'focus-reference', 'opening the reference must preserve typing focus')
+    assert.equal(await page.$$eval('.shortcut-row', rows => rows.length), 15)
+    assert.equal(await page.$eval('.hold-action', row => row.textContent.includes('New tab group')), true)
+    await page.$eval('.shortcut-sheet', sheet => Promise.all(sheet.getAnimations().map(animation => animation.finished)))
+    await page.screenshot({ path: `${root}.cache/shortcut-overlay-desktop.png` })
+    await page.keyboard.up('Meta')
+    await page.waitForFunction(() => !document.querySelector('.shortcut-overlay'))
+
+    await page.setViewport({ width: 390, height: 844 })
+    await page.keyboard.down('Control')
+    await page.waitForSelector('.shortcut-overlay:popover-open')
+    const layout = await page.$eval('.shortcut-sheet', sheet => ({ width: sheet.clientWidth, content: sheet.scrollWidth }))
+    assert.ok(layout.content <= layout.width, 'the mobile sheet must not overflow horizontally')
+    await page.$eval('.shortcut-sheet', sheet => Promise.all(sheet.getAnimations().map(animation => animation.finished)))
+    await page.screenshot({ path: `${root}.cache/shortcut-overlay-mobile.png` })
+    await page.$eval('.shortcut-sheet', sheet => { sheet.scrollTop = sheet.scrollHeight })
+    assert.equal(await page.$eval('.shortcut-sheet', sheet => {
+        const footer = sheet.querySelector('footer').getBoundingClientRect()
+        return footer.bottom <= sheet.getBoundingClientRect().bottom
+    }), true, 'all shortcuts and the footer remain reachable on a narrow screen')
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => !document.querySelector('.shortcut-overlay'))
+    await page.keyboard.up('Control')
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'focus-reference')
     assert.deepEqual(errors, [])
-    console.log('Hovercard controls: all seven actions and URL-to-controls pointer crossing pass for single and stacked previews')
+    console.log('Hovercard controls, Cmd+L focus, held Cmd+T groups, two-second modifier help, focus preservation and mobile layout pass')
 } finally {
     await browser?.close()
     await server.shutdown()

@@ -21,8 +21,9 @@
     
     // Use reactive doc data for url/favicon, falling back to prop
     const reactiveUrl = $derived(data.docs[tab?.id]?.url ?? tab?.url)
-    const reactiveFavicon = $derived(data.docs[tab?.id]?.favicon ?? tab?.favicon)
-    const reactiveTitle = $derived(data.docs[tab?.id]?.title ?? tab?.title)
+    const currentTab = $derived(data.docs[tab?.id] || tab)
+    const reactiveFavicon = $derived(currentTab?.faviconOverride || currentTab?.favicon)
+    const reactiveTitle = $derived(currentTab?.titleOverride || currentTab?.title)
     const loading = $derived(data.frames[tab?.id]?.loading ?? false)
     
     // Derive security status if not provided
@@ -57,7 +58,7 @@
         
         // New tab icon - check URL FIRST before anything else
         // This ensures about: pages always show correct icon regardless of any other state
-        if (url?.startsWith?.('about:newtab') || url?.startsWith?.('about:blank')) {
+        if (!currentTab?.emojiOverride && !currentTab?.faviconOverride && (url?.startsWith?.('about:newtab') || url?.startsWith?.('about:blank'))) {
             return { type: 'newTab' }
         }
         
@@ -66,11 +67,15 @@
             return { type: 'security', component: SecurityIndicator }
         }
 
+        if (currentTab?.emojiOverride) {
+            return { type: 'emoji', emoji: currentTab.emojiOverride }
+        }
+
         // Custom favicon - check if it's SVG markup or URL
         // But skip if favicon URL doesn't match current URL's domain (stale favicon)
         if (favicon) {
             // Skip stale favicons from different domains
-            if (favicon.startsWith('http') && url) {
+            if (!currentTab?.faviconOverride && favicon.startsWith('http') && url) {
                 try {
                     const faviconUrlParam = new URL(favicon).searchParams.get('url')
                     if (faviconUrlParam) {
@@ -135,6 +140,8 @@
         aria-label="Tab favicon and security status">
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
+        {:else if faviconContent.type === 'emoji'}
+            <span class="favicon-emoji">{faviconContent.emoji}</span>
         {:else if faviconContent.type === 'image'}
             <img src={faviconContent.src} alt="" class="favicon" draggable="false" onerror={() => handleFaviconError(faviconContent.src)} />
         {:else if faviconContent.type === 'svg'}
@@ -150,6 +157,8 @@
     <span class="favicon-wrapper" class:small={size === 'small'}>
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
+        {:else if faviconContent.type === 'emoji'}
+            <span class="favicon-emoji">{faviconContent.emoji}</span>
         {:else if faviconContent.type === 'image'}
             <img src={faviconContent.src} alt="" class="favicon" draggable="false" onerror={() => handleFaviconError(faviconContent.src)} />
         {:else if faviconContent.type === 'svg'}
@@ -167,6 +176,15 @@
     .favicon-display,
     .favicon-wrapper {
         position: relative;
+    }
+
+    .favicon-emoji {
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    .small .favicon-emoji {
+        font-size: 12px;
     }
 
     .favicon-loading-spinner {

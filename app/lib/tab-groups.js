@@ -15,8 +15,18 @@ export function getSidepins (items = [], groupTabId) {
     const anchor = items.find(tab => tab.id === groupTabId && isOpenTab(tab))
     const groupKey = anchor ? tabGroupKey(anchor) : null
     return items.filter(tab => tab.type === 'tab' && tab.pinned && !tab.archive && !tab.preview && !tab.lightbox &&
-        (getPinScope(tab) === 'space' || (groupKey && tabGroupKey(tab) === groupKey)))
+        (getPinScope(tab) === 'space' || (getPinScope(tab) === 'group' && groupKey && tabGroupKey(tab) === groupKey)))
         .sort((a, b) => (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
+}
+
+export function getGlobalPins (items = []) {
+    return items.filter(tab => tab.type === 'tab' && tab.pinned && getPinScope(tab) === 'global' && !tab.archive && !tab.preview && !tab.lightbox && !tab._deleted)
+        .sort((a, b) => (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
+}
+
+export function getSidebarPinnedTabs (items = []) {
+    return items.filter(tab => isOpenTab(tab) && !tab.pinned && tab.sidebarPinned && !tab._deleted)
+        .sort((a, b) => (a.sidebarPinOrder ?? a.order ?? 0) - (b.sidebarPinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
 }
 
 export function tabGroupKey (tab) {
@@ -55,13 +65,13 @@ export function getTabGroups (items = [], activeTabIds = [], docs = {}) {
         const metadata = group.tabGroupId ? docs[tabGroupMetadataId(group.tabGroupId)] : null
         group.metadata = metadata && !metadata.archive && !metadata._deleted ? metadata : null
         group.name = group.metadata?.name?.trim() || null
-        group.title = group.name || group.tabs[0].title || group.tabs[0].url || 'New tab'
+        group.title = group.name || group.tabs[0].titleOverride || group.tabs[0].title || group.tabs[0].url || 'New tab'
         return group
     }).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
 }
 
-export function getSidebarItems (items = [], activeTabIds = [], docs = {}) {
-    return [...getTabGroups(items, activeTabIds, docs), ...items.filter(item => item.type === 'divider')]
+export function getSidebarItems (items = [], activeTabIds = [], docs = {}, includeSidebarPins = false) {
+    return [...getTabGroups(includeSidebarPins ? items : items.filter(tab => !tab.sidebarPinned), activeTabIds, docs), ...items.filter(item => item.type === 'divider')]
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 }
 
@@ -72,7 +82,7 @@ export function getTabGroup (items, tabId, activeTabIds = [], docs = {}) {
 export function planTabUngroup (items, tabId) {
     const group = getTabGroup(items, tabId)
     if (!group?.tabGroupId) return []
-    const entries = getSidebarItems(items).flatMap(entry => entry.id === group.id
+    const entries = getSidebarItems(items, [], {}, true).flatMap(entry => entry.id === group.id
         ? group.tabs.map(tab => ({ tabs: [tab], ungroup: true }))
         : [entry])
     // Normalize first-level ranks so even tied/fractional orders and dividers keep their positions.
@@ -147,8 +157,8 @@ export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, t
     if (targetGroup) {
         const remaining = targetGroup.tabs.filter(item => !movingIds.has(item.id))
         if (!remaining.length) {
-            if (scope !== 'group' && tab.pinned) {
-                return [{ id: tab.id, pinned: null, pinScope: null, pinOrder: null }]
+            if (scope !== 'group' && (tab.pinned || tab.sidebarPinned)) {
+                return [{ id: tab.id, pinned: null, pinScope: null, pinOrder: null, sidebarPinned: null, sidebarPinOrder: null }]
             }
             return []
         }
@@ -164,7 +174,7 @@ export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, t
         } : null
         members.forEach((member, index) => updates.push({
             id: member.id, tabGroupId: groupId, order: targetGroup.order, tabGroupOrder: index,
-            ...(movingIds.has(member.id) ? { spaceId: targetSpaceId, ...(scope === 'group' ? {} : { pinned: null, pinScope: null, pinOrder: null }) } : {}),
+            ...(movingIds.has(member.id) ? { spaceId: targetSpaceId, ...(scope === 'group' ? {} : { pinned: null, pinScope: null, pinOrder: null, sidebarPinned: null, sidebarPinOrder: null }) } : {}),
             ...(placement && movingIds.has(member.id) ? { canvas: { ...member.canvas, [targetSpaceId]: { ...placement, x: placement.x + moving.findIndex(tab => tab.id === member.id) * 1080 } } } : {})
         }))
     } else {
@@ -172,7 +182,7 @@ export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, t
         const neighbor = id => entries.find(item => item.tabs?.some(member => member.id === id) || item.id === id)
         const order = orderBetween(neighbor(beforeTabId), neighbor(afterTabId))
         moving.forEach(member => updates.push({
-            id: member.id, spaceId: targetSpaceId, ...(scope === 'group' ? {} : { pinned: null, pinScope: null, pinOrder: null }), order,
+            id: member.id, spaceId: targetSpaceId, ...(scope === 'group' ? {} : { pinned: null, pinScope: null, pinOrder: null, sidebarPinned: null, sidebarPinOrder: null }), order,
             tabGroupId: scope === 'group' ? member.tabGroupId || null : null,
             tabGroupOrder: scope === 'group' ? member.tabGroupOrder ?? member.order : null
         }))

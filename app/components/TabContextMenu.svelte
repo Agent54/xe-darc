@@ -17,6 +17,11 @@
     let adjustedX = $state(0)
     let groupMenuView = $state('menu')
     let groupNameInput = $state(null)
+    const isGroup = $derived(menu.tab?.type === 'tabgroup')
+    const customName = $derived(isGroup ? menu.tab?.name : (data.docs[menu.tab?.id] || menu.tab)?.titleOverride)
+    const customEmoji = $derived(isGroup ? menu.tab?.metadata?.emoji : (data.docs[menu.tab?.id] || menu.tab)?.emojiOverride)
+    const customFavicon = $derived(isGroup ? menu.tab?.metadata?.favicon : (data.docs[menu.tab?.id] || menu.tab)?.faviconOverride)
+    const editorTitle = $derived(groupMenuView === 'rename' ? (isGroup ? 'Rename group' : 'Rename tab') : (isGroup ? 'Group icon' : 'Tab icon'))
 
     $effect(() => {
         if (menu.visible && menu.tab) groupMenuView = 'menu'
@@ -77,6 +82,11 @@
     
     function unpinTab(tab) {
         data.pin({ tabId: tab.id, pinned: null })
+        onHide()
+    }
+
+    function toggleSidebarPin(tab) {
+        data.pinSidebarTab({ tabId: tab.id, pinned: !tab.sidebarPinned })
         onHide()
     }
 
@@ -145,12 +155,20 @@
     async function saveGroupName(event) {
         event.preventDefault()
         const name = new FormData(event.currentTarget).get('groupName')
-        await data.updateTabGroup(menu.tab.tabGroupId, { name }, menu.tab.spaceId)
+        if (isGroup) {
+            await data.updateTabGroup(menu.tab.tabGroupId, { name }, menu.tab.spaceId)
+        } else {
+            await data.updateTabOverrides(menu.tab.id, { titleOverride: name })
+        }
         onHide()
     }
 
     async function resetGroupName() {
-        await data.updateTabGroup(menu.tab.tabGroupId, { name: null }, menu.tab.spaceId)
+        if (isGroup) {
+            await data.updateTabGroup(menu.tab.tabGroupId, { name: null }, menu.tab.spaceId)
+        } else {
+            await data.updateTabOverrides(menu.tab.id, { titleOverride: null })
+        }
         onHide()
     }
 
@@ -166,7 +184,22 @@
     }
 
     async function saveGroupEmoji(emoji) {
-        await data.updateTabGroup(menu.tab.tabGroupId, { emoji, favicon: null }, menu.tab.spaceId)
+        if (isGroup) {
+            await data.updateTabGroup(menu.tab.tabGroupId, { emoji, favicon: null }, menu.tab.spaceId)
+        } else {
+            await data.updateTabOverrides(menu.tab.id, { emojiOverride: emoji, faviconOverride: null })
+        }
+        onHide()
+    }
+
+    async function saveFavicon(event) {
+        event.preventDefault()
+        const favicon = new FormData(event.currentTarget).get('favicon')
+        if (isGroup) {
+            await data.updateTabGroup(menu.tab.tabGroupId, { favicon, emoji: null }, menu.tab.spaceId)
+        } else {
+            await data.updateTabOverrides(menu.tab.id, { faviconOverride: favicon, emojiOverride: null })
+        }
         onHide()
     }
 
@@ -197,8 +230,8 @@
     
     <div class="context-menu" 
          bind:this={menuElement}
-         role={menu.tab.type === 'tabgroup' && groupMenuView !== 'menu' ? 'dialog' : 'menu'}
-         aria-label={menu.tab.type === 'tabgroup' && groupMenuView !== 'menu' ? (groupMenuView === 'rename' ? 'Rename group' : 'Group icon') : undefined}
+         role={groupMenuView !== 'menu' ? 'dialog' : 'menu'}
+         aria-label={groupMenuView !== 'menu' ? editorTitle : undefined}
          tabindex="-1"
          style="left: {adjustedX}px; top: {adjustedY}px;"
          onclick={(e) => e.stopPropagation()}
@@ -211,42 +244,50 @@
              }
          }}
          oncontextmenu={(e) => e.preventDefault()}>
-        {#if menu.tab.type === 'tabgroup'}
-            {#if groupMenuView === 'menu'}
-                <button class="context-menu-item" role="menuitem" type="button"
+        {#if groupMenuView !== 'menu'}
+            <button class="group-editor-back" type="button"
+                    onmouseup={() => showGroupView('menu')}
+                    onclick={(e) => { if (e.detail === 0) showGroupView('menu') }}>← {editorTitle}</button>
+            {#if groupMenuView === 'rename'}
+                <form class="group-name-form" onsubmit={saveGroupName}>
+                    <label for="tab-group-name">{isGroup ? 'Group name' : 'Tab title'}</label>
+                    <div class="group-name-fields">
+                        <input bind:this={groupNameInput} id="tab-group-name" name="groupName" value={customName || ''} placeholder={isGroup ? 'Use tab titles' : 'Use page title'} autocomplete="off" />
+                        <button type="submit">Save</button>
+                    </div>
+                </form>
+                {#if customName}
+                    <button class="context-menu-item" type="button"
+                            onmouseup={resetGroupName}
+                            onclick={(e) => { if (e.detail === 0) resetGroupName() }}>{isGroup ? 'Use tab titles' : 'Use page title'}</button>
+                {/if}
+            {:else}
+                <EmojiPicker value={customEmoji} label={isGroup ? 'Group emoji' : 'Tab emoji'} resetLabel={isGroup ? 'Use tab favicons' : 'Use page favicon'} onSelect={saveGroupEmoji} />
+                <form class="group-name-form" onsubmit={saveFavicon}>
+                    <label for="tab-icon-url">Icon URL</label>
+                    <div class="group-name-fields">
+                        <input id="tab-icon-url" name="favicon" type="url" value={customFavicon || ''} placeholder="https://…" required />
+                        <button type="submit">Use</button>
+                    </div>
+                </form>
+            {/if}
+        {:else if menu.tab.type !== 'divider'}
+            <button class="context-menu-item" role="menuitem" type="button"
                         onmouseup={() => showGroupView('rename')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>Rename…</button>
-                <button class="context-menu-item" role="menuitem" type="button"
+            <button class="context-menu-item" role="menuitem" type="button"
                         onmouseup={() => showGroupView('emoji')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>Change icon…</button>
+            {#if menu.tab.type === 'tabgroup'}
                 <button class="context-menu-item" role="menuitem" type="button"
                         onmouseup={ungroup}
                         onclick={(e) => { if (e.detail === 0) ungroup() }}>Ungroup</button>
                 <button class="context-menu-item" role="menuitem" type="button"
                         onmouseup={closeGroup}
                         onclick={(e) => { if (e.detail === 0) closeGroup() }}>Close all</button>
-            {:else}
-                <button class="group-editor-back" type="button"
-                        onmouseup={() => showGroupView('menu')}
-                        onclick={(e) => { if (e.detail === 0) showGroupView('menu') }}>← {groupMenuView === 'rename' ? 'Rename group' : 'Group icon'}</button>
-                {#if groupMenuView === 'rename'}
-                    <form class="group-name-form" onsubmit={saveGroupName}>
-                        <label for="tab-group-name">Group name</label>
-                        <div class="group-name-fields">
-                            <input bind:this={groupNameInput} id="tab-group-name" name="groupName" value={menu.tab.name || ''} placeholder="Use tab titles" autocomplete="off" />
-                            <button type="submit">Save</button>
-                        </div>
-                    </form>
-                    {#if menu.tab.name}
-                        <button class="context-menu-item" type="button"
-                                onmouseup={resetGroupName}
-                                onclick={(e) => { if (e.detail === 0) resetGroupName() }}>Use tab titles</button>
-                    {/if}
-                {:else}
-                    <EmojiPicker value={menu.tab.metadata?.emoji} onSelect={saveGroupEmoji} />
-                {/if}
             {/if}
-        {:else if menu.tab.type === 'divider'}
+        {/if}
+        {#if groupMenuView === 'menu' && menu.tab.type === 'divider'}
             <div class="context-menu-item" role="menuitem" tabindex="0"
                     onmouseup={() => removeDividerFromMenu(menu.tab)}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeDividerFromMenu(menu.tab) } }}>
@@ -257,7 +298,7 @@
                 </span>
                 <span>Remove spacer</span>
             </div>
-        {:else}
+        {:else if groupMenuView === 'menu' && menu.tab.type !== 'tabgroup'}
         <div class="context-menu-item" 
              role="menuitem"
              tabindex="0"
@@ -284,6 +325,16 @@
             <span>Certificate Info</span>
         </div>
         
+        <button class="context-menu-item" type="button" role="menuitem"
+                onmouseup={() => toggleSidebarPin(menu.tab)}
+                onclick={(e) => { if (e.detail === 0) toggleSidebarPin(menu.tab) }}>
+            <span class="context-menu-icon" aria-hidden="true">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                </svg>
+            </span>
+            <span>{menu.tab.sidebarPinned ? 'Unpin from Sidebar' : 'Pin in Sidebar'}</span>
+        </button>
         {#if menu.tab.pinned}
             <div class="context-menu-item" 
                  role="menuitem"

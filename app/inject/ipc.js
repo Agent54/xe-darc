@@ -1,3 +1,25 @@
+// The guest has no embedder WindowProxy until the embedder sends a message.
+// Announce readiness first, then exchange the hello over a real MessagePort.
+if (window === window.top) {
+    let ipcPort = null
+
+    window.addEventListener('message', event => {
+        if (event.data?.type !== 'darc:ipc-connect' || event.data.tabId !== tabId || !event.ports[0] || ipcPort) {
+            return
+        }
+
+        ipcPort = event.ports[0]
+        ipcPort.onmessage = ({ data }) => {
+            if (data?.type === 'darc:ipc-reply' && data.message === 'Hello world') {
+                console.log('[IPC] Hello world from parent (MessagePort round trip complete)')
+            }
+        }
+        ipcPort.postMessage({ type: 'darc:ipc-hello', message: 'Hello world' })
+    })
+
+    console.log(`iwa:ipc-ready:${tabId}`)
+}
+
 window.addEventListener('focus', () => { 
     // console.log('####### 🎯 [FOCUS] Frame window received focus event | tabId:', tabId);
     console.log('iwa:focus');
@@ -28,47 +50,11 @@ document.addEventListener('keyup', function(event) {
 }, { capture: true, passive: false });
 
 
-// Global keyboard event listener for controlled frame
+// Track modifiers independently of the shared shortcut dispatcher.
 document.addEventListener('keydown', function(event) {
     // Track command key state
     if (event.metaKey || event.ctrlKey) {
         console.log(`iwa:command-key-down:${tabId}`);
-    }
-    
-    // Check for Cmd+W (Mac) or Ctrl+W (Windows/Linux)
-    if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
-        console.log(`iwa:close-tab:${tabId}`);
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        return false;
-    }
-    
-    // Check for Cmd+T (Mac) or Ctrl+T (Windows/Linux) 
-    if ((event.metaKey || event.ctrlKey) && event.key === 't') {
-        console.log(`iwa:new-tab:${tabId}`);
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        return false;
-    }
-    
-    // Check for Cmd+R (Mac) or Ctrl+R (Windows/Linux) or F5
-    if (((event.metaKey || event.ctrlKey) && event.key === 'r') || event.key === 'F5') {
-        console.log(`iwa:reload-tab:${tabId}`);
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        return false;
-    }
-    
-    // Check for F18 (grid view toggle)
-    if (event.key === 'F18') {
-        console.log(`iwa:key:F18:${tabId}`);
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        return false;
     }
 }, { capture: true, passive: false });
 

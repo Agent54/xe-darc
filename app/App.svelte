@@ -15,8 +15,11 @@
     import TabGroupPreview from './components/TabGroupPreview.svelte'
     import TabHoverCard from './components/TabHoverCard.svelte'
     import TabContextMenu from './components/TabContextMenu.svelte'
+    import AppearanceContextMenu from './components/AppearanceContextMenu.svelte'
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
+    import ShortcutOverlay from './components/ShortcutOverlay.svelte'
+    import HelpMenu from './components/HelpMenu.svelte'
     import Favicon from './components/Favicon.svelte'
     import UrlRenderer from './components/UrlRenderer.svelte'
     // import AttachmentImage from './components/AttachmentImage.svelte'
@@ -27,6 +30,8 @@
     import { colors } from './lib/utils.js'
     import { getComposeAppPorts } from './lib/compose-api.js'
     import { resolveSidepinVisibility } from './lib/sidepin-visibility.js'
+    import { shortcuts, shortcutActionIds, createShortcutMatcher, createShortcutHandler, isMacPlatform as detectMacPlatform } from './lib/shortcuts.js'
+    import { createShortcutActions } from './lib/shortcut-actions.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag, onDrop } from './lib/tab-drag.svelte.js'
     const iwaVersion = __IWA_VERSION__
@@ -108,6 +113,10 @@
     let closeButtonHoverTimer = null
     let instantHovercardsMode = $state(false)
     let hovercardUrlBarExpanded = $state(false)
+    let hovercardComponent = $state(null)
+    let shortcutOverlayVisible = $state(false)
+    let shortcutOverviewVisible = $state(false)
+    let helpMenu = $state(null)
     let instantModeResetTimer = null
     let headerPartOfMain = $state(false)
     let isScrolling = $state(false)
@@ -287,6 +296,7 @@
     let tabsOpenRight = $state(true)
     let showNavigationToolbar = $state(false)
     let showSidebarUrl = $state(false)
+    let appearanceMenu = $state(null)
     
     let menuForceClose = $state(false)
 
@@ -589,51 +599,9 @@
 
     window.addEventListener('resize', handleWindowResize)
 
-    // Listen for the global Cmd+W/Ctrl+W custom event from main.js
-    function handleGlobalTabClose(event) {
-        console.log('Received global tab close event')
-        handleTabClose(event.detail?.originalEvent || event)
-    }
-
-    // Listen for the global Cmd+R/Ctrl+R custom event from main.js
-    function handleGlobalTabReload(event) {
-        handleTabReload(event.detail?.originalEvent || event)
-    }
-
-    // Listen for keyboard events from controlled frames
-    function handleFrameTabClose(event) {
-        const { tabId, sourceFrame } = event.detail
-        console.log(`Received tab close request from controlled frame: ${tabId}`)
-        
-        const tab = data.docs[tabId]
-        if (tab) {
-            console.log(`Closing tab: ${tab.title}`)
-            closeTab(tab, event)
-        } else {
-            console.warn(`Tab with ID ${tabId} not found`)
-        }
-    }
-
-    function handleFrameTabReload(event) {
-        const { tabId, sourceFrame } = event.detail
-        
-        const tab = data.docs[tabId]
-        if (tab) {
-            reloadTab(tab)
-        }
-    }
-
-    function handleFrameNewTab(event) {
-        const { tabId, sourceFrame } = event.detail
-        console.log(`Received new tab request from controlled frame: ${tabId}`)
-        openNewTab()
-    }
-
-    function handleFrameKey(event) {
-        const { key, tabId } = event.detail
-        if (key === 'F18') {
-            selectViewMode('tile', {fromZoomOrKey: true})
-        }
+    function handleFrameShortcut(event) {
+        const { id, tabId } = event.detail
+        if (data.docs[tabId] && shortcutActionIds.has(id)) runShortcut(id, event, tabId)
     }
 
     // Track mouse state and focus for controlled frames (declared early to avoid TDZ issues)
@@ -761,21 +729,16 @@
         }
     }
 
-    window.addEventListener('darc-close-tab', handleGlobalTabClose)
-    window.addEventListener('darc-reload-tab', handleGlobalTabReload)
-    window.addEventListener('darc-close-tab-from-frame', handleFrameTabClose)
-    window.addEventListener('darc-reload-tab-from-frame', handleFrameTabReload)
-    window.addEventListener('darc-new-tab-from-frame', handleFrameNewTab)
+    window.addEventListener('darc-shortcut', handleFrameShortcut)
     window.addEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
     window.addEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
     window.addEventListener('darc-controlled-frame-click', handleFrameClick)
-    window.addEventListener('darc-key-from-frame', handleFrameKey)
     window.addEventListener('close-apps-overlay', () => { closeAppsOverlay() })
     // Disabled: zoom-out gestures should not toggle the overview grid view.
     // window.addEventListener('darc-zoom-out-at-max-internal', handleZoomOutAtMaxInternal)
     window.addEventListener('darc-zoom-in', handleZoomIn)
 
-    function openNewTab() {  
+    function openNewTab(newGroup = false) {
         isChangingTabs = true
         setTimeout(() => { isChangingTabs = false }, 350)
         
@@ -786,7 +749,9 @@
         }
         
         collapseAndRemovePlaceholders()      
-        const newTab = data.newGroupTab(data.spaceMeta.activeSpace, { shouldFocus: true })
+        const newTab = newGroup
+            ? data.newTab(data.spaceMeta.activeSpace, { shouldFocus: true })
+            : data.newGroupTab(data.spaceMeta.activeSpace, { shouldFocus: true })
         if (newTab) {
             setTimeout(checkTabListOverflow, 50) // Check overflow after DOM update
         }
@@ -907,108 +872,59 @@
         }
     }
 
-    function handleKeyDown(event) {
-        if ((event.metaKey || event.ctrlKey) && event.key === 't') {
-            event.preventDefault()
-            event.stopPropagation()
-            event.stopImmediatePropagation()
-            event.cancelBubble = true
-            // Clear flag on user-initiated actions
-            if (tabChangeFromScroll) {
-                tabChangeFromScroll = false
-                if (tabChangeFromScrollTimer) {
-                    clearTimeout(tabChangeFromScrollTimer)
-                    tabChangeFromScrollTimer = null
-                }
-            }
-            openNewTab()
-            return
+    const runShortcut = createShortcutActions(data, {
+        openNewTab,
+        openNewTabGroup: () => openNewTab(true),
+        showShortcuts: (visible) => { shortcutOverlayVisible = visible },
+        openLocation: openTabLocation,
+        closeTab,
+        dismissHovercards: () => window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards')),
+        activateTab: (tab) => {
+            if (tab.id !== data.spaceMeta.activeTabId) activateTab(tab)
+        },
+        getTabs: () => [...leftPinnedTabs, ...unpinnedTabs, ...rightPinnedTabs],
+        focusTab: (tabId) => data.frames[tabId]?.frame?.focus(),
+        escape: handleShortcutEscape,
+        showOverview: () => selectViewMode('tile', { fromZoomOrKey: true })
+    })
+    const handleKeyDown = createShortcutHandler(createShortcutMatcher(shortcuts, detectMacPlatform()), runShortcut)
+
+    function handleShortcutEscape(event) {
+        if (shortcutOverviewVisible) {
+            shortcutOverviewVisible = false
+            return true
         }
-        if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
-            event.preventDefault()
-            event.stopPropagation()
-            event.stopImmediatePropagation()
-            // Clear flag on user-initiated actions
-            if (tabChangeFromScroll) {
-                tabChangeFromScroll = false
-                if (tabChangeFromScrollTimer) {
-                    clearTimeout(tabChangeFromScrollTimer)
-                    tabChangeFromScrollTimer = null
-                }
-            }
-            handleTabClose(event)
-            return
-        }
-        if ((event.metaKey || event.ctrlKey) && event.key === '0') {
-            event.preventDefault()
-            event.stopPropagation()
-            event.stopImmediatePropagation()
-            handleZoomReset()
-            return
-        }
-        if (event.key === 'Escape' && tabDrag.active) {
-            event.preventDefault()
-            event.stopImmediatePropagation()
+        if (helpMenu?.dismiss()) return true
+        if (tabDrag.active) {
             cancelDrag()
-            return
+            return true
         }
-        if (event.key === 'Escape' && showAppsOverlay) {
-            event.preventDefault()
+        if (showAppsOverlay) {
+            if (event.target?.closest?.('.app-context-menu')) return false
             closeAppsOverlay()
-            return
+            return true
         }
-        if (event.key === 'F18') {
-            event.preventDefault()
-            selectViewMode('tile', {fromZoomOrKey: true})
-            return
+        if (hovercardUrlBarExpanded || hoveredTab) {
+            window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
+            return true
         }
+        return false
     }
 
-    function handleZoomReset() {
-        if (tabs.length > 0 && data.spaceMeta.activeTabId) {
-            if (data.frames[data.spaceMeta.activeTabId]) {
-                const frame = data.frames[data.spaceMeta.activeTabId]?.frame
-                
-                if (frame && frame.setZoom) {
-                    frame.setZoom(1.0).then(() => {
-                        console.log(`[Tab ${data.spaceMeta.activeTabId}] Zoom reset to 100%`)
-                    }).catch((error) => {
-                        console.error(`[Tab ${data.spaceMeta.activeTabId}] Failed to reset zoom:`, error)
-                    })
-                } else if (frame && !frame.setZoom) {
-                    console.warn(`[Tab ${data.spaceMeta.activeTabId}] setZoom API not available on this frame`)
-                } else {
-                    console.warn('No active frame available for zoom reset')
-                }
-            } else {
-                console.warn('Active tab not found')
-            }
-        } else {
-            console.warn('No active tab available for zoom reset')
+    async function openTabLocation(tab) {
+        const previousPosition = hoveredTab?.id === tab.id ? hovercardPosition : null
+        window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
+        const anchor = tabButtons[tab.id] || document.querySelector('.sidebar [data-tab-id="' + tab.id + '"]') || document.querySelector('header')
+        const rect = anchor?.getBoundingClientRect()
+        hovercardPosition = previousPosition || {
+            x: Math.max(170, Math.min((rect?.left || 0) + (rect?.width || 0) / 2, window.innerWidth - 170)),
+            y: Math.max(20, Math.min(rect?.bottom || 20, window.innerHeight - 200))
         }
-    }
-
-
-    function handleTabClose (event) {
-        if (tabs.length > 0 && data.spaceMeta.activeTabId) {
-            const activeTab = data.docs[data.spaceMeta.activeTabId]
-            if (activeTab) {
-                closeTab(activeTab, event)
-            }
-        } else {
-            console.log('No tabs to close')
-        }
-    }
-
-    function handleTabReload (event) {
-        if (tabs.length > 0 && data.spaceMeta.activeTabId) {
-            const activeTab = data.docs[data.spaceMeta.activeTabId]
-            if (activeTab) {
-                reloadTab(activeTab)
-            }
-        } else {
-            console.log('No tabs to reload')
-        }
+        hoveredTab = tab
+        hovercardShowTime = Date.now()
+        hovercardUrlBarExpanded = true
+        await tick()
+        hovercardComponent?.focusLocation()
     }
 
     async function activateTab (tab, index) {
@@ -1249,6 +1165,7 @@
     function handleTabContextMenu(event, tab, index) {
         event.preventDefault()
         event.stopPropagation()
+        appearanceMenu = null
         
         // Prevent opening a second context menu if one is already visible
         if (contextMenu.visible) {
@@ -1276,6 +1193,7 @@
 
     // Handle right-clicks anywhere to close context menu
     function handleGlobalContextMenu(event) {
+        appearanceMenu = null
         if (contextMenu.visible) {
             event.preventDefault()
             hideContextMenu()
@@ -1401,6 +1319,18 @@
     onDrop((event) => {
         if (event.type === 'remove-divider') {
             data.removeDivider(event.dividerId)
+        } else if (event.type === 'pin') {
+            const tab = data.docs[event.tabId]
+            if (!tab) return
+            if (event.pinScope === 'sidebar') {
+                data.pinSidebarTab(event)
+                return
+            }
+            data.pin({
+                tabId: tab.id, pinned: tab.pinned || 'left', scope: event.pinScope,
+                targetSpaceId: event.targetSpaceId,
+                beforeTabId: event.beforeTabId, afterTabId: event.afterTabId
+            })
         } else if (event.type === 'sidepin') {
             const tab = data.docs[event.tabId]
             if (!tab) return
@@ -1408,6 +1338,7 @@
 
             data.pin({
                 tabId: tab.id, pinned: side,
+                scope: data.getPinScope(tab) === 'global' ? 'group' : undefined,
                 groupTabId: data.getCurrentGroupTabId(),
                 targetSpaceId: data.spaceMeta.activeSpace,
                 beforeTabId: event.beforeTabId, afterTabId: event.afterTabId
@@ -1459,7 +1390,7 @@
                         const isForceHibernated = data.frames[tabId]?.forceHibernated === true
 
                         if (entry.isIntersecting && tab && !isForceHibernated) {
-                            console.log('%c[TAB-DEBUG] IntersectionObserver activating tab: ' + tab.id + ' "' + (tab.title || tab.url || '') + '" (ratio=' + entry.intersectionRatio.toFixed(2) + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
+                            console.log('%c[TAB-DEBUG] IntersectionObserver activating tab: ' + tab.id + ' "' + (tab.titleOverride || tab.title || tab.url || '') + '" (ratio=' + entry.intersectionRatio.toFixed(2) + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
                             tabChangeFromScroll = true
                             if (tabChangeFromScrollTimer) {
                                 clearTimeout(tabChangeFromScrollTimer)
@@ -1524,6 +1455,7 @@
     // Cleanup on component destroy
     $effect(() => {
         return () => {
+            handleKeyDown.reset()
             stopHovercardPositionCheck()
             if (_observer) {
                 _observer.disconnect()
@@ -1550,15 +1482,10 @@
                 clearTimeout(sidebarStateUpdateTimer)
             }
 
-            window.removeEventListener('darc-close-tab', handleGlobalTabClose)
-            window.removeEventListener('darc-reload-tab', handleGlobalTabReload)
-            window.removeEventListener('darc-close-tab-from-frame', handleFrameTabClose)
-            window.removeEventListener('darc-reload-tab-from-frame', handleFrameTabReload)
-            window.removeEventListener('darc-new-tab-from-frame', handleFrameNewTab)
+            window.removeEventListener('darc-shortcut', handleFrameShortcut)
             window.removeEventListener('darc-controlled-frame-mousedown', handleFrameMouseDown)
             window.removeEventListener('darc-controlled-frame-mouseup', handleFrameMouseUp)
             window.removeEventListener('darc-controlled-frame-click', handleFrameClick)
-            window.removeEventListener('darc-key-from-frame', handleFrameKey)
         }
     })
 
@@ -2638,6 +2565,14 @@
         data.settings.showSidebarUrl = showSidebarUrl
     }
 
+    function openAppearanceMenu(event, area) {
+        event.preventDefault()
+        event.stopPropagation()
+        hideContextMenu()
+        window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
+        appearanceMenu = { x: event.clientX, y: event.clientY, area, target: event.currentTarget }
+    }
+
     function toggleGlobalTabComplete() {
         globalTabComplete = !globalTabComplete
         localStorage.setItem('globalTabComplete', globalTabComplete.toString())
@@ -3147,7 +3082,7 @@
     let currentTabGroup = $derived(data.getTabGroup(currentGroupTabId))
     let unpinnedTabs = $derived((currentTabGroup?.tabs || []).filter(tab => !tab.pinned && !closed[tab._rev]))
     let unpinnedTabCount = $derived(unpinnedTabs.filter(tab => tab.type === 'tab').length)
-    let spaceSidepins = $derived(tabs.filter(tab => tab.type === 'tab' && tab.pinned && !tab.archive && !tab.preview && !tab.lightbox))
+    let spaceSidepins = $derived([...tabs.filter(tab => tab.type === 'tab' && tab.pinned && data.getPinScope(tab) !== 'global' && !tab.archive && !tab.preview && !tab.lightbox), ...data.spaceMeta.globalPins])
     let scopedPins = $derived(data.getSidepins().filter(tab => !closed[tab._rev]))
     let leftPinnedTabs = $derived(scopedPins.filter(tab => tab.pinned === true || tab.pinned === 'left'))
     let rightPinnedTabs = $derived(scopedPins.filter(tab => tab.pinned === 'right'))
@@ -3246,7 +3181,7 @@
             class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
             role="tab"
             tabindex="0"
-            title={tab.title || tab.url}
+            title={tab.titleOverride || tab.title || tab.url}
             onmousedown={(e) => { if (e.button === 0) { startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, tab.id === data.spaceMeta.activeTabId, 'right') } }}
             onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
@@ -3287,6 +3222,7 @@
 <svelte:window
     onpointerdowncapture={handleHovercardPointerDown}
     onkeydowncapture={handleKeyDown}
+    onkeyupcapture={handleKeyDown.keyup}
     onclick={hideContextMenu}
     oncontextmenu={handleGlobalContextMenu}
     onmousemove={handleGlobalMouseMove}
@@ -3294,15 +3230,19 @@
     onmouseup={handleGlobalMouseUp}
     onresize={handleResize}
     onfocus={updateWindowFocusState}
-    onblur={updateWindowFocusState}
+    onblur={() => { handleKeyDown.reset(); updateWindowFocusState() }}
     onvisibilitychange={() => { 
         // console.log('visibilitychange', document.visibilityState) 
     }}
 />
 
+{#if shortcutOverlayVisible || shortcutOverviewVisible}
+    <ShortcutOverlay isMac={detectMacPlatform()} dismissible={shortcutOverviewVisible} onClose={() => { shortcutOverviewVisible = false }} />
+{/if}
+
 <header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} class:has-navigation-toolbar={showNavigationToolbar} class:has-tab-sidebar={tabSidebarVisible} style="--tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;" onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) { cancelFocusModeHide(); focusModeHovered = true } }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) scheduleFocusModeHide() }}>
     <!-- Main background drag handle -->
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 178px;' : 'right: 137px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 221px;' : 'right: 180px;'}"></div>
     
     <!-- Navigation toolbar -->
     {#if showNavigationToolbar}
@@ -3352,7 +3292,7 @@
                         class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
-                        title={tab.title || tab.url}
+                        title={tab.titleOverride || tab.title || tab.url}
                         onmousedown={(e) => { if (e.button === 0) { startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, tab.id === data.spaceMeta.activeTabId, 'left') } }}
                         onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
@@ -3392,7 +3332,7 @@
         </div>
     {/if}
      
-        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: calc(var(--header-tabs-left) + {leftPinnedTabsWidth}px); width: calc(100% - var(--header-tabs-left) - {(devModeEnabled ? 303 : 273) + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: calc(var(--header-tabs-left) + {leftPinnedTabsWidth}px); width: calc(100% - var(--header-tabs-left) - {(devModeEnabled ? 346 : 316) + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list tabs" data-group-tab-id={currentGroupTabId} data-space-id={data.spaceMeta.activeSpace} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
@@ -3430,7 +3370,7 @@
                                 🔊 &nbsp;
                             {:else if tab.muted}
                                 🔇 &nbsp;
-                            {/if}{tab.title || tab.url}</span>
+                            {/if}{tab.titleOverride || tab.title || tab.url}</span>
                             <button class="close-btn" 
                                     aria-label="Close tab"
                                     onmousedown={() => closeTab(tab, event, true)} 
@@ -3539,12 +3479,12 @@
     <div class="header-drag-handle header-drag-handle-left" class:drag-enabled={isDragEnabled}></div>
 
     <!-- Right drag handle (width adjusts for right pinned tabs) -->
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {115 - rightPinnedTabsWidth}px; left: unset; {devModeEnabled ? 'right: 190px;' : 'right: 158px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {115 - rightPinnedTabsWidth}px; left: unset; {devModeEnabled ? 'right: 233px;' : 'right: 201px;'}"></div>
 
     <!-- Zen mode hover trigger zone - covers area above toolbar buttons, no drag behavior -->
     {#if focusModeEnabled}
         <div class="zen-hover-trigger" 
-             style="right: 0; width: {devModeEnabled ? '178px' : '137px'};"
+             style="right: 0; width: {devModeEnabled ? '221px' : '180px'};"
              onmouseenter={() => { if (hasLeftToggle) { cancelFocusModeHide(); focusModeHovered = true; contentAreaScrimActive = true; } }}></div>
     {/if}
 
@@ -3665,7 +3605,7 @@
     </div>
 
     <div class="new-tab-button-wrapper" 
-         style="right: {devModeEnabled ? 174 : 133}px;"
+         style="right: {devModeEnabled ? 217 : 176}px;"
          class:visible={showFixedNewTabButton && (!focusModeEnabled || focusModeHovered)}
          onmouseenter={() => handleNewTabButtonMouseEnter(false)}
          onmouseleave={handleNewTabButtonMouseLeave}
@@ -3726,7 +3666,7 @@
                              onmouseenter={(e) => handleTrashItemMouseEnter(closedTab, e)}
                              onmouseleave={handleTrashItemMouseLeave}>
                             <img src={closedTab.favicon} alt="" class="favicon" />
-                            <span>{closedTab.title || closedTab.url}</span>
+                            <span>{closedTab.titleOverride || closedTab.title || closedTab.url}</span>
                         </div>
                     {/each}
                 </div>
@@ -3764,6 +3704,12 @@
             </svg>
         {/if}
     </div>
+
+    <HelpMenu bind:this={helpMenu} hidden={focusModeEnabled && !focusModeHovered} onShowShortcuts={() => {
+        dismissHovercards()
+        closeMenuImmediately()
+        shortcutOverviewVisible = true
+    }} />
 
     <div class="header-icon-button settings-menu-icon hover-menu-button" 
         role="button"
@@ -4023,7 +3969,7 @@
             role="button"
             tabindex="0"
             title="Dev Menu"
-            style="right: 133px;"
+            style="right: 176px;"
             class:hidden={focusModeEnabled && !focusModeHovered}
             onmouseenter={() => menuForceClose = false}
             onmousedown={(e) => { e.stopPropagation(); closeMenuImmediately() }}>
@@ -4179,7 +4125,8 @@
          class:navigation-hovercard={navigationHovercardTabId === hoveredTab.id}
          style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px; --hovercard-top: {hovercardPosition.y}px;">
        
-            <TabHoverCard tab={hoveredTab} 
+            <TabHoverCard tab={hoveredTab}
+                          bind:this={hovercardComponent}
                           onActivate={activateTab}
                           isClosedTab={false} 
                           showHistoryImmediately={closeButtonHoveredDelayed || navigationHovercardTabId === hoveredTab.id}
@@ -4316,6 +4263,8 @@
 
 <TabSidebar {isDragEnabled} onShowApps={toggleAppsOverlay} 
            onSettings={switchToSettings}
+           onHeaderContextMenu={(event) => openAppearanceMenu(event, 'tab-sidebar')}
+           headerMenuOpen={appearanceMenu?.area === 'tab-sidebar'}
            onNavigateHistory={navigateTabHistory}
            {customTabSidebarWidth} 
            {tabSidebarVisible} 
@@ -4650,8 +4599,12 @@
 
     </div>
 
-    {#if statusLightsEnabled}
-        <div class="led-indicator-array">
+    <div class="led-indicator-array"
+         role="group"
+         aria-label="Status lights"
+         tabindex="-1"
+         oncontextmenu={(event) => openAppearanceMenu(event, 'status-lights')}>
+        {#if statusLightsEnabled}
             <!-- TODO: unify {#if agentEnabled}
                 <div class="microphone-indicator">
                     <svg class="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
@@ -4663,10 +4616,23 @@
             <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>
             <div class="led-dot mocked-activation" class:active={mockedActivationActive}></div>
             <div class="led-dot permission-request" class:active={permissionRequestActive}></div>
-        </div>
-    {/if}
+        {/if}
+    </div>
     <!-- class:drag-enabled={isDragEnabled} -->
 </div>
+
+{#if appearanceMenu}
+    {#key appearanceMenu}
+        <AppearanceContextMenu menu={appearanceMenu}
+            items={appearanceMenu.area === 'status-lights' ? [
+                { id: 'status-lights', label: 'Status Lights', checked: statusLightsEnabled, toggle: toggleStatusLights }
+            ] : [
+                { id: 'header-navigation', label: 'Navigation in Header', checked: showNavigationToolbar, toggle: toggleShowNavigationToolbar },
+                { id: 'sidebar-url', label: 'URL Bar in Sidebar', checked: showSidebarUrl, toggle: toggleShowSidebarUrl }
+            ]}
+            onHide={() => appearanceMenu = null} />
+    {/key}
+{/if}
 
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
@@ -4816,7 +4782,7 @@
             <div class="favicon-wrapper">
                 <Favicon tab={dragTab} />
             </div>
-            <span class="tab-drag-preview-title">{dragTab.title || dragTab.url || 'Untitled'}</span>
+            <span class="tab-drag-preview-title">{dragTab.titleOverride || dragTab.title || dragTab.url || 'Untitled'}</span>
         {/if}
     </div>
 {/if}
@@ -5157,15 +5123,19 @@
         display: flex;
         flex-direction: column;
         gap: 4px;
-        padding: 8px 0;
+        padding: 8px 10px;
         align-items: center;
         position: fixed;
-        right: 33px;
+        min-width: 27px;
+        min-height: 56px;
+        box-sizing: border-box;
+        -webkit-app-region: no-drag;
+        right: 23px;
         bottom: 13px;
     }
 
     .sidebar-right:hover .led-indicator-array { 
-         right: 18px;
+         right: 8px;
     }
 
     .led-dot {

@@ -21,6 +21,8 @@
         onReload = null,
         onCloseTab = null,
         onSettings = null,
+        onHeaderContextMenu = () => {},
+        headerMenuOpen = false,
         showUrl = true
     } = $props()
     import data from '../data.svelte.js'
@@ -32,11 +34,12 @@
     import TabGroupPreview from './TabGroupPreview.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
     import { observeScrollEdges } from '../lib/scroll-edges.js'
+    import { getSidebarPinnedTabs } from '../lib/tab-groups.js'
     import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
     import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, onGroupExpand } from '../lib/tab-drag.svelte.js'
     import { colors as spaceColors } from '../lib/utils.js'
-    import { untrack, onMount } from 'svelte'
+    import { untrack, onMount, tick } from 'svelte'
     
     let isHovered = $state(false)
     let tabListRef = $state(null)
@@ -46,10 +49,20 @@
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
     let closedTabsHideTimeout = null
+    let closedTabsPreviewUntil = $state(0)
+    let closedTabsPreviewNow = $state(0)
+    const recentClosedTabs = $derived(data.spaceMeta.closedTabs.filter(tab =>
+        tab.closedAt > closedTabsPreviewNow - 10_000 && tab.closedAt <= closedTabsPreviewNow
+    ))
+    const closedTabsPreviewVisible = $derived(closedTabsPreviewUntil > closedTabsPreviewNow && recentClosedTabs.length > 0)
+    const displayedClosedTabs = $derived(closedTabsPreviewVisible && !closedTabsHovered ? recentClosedTabs : data.spaceMeta.closedTabs)
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
     let urlBarExpanded = $state(false)
+    $effect(() => {
+        if (!showUrl) urlBarExpanded = false
+    })
     let urlInput = $state(null)
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
@@ -116,7 +129,7 @@
     function tabMatchesSearch(tab) {
         if (!tabSearchQuery) return true;
         const query = tabSearchQuery.toLowerCase();
-        const title = (data.docs[tab.id]?.title || tab.title || '').toLowerCase();
+        const title = (data.docs[tab.id]?.titleOverride || tab.titleOverride || data.docs[tab.id]?.title || tab.title || '').toLowerCase();
         const url = (data.docs[tab.id]?.url || tab.url || '').toLowerCase();
         return title.includes(query) || url.includes(query);
     }
@@ -625,12 +638,31 @@
     function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
         if (!spaceId || tabSearchQuery || data.spaces[spaceId]?.tabs?.[0]?.type === 'divider') return
 
-        const tabsList = tabListRef?.querySelector(`[data-space-id="${spaceId}"] .tabs-list`)
-        if (tabsList) {
-            tabsList.scrollTop = 0
-        }
+        scrollTabListToTop(spaceId)
 
         data.addDivider(spaceId)
+    }
+
+    function scrollTabListToTop(spaceId) {
+        const space = tabListRef?.querySelector(`[data-space-id="${spaceId}"]`)
+        const list = space?.querySelector('.tabs-list')
+        const newTab = space?.querySelector('.new-tab-row')
+        if (!space || !list || !newTab) {
+            return
+        }
+        space.scrollTop += list.getBoundingClientRect().top - space.getBoundingClientRect().top - newTab.offsetHeight
+    }
+
+    async function createSidebarTab(spaceId, options) {
+        const tab = await data.newTab(spaceId, options)
+        if (!tab) {
+            return null
+        }
+        data.activateSpace(spaceId)
+        data.activate(tab.id)
+        await tick()
+        scrollTabListToTop(spaceId)
+        return tab
     }
 
     // Initialize spaces scroll fade state when spacesListRef is available or spaces change
@@ -748,6 +780,24 @@
         } else {
             data.activate(tabId)
         }   
+    }
+
+    function startPinDrag(event, tab, spaceId) {
+        if (event.button !== 0) {
+            return
+        }
+        event.stopPropagation()
+        const wasActive = tab.id === data.spaceMeta.activeTabId
+        startTabDrag(tab.id, event.currentTarget, 'sidebar', tab.spaceId, event, wasActive, tab.pinned)
+        if (!wasActive && !multiSpaceMode) {
+            setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150))
+        }
+    }
+
+    function finishPinClick(event, tab, spaceId) {
+        if (event.button === 0 && !didDragOccurred() && (multiSpaceMode || tabDrag.wasAlreadyActive)) {
+            activateTab(tab.id, spaceId)
+        }
     }
 
     let currentScrolledSpace = $state(null)
@@ -930,6 +980,9 @@
     let tabsListScrolledBottom = $state({})
     
     function handleTabsListScroll(event) {
+        if (event.target !== event.currentTarget) {
+            return
+        }
         const tabsList = event.target
         const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
         if (spaceId) {
@@ -1010,14 +1063,18 @@
                 activeTabElement = document.querySelector(`.sidebar [data-tab-group-id="${data.docs[data.spaceMeta.activeTabId]?.tabGroupId}"]`)
             }
             if (activeTabElement) {
-                const tabsList = activeTabElement.closest('.tabs-list')
+                const tabsList = activeTabElement.closest('.space-content')
                 if (tabsList) {
                     console.log('%c[TAB-DEBUG] TabSidebar scrolling active tab into view: ' + data.spaceMeta.activeTabId, 'color: #d946ef; font-weight: bold; font-size: 13px')
                     // Scroll the tab into view within its tabs list
-                    activeTabElement.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'nearest'
-                    })
+                    const bounds = tabsList.getBoundingClientRect()
+                    const row = activeTabElement.getBoundingClientRect()
+                    const top = bounds.top + (tabsList.querySelector('.new-tab-row')?.offsetHeight || 0)
+                    if (row.top < top) {
+                        tabsList.scrollTop += row.top - top
+                    } else if (row.bottom > bounds.bottom) {
+                        tabsList.scrollTop += row.bottom - bounds.bottom
+                    }
                 }
             }
         }, 50) // Small delay to ensure DOM is updated
@@ -1027,7 +1084,7 @@
     $effect(() => {
         data.spaceMeta.spaceOrder // dependency on spaces
         setTimeout(() => {
-            const tabsLists = document.querySelectorAll('.tabs-list')
+            const tabsLists = document.querySelectorAll('.space-content')
             tabsLists.forEach(tabsList => {
                 const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
                 if (spaceId) {
@@ -1070,22 +1127,28 @@
         }
     })
 
-    // Watch for new closed tabs and auto-show menu, might be a bit much?
-    // $effect(() => {
-    //     const currentLength = data.spaceMeta.closedTabs.length
-    //     if (currentLength > previousClosedTabsLength) {
-    //         // New tab was closed, show menu
-    //         if (closedTabsHideTimeout) {
-    //             clearTimeout(closedTabsHideTimeout)
-    //         }
-    //         closedTabsHovered = true
-    //         closedTabsHideTimeout = setTimeout(() => {
-    //             closedTabsHovered = false
-    //             closedTabsHideTimeout = null
-    //         }, 1000)
-    //     }
-    //     previousClosedTabsLength = currentLength
-    // })
+    const closedTabsMountedAt = Date.now()
+    let previousClosedTabs = null
+    $effect(() => {
+        const closedTabs = new Map(data.spaceMeta.closedTabs.map(tab => [tab.id, tab.closedAt]))
+        const now = Date.now()
+        if (previousClosedTabs && [...closedTabs].some(([id, closedAt]) =>
+            closedAt >= closedTabsMountedAt && closedAt > now - 10_000 && closedAt <= now &&
+            previousClosedTabs.get(id) !== closedAt
+        )) {
+            closedTabsPreviewNow = now
+            closedTabsPreviewUntil = now + 1000
+        }
+        previousClosedTabs = closedTabs
+    })
+
+    // Expire the preview and any rows that pass the ten-second cutoff while it is open.
+    $effect(() => {
+        if (!closedTabsPreviewVisible) return
+        const nextExpiry = Math.min(closedTabsPreviewUntil, ...recentClosedTabs.map(tab => tab.closedAt + 10_000))
+        const timeout = setTimeout(() => { closedTabsPreviewNow = Date.now() }, Math.max(1, nextExpiry - Date.now()))
+        return () => clearTimeout(timeout)
+    })
     
     // Cleanup timeouts on component destroy
     $effect(() => {
@@ -1362,13 +1425,9 @@
         try {
             const text = (await navigator.clipboard.readText())?.trim()
             if (!text) {
-                const tab = await data.newTab(spaceId, { shouldFocus: true })
-                if (tab) {
-                    data.activateSpace(spaceId)
-                    data.activate(tab.id)
-                }
+                await createSidebarTab(spaceId, { shouldFocus: true })
                 return
-                }
+            }
 
             let url = text
             try {
@@ -1384,22 +1443,14 @@
                 url = 'about:newtab'
             }
 
-            const tab = await data.newTab(spaceId, { url, shouldFocus: true })
-            if (tab) {
-                data.activateSpace(spaceId)
-                data.activate(tab.id)
-            }
+            await createSidebarTab(spaceId, { url, shouldFocus: true })
         } catch (err) {
-            const tab = await data.newTab(spaceId, { shouldFocus: true })
-            if (tab) {
-                data.activateSpace(spaceId)
-                data.activate(tab.id)
-            }
+            await createSidebarTab(spaceId, { shouldFocus: true })
         }
     }
 
     async function handleNewTabInPartition(spaceId, partition) {
-        const tab = await data.newTab(spaceId, { shouldFocus: true })
+        const tab = await createSidebarTab(spaceId, { shouldFocus: true })
         if (tab) {
             // In-memory assignment mirrors App.svelte partition handling
             data.docs[tab.id].partition = partition
@@ -1408,8 +1459,6 @@
             if (idx !== -1) {
                 space.tabs[idx].partition = partition
             }
-            data.activateSpace(spaceId)
-            data.activate(tab.id)
         }
     }
 
@@ -1531,10 +1580,7 @@
 
     function handleBackgroundDoubleClick() {
         if (data.spaceMeta.activeSpace) {
-            const newTab = data.newTab(data.spaceMeta.activeSpace)
-            if (newTab) {
-                data.activate(newTab.id)
-            }
+            createSidebarTab(data.spaceMeta.activeSpace)
         }
     }
 
@@ -1543,12 +1589,14 @@
 <svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 {#if tabSidebarVisible}
-    <div class="sidebar-window-drag" class:drag-enabled={isDragEnabled && !tabDrag.active && !tabDrag.pending && !isResizingTabSidebar && !tabContextMenu.visible}
+    <div class="sidebar-window-drag" class:drag-enabled={isDragEnabled && !tabDrag.active && !tabDrag.pending && !isResizingTabSidebar && !tabContextMenu.visible && !headerMenuOpen}
+         oncontextmenu={onHeaderContextMenu}
          style:width="{customTabSidebarWidth || 263}px" aria-hidden="true"></div>
 {/if}
 
 <div class="sidebar-box" 
-     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
+     class:closed-tabs-preview={closedTabsPreviewVisible}
+     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || headerMenuOpen || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
      class:multi-space-mode={multiSpaceMode}
@@ -1591,6 +1639,9 @@
                     </svg>
                 </button>
             {/if}
+            <div class="sidebar-header" class:drag-enabled={tabSidebarVisible && isDragEnabled && !tabDrag.active && !tabDrag.pending && !isResizingTabSidebar && !tabContextMenu.visible && !headerMenuOpen}
+                 role="toolbar" aria-label="Tab sidebar header" tabindex="-1"
+                 oncontextmenu={onHeaderContextMenu}>
             {#if showUrl}
                 <UrlBar
                     url={data.docs[data.spaceMeta.activeTabId]?.url || ''}
@@ -1624,7 +1675,7 @@
                 </div>
             {:else}
                 <div class="section global-pins-section">
-                    <div class="pinned-tabs-grid">
+                    <div class="pinned-tabs-grid" data-pin-scope="global" class:pin-drop-active={tabDrag.active && tabDrag.dropTarget?.pinScope === 'global'}>
                         <button class="pinned-tab search-toggle-tab"
                                 title="Search Tabs"
                                 onmousedown={(e) => { e.stopPropagation(); isSearchModeActive = true; setTimeout(() => searchInputRef?.focus(), 50); }}
@@ -1648,15 +1699,25 @@
                         <!-- NOTE: Tabs are also rendered in App.svelte (top bar) - keep hibernated class in sync there too -->
                         {#each globallyPinnedTabs as tab (tab.id)}
                             <button class="pinned-tab" data-tab-id={tab.id} class:hibernated={data.isTabHibernated(tab.id)}
+                                    class:active={tab.id === data.spaceMeta.activeTabId}
+                                    class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
+                                    title={tab.titleOverride || tab.title || tab.url} aria-label={tab.titleOverride || tab.title || tab.url}
+                                    onmousedown={(e) => startPinDrag(e, tab, data.spaceMeta.activeSpace)}
+                                    onclick={(e) => finishPinClick(e, tab, data.spaceMeta.activeSpace)}
+                                    oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}
                                     onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                     onmouseleave={handleTabMouseLeave}>
                                 <Favicon {tab} showButton={false} />
                             </button>
                         {/each}
+                        {#if !globallyPinnedTabs.length && tabDrag.active && tabDrag.dragType === 'tab'}
+                            <span class="pin-drop-placeholder" title="Pin globally" aria-label="Pin globally">+</span>
+                        {/if}
                     </div>
                 </div>
             {/if}
 
+            </div>
             {#if !tabSearchQuery}
                 <div class="section">
                     <div class="spaces-container">
@@ -1748,6 +1809,7 @@
                     <div class="tab-content-track" class:multi-space={multiSpaceMode}>
                         {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
                             {@const spacePins = data.getSpacePins(spaceId)}
+                            {@const sidebarPins = getSidebarPinnedTabs(data.spaces[spaceId]?.tabs)}
                             {#if spaceHasMatchingTabs(spaceId)}
                                 {#if multiSpaceMode && index > 0}
                                     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1758,6 +1820,7 @@
                                 <div class="space-content"
                                      class:multi-space={multiSpaceMode}
                                      data-space-id={spaceId}
+                                     onscroll={handleTabsListScroll}
                                      style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}
                                      onmouseenter={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = spaceId }}
                                      onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
@@ -1830,27 +1893,27 @@
                                     </div>
                                 </div>
                                 
-                                {#if spacePins.length > 0}
-                                    <div class="pinned-tabs-grid">
+                                {#if spacePins.length > 0 || (tabDrag.active && tabDrag.dragType === 'tab')}
+                                    <div class="pinned-tabs-grid" data-pin-scope="space" class:pin-drop-active={tabDrag.active && tabDrag.dropTarget?.pinScope === 'space' && tabDrag.dropTarget?.targetSpaceId === spaceId}>
                                         {#each spacePins as tab (tab.id)}
                                             {#if tabMatchesSearch(tab)}
-                                                <button class="app-tab" data-tab-id={tab.id} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} title={tab.title || tab.url} aria-label={tab.title || tab.url} onmousedown={(e) => { if (e.button === 0) activateTab(tab.id, spaceId) }} oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}>
+                                                <button class="app-tab" data-tab-id={tab.id} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} title={tab.titleOverride || tab.title || tab.url} aria-label={tab.titleOverride || tab.title || tab.url}
+                                                        onmousedown={(e) => startPinDrag(e, tab, spaceId)}
+                                                        onclick={(e) => finishPinClick(e, tab, spaceId)}
+                                                        oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}>
                                                     <Favicon {tab} showButton={false} />
                                                 </button>
                                             {/if}
                                         {/each}
+                                        {#if !spacePins.length}
+                                            <span class="pin-drop-placeholder" title="Pin to space" aria-label="Pin to space">+</span>
+                                        {/if}
                                     </div>
                                 {/if}
                                 
                                 <div class="new-tab-row">
                                     <div class="new-tab-button" 
-                                            onmousedown={async () => {
-                                                const newTab = await data.newTab(spaceId)
-                                                if (newTab) {
-                                                    data.activateSpace(spaceId)
-                                                    data.activate(newTab.id)
-                                                }
-                                            }}
+                                            onmousedown={() => createSidebarTab(spaceId)}
                                             role="button"
                                             tabindex="0"
                                             aria-label="Create new tab">
@@ -1884,22 +1947,7 @@
                                     </div>
                                 </div>
                                 
-                                <div class="tabs-list-container">
-                                    {#if !tabSearchQuery && data.spaces[spaceId]?.tabs?.[0]?.type !== 'divider' && !tabsListScrolled[spaceId]}
-                                        <div class="add-spacer-insertion">
-                                            <Tooltip text="Add spacer" position="top" delay={300}>
-                                                <button class="add-spacer-preview"
-                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(spaceId) } }}
-                                                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
-                                                        aria-label="Add spacer">
-                                                    <span class="add-spacer-preview-line"></span>
-                                                </button>
-                                            </Tooltip>
-                                        </div>
-                                    {/if}
-                                    <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
-                                    <div class="tabs-list" onscroll={handleTabsListScroll}>
-
+                                <div class="space-tabs-sections">
                                    {#snippet sidebarTab(tab, i, groupActivationTarget = false)}
                                         {#if tab.type === 'divider'}
                                             {#if !tabSearchQuery}
@@ -1936,7 +1984,7 @@
                                                     <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive && !multiSpaceMode) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
                                                         onclick={(e) => { if (e.button === 0 && !didDragOccurred()) { if (multiSpaceMode) { activateTab(tab.id, spaceId) } else if (tabDrag.wasAlreadyActive) { activateTab(tab.id, spaceId) } } }}>
                                                         <Favicon {tab} showButton={false} />
-                                                        <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
+                                                        <span class="tab-title">{data.docs[tab.id]?.titleOverride || tab.titleOverride || data.docs[tab.id]?.title || tab.title}</span>
                                                     </button>
                                                     
                                                     <button class="tab-close" aria-label="Close tab"
@@ -1968,6 +2016,32 @@
                                             {/if}
                                         {/if}
                                     {/snippet}
+                                    <div class="sidebar-pinned-tabs" data-pin-scope="sidebar" data-pin-layout="rows"
+                                         class:pin-drop-active={tabDrag.active && tabDrag.dropTarget?.pinScope === 'sidebar' && tabDrag.dropTarget?.targetSpaceId === spaceId}
+                                         role="list" aria-label="Pinned tabs">
+                                        {#each sidebarPins as tab, i (tab.id)}
+                                            {@render sidebarTab(tab, i)}
+                                        {/each}
+                                        {#if !sidebarPins.length && !tabSearchQuery}
+                                            <div class="sidebar-pins-placeholder">Drag tabs here to pin</div>
+                                        {/if}
+                                    </div>
+                                    <div class="pinned-tabs-divider" role="separator" aria-label="Pinned and normal tabs"></div>
+                                    <div class="tabs-list-container">
+                                    {#if !tabSearchQuery && data.spaces[spaceId]?.tabs?.[0]?.type !== 'divider' && !tabsListScrolled[spaceId]}
+                                        <div class="add-spacer-insertion">
+                                            <Tooltip text="Add spacer" position="top" delay={300}>
+                                                <button class="add-spacer-preview"
+                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(spaceId) } }}
+                                                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
+                                                        aria-label="Add spacer">
+                                                    <span class="add-spacer-preview-line"></span>
+                                                </button>
+                                            </Tooltip>
+                                        </div>
+                                    {/if}
+                                    <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
+                                    <div class="tabs-list">
                                     {#each data.getSidebarItems(spaceId) as item, i (item.id)}
                                         {#if item.type === 'divider'}
                                             {@render sidebarTab(item, i)}
@@ -1981,7 +2055,7 @@
                                                 {@const activationTab = data.getGroupActiveTab(item, spaceId)}
                                                 {@const recentEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                                                 {@const spaceActive = spaceId !== data.spaceMeta.activeSpace && item.tabs.some(tab => tab.id === (typeof recentEntry === 'string' ? recentEntry : recentEntry?.id))}
-                                                <div class="tab-group-wrapper" class:expanded class:active class:group-resizing={groupResize?.groupId === expansionId} style:--tab-group-max-height="{tabGroupMaxHeight}px" class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
+                                                <div class="tab-group-wrapper" class:expanded class:active class:custom-group-height={tabGroupMaxHeight > defaultTabGroupMaxHeight} class:group-resizing={groupResize?.groupId === expansionId} style:--tab-group-max-height="{tabGroupMaxHeight}px" class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
                                                      role="group" aria-label={item.title} onmouseenter={() => groupPreview.enter(expansionId)} onmouseleave={() => groupPreview.leave(expansionId)} onpointerover={handleGroupPointerOver}>
                                                     <div class="tab-group" class:expanded class:active class:space-active-tab={spaceActive}
                                                         onmouseenter={(e) => handleTabMouseEnter(null, e)} onmouseleave={handleTabMouseLeave}
@@ -2032,15 +2106,12 @@
                                              }}
                                              ondblclick={async (e) => {
                                                 e.stopPropagation()
-                                                const newTab = await data.newTab(spaceId)
-                                                if (newTab) {
-                                                    data.activateSpace(spaceId)
-                                                    data.activate(newTab.id)
-                                                }
+                                                await createSidebarTab(spaceId)
                                         }}></div>
                                     {/if}
                                 </div>
                                         <div class="tabs-list-fade-bottom" class:visible={tabsListScrolledBottom[spaceId]}></div>
+                                    </div>
                                     </div>
                                 </div>
                             {/if}
@@ -2065,9 +2136,9 @@
                     <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
                     <span class="closed-tabs-count">{data.spaceMeta.closedTabs.length}</span>
                 </button>
-                <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
+                <div class="closed-tabs-content" class:expanded={closedTabsHovered || closedTabsPreviewVisible}>
                     <div class="closed-tabs-list">
-                        {#each data.spaceMeta.closedTabs as tab (tab.id)}
+                        {#each displayedClosedTabs as tab (tab.id)}
                             {#if tabMatchesSearch(tab)}
                                 <button class="closed-tab-item" data-tab-id={tab.id}
                                         onmousedown={() => data.restoreClosedTab(tab.id)}
@@ -2075,7 +2146,7 @@
                                         onmouseleave={handleTabMouseLeave}>
                                     <Favicon {tab} showButton={false} />
                                     <div class="tab-text">
-                                        <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
+                                        <span class="tab-title">{data.docs[tab.id]?.titleOverride || tab.titleOverride || data.docs[tab.id]?.title || tab.title}</span>
                                         <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
                                     </div>
                                     <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}>
@@ -2182,7 +2253,7 @@
         position: fixed;
         top: 0;
         left: 0;
-        height: max(35px, env(titlebar-area-height, 35px));
+        height: 9px;
         z-index: 2201;
         -webkit-app-region: no-drag;
     }
@@ -2212,9 +2283,27 @@
     }
 
     .sidebar-box.visible {
-        top: max(35px, env(titlebar-area-height, 35px));
         padding-right: 0;
         padding-left: 3px;
+    }
+
+    .sidebar-header {
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        max-height: 35%;
+        min-height: 0;
+        -webkit-app-region: no-drag;
+    }
+
+    .sidebar-header.drag-enabled {
+        -webkit-app-region: drag;
+    }
+
+    .sidebar-header :global(button),
+    .sidebar-header :global(input),
+    .sidebar-header :global(.url-bar-section) {
+        -webkit-app-region: no-drag;
     }
     
     /* Constrain URL bar width to prevent stretching in fullscreen mode */
@@ -2451,7 +2540,8 @@
 
     .global-pins-section {
         margin-bottom: 10px;
-        flex-shrink: 0;
+        flex-shrink: 1;
+        min-height: 0;
     }
     
     .flex-1 {
@@ -2470,6 +2560,48 @@
         gap: 3px;
         padding: 4px;
         flex-shrink: 0;
+    }
+
+    .global-pins-section > .pinned-tabs-grid {
+        min-height: 44px;
+        flex-shrink: 1;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+    }
+
+    .space-content > .pinned-tabs-grid {
+        max-height: max(44px, calc(100% - 120px));
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+    }
+
+    .pin-drop-active {
+        background: rgb(255 255 255 / 4%);
+        border-radius: 12px;
+    }
+
+    .pin-drop-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border: 1px dashed rgb(255 255 255 / 20%);
+        border-radius: 12px;
+        color: rgb(255 255 255 / 40%);
+        -webkit-app-region: no-drag;
+    }
+
+    .pinned-tab.tab-dragging,
+    .app-tab.tab-dragging {
+        opacity: 0.3;
+    }
+
+    .pinned-tab.active {
+        background: var(--tab-active-background);
+        border-color: var(--tab-active-border);
     }
     
     .pinned-tab {
@@ -2984,7 +3116,9 @@
         flex-direction: column;
         gap: 8px;
         height: 100%;
-        overflow-y: hidden;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
         padding-top: 0;
         padding-right: 8px;
         position: relative;
@@ -3185,9 +3319,44 @@
     }
     
     /* Tabs list container with fade */
+    .space-tabs-sections {
+        display: flex;
+        flex-direction: column;
+        flex: 1 0 auto;
+        min-height: calc(100% - 44px);
+    }
+
+    .sidebar-pinned-tabs {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex-shrink: 0;
+        min-height: 36px;
+        max-height: 40vh;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+    }
+
+    .sidebar-pins-placeholder {
+        display: flex;
+        align-items: center;
+        min-height: 36px;
+        padding: 0 10px;
+        color: rgb(255 255 255 / 28%);
+        font-size: 12px;
+    }
+
+    .pinned-tabs-divider {
+        flex-shrink: 0;
+        height: 1px;
+        margin: 10px 4px 2px;
+        background: rgb(255 255 255 / 12%);
+    }
+
     .tabs-list-container {
         position: relative;
-        flex: 1;
+        flex: 1 0 auto;
         min-height: 0;
         display: flex;
         flex-direction: column;
@@ -3276,9 +3445,10 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        flex: 1;
+        flex: 1 0 auto;
         min-height: 0;
-        overflow-y: auto;
+        overflow-y: visible;
+        overflow-x: clip;
         overscroll-behavior-y: contain; /* Prevent vertical scroll chaining to background views */
         padding-top: 8px;
         padding-bottom: 0; /* Bottom spacer element handles scroll space */
@@ -3290,11 +3460,11 @@
     
     .tab-content-container.searching:not(.multi-space) .tabs-list {
         overscroll-behavior-y: auto;
-        overflow-y: auto;
+        overflow-y: visible;
         padding-top: 0;
     }
     
-    .tab-content-container.horizontal-scrolling .tabs-list {
+    .tab-content-container.horizontal-scrolling .space-content {
         overflow-y: hidden;
     }
     
@@ -3662,7 +3832,11 @@
     }
     
     .new-tab-row {
-        position: relative;
+        position: sticky;
+        top: 0;
+        z-index: 12;
+        flex-shrink: 0;
+        background: black;
         display: flex;
         align-items: center;
     }
@@ -3960,6 +4134,7 @@
 
     .tab-group-scroll:global([data-scroll-top='true']),
     .tab-group-scroll:global([data-scroll-bottom='true']),
+    .custom-group-height .tab-group-scroll,
     .group-resizing .tab-group-scroll {
         padding-bottom: 4px;
     }
@@ -4042,6 +4217,7 @@
 
     .tab-group-scroll:global([data-scroll-top='true']) > .tab-group-resize,
     .tab-group-scroll:global([data-scroll-bottom='true']) > .tab-group-resize,
+    .custom-group-height .tab-group-resize,
     .group-resizing .tab-group-resize {
         display: block;
     }
@@ -4159,6 +4335,11 @@
         flex-direction: column;
         /* width: calc(100% - 17px); */
         flex-shrink: 0;
+    }
+
+    /* Reveal only the closed-tab menu when the rest of the sidebar is tucked away. */
+    .sidebar-box.closed-tabs-preview:not(:hover):not(.hovered):not(.visible):not(.resizing) .closed-tabs-section {
+        transform: translateX(calc(100% + 9px));
     }
 
     :global(.sidebar-box.visible .closed-tabs-section)   {

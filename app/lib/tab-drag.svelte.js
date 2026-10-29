@@ -54,7 +54,7 @@ function startAutoScroll() {
         }
 
         // Scroll the group before its containing sidebar, then continue outward at its edges.
-        const sidebarLists = [...document.querySelectorAll('.tab-group-content'), ...document.querySelectorAll('.tabs-list')]
+        const sidebarLists = [...document.querySelectorAll('.tab-group-content'), ...document.querySelectorAll('[data-pin-scope]'), ...document.querySelectorAll('.space-content'), ...document.querySelectorAll('.tabs-list')]
         for (const list of sidebarLists) {
             if (list.scrollHeight <= list.clientHeight) continue
             const r = list.getBoundingClientRect()
@@ -218,6 +218,25 @@ function handleMouseMove(e) {
     state.deleteZone = false
     state.dropTarget = null
 
+    const pinTarget = state.dragType === 'tab' ? findPinDropTarget(mx, my) : null
+    if (pinTarget) {
+        updateJoinHover(null)
+        updateGroupHover(null)
+        state.sidepinZone = null
+        state.dropTarget = pinTarget.noop ? null : pinTarget.drop
+        if (pinTarget.noop) {
+            hideIndicator()
+        } else if (pinTarget.hit) {
+            showIndicator(pinTarget.tabs, pinTarget.hit.index, pinTarget.hit.after, pinTarget.axis)
+        } else {
+            const rect = pinTarget.placeholder.getBoundingClientRect()
+            Object.assign(state.indicator, pinTarget.axis === 'y'
+                ? { visible: true, x: rect.left + rect.width / 2, y: rect.top + 4, width: rect.width, height: 2 }
+                : { visible: true, x: rect.left, y: rect.top + rect.height / 2, width: 2, height: rect.height })
+        }
+        return
+    }
+
     if (state.dragType !== 'divider') {
         const target = findGroupDropTarget(mx, my)
         updateJoinHover(target?.join)
@@ -370,6 +389,56 @@ function isNoopDrop(tabs, hit) {
     if (hit.after && i + 1 < tabs.length && tabs[i + 1] === dragEl) return true
     if (!hit.after && i - 1 >= 0 && tabs[i - 1] === dragEl) return true
     return false
+}
+
+function findPinDropTarget(mx, my) {
+    for (const list of document.querySelectorAll('[data-pin-scope]')) {
+        const rect = list.getBoundingClientRect()
+        if (mx < rect.left || mx > rect.right || my < rect.top || my > rect.bottom) {
+            continue
+        }
+        const scrollParent = list.closest('.tab-content-container')
+        if (scrollParent) {
+            const bounds = scrollParent.getBoundingClientRect()
+            if (mx < bounds.left || mx > bounds.right || my < bounds.top || my > bounds.bottom) {
+                continue
+            }
+        }
+        const appsButton = list.querySelector('.all-apps-tab')
+        if (appsButton) {
+            const bounds = appsButton.getBoundingClientRect()
+            if (my <= bounds.bottom && mx <= bounds.right) {
+                continue
+            }
+        }
+        const tabs = [...list.querySelectorAll(':scope > [data-tab-id]')]
+        const axis = list.dataset.pinLayout === 'rows' ? 'y' : 'x'
+        const drop = { type: 'pin', pinScope: list.dataset.pinScope, targetSpaceId: list.closest('.space-content')?.dataset.spaceId }
+        if (!tabs.length) {
+            const placeholder = list.querySelector('.sidebar-pins-placeholder') || list.querySelector('.pin-drop-placeholder')
+            if (placeholder) {
+                return { drop, placeholder, axis }
+            }
+            continue
+        }
+        if (axis === 'y') {
+            const hit = findClosestTab(tabs, my, axis)
+            return { tabs, hit, axis, noop: isNoopDrop(tabs, hit), drop: { ...drop, ...buildDropInfo(tabs, hit, state.tabId, drop.targetSpaceId) } }
+        }
+        const closest = tabs.reduce((best, tab) => {
+            const bounds = tab.getBoundingClientRect()
+            const distance = Math.abs(my - (bounds.top + bounds.height / 2))
+            return !best || distance < best.distance ? { top: bounds.top, distance } : best
+        }, null)
+        const row = tabs.filter(tab => Math.abs(tab.getBoundingClientRect().top - closest.top) < 1)
+        const hit = findClosestTab(row, mx, 'x')
+        const index = tabs.indexOf(hit.el)
+        return {
+            tabs: row, hit, axis, noop: isNoopDrop(tabs, { ...hit, index }),
+            drop: { ...drop, ...buildDropInfo(tabs, { ...hit, index }, state.tabId, drop.targetSpaceId) }
+        }
+    }
+    return null
 }
 
 function findGroupDropTarget(mx, my) {

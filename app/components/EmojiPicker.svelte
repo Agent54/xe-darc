@@ -1,7 +1,7 @@
 <script>
     import { onMount } from 'svelte'
 
-    let { value = null, onSelect = () => {} } = $props()
+    let { value = null, label = 'Group emoji', resetLabel = 'Use tab favicons', onSelect = () => {} } = $props()
     let query = $state('')
     let customEmoji = $state('')
     let searchInput = $state(null)
@@ -36,7 +36,7 @@
 
 <div class="emoji-picker">
     <input class="emoji-search" bind:this={searchInput} bind:value={query} type="search" aria-label="Search emojis" placeholder="Search emojis" />
-    <div class="emoji-grid" role="group" aria-label="Group emoji">
+    <div class="emoji-grid" role="group" aria-label={label}>
         {#each matches as [emoji, label] (emoji)}
             <button type="button" class:selected={value === emoji} aria-pressed={value === emoji} aria-label={label} title={label}
                     onmouseup={() => onSelect(emoji)}
@@ -51,7 +51,7 @@
     </form>
     <button class="reset-emoji" type="button"
             onmouseup={() => onSelect(null)}
-            onclick={(e) => { if (e.detail === 0) onSelect(null) }}>Use tab favicons</button>
+            onclick={(e) => { if (e.detail === 0) onSelect(null) }}>{resetLabel}</button>
 </div>
 
 <style>

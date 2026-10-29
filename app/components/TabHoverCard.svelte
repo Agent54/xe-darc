@@ -36,8 +36,13 @@
     const SCREENSHOT_HEIGHT = 180
     const HISTORY_TITLE_HEIGHT = 30
     const MIN_HISTORY_HEIGHT = 100
-    const title = $derived(tab.title || 'Untitled')
+    const title = $derived(tab.titleOverride || tab.title || 'Untitled')
     const activationLabel = $derived(`${isClosedTab ? 'Restore' : 'Open'} ${title}`)
+    let urlBar = $state(null)
+
+    export function focusLocation() {
+        return urlBar?.focusLocation()
+    }
 
     function activateTab() {
         if (isClosedTab) return data.restoreClosedTab(tab.id)
@@ -58,7 +63,7 @@
     async function openTabHistory() {
         const historyTab = await data.newTab(tab.spaceId || data.spaceMeta.activeSpace, {
             url: `about:tabhistory#${tab.id}`,
-            title: `History - ${tab.title || 'Untitled'}`,
+            title: `History - ${tab.titleOverride || tab.title || 'Untitled'}`,
             pinned: 'right',
             groupTabId: tab.id
         })
@@ -384,6 +389,7 @@
         </div>
         
         <UrlBar 
+            bind:this={urlBar}
             escapeOverflow={stacked}
             url={tab.url}
             tabId={tab.id}
@@ -479,7 +485,7 @@
                             <div class="history-title-scroll-wrapper" use:initScrollFade>
                                 <div class="fade-left"></div>
                                 <div class="history-title" onscroll={handleScrollFade}>
-                                    {historyTab.title || 'Untitled'}
+                                    {historyTab.titleOverride || historyTab.title || 'Untitled'}
                                     {#if historyTab.source}
                                         <span class="history-source">({historyTab.source.label})</span>
                                     {/if}
@@ -527,7 +533,7 @@
         --hovercard-title-fade-color: rgba(0, 0, 0, 0.95);
         background: rgba(0, 0, 0, 0.95);
         backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 12px;
         /* overflow-x: hidden; */
         /* overflow-x: hidden;

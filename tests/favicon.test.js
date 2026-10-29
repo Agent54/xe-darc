@@ -66,6 +66,20 @@ Deno.test('lightbox shares fallback, new-tab, image and inline SVG favicons', ()
     assert.match(lightboxFavicon({ ...tab, favicon: '<svg viewBox="0 0 24 24"><circle r="8" /></svg>' }), /<circle r="8"/)
 })
 
+Deno.test('individual icon overrides apply in every shared favicon display and reset to page icons', () => {
+    const tab = { id: 'override-tab', url: 'about:newtab', favicon: 'data:image/png;base64,AA==' }
+    for (const showButton of [true, false]) {
+        const html = render(Favicon, { props: { tab: { ...tab, emojiOverride: '🧪' }, showButton } }).body
+        assert.match(html, /🧪/)
+        assert.doesNotMatch(html, /new-tab-icon/)
+    }
+    data.docs[tab.id] = { ...tab, url: 'https://new.example', faviconOverride: 'https://icons.example/icon.png?url=https://old.example' }
+    assert.match(faviconMarkup(Favicon, { tab, showButton: false }), /<img/)
+    data.docs[tab.id] = { ...tab, emojiOverride: null, faviconOverride: null }
+    assert.match(faviconMarkup(Favicon, { tab, showButton: false }), /new-tab-icon/)
+    delete data.docs[tab.id]
+})
+
 Deno.test('lightbox reads current document favicon and rejects stale domain icons', () => {
     const tab = { id: 'document-tab', url: 'https://old.example', favicon: 'data:image/png;base64,AA==' }
     data.docs[tab.id] = {
