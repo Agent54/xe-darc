@@ -36,6 +36,7 @@
     import TabContextMenu from './TabContextMenu.svelte'
     import { observeScrollEdges } from '../lib/scroll-edges.js'
     import { getSidebarPinnedTabs } from '../lib/tab-groups.js'
+    import { getActivitySidebarItems } from '../lib/tab-activity.js'
     import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
     import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, onGroupExpand } from '../lib/tab-drag.svelte.js'
@@ -1683,6 +1684,7 @@
             <div class="sidebar-header" class:drag-enabled={tabSidebarVisible && isDragEnabled && !tabDrag.active && !tabDrag.pending && !isResizingTabSidebar && !tabContextMenu.visible && !headerMenuOpen}
                  role="toolbar" aria-label="Tab sidebar header" tabindex="-1"
                  oncontextmenu={onHeaderContextMenu}>
+            <div class="sidebar-top-row">
             {#if showUrl}
                 <UrlBar
                     url={data.docs[data.spaceMeta.activeTabId]?.url || ''}
@@ -1699,6 +1701,15 @@
                     onExpandedChange={(v) => urlBarExpanded = v}
                 />
             {/if}
+                <button class="activity-toggle" class:active={data.ui.tabActivityMode}
+                        type="button" aria-label="Sort tabs by activity" aria-pressed={!!data.ui.tabActivityMode}
+                        title="{data.ui.tabActivityMode ? 'Disable' : 'Enable'} activity sorting"
+                        onclick={() => data.toggleTabActivityMode()}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a24 24 0 0 0 5.454-1.31A8.97 8.97 0 0 1 18 9.75V9a6 6 0 0 0-12 0v.75a8.97 8.97 0 0 1-2.312 6.022 24 24 0 0 0 5.455 1.31m5.714 0a24.3 24.3 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+                    </svg>
+                </button>
+            </div>
             
             {#if isSearchModeActive}
                 <div class="section search-section" class:multi-space={multiSpaceMode}>
@@ -2065,8 +2076,10 @@
                                     {/if}
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list">
-                                    {#each data.getSidebarItems(spaceId) as item, i (item.id)}
-                                        {#if item.type === 'divider'}
+                                    {#each getActivitySidebarItems(data.getSidebarItems(spaceId).filter(item => item.type !== 'divider' || !tabSearchQuery), data.docs, data.ui.tabActivityMode, tabMatchesSearch) as item, i (item.id)}
+                                        {#if item.type === 'activity-divider'}
+                                            <div class="activity-tabs-divider" role="separator" aria-label="Activity and other tabs"></div>
+                                        {:else if item.type === 'divider'}
                                             {@render sidebarTab(item, i)}
                                         {:else if item.tabs.some(tabMatchesSearch)}
                                             {#if !item.tabGroupId}
@@ -2322,6 +2335,63 @@
 
     .sidebar-header.drag-enabled {
         -webkit-app-region: drag;
+    }
+
+    .sidebar-top-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        min-height: 24px;
+    }
+
+    .sidebar-top-row :global(.url-bar-section) {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .activity-toggle {
+        flex: 0 0 20px;
+        width: 20px;
+        height: 20px;
+        margin: 2px 4px 0 auto;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.1s ease;
+        backdrop-filter: blur(4px);
+    }
+
+    .activity-toggle:hover {
+        background: rgba(255, 255, 255, 0.12);
+        color: rgba(255, 255, 255, 0.9);
+        border-color: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        transform: scale(1.05);
+    }
+
+    .activity-toggle:active { transform: scale(0.95); }
+
+    .activity-toggle.active {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .activity-toggle:focus-visible { outline: 1px solid #a3a3a3; outline-offset: 2px; }
+    .activity-toggle svg { width: 12px; height: 12px; }
+
+    .activity-tabs-divider {
+        flex-shrink: 0;
+        height: 1px;
+        margin: 8px 10px;
+        background: rgba(255, 255, 255, 0.16);
+        pointer-events: none;
     }
 
     .sidebar-header :global(button),
@@ -3189,7 +3259,7 @@
     .close-multi-space-button {
         position: absolute;
         top: 12px;
-        right: 12px;
+        right: 36px;
         width: 32px;
         height: 32px;
         border-radius: 8px;

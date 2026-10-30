@@ -3,6 +3,7 @@ import vm from 'node:vm'
 import { compileModule } from 'svelte/compiler'
 import { getWindowSessionHints, getWindowSessionStartup, rememberWindowBounds, fitWindowBounds, openWindowSession } from '../app/lib/window-session.js'
 import * as tabGroups from '../app/lib/tab-groups.js'
+import * as tabActivity from '../app/lib/tab-activity.js'
 import * as svelteServer from 'svelte/internal/server'
 import * as svelteClient from 'svelte/internal/client'
 
@@ -138,9 +139,11 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     records.push(...structuredClone(tabs))
     const queries = []
     const writes = []
+    const designDocs = new Map()
     const changeListeners = new Map()
     const db = {
         get: async id => {
+            if (designDocs.has(id)) return structuredClone(designDocs.get(id))
             const record = records.find(doc => doc._id === id)
             if (!record) {
                 throw { status: 404 }
@@ -149,14 +152,19 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         },
         bulkDocs: () => new Promise(() => {}),
         changes: () => ({ on(event, callback) { changeListeners.set(event, callback); return this } }),
-        find: async query => {
+        query: async (view, query) => {
+            assert.equal(view, 'tab-activity/by_space')
             queries.push(query)
             const result = records.filter(doc => {
-                return doc.archive !== 'deleted' && (typeof query.selector.spaceId !== 'string' || doc.spaceId === query.selector.spaceId)
+                return doc.archive !== 'deleted' && (!query.startkey || doc.spaceId === query.startkey[0])
             })
-            return { docs: structuredClone(query.fields ? result.map(({ _id }) => ({ _id })) : result) }
+            return { rows: structuredClone(result.map(doc => ({ id: doc._id, ...(query.include_docs ? { doc } : {}) }))) }
         },
         put: async doc => {
+            if (doc._id.startsWith('_design/')) {
+                designDocs.set(doc._id, structuredClone(doc))
+                return { id: doc._id, rev: '1-design' }
+            }
             writes.push(doc)
             const index = records.findIndex(record => record._id === doc._id)
             if (index === -1) {
@@ -174,6 +182,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         PouchDB,
         $: runtime === 'client' ? svelteClient : svelteServer,
         ...tabGroups,
+        ...tabActivity,
         findPlugin: {},
         bootstrap: [],
         testData: [],
@@ -195,6 +204,31 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     return { data, refresh, window, storage, queries, writes, db, emitChange: doc => changeListeners.get('change')({ id: doc._id, doc, seq: 1 }) }
 }
 
+Deno.test('explicit activity persists independently of tab visits and ordinary order', async () => {
+    const { data, refresh, db, storage, writes } = session({ tabs: [tab('one', defaultSpace, { order: 0 }), tab('two', defaultSpace, { order: 10 })], runtime: 'client' })
+    await refresh()
+    data.activate('two')
+    assert.equal(data.docs.two.lastActivityAt, undefined)
+    await data.bumpTabActivity('two')
+    assert.equal(writes.length, 0)
+    data.toggleTabActivityMode()
+    assert.equal(storage.get('tabActivityMode'), 'true')
+    const bump = data.bumpTabActivity('two')
+    assert.ok(data.docs.two.lastActivityAt > 0)
+    await bump
+    const firstActivity = data.docs.two.lastActivityAt
+    await data.bumpTabActivity('one')
+    assert.ok(data.docs.one.lastActivityAt > firstActivity)
+    assert.equal((await db.get('two')).lastActivityAt, firstActivity)
+    assert.deepEqual(data.spaces[defaultSpace].tabs.map(tab => tab.order), [0, 10])
+    data.toggleTabActivityMode()
+    const restarted = session({ tabs: [await db.get('one'), await db.get('two')], storage, runtime: 'client' })
+    await restarted.refresh()
+    assert.equal(restarted.data.ui.tabActivityMode, false)
+    assert.equal(restarted.data.docs.two.lastActivityAt, firstActivity)
+    assert.deepEqual(restarted.data.spaces[defaultSpace].tabs.map(tab => tab.id), ['one', 'two'])
+})
+
 Deno.test('a partial refresh at startup still restores the active tab from the complete session', async () => {
     const { data, refresh, queries, writes } = session({
         tabs: [tab('first'), tab('last-active'), tab('other', otherSpace)],
@@ -205,7 +239,8 @@ Deno.test('a partial refresh at startup still restores the active tab from the c
 
     assert.equal(data.spaceMeta.activeTabId, 'last-active')
     assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['first', 'last-active'])
-    assert.equal(typeof queries[0].selector.spaceId, 'object')
+    assert.equal(queries[0].startkey, undefined)
+    assert.equal(queries[0].include_docs, true)
     assert.equal(writes.length, 0)
 })
 
@@ -303,8 +338,8 @@ Deno.test('activation survives another restart and later partial refreshes prese
     restarted.data.activate('last')
     await restarted.refresh(otherSpace)
     assert.equal(restarted.data.spaceMeta.activeTabId, 'last')
-    assert.deepEqual(Array.from(restarted.queries[1].fields), ['_id'])
-    assert.equal(restarted.queries[1].selector.spaceId, otherSpace)
+    assert.equal(restarted.queries[1].include_docs, false)
+    assert.deepEqual(Array.from(restarted.queries[1].startkey), [otherSpace])
 })
 
 Deno.test('each activation has transient scroll intent, including repeated selections and previous-tab navigation', async () => {

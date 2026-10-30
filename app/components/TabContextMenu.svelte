@@ -90,6 +90,12 @@
         onHide()
     }
 
+    function bumpToTop() {
+        const tab = isGroup ? data.getGroupActiveTab(menu.tab, menu.tab.spaceId) : menu.tab
+        if (tab) data.bumpTabActivity(tab.id)
+        onHide()
+    }
+
     function setPinScope(scope) {
         data.pin({ tabId: menu.tab.id, pinned: menu.tab.pinned, scope })
         onHide()
@@ -272,6 +278,11 @@
                 </form>
             {/if}
         {:else if menu.tab.type !== 'divider'}
+            {#if data.ui.tabActivityMode}
+                <button class="context-menu-item" role="menuitem" type="button"
+                        onmouseup={bumpToTop}
+                        onclick={(e) => { if (e.detail === 0) bumpToTop() }}>Bump to top</button>
+            {/if}
             <button class="context-menu-item" role="menuitem" type="button"
                         onmouseup={() => showGroupView('rename')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>Rename…</button>

@@ -75,6 +75,8 @@ const modules = {
         data.updateTabOverrides = async (tabId, update) => Object.assign(data.docs[tabId], update)
         data.getSpacePins = spaceId => data.spaces[spaceId].pinnedTabs
         data.pinSidebarTab = options => data.menuActions.push({ action: 'sidebar-pin', ...options })
+        data.toggleTabActivityMode = () => { data.ui.tabActivityMode = !data.ui.tabActivityMode }
+        data.bumpTabActivity = tabId => { data.docs[tabId].lastActivityAt = Date.now() }
         let newTabCount = 0
         data.newTab = async spaceId => {
             const id = newTabCount++ ? 'new-normal-' + newTabCount : 'new-normal'
@@ -173,6 +175,30 @@ try {
     await page.goto(`http://127.0.0.1:${server.addr.port}`)
     await page.waitForFunction(() => document.querySelector('.closed-tab-item .fallback-favicon'))
     assert.deepEqual(errors, [])
+    const activityOrder = () => page.$$eval('.tabs-list > [data-tab-id], .tabs-list > .activity-tabs-divider', rows => rows.map(row => row.dataset.tabId || 'activity-divider'))
+    const originalActivityOrder = await activityOrder()
+    assert.deepEqual(await page.$eval('.activity-toggle', button => [button.offsetWidth, button.offsetHeight, button.getAttribute('aria-pressed')]), [20, 20, 'false'])
+    await page.evaluate(() => window.flushSync(() => { window.data.docs.outside.lastActivityAt = 100 }))
+    assert.deepEqual(await activityOrder(), originalActivityOrder, 'activity must not affect ordinary mode')
+    await page.click('.activity-toggle')
+    assert.equal(await page.$eval('.activity-toggle', button => button.getAttribute('aria-pressed')), 'true')
+    assert.deepEqual(await activityOrder(), ['outside', 'activity-divider', 'group-missing'])
+    assert.equal(await page.$eval('.activity-tabs-divider', divider => !divider.querySelector('button') && !divider.hasAttribute('data-tab-id')), true, 'the activity boundary cannot be removed or dragged')
+    await page.click('.tab-group', { button: 'right' })
+    await page.waitForSelector('.context-menu')
+    await page.evaluate(() => [...document.querySelectorAll('.context-menu-item')].find(button => button.textContent.trim() === 'Bump to top').click())
+    await page.waitForSelector('.context-menu', { hidden: true })
+    assert.deepEqual(await activityOrder(), ['group-missing', 'outside'], 'bumping a group promotes it without changing its member order')
+    await page.click('.activity-toggle')
+    assert.deepEqual(await activityOrder(), originalActivityOrder, 'turning activity off restores the existing order')
+    await page.click('[data-tab-id="outside"] .tab-item-main', { button: 'right' })
+    await page.waitForSelector('.context-menu')
+    assert.equal(await page.$$eval('.context-menu-item', items => items.some(item => item.textContent.trim() === 'Bump to top')), false)
+    await page.keyboard.press('Escape')
+    await page.evaluate(() => window.flushSync(() => {
+        delete window.data.docs.outside.lastActivityAt
+        delete window.data.docs['group-two'].lastActivityAt
+    }))
     if (!Deno.args.includes('--sidebar-scroll-only')) {
     assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), false, 'loading closed history must not flash the preview')
     await page.evaluate(() => {

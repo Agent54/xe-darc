@@ -4,6 +4,7 @@ import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
+import { ensureTabActivityView } from './lib/tab-activity.js'
 import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
@@ -263,6 +264,7 @@ PouchDB.plugin(findPlugin)
 const db = new PouchDB('darc', { adapter: 'idb' })
 
 const sortOrder = ['archive', 'spaceId', 'type', 'order']
+let tabActivityViewReady = null
 
 const docs = $state({})
 const origins = $state({})
@@ -286,7 +288,7 @@ const frames = $state({})
 let lastForceHibernateTime = 0
 const previews = $state({})
 const settings = $state({})
-const ui = $state({ viewMode: 'default', tabActivation: null })
+const ui = $state({ viewMode: 'default', tabActivation: null, tabActivityMode: localStorage.getItem('tabActivityMode') === 'true' })
 const desiredCanvasShapes = new Map()
 const canvasShapeSaveTasks = new Map()
 const canvasShapeStates = new Map()
@@ -595,11 +597,7 @@ function createDivider(spaceId) {
 }
 
 db.bulkDocs(bootstrap).then(async (res) => {
-    db.createIndex({
-        index: { fields: sortOrder }
-    }).then(() => {
-        refresh()
-    })
+    refresh()
 
     const docsToUpdate = []
     for (const doc of res) {
@@ -742,15 +740,18 @@ const refresh = throttle(async function (spaceId) {
 
     // console.time('qry')
     // console.timeLog('updt', 'exec refresh')
-    const { docs: newDocs } = await db.find({
-        selector: {
-            archive: { $lt: 'deleted' },
-            spaceId: spaceId ? spaceId : { $exists: true },
-        },
-        fields: initialLoad ? undefined : ['_id'],
-        sort: sortOrder.map(key => ({ [key] : 'asc' })),
+    tabActivityViewReady ??= ensureTabActivityView(db).catch(error => {
+        tabActivityViewReady = null
+        throw error
+    })
+    await tabActivityViewReady
+    const { rows } = await db.query('tab-activity/by_space', {
+        ...(spaceId ? { startkey: [spaceId], endkey: [spaceId, {}] } : {}),
+        include_docs: initialLoad,
+        reduce: false,
         limit: 4000
-    }).catch(err => console.error(err))
+    })
+    const newDocs = rows.map(row => row.doc || { _id: row.id })
 
     // console.timeEnd('qry')
     // console.log('qry', newDocs.length)
@@ -959,6 +960,7 @@ live: true,
     filter: doc => !doc._id.startsWith('_design/')
 }).on('change', async change => {
     lastLocalSeq = change.seq
+    if (change.id.startsWith('_design/')) return
 
     // console.log('change', change)
     // console.timeLog('updt', 'change')
@@ -1002,7 +1004,7 @@ live: true,
         }
 
         // fixme: deep comp
-        for (const key of ['canvas', 'element', 'files', 'pinned', 'pinScope', 'pinOrder', 'sidebarPinned', 'sidebarPinOrder', 'tabGroupId', 'tabGroupOrder', ...sortOrder]) { // force reload until using docs store
+        for (const key of ['canvas', 'element', 'files', 'pinned', 'pinScope', 'pinOrder', 'sidebarPinned', 'sidebarPinOrder', 'tabGroupId', 'tabGroupOrder', 'lastActivityAt', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
                 if (change.doc.spaceId && change.doc.type !== 'space' && change.doc.type !== 'activity') {
                     console.log('refreshing', change.doc.spaceId)
@@ -1403,6 +1405,17 @@ const data = {
     permissions,
 
     ui,
+
+    toggleTabActivityMode: () => {
+        ui.tabActivityMode = !ui.tabActivityMode
+        localStorage.setItem('tabActivityMode', String(ui.tabActivityMode))
+    },
+    bumpTabActivity: (tabId) => {
+        if (!ui.tabActivityMode || docs[tabId]?.type !== 'tab') return Promise.resolve()
+        const latestActivity = Math.max(0, ...Object.values(docs).map(doc => Number.isFinite(doc.lastActivityAt) ? doc.lastActivityAt : 0))
+        const lastActivityAt = Math.max(Date.now(), latestActivity + 1)
+        return queueDocumentUpdate(tabId, { lastActivityAt, modified: Date.now() })
+    },
 
     activate,
     activateSpace,
