@@ -472,8 +472,27 @@
             data.settings.dataSaver = dataSaver
             data.settings.batterySaver = batterySaver
 
-            // Load open sidebars
-            const savedOpenSidebars = localStorage.getItem('openSidebars')
+            await loadSidebarPreferences()
+        } catch (error) {
+            console.error('Error loading user mods:', error)
+            userMods = []
+        }
+    }
+
+    function getSidebarPreference(key) {
+        return localStorage.getItem(`${key}:${window.darcWindowId}`)
+    }
+
+    function persistSidebarPreference(key, value) {
+        if (!sidebarStateLoaded || !window.darcWindowId) return
+        localStorage.setItem(`${key}:${window.darcWindowId}`, value)
+    }
+
+    async function loadSidebarPreferences() {
+        // The SharedWorker assigns the persistent virtual window ID asynchronously.
+        await window.darcWindowIdPromise
+        try {
+            const savedOpenSidebars = getSidebarPreference('openSidebars')
             if (savedOpenSidebars !== null) {
                 try {
                     const sidebarArray = JSON.parse(savedOpenSidebars)
@@ -486,7 +505,7 @@
             }
             
             // Load invisible pinned frames
-            const savedInvisiblePins = localStorage.getItem('invisiblePins')
+            const savedInvisiblePins = getSidebarPreference('invisiblePins')
             if (savedInvisiblePins !== null) {
                 try {
                     const parsed = JSON.parse(savedInvisiblePins)
@@ -501,42 +520,41 @@
             }
             
             // Load custom pinned widths
-            const savedLeftWidth = localStorage.getItem('customLeftPinnedWidth')
+            const savedLeftWidth = getSidebarPreference('customLeftPinnedWidth')
             if (savedLeftWidth !== null) {
                 customLeftPinnedWidth = parseInt(savedLeftWidth, 10)
             }
-            const savedRightWidth = localStorage.getItem('customRightPinnedWidth')
+            const savedRightWidth = getSidebarPreference('customRightPinnedWidth')
             if (savedRightWidth !== null) {
                 customRightPinnedWidth = parseInt(savedRightWidth, 10)
             }
             
-            const savedSidebarWidth = localStorage.getItem('customRightSidebarWidth')
+            const savedSidebarWidth = getSidebarPreference('customRightSidebarWidth')
             if (savedSidebarWidth !== null) {
                 customRightSidebarWidth = parseInt(savedSidebarWidth, 10)
             }
             
-            const savedTabSidebarWidth = localStorage.getItem('customTabSidebarWidth')
+            const savedTabSidebarWidth = getSidebarPreference('customTabSidebarWidth')
             if (savedTabSidebarWidth !== null) {
                 customTabSidebarWidth = parseInt(savedTabSidebarWidth, 10)
             }
 
-            const savedTabSidebarVisible = localStorage.getItem('tabSidebarVisible')
+            const savedTabSidebarVisible = getSidebarPreference('tabSidebarVisible')
             if (savedTabSidebarVisible !== null) {
                 tabSidebarVisible = savedTabSidebarVisible === 'true'
             }
             
-            // Mark sidebar state as loaded (whether we found saved state or not)
-            sidebarStateLoaded = true
         } catch (error) {
-            console.error('Error loading user mods:', error)
-            userMods = []
+            console.warn('Failed to load sidebar preferences:', error)
+        } finally {
+            sidebarStateLoaded = true
         }
     }
 
     function persistOpenSidebars() {
         try {
             const sidebarArray = Array.from(openSidebars)
-            localStorage.setItem('openSidebars', JSON.stringify(sidebarArray))
+            persistSidebarPreference('openSidebars', JSON.stringify(sidebarArray))
             console.log('Saved sidebar state:', sidebarArray)
         } catch (error) {
             console.warn('Failed to save sidebar state:', error)
@@ -545,7 +563,7 @@
 
     function toggleTabSidebar() {
         tabSidebarVisible = !tabSidebarVisible
-        localStorage.setItem('tabSidebarVisible', tabSidebarVisible.toString())
+        persistSidebarPreference('tabSidebarVisible', tabSidebarVisible.toString())
     }
 
     // Determine if sidebars are newly opened (but not when switching)
@@ -1114,7 +1132,7 @@
         // Clean up visibility state for closing pinned tab
         if (tab.pinned && isPinHidden(tab.id)) {
             delete invisiblePins[tab.id]
-            localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+            persistSidebarPreference('invisiblePins', JSON.stringify(invisiblePins))
         }
 
         data.closeTab(data.spaceMeta.activeSpace, tab.id)
@@ -1300,7 +1318,7 @@
         // Clean up visibility state when unpinning
         if (tab.pinned && isPinHidden(tab.id)) {
             delete invisiblePins[tab.id]
-            localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+            persistSidebarPreference('invisiblePins', JSON.stringify(invisiblePins))
         }
         
         data.pin({ tabId: tab.id, pinned: null })
@@ -1364,10 +1382,11 @@
             if (tab?.pinned && event.scope !== 'group') {
                 if (isPinHidden(tab.id)) {
                     delete invisiblePins[tab.id]
-                    localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+                    persistSidebarPreference('invisiblePins', JSON.stringify(invisiblePins))
                 }
             }
             data.moveTab(event.tabId, {
+                activityMode: event.targetZone === 'sidebar',
                 scope: event.scope,
                 targetGroupTabId: event.targetGroupTabId,
                 beforeTabId: event.beforeTabId,
@@ -2236,7 +2255,7 @@
         }
         
         if (customLeftPinnedWidth !== null && customLeftPinnedWidth !== resizeStartWidth) {
-            localStorage.setItem('customLeftPinnedWidth', customLeftPinnedWidth.toString())
+            persistSidebarPreference('customLeftPinnedWidth', customLeftPinnedWidth.toString())
         }
         
         // Clear the visible frame tracking
@@ -2284,7 +2303,7 @@
         }
         
         if (customRightPinnedWidth !== null && customRightPinnedWidth !== resizeStartWidth) {
-            localStorage.setItem('customRightPinnedWidth', customRightPinnedWidth.toString())
+            persistSidebarPreference('customRightPinnedWidth', customRightPinnedWidth.toString())
         }
         
         // Clear the visible frame tracking
@@ -2332,7 +2351,7 @@
         }
         
         if (customRightSidebarWidth !== null && customRightSidebarWidth !== resizeStartWidth) {
-            localStorage.setItem('customRightSidebarWidth', customRightSidebarWidth.toString())
+            persistSidebarPreference('customRightSidebarWidth', customRightSidebarWidth.toString())
         }
         
         // Clear the visible frame tracking
@@ -2396,7 +2415,7 @@
         }
         
         if (tabSidebarHasDragged && customTabSidebarWidth !== null && customTabSidebarWidth !== resizeStartWidth) {
-            localStorage.setItem('customTabSidebarWidth', customTabSidebarWidth.toString())
+            persistSidebarPreference('customTabSidebarWidth', customTabSidebarWidth.toString())
         }
     }
 
@@ -3119,7 +3138,7 @@
         // Normalize restored pins and changes to their side, scope, or group membership.
         if (invisiblePins !== pinVisibility) invisiblePins = pinVisibility
         try {
-            localStorage.setItem('invisiblePins', JSON.stringify(invisiblePins))
+            persistSidebarPreference('invisiblePins', JSON.stringify(invisiblePins))
         } catch (error) {
             console.warn('Failed to save invisible pins state:', error)
         }

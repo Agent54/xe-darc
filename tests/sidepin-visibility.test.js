@@ -6,6 +6,8 @@ import { resolveSidepinVisibility } from '../app/lib/sidepin-visibility.js'
 
 // Exercise the actual App visibility state, including restoration and reactive membership changes.
 const appSource = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
+const persistPreference = parse(appSource).instance.content.body
+    .find(node => node.type === 'FunctionDeclaration' && node.id.name === 'persistSidebarPreference')
 const visibilityState = appSource.match(/    let spaceSidepins[\s\S]*?(?=    \/\/ Calculate space taken)/)[0]
 const source = compileModule(`
     export function observe (state, data, initialHidden) {
@@ -13,6 +15,7 @@ const source = compileModule(`
         const sidebarStateLoaded = $derived(state.loaded)
         const tabs = $derived(state.tabs.filter(tab => tab.spaceId === state.spaceId))
         const closed = {}
+        ${appSource.slice(persistPreference.start, persistPreference.end)}
         ${visibilityState}
         return {
             toggle: togglePinHidden,
@@ -42,8 +45,9 @@ function harness (initialHidden = {}, { loaded = true, tabs = pins() } = {}) {
         spaceMeta: { get globalPins() { return getGlobalPins(state.tabs) } },
         getSidepins: () => [...getSidepins(state.tabs.filter(tab => tab.spaceId === state.spaceId), state.groupTabId), ...getGlobalPins(state.tabs)]
     }
-    const observe = new Function('$', 'resolveSidepinVisibility', 'localStorage', `${source}\nreturn observe`)(
-        svelteClient, resolveSidepinVisibility, { setItem: (key, value) => storage.set(key, value) }
+    const observe = new Function('$', 'resolveSidepinVisibility', 'localStorage', 'window', `${source}\nreturn observe`)(
+        svelteClient, resolveSidepinVisibility, { setItem: (key, value) => storage.set(key, value) },
+        { darcWindowId: 'window-1' }
     )
     let api
     const destroy = svelteClient.effect_root(() => { api = observe(state, data, initialHidden) })
@@ -53,7 +57,7 @@ function harness (initialHidden = {}, { loaded = true, tabs = pins() } = {}) {
         change (update) { svelteClient.flush(() => update(state)) },
         toggle (id) { svelteClient.flush(() => api.toggle(id)) },
         visible () { return api.visible().sort() },
-        saved () { return JSON.parse(storage.get('invisiblePins')) }
+        saved () { return JSON.parse(storage.get('invisiblePins:window-1')) }
     }
 }
 

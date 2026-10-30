@@ -175,21 +175,38 @@ try {
     await page.goto(`http://127.0.0.1:${server.addr.port}`)
     await page.waitForFunction(() => document.querySelector('.closed-tab-item .fallback-favicon'))
     assert.deepEqual(errors, [])
-    const activityOrder = () => page.$$eval('.tabs-list > [data-tab-id], .tabs-list > .activity-tabs-divider', rows => rows.map(row => row.dataset.tabId || 'activity-divider'))
+    const activityOrder = () => page.$$eval('.tabs-list > [data-tab-id]', rows => rows.map(row => row.dataset.tabId))
     const originalActivityOrder = await activityOrder()
     assert.deepEqual(await page.$eval('.activity-toggle', button => [button.offsetWidth, button.offsetHeight, button.getAttribute('aria-pressed')]), [20, 20, 'false'])
     await page.evaluate(() => window.flushSync(() => { window.data.docs.outside.lastActivityAt = 100 }))
     assert.deepEqual(await activityOrder(), originalActivityOrder, 'activity must not affect ordinary mode')
     await page.click('.activity-toggle')
     assert.equal(await page.$eval('.activity-toggle', button => button.getAttribute('aria-pressed')), 'true')
-    assert.deepEqual(await activityOrder(), ['outside', 'activity-divider', 'group-missing'])
-    assert.equal(await page.$eval('.activity-tabs-divider', divider => !divider.querySelector('button') && !divider.hasAttribute('data-tab-id')), true, 'the activity boundary cannot be removed or dragged')
+    assert.deepEqual(await activityOrder(), ['outside', 'group-missing'])
+    await page.screenshot({ path: `${root}.cache/tab-activity-sorting.png` })
+    await page.evaluate(() => window.flushSync(() => { window.data.ui.showUrl = true }))
+    assert.equal(await page.$eval('.activity-toggle', button => {
+        const rect = button.getBoundingClientRect()
+        const url = document.querySelector('.sidebar-top-row .url-bar-container').getBoundingClientRect()
+        return url.right < rect.left && button.contains(document.elementFromPoint(rect.left + 10, rect.top + 10))
+    }), true, 'the URL bar and activity toggle remain reachable without overlapping')
+    await page.screenshot({ path: `${root}.cache/tab-activity-url.png` })
+    await page.evaluate(() => window.flushSync(() => { window.data.ui.showUrl = false }))
+    assert.equal(await page.$('.activity-tabs-divider'), null, 'activity and fallback tabs have no divider')
+    await page.evaluate(() => window.flushSync(() => { window.data.docs.outside.lastActivityAt = 0 }))
+    assert.deepEqual(await activityOrder(), ['group-missing', 'outside'], 'a tab without activity uses its order timestamp in the same list')
     await page.click('.tab-group', { button: 'right' })
     await page.waitForSelector('.context-menu')
     await page.evaluate(() => [...document.querySelectorAll('.context-menu-item')].find(button => button.textContent.trim() === 'Bump to top').click())
     await page.waitForSelector('.context-menu', { hidden: true })
-    assert.deepEqual(await activityOrder(), ['group-missing', 'outside'], 'bumping a group promotes it without changing its member order')
+    assert.deepEqual(await activityOrder(), ['group-missing', 'outside'], 'bumping a group keeps its canonical sidebar anchor')
+    await page.click('.tab-group-toggle')
+    const sidebarMemberIds = () => page.$$eval('.tab-group-content > .tab-item-container', rows => rows.map(row => row.dataset.tabId))
+    assert.equal((await sidebarMemberIds())[0], 'group-two', 'sidebar group members follow their explicit activity')
+    assert.deepEqual(await page.evaluate(() => window.data.getTabGroup('group-two', 'space').tabs.slice(0, 2).map(tab => tab.id)), ['group-missing', 'group-two'], 'sidebar sorting leaves traditional title-bar data intact')
     await page.click('.activity-toggle')
+    assert.equal((await sidebarMemberIds())[0], 'group-missing', 'disabling activity restores traditional sidebar member order')
+    await page.click('.tab-group-toggle')
     assert.deepEqual(await activityOrder(), originalActivityOrder, 'turning activity off restores the existing order')
     await page.click('[data-tab-id="outside"] .tab-item-main', { button: 'right' })
     await page.waitForSelector('.context-menu')
@@ -199,7 +216,7 @@ try {
         delete window.data.docs.outside.lastActivityAt
         delete window.data.docs['group-two'].lastActivityAt
     }))
-    if (!Deno.args.includes('--sidebar-scroll-only')) {
+    if (!Deno.args.includes('--sidebar-scroll-only') && !Deno.args.includes('--activity-only')) {
     assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), false, 'loading closed history must not flash the preview')
     await page.evaluate(() => {
         window.previewFixtureClosedTabs = [...window.data.spaceMeta.closedTabs]
@@ -497,7 +514,10 @@ try {
         console.log('Chromium: standalone and grouped tab title, emoji, image URL overrides and resets pass')
     }
 
-    if (Deno.args.includes('--close-button-history-only')) {
+    if (Deno.args.includes('--activity-only')) {
+        assert.deepEqual(errors, [])
+        console.log('Chromium: activity toggle size, URL layout, continuous activity/fallback sorting, group bump and ordinary-order restoration pass')
+    } else if (Deno.args.includes('--close-button-history-only')) {
         const targets = [
             { row: '.tab-item-container[data-tab-id="outside"]', close: '.tab-close' },
             { row: '.closed-tab-item[data-tab-id="closed-two"]', close: '.closed-tab-remove' }

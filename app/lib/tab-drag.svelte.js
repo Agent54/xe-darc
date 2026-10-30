@@ -460,7 +460,7 @@ function findGroupDropTarget(mx, my) {
         const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, null) : {}
         return { tabs, hit, list: topbar, axis: 'x', drop: {
             ...neighbors,
-            targetSpaceId: topbar.dataset.spaceId, targetGroupTabId: topbar.dataset.groupTabId, scope
+            targetSpaceId: topbar.dataset.spaceId, targetGroupTabId: topbar.dataset.groupTabId, targetZone: 'topbar', scope
         } }
     }
     for (const list of document.querySelectorAll('.tabs-list')) {
@@ -472,7 +472,7 @@ function findGroupDropTarget(mx, my) {
             const tabs = content.querySelectorAll(':scope > .tab-item-container')
             const hit = findClosestTab(tabs, my, 'y')
             const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, targetSpaceId) : {}
-            return { tabs, hit, list: content, axis: 'y', drop: { ...neighbors, targetSpaceId, targetGroupTabId: content.dataset.groupTabId, scope } }
+            return { tabs, hit, list: content, axis: 'y', drop: { ...neighbors, targetSpaceId, targetGroupTabId: content.dataset.groupTabId, targetZone: 'sidebar', scope } }
         }
         const tabs = list.querySelectorAll(SIDEBAR_ITEMS)
         const hit = findClosestTab(tabs, my, 'y')
@@ -494,8 +494,8 @@ function findGroupDropTarget(mx, my) {
         }
         const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, targetSpaceId) : {}
         return { tabs, hit, list, axis: 'y', hoverGroup, join,
-            joinDrop: join ? { targetSpaceId, targetGroupTabId: getTabId(hit.el), scope } : null,
-            drop: { ...neighbors, targetSpaceId, targetGroupTabId: null, scope } }
+            joinDrop: join ? { targetSpaceId, targetGroupTabId: getTabId(hit.el), targetZone: 'sidebar', scope } : null,
+            drop: { ...neighbors, targetSpaceId, targetGroupTabId: null, targetZone: 'sidebar', scope } }
     }
     return null
 }
@@ -652,7 +652,7 @@ function resolveDropTarget(mx, my, dragTabId) {
             const tabs = topbarList.querySelectorAll(':scope > .tab-container:not(.pinned-tab-container), :scope > .tab-divider-container')
             const hit = findClosestTab(tabs, mx, 'x')
             if (hit && !isNoopDrop(tabs, hit)) {
-                return buildDropInfo(tabs, hit, dragTabId, null) // null = same space (topbar is always active space)
+                return { ...buildDropInfo(tabs, hit, dragTabId, null), targetZone: 'topbar' } // null = same space (topbar is always active space)
             }
         }
     }
@@ -672,7 +672,7 @@ function resolveDropTarget(mx, my, dragTabId) {
             if (hit && !isNoopDrop(tabs, hit)) {
                 const spaceContent = list.closest('.space-content')
                 const targetSpaceId = spaceContent?.getAttribute('data-space-id') || null
-                return buildDropInfo(tabs, hit, dragTabId, targetSpaceId)
+                return { ...buildDropInfo(tabs, hit, dragTabId, targetSpaceId), targetZone: 'sidebar' }
             }
             // Empty list or past all tabs — drop at end (or beginning if empty)
             const spaceContent = list.closest('.space-content')
@@ -680,7 +680,7 @@ function resolveDropTarget(mx, my, dragTabId) {
             const tabEls = Array.from(tabs)
             const lastId = tabEls.length ? getTabId(tabEls[tabEls.length - 1]) : null
             const beforeTabId = lastId === dragTabId ? null : lastId
-            return { beforeTabId, afterTabId: null, targetSpaceId }
+            return { beforeTabId, afterTabId: null, targetSpaceId, targetZone: 'sidebar' }
         }
     }
 

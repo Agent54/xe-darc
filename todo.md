@@ -3435,3 +3435,9 @@ hud video pip
 double click to rename?
 
 activity view gloal/current space
+
+
+new tab in group context menu for tabgroup
+
+tabgroup resize scrollglitch
+

@@ -1,3 +1,5 @@
+import { activityBetween, getActivityGroupTabs } from './tab-activity.js'
+
 export function isOpenTab (tab) {
     return tab.type === 'tab' && !tab.archive && !tab.preview && !tab.lightbox && (!tab.pinned || getPinScope(tab) === 'group')
 }
@@ -144,7 +146,7 @@ export function addTabGroupFrames (elements, groups) {
 }
 
 // Both sidebar and top-bar drops describe neighbors in sidebar order.
-export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, targetGroupTabId, beforeTabId, afterTabId, scope = 'tab' }, createGroupId) {
+export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, targetGroupTabId, beforeTabId, afterTabId, scope = 'tab', activityMode = false }, createGroupId) {
     const tab = sourceItems.find(item => item.id === tabId)
     if (!tab || tab.type !== 'tab') {
         return []
@@ -165,24 +167,43 @@ export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, t
         const groupId = targetGroup.tabs[0].tabGroupId || createGroupId()
         const beforeIndex = remaining.findIndex(item => item.id === beforeTabId)
         const afterIndex = remaining.findIndex(item => item.id === afterTabId)
-        const insertIndex = afterIndex !== -1 ? afterIndex : beforeIndex !== -1 ? beforeIndex + 1 : remaining.length
+        const activityTabs = activityMode ? getActivityGroupTabs(remaining, {}, true) : []
+        const lastActivityAt = activityMode ? activityBetween(
+            remaining[beforeIndex] || (afterIndex === -1 ? activityTabs.at(-1) : null), remaining[afterIndex]
+        ) : null
+        if (activityMode && sourceGroup?.id === targetGroup.id) {
+            return moving.map(member => ({ id: member.id, lastActivityAt,
+                ...(scope === 'group' ? {} : { pinned: null, pinScope: null, pinOrder: null, sidebarPinned: null, sidebarPinOrder: null }) }))
+        }
+        // Sidebar activity placement is independent of the traditional member order used by the title bar.
+        const insertIndex = activityMode ? remaining.length : afterIndex !== -1 ? afterIndex : beforeIndex !== -1 ? beforeIndex + 1 : remaining.length
         const members = [...remaining.slice(0, insertIndex), ...moving, ...remaining.slice(insertIndex)]
         const targetGroups = getTabGroups(targetItems.filter(item => !movingIds.has(item.id)))
         const targetIndex = targetGroups.findIndex(group => group.tabs.some(tab => tab.id === targetGroupTabId))
         const placement = sourceGroup?.id !== targetGroup.id || tab.spaceId !== targetSpaceId ? groupCanvasPosition(remaining, targetSpaceId) || {
             x: 200 + remaining.length * 1080, y: 200 + Math.max(0, targetIndex) * 860, width: 1000, height: 700
         } : null
-        members.forEach((member, index) => updates.push({
-            id: member.id, tabGroupId: groupId, order: targetGroup.order, tabGroupOrder: index,
-            ...(movingIds.has(member.id) ? { spaceId: targetSpaceId, ...(scope === 'group' ? {} : { pinned: null, pinScope: null, pinOrder: null, sidebarPinned: null, sidebarPinOrder: null }) } : {}),
-            ...(placement && movingIds.has(member.id) ? { canvas: { ...member.canvas, [targetSpaceId]: { ...placement, x: placement.x + moving.findIndex(tab => tab.id === member.id) * 1080 } } } : {})
-        }))
+        const nextMemberOrder = targetGroup.tabGroupId
+            ? Math.max(...remaining.map(member => member.tabGroupOrder ?? member.order ?? 0)) + 1
+            : remaining.length
+        members.forEach((member, index) => {
+            if (activityMode && !movingIds.has(member.id) && member.tabGroupId === groupId) return
+            updates.push({
+                id: member.id, tabGroupId: groupId, order: targetGroup.order,
+                tabGroupOrder: activityMode && movingIds.has(member.id) ? nextMemberOrder + moving.findIndex(tab => tab.id === member.id) : index,
+                ...(activityMode && movingIds.has(member.id) ? { lastActivityAt } : {}),
+                ...(movingIds.has(member.id) ? { spaceId: targetSpaceId, ...(scope === 'group' ? {} : { pinned: null, pinScope: null, pinOrder: null, sidebarPinned: null, sidebarPinOrder: null }) } : {}),
+                ...(placement && movingIds.has(member.id) ? { canvas: { ...member.canvas, [targetSpaceId]: { ...placement, x: placement.x + moving.findIndex(tab => tab.id === member.id) * 1080 } } } : {})
+            })
+        })
     } else {
         const entries = getSidebarItems(targetItems).filter(item => !item.tabs?.every(member => movingIds.has(member.id)))
         const neighbor = id => entries.find(item => item.tabs?.some(member => member.id === id) || item.id === id)
-        const order = orderBetween(neighbor(beforeTabId), neighbor(afterTabId))
+        const rank = activityMode
+            ? { lastActivityAt: activityBetween(neighbor(beforeTabId), neighbor(afterTabId)) }
+            : { order: orderBetween(neighbor(beforeTabId), neighbor(afterTabId)) }
         moving.forEach(member => updates.push({
-            id: member.id, spaceId: targetSpaceId, ...(scope === 'group' ? {} : { pinned: null, pinScope: null, pinOrder: null, sidebarPinned: null, sidebarPinOrder: null }), order,
+            id: member.id, spaceId: targetSpaceId, ...(scope === 'group' ? {} : { pinned: null, pinScope: null, pinOrder: null, sidebarPinned: null, sidebarPinOrder: null }), ...rank,
             tabGroupId: scope === 'group' ? member.tabGroupId || null : null,
             tabGroupOrder: scope === 'group' ? member.tabGroupOrder ?? member.order : null
         }))

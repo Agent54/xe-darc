@@ -180,6 +180,7 @@ Deno.test('sidebar-to-topbar drops preserve the same neighbor order as the sideb
     assert.equal(drop.beforeTabId, 'one')
     assert.equal(drop.afterTabId, 'two')
     assert.equal(drop.targetSpaceId, 'target-space')
+    assert.equal(drop.targetZone, 'topbar')
 })
 
 Deno.test('topbar-to-sidebar edge drops detach individual tabs', () => {
@@ -191,6 +192,7 @@ Deno.test('topbar-to-sidebar edge drops detach individual tabs', () => {
     assert.equal(harness.drops[0].targetGroupTabId, null)
     assert.equal(harness.drops[0].afterTabId, 'target')
     assert.equal(harness.drops[0].scope, 'tab')
+    assert.equal(harness.drops[0].targetZone, 'sidebar')
 })
 
 Deno.test('joining a sidebar tab or group waits 700ms without resetting for pointer movement', () => {
@@ -284,7 +286,7 @@ Deno.test('spacers can move between expanded groups from either direction', () =
             harness.release()
             assert.deepEqual({ ...harness.drops[0] }, {
                 type: 'reorder', tabId: 'spacer', sourceSpaceId: 'source-space',
-                beforeTabId: 'first', afterTabId: 'second', targetSpaceId: 'target-space'
+                beforeTabId: 'first', afterTabId: 'second', targetSpaceId: 'target-space', targetZone: 'sidebar'
             })
         }
     }

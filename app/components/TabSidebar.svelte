@@ -36,7 +36,7 @@
     import TabContextMenu from './TabContextMenu.svelte'
     import { observeScrollEdges } from '../lib/scroll-edges.js'
     import { getSidebarPinnedTabs } from '../lib/tab-groups.js'
-    import { getActivitySidebarItems } from '../lib/tab-activity.js'
+    import { getActivitySidebarItems, getActivityGroupTabs } from '../lib/tab-activity.js'
     import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
     import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, onGroupExpand } from '../lib/tab-drag.svelte.js'
@@ -98,7 +98,7 @@
     let hovercardHistoryBeside = $state(false)
     const hoveredGroup = $derived(hoveredGroupTarget ? data.getTabGroup(hoveredGroupTarget.tabId, hoveredGroupTarget.spaceId) : null)
     const hovercardActivationTabId = $derived(hoveredGroup ? data.getGroupActiveTab(hoveredGroup, hoveredGroupTarget.spaceId)?.id : null)
-    const hovercardTabs = $derived(hoveredGroupTarget ? hoveredGroup?.tabs || [] : hoveredTab ? [hoveredTab] : [])
+    const hovercardTabs = $derived(hoveredGroupTarget ? getActivityGroupTabs(hoveredGroup?.tabs || [], data.docs, data.ui.tabActivityMode) : hoveredTab ? [hoveredTab] : [])
     let hoverTimeout = null
     let hovercardPosition = $state({ x: 0, y: 0 })
     let hovercardShowTime = null
@@ -2077,9 +2077,7 @@
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list">
                                     {#each getActivitySidebarItems(data.getSidebarItems(spaceId).filter(item => item.type !== 'divider' || !tabSearchQuery), data.docs, data.ui.tabActivityMode, tabMatchesSearch) as item, i (item.id)}
-                                        {#if item.type === 'activity-divider'}
-                                            <div class="activity-tabs-divider" role="separator" aria-label="Activity and other tabs"></div>
-                                        {:else if item.type === 'divider'}
+                                        {#if item.type === 'divider'}
                                             {@render sidebarTab(item, i)}
                                         {:else if item.tabs.some(tabMatchesSearch)}
                                             {#if !item.tabGroupId}
@@ -2089,6 +2087,7 @@
                                                 {@const expanded = tabGroupExpansion[expansionId] ?? false}
                                                 {@const active = item.tabs.some(tab => tab.id === data.spaceMeta.activeTabId)}
                                                 {@const activationTab = data.getGroupActiveTab(item, spaceId)}
+                                                {@const sidebarGroupTabs = getActivityGroupTabs(item.tabs, data.docs, data.ui.tabActivityMode)}
                                                 {@const recentEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                                                 {@const spaceActive = spaceId !== data.spaceMeta.activeSpace && item.tabs.some(tab => tab.id === (typeof recentEntry === 'string' ? recentEntry : recentEntry?.id))}
                                                 <div class="tab-group-wrapper" class:expanded class:active class:custom-group-height={tabGroupMaxHeight > defaultTabGroupMaxHeight} class:group-resizing={groupResize?.groupId === expansionId} style:--tab-group-max-height="{tabGroupMaxHeight}px" class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
@@ -2102,7 +2101,7 @@
                                                             onmousedown={(e) => { if (e.button === 0) { startTabDrag(item.tabs[0].id, e.currentTarget.closest('.tab-group-wrapper'), 'sidebar', spaceId, e, false, null, 'group') } }}
                                                             onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred())) { activateTab(activationTab.id, spaceId) } }}
                                                             ondblclick={(e) => { if (e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(activationTab.id); handleTabGroupToggle(expansionId, expanded) } }}>
-                                                            <TabGroupPreview group={item} groupId={expansionId} preview={groupPreview} active={active || spaceActive} disabled={tabDrag.active || tabDrag.pending} />
+                                                            <TabGroupPreview group={{ ...item, tabs: sidebarGroupTabs }} groupId={expansionId} preview={groupPreview} active={active || spaceActive} disabled={tabDrag.active || tabDrag.pending} />
                                                         </button>
                                                         <span class="tab-group-count">{item.tabs.length}</span>
                                                         <button class="tab-group-toggle" aria-label="{expanded ? 'Collapse' : 'Expand'} {item.title}" aria-expanded={expanded}
@@ -2114,7 +2113,7 @@
                                                     {#if tabGroupExpansion[expansionId] !== undefined}
                                                         <div class="tab-group-scroll" hidden={!expanded}>
                                                             <div class="tab-group-content" data-group-tab-id={item.tabs[0].id} use:observeScrollEdges={item.tabs.length}>
-                                                                {#each item.tabs as tab (tab.id)}
+                                                                {#each sidebarGroupTabs as tab (tab.id)}
                                                                     {@render sidebarTab(tab, i, tab.id === activationTab.id)}
                                                                 {/each}
                                                             </div>
@@ -2349,6 +2348,18 @@
         min-width: 0;
     }
 
+    .sidebar-content.no-url .sidebar-top-row {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        z-index: 1;
+    }
+
+    .sidebar-content.no-url .global-pins-section,
+    .sidebar-content.no-url .search-section {
+        margin-right: 28px;
+    }
+
     .activity-toggle {
         flex: 0 0 20px;
         width: 20px;
@@ -2385,14 +2396,6 @@
 
     .activity-toggle:focus-visible { outline: 1px solid #a3a3a3; outline-offset: 2px; }
     .activity-toggle svg { width: 12px; height: 12px; }
-
-    .activity-tabs-divider {
-        flex-shrink: 0;
-        height: 1px;
-        margin: 8px 10px;
-        background: rgba(255, 255, 255, 0.16);
-        pointer-events: none;
-    }
 
     .sidebar-header :global(button),
     .sidebar-header :global(input),

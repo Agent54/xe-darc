@@ -4,7 +4,7 @@ import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
-import { ensureTabActivityView } from './lib/tab-activity.js'
+import { ensureTabActivityView, getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
 import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
@@ -511,13 +511,17 @@ async function persistDocumentUpdate(tabId) {
         }
 
         try {
+            const savedUpdate = withOrderActivity(currentTab, update)
             const result = await db.put({
                 ...currentTab,
-                ...update,
+                ...savedUpdate,
                 _rev: currentTab._rev
             })
 
-            applyDocumentUpdate(tabId, { _rev: result.rev })
+            applyDocumentUpdate(tabId, {
+                ...(desiredDocumentUpdates.get(tabId) === update ? savedUpdate : {}),
+                _rev: result.rev
+            })
 
             if (desiredDocumentUpdates.get(tabId) === update) {
                 desiredDocumentUpdates.delete(tabId)
@@ -532,6 +536,7 @@ async function persistDocumentUpdate(tabId) {
 
 function queueDocumentUpdate(tabId, update) {
     if (!['tab', 'tabgroup', 'divider'].includes(docs[tabId]?.type)) return Promise.resolve()
+    update = withOrderActivity(docs[tabId], update)
 
     const desiredUpdate = {
         ...(desiredDocumentUpdates.get(tabId) || {}),
@@ -746,10 +751,9 @@ const refresh = throttle(async function (spaceId) {
     })
     await tabActivityViewReady
     const { rows } = await db.query('tab-activity/by_space', {
-        ...(spaceId ? { startkey: [spaceId], endkey: [spaceId, {}] } : {}),
+        ...(spaceId ? { key: spaceId } : {}),
         include_docs: initialLoad,
-        reduce: false,
-        limit: 4000
+        reduce: false
     })
     const newDocs = rows.map(row => row.doc || { _id: row.id })
 
@@ -757,10 +761,6 @@ const refresh = throttle(async function (spaceId) {
     // console.log('qry', newDocs.length)
 
     // console.timeLog('updt', 'exec received docs')
-
-    if (newDocs.length > 3000) {
-        console.error('approaching max data size, needs paging and partition support now')
-    }
 
     // console.log({ newDocs, docs })
 
@@ -1412,7 +1412,9 @@ const data = {
     },
     bumpTabActivity: (tabId) => {
         if (!ui.tabActivityMode || docs[tabId]?.type !== 'tab') return Promise.resolve()
-        const latestActivity = Math.max(0, ...Object.values(docs).map(doc => Number.isFinite(doc.lastActivityAt) ? doc.lastActivityAt : 0))
+        const latestActivity = Math.max(0, ...Object.values(docs)
+            .filter(doc => ['tab', 'divider'].includes(doc.type) && !doc.archive)
+            .map(getActivityTimestamp))
         const lastActivityAt = Math.max(Date.now(), latestActivity + 1)
         return queueDocumentUpdate(tabId, { lastActivityAt, modified: Date.now() })
     },
@@ -2394,9 +2396,11 @@ const data = {
 
     closeTab,
 
-    moveTab: (tabId, { beforeTabId, afterTabId, targetSpaceId, targetGroupTabId, scope = 'tab' }) => {
+    moveTab: (tabId, { beforeTabId, afterTabId, targetSpaceId, targetGroupTabId, scope = 'tab', activityMode = false }) => {
         const tabDoc = docs[tabId]
         if (!tabDoc) return
+        // Only sidebar drops opt into activity ordering; title-bar drops keep traditional member order.
+        activityMode = activityMode && ui.tabActivityMode
 
         if (tabDoc.type === 'tab' && scope === 'pinned') {
             return data.pin({ tabId, pinned: tabDoc.pinned || 'left', beforeTabId, afterTabId, targetSpaceId })
@@ -2406,7 +2410,7 @@ const data = {
             const destSpaceId = targetSpaceId || sourceSpaceId
             if (!spaces[destSpaceId]) return
             const updates = planTabMove(spaces[sourceSpaceId]?.tabs || [], spaces[destSpaceId].tabs || [], tabId,
-                { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope }, () => crypto.randomUUID())
+                { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode }, () => crypto.randomUUID())
             const saves = []
             const sourceGroup = data.getTabGroup(tabId, sourceSpaceId)
             const targetGroup = targetGroupTabId ? data.getTabGroup(targetGroupTabId, destSpaceId) : null
@@ -2498,7 +2502,11 @@ const data = {
             }
         }
 
-        tab.order = newOrder
+        const sidebarItems = getSidebarItems(targetItems || [])
+        const neighbor = id => sidebarItems.find(item => item.id === id || item.tabs?.some(tab => tab.id === id))
+        Object.assign(tab, activityMode
+            ? { lastActivityAt: activityBetween(neighbor(beforeTabId), neighbor(afterTabId)) }
+            : withOrderActivity(tab, { order: newOrder }))
         if (isSpaceMove) {
             // Cross-space: protect frame from destruction via onDestroy
             if (frameData) {
@@ -2516,7 +2524,7 @@ const data = {
 
             const destTabs = spaces[destSpaceId]?.tabs
             if (destTabs) {
-                let insertIdx = destTabs.findIndex(t => t.order > newOrder)
+                let insertIdx = destTabs.findIndex(t => t.order > tab.order)
                 if (insertIdx === -1) insertIdx = destTabs.length
                 destTabs.splice(insertIdx, 0, tab)
             }
@@ -2546,7 +2554,7 @@ const data = {
         const creation = dividerCreationTasks.get(tabId)
         const persistMove = creation ? creation.then(() => db.put({ ...tab })) : db.put({ ...tab })
 
-        persistMove.then((res) => {
+        return persistMove.then((res) => {
             editingId = null
             if (res?.rev) tab._rev = res.rev
         }).catch(() => {

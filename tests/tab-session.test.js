@@ -156,7 +156,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
             assert.equal(view, 'tab-activity/by_space')
             queries.push(query)
             const result = records.filter(doc => {
-                return doc.archive !== 'deleted' && (!query.startkey || doc.spaceId === query.startkey[0])
+                return doc.archive !== 'deleted' && (!query.key || doc.spaceId === query.key)
             })
             return { rows: structuredClone(result.map(doc => ({ id: doc._id, ...(query.include_docs ? { doc } : {}) }))) }
         },
@@ -229,6 +229,146 @@ Deno.test('explicit activity persists independently of tab visits and ordinary o
     assert.deepEqual(restarted.data.spaces[defaultSpace].tabs.map(tab => tab.id), ['one', 'two'])
 })
 
+Deno.test('activity reordering persists fractional activity ranks without changing ordinary order', async () => {
+    const { data, refresh, db, storage } = session({ tabs: [
+        tab('one', defaultSpace, { order: 10, lastActivityAt: 300 }),
+        tab('two', defaultSpace, { order: 100 }),
+        tab('moving', defaultSpace, { order: 50, lastActivityAt: 500 })
+    ], runtime: 'client' })
+    await refresh()
+    data.toggleTabActivityMode()
+    await data.moveTab('moving', { beforeTabId: 'one', afterTabId: 'two', activityMode: true })
+    assert.equal(data.docs.moving.lastActivityAt, 200)
+    assert.equal((await db.get('moving')).lastActivityAt, 200)
+    assert.equal(data.docs.moving.order, 50)
+    await data.moveTab('moving', { afterTabId: 'one', activityMode: true })
+    assert.equal(data.docs.moving.lastActivityAt, 301)
+    await data.moveTab('moving', { beforeTabId: 'two', activityMode: true })
+    assert.equal(data.docs.moving.lastActivityAt, 99)
+    const restarted = session({ tabs: await Promise.all(['one', 'two', 'moving'].map(id => db.get(id))), storage, runtime: 'client' })
+    await restarted.refresh()
+    assert.equal(restarted.data.docs.moving.lastActivityAt, 99)
+    assert.equal(restarted.data.docs.moving.order, 50)
+})
+
+Deno.test('top group tabs keep traditional ordering through activity toggles, bumps and member reorders', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('one', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 0, lastActivityAt: 100 }),
+        tab('two', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 1, lastActivityAt: 10000 }),
+        tab('three', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 2, lastActivityAt: 500 })
+    ], history: ['one'], runtime: 'client' })
+    await refresh()
+    const readTabs = new Function('$', 'data', 'closed', readTopTabsSource.replace(/\nreadTabs$/, '\nreturn readTabs'))(svelteClient, data, svelteClient.proxy({}))
+    assert.deepEqual(readTabs().map(tab => tab.id), ['one', 'two', 'three'])
+    data.toggleTabActivityMode()
+    await data.bumpTabActivity('three')
+    assert.deepEqual(readTabs().map(tab => tab.id), ['one', 'two', 'three'])
+    // Title-bar drops use traditional member placement even while the sidebar toggle is on.
+    await data.moveTab('three', { targetGroupTabId: 'one', afterTabId: 'one' })
+    assert.deepEqual(readTabs().map(tab => tab.id), ['three', 'one', 'two'])
+    assert.equal((await db.get('three')).tabGroupOrder, 0)
+    data.toggleTabActivityMode()
+    assert.deepEqual(readTabs().map(tab => tab.id), ['three', 'one', 'two'])
+})
+
+Deno.test('sidebar member drags persist activity ranks while title-bar member order stays independent', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('one', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 0, lastActivityAt: 100 }),
+        tab('two', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 1, lastActivityAt: 300 }),
+        tab('three', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 2, lastActivityAt: 500 })
+    ], history: ['one'], runtime: 'client' })
+    await refresh()
+    const readTabs = new Function('$', 'data', 'closed', readTopTabsSource.replace(/\nreadTabs$/, '\nreturn readTabs'))(svelteClient, data, svelteClient.proxy({}))
+    const sidebarIds = () => tabActivity.getActivityGroupTabs(data.getTabGroup('one').tabs, data.docs, data.ui.tabActivityMode).map(tab => tab.id)
+    data.toggleTabActivityMode()
+    assert.deepEqual(sidebarIds(), ['three', 'two', 'one'])
+    await data.moveTab('one', { targetGroupTabId: 'two', beforeTabId: 'three', afterTabId: 'two', activityMode: true })
+    assert.equal((await db.get('one')).lastActivityAt, 400)
+    assert.equal((await db.get('one')).tabGroupOrder, 0)
+    assert.deepEqual(sidebarIds(), ['three', 'one', 'two'])
+    assert.deepEqual(readTabs().map(tab => tab.id), ['one', 'two', 'three'])
+    await data.moveTab('three', { targetGroupTabId: 'one', beforeTabId: 'two', activityMode: true })
+    assert.equal((await db.get('three')).lastActivityAt, 299)
+    assert.deepEqual(sidebarIds(), ['one', 'two', 'three'])
+    assert.deepEqual(readTabs().map(tab => tab.id), ['one', 'two', 'three'])
+    data.toggleTabActivityMode()
+    assert.deepEqual(sidebarIds(), ['one', 'two', 'three'])
+})
+
+Deno.test('activity sidebar joins preserve existing title-bar order and append incoming members', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('one', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 0, lastActivityAt: 100 }),
+        tab('two', defaultSpace, { order: 10, tabGroupId: 'group', tabGroupOrder: 5, lastActivityAt: 300 }),
+        tab('incoming', defaultSpace, { order: 20, lastActivityAt: 500 })
+    ], history: ['one'], runtime: 'client' })
+    await refresh()
+    data.toggleTabActivityMode()
+    await data.moveTab('incoming', { targetGroupTabId: 'one', beforeTabId: 'two', afterTabId: 'one', activityMode: true })
+    const group = data.getTabGroup('one')
+    assert.deepEqual(group.tabs.map(tab => tab.id), ['one', 'two', 'incoming'])
+    assert.deepEqual(tabActivity.getActivityGroupTabs(group.tabs, data.docs, true).map(tab => tab.id), ['two', 'incoming', 'one'])
+    assert.equal((await db.get('incoming')).tabGroupOrder, 6)
+    assert.equal((await db.get('two')).tabGroupOrder, 5)
+})
+
+Deno.test('moves outside the sidebar keep traditional ranks while the activity toggle is on', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('before', defaultSpace, { order: 100, lastActivityAt: 900 }),
+        tab('after', defaultSpace, { order: 200, lastActivityAt: 300 }),
+        tab('moving', defaultSpace, { order: 10, lastActivityAt: 20 })
+    ], runtime: 'client' })
+    await refresh()
+    data.toggleTabActivityMode()
+    await data.moveTab('moving', { beforeTabId: 'before', afterTabId: 'after' })
+    assert.equal((await db.get('moving')).order, 150)
+    assert.equal(data.docs.moving.lastActivityAt, 150)
+})
+
+Deno.test('ordinary order changes raise older activity but preserve a newer timestamp', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('before', defaultSpace, { order: 100 }), tab('after', defaultSpace, { order: 200 }),
+        tab('older', defaultSpace, { order: 10, lastActivityAt: 20 }),
+        tab('newer', defaultSpace, { order: 20, lastActivityAt: 500 }),
+        tab('missing', defaultSpace, { order: 30 })
+    ], runtime: 'client' })
+    await refresh()
+    for (const id of ['older', 'newer', 'missing']) {
+        await data.moveTab(id, { beforeTabId: 'before', afterTabId: 'after' })
+        assert.equal(data.docs[id].order, 150)
+        assert.equal((await db.get(id)).lastActivityAt, id === 'newer' ? 500 : 150)
+    }
+})
+
+Deno.test('activity group and spacer drops use neighboring group timestamps and keep ordinary ranks', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('one', defaultSpace, { order: 10, tabGroupId: 'moving', tabGroupOrder: 0, lastActivityAt: 500 }),
+        tab('two', defaultSpace, { order: 10, tabGroupId: 'moving', tabGroupOrder: 1 }),
+        tab('neighbor-one', defaultSpace, { order: 20, tabGroupId: 'neighbor', lastActivityAt: 50 }),
+        tab('neighbor-two', defaultSpace, { order: 20, tabGroupId: 'neighbor', lastActivityAt: 300 }),
+        tab('fallback', defaultSpace, { order: 100 }),
+        tab('spacer', defaultSpace, { type: 'divider', order: 40 })
+    ], runtime: 'client' })
+    await refresh()
+    data.toggleTabActivityMode()
+    await data.moveTab('one', { beforeTabId: 'neighbor-one', afterTabId: 'fallback', scope: 'group', activityMode: true })
+    for (const id of ['one', 'two']) {
+        assert.equal((await db.get(id)).lastActivityAt, 200)
+        assert.equal(data.docs[id].order, 10)
+    }
+    await data.moveTab('spacer', { beforeTabId: 'neighbor-one', afterTabId: 'one', activityMode: true })
+    assert.equal((await db.get('spacer')).lastActivityAt, 250)
+    assert.equal(data.docs.spacer.order, 40)
+})
+
+Deno.test('bump to top exceeds tabs whose fallback order timestamp is newer than the clock', async () => {
+    const future = Date.now() + 1000000
+    const { data, refresh } = session({ tabs: [tab('one'), tab('future', defaultSpace, { order: future })], runtime: 'client' })
+    await refresh()
+    data.toggleTabActivityMode()
+    await data.bumpTabActivity('one')
+    assert.ok(data.docs.one.lastActivityAt > future)
+})
+
 Deno.test('a partial refresh at startup still restores the active tab from the complete session', async () => {
     const { data, refresh, queries, writes } = session({
         tabs: [tab('first'), tab('last-active'), tab('other', otherSpace)],
@@ -239,7 +379,8 @@ Deno.test('a partial refresh at startup still restores the active tab from the c
 
     assert.equal(data.spaceMeta.activeTabId, 'last-active')
     assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['first', 'last-active'])
-    assert.equal(queries[0].startkey, undefined)
+    assert.equal(queries[0].key, undefined)
+    assert.equal(queries[0].limit, undefined)
     assert.equal(queries[0].include_docs, true)
     assert.equal(writes.length, 0)
 })
@@ -339,7 +480,7 @@ Deno.test('activation survives another restart and later partial refreshes prese
     await restarted.refresh(otherSpace)
     assert.equal(restarted.data.spaceMeta.activeTabId, 'last')
     assert.equal(restarted.queries[1].include_docs, false)
-    assert.deepEqual(Array.from(restarted.queries[1].startkey), [otherSpace])
+    assert.equal(restarted.queries[1].key, otherSpace)
 })
 
 Deno.test('each activation has transient scroll intent, including repeated selections and previous-tab navigation', async () => {
