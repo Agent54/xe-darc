@@ -6,6 +6,7 @@
 
 <script>
     import { openTabDevTools } from '../lib/tab-devtools.js'
+    import { closeButtonHistory } from '../lib/close-button-history.js'
     // Tab sidebar component with Firefox-like hover behavior
     let { 
         isDragEnabled = true,
@@ -102,9 +103,7 @@
     let hovercardShowTime = null
     let hovercardResetTimer = null
     let hovercardCheckInterval = null
-    let closeButtonHovered = $state(false)
     let closeButtonHoveredDelayed = $state(false)
-    let closeButtonHoverTimer = null
     let instantHovercardsMode = $state(false)
     let instantModeResetTimer = null
     let hovercardUrlBarExpanded = $state(false)
@@ -112,6 +111,7 @@
     let expandedHovercardHistoryTabId = $state(null)
     let hovercardHistoryReady = $state(false)
     let menuCloseTimeout = null
+    let hoverMenusDismissed = $state(false)
     
     // Resize handle visibility - only enable after sidebar is fully shown
     let sidebarFullyShown = $state(false)
@@ -178,10 +178,36 @@
             hovercardShowTime = null
             expandedHovercardHistoryTabId = null
             hovercardHistoryReady = false
+            hovercardUrlBarExpanded = false
+            expandedHovercardTabs = {}
             if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+            stopHovercardPositionCheck()
+        }
+        const dismissOverlays = () => {
+            dismissHovercards()
+            hideTabContextMenu()
+            openMenuId = null
+            newSpaceMenuOpen = false
+            spaceContextMenuId = null
+            hoverMenusDismissed = true
+            colorPickerSpaceId = null
+            renamingSpaceId = null
+            urlBarExpanded = false
+            closedTabsHovered = false
+            closedTabsHeaderHovered = false
+            closedTabsPreviewUntil = 0
+            clearTimeout(menuCloseTimeout)
+            clearTimeout(closedTabsHideTimeout)
+            menuCloseTimeout = null
+            closedTabsHideTimeout = null
+            groupPreview.dismiss()
         }
         window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
-        return () => window.removeEventListener('darc-dismiss-hovercards', dismissHovercards)
+        window.addEventListener('darc-dismiss-overlays', dismissOverlays)
+        return () => {
+            window.removeEventListener('darc-dismiss-hovercards', dismissHovercards)
+            window.removeEventListener('darc-dismiss-overlays', dismissOverlays)
+        }
     })
 
     // Focus the URL input when it becomes visible
@@ -638,19 +664,25 @@
     function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
         if (!spaceId || tabSearchQuery || data.spaces[spaceId]?.tabs?.[0]?.type === 'divider') return
 
-        scrollTabListToTop(spaceId)
+        ensureNewTabVisible(spaceId)
 
         data.addDivider(spaceId)
     }
 
-    function scrollTabListToTop(spaceId) {
+    let lastCreatedSidebarTabId = null
+
+    function ensureNewTabVisible(spaceId) {
         const space = tabListRef?.querySelector(`[data-space-id="${spaceId}"]`)
-        const list = space?.querySelector('.tabs-list')
         const newTab = space?.querySelector('.new-tab-row')
-        if (!space || !list || !newTab) {
+        if (!space || !newTab) {
             return
         }
-        space.scrollTop += list.getBoundingClientRect().top - space.getBoundingClientRect().top - newTab.offsetHeight
+        const bounds = space.getBoundingClientRect()
+        const row = newTab.getBoundingClientRect()
+        if (row.top >= bounds.top && row.bottom <= bounds.bottom) {
+            return
+        }
+        space.scrollTop += row.top + row.height / 2 - bounds.top - bounds.height / 2
     }
 
     async function createSidebarTab(spaceId, options) {
@@ -658,10 +690,11 @@
         if (!tab) {
             return null
         }
+        lastCreatedSidebarTabId = tab.id
         data.activateSpace(spaceId)
         data.activate(tab.id)
         await tick()
-        scrollTabListToTop(spaceId)
+        ensureNewTabVisible(spaceId)
         return tab
     }
 
@@ -1052,21 +1085,33 @@
 
     // Watch for active tab changes and scroll to it in sidebar
     $effect(() => {
-        if (!data.spaceMeta.activeTabId) {
+        const tabId = data.spaceMeta.activeTabId
+        if (!tabId || tabId === lastCreatedSidebarTabId) {
             return
         }
+        lastCreatedSidebarTabId = null
         
         // Find the active tab element in the sidebar
-        setTimeout(() => {
-            let activeTabElement = document.querySelector(`.sidebar .tab-item-container[data-tab-id="${data.spaceMeta.activeTabId}"]`)
+        const timeout = setTimeout(() => {
+            let activeTabElement = document.querySelector(`.sidebar .tab-item-container[data-tab-id="${tabId}"]`)
             if (!activeTabElement || activeTabElement.closest('.tab-group-scroll[hidden]')) {
-                activeTabElement = document.querySelector(`.sidebar [data-tab-group-id="${data.docs[data.spaceMeta.activeTabId]?.tabGroupId}"]`)
+                activeTabElement = document.querySelector(`.sidebar [data-tab-group-id="${data.docs[tabId]?.tabGroupId}"]`)
             }
             if (activeTabElement) {
                 const tabsList = activeTabElement.closest('.space-content')
                 if (tabsList) {
                     console.log('%c[TAB-DEBUG] TabSidebar scrolling active tab into view: ' + data.spaceMeta.activeTabId, 'color: #d946ef; font-weight: bold; font-size: 13px')
                     // Scroll the tab into view within its tabs list
+                    const innerList = activeTabElement.closest('.tab-group-content, .sidebar-pinned-tabs')
+                    if (innerList) {
+                        const innerBounds = innerList.getBoundingClientRect()
+                        const innerRow = activeTabElement.getBoundingClientRect()
+                        if (innerRow.top < innerBounds.top) {
+                            innerList.scrollTop += innerRow.top - innerBounds.top
+                        } else if (innerRow.bottom > innerBounds.bottom) {
+                            innerList.scrollTop += innerRow.bottom - innerBounds.bottom
+                        }
+                    }
                     const bounds = tabsList.getBoundingClientRect()
                     const row = activeTabElement.getBoundingClientRect()
                     const top = bounds.top + (tabsList.querySelector('.new-tab-row')?.offsetHeight || 0)
@@ -1078,6 +1123,7 @@
                 }
             }
         }, 50) // Small delay to ensure DOM is updated
+        return () => clearTimeout(timeout)
     })
 
     // Initialize bottom scroll fade state when tabs lists render or change
@@ -1321,12 +1367,7 @@
         // })
         
         // Reset close button hover state when entering a new tab
-        closeButtonHovered = false
         closeButtonHoveredDelayed = false
-        if (closeButtonHoverTimer) {
-            clearTimeout(closeButtonHoverTimer)
-            closeButtonHoverTimer = null
-        }
         
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
@@ -1922,9 +1963,9 @@
                                         </svg>
                                         <span class="new-tab-text">New Tab</span>
 
-                                        <span class="new-tab-more-button" aria-label="New tab options">
+                                        <span class="new-tab-more-button" role="group" aria-label="New tab options" onmouseenter={() => { hoverMenusDismissed = false }}>
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="down-icon"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
-                                            <div class="new-tab-hover-menu" role="menu" aria-label="New tab options">
+                                            <div class="new-tab-hover-menu" class:menu-force-close={hoverMenusDismissed} role="menu" aria-label="New tab options">
                                           <span class="new-tab-hover-item" onmouseup={() => handleNewFromClipboard(spaceId)} role="menuitem" tabindex="0">
                                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
                                               <span>New from clipboard</span>
@@ -1989,25 +2030,7 @@
                                                     
                                                     <button class="tab-close" aria-label="Close tab"
                                                             onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}
-                                                            onmouseenter={() => {
-                                                                closeButtonHovered = true
-                                                                if (closeButtonHoverTimer) clearTimeout(closeButtonHoverTimer)
-                                                                if (instantHovercardsMode) {
-                                                                    closeButtonHoverTimer = setTimeout(() => {
-                                                                        closeButtonHoveredDelayed = true
-                                                                    }, 300)
-                                                                } else {
-                                                                    closeButtonHoveredDelayed = true
-                                                                }
-                                                            }}
-                                                            onmouseleave={() => {
-                                                                closeButtonHovered = false
-                                                                closeButtonHoveredDelayed = false
-                                                                if (closeButtonHoverTimer) {
-                                                                    clearTimeout(closeButtonHoverTimer)
-                                                                    closeButtonHoverTimer = null
-                                                                }
-                                                            }}>
+                                                            use:closeButtonHistory={{ instant: instantHovercardsMode, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
                                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                                                 <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                                                             </svg>
@@ -2149,7 +2172,8 @@
                                         <span class="tab-title">{data.docs[tab.id]?.titleOverride || tab.titleOverride || data.docs[tab.id]?.title || tab.title}</span>
                                         <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
                                     </div>
-                                    <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}>
+                                    <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}
+                                         use:closeButtonHistory={{ instant: instantHovercardsMode, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                             <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                                         </svg>
@@ -2571,7 +2595,7 @@
     }
 
     .space-content > .pinned-tabs-grid {
-        max-height: max(44px, calc(100% - 120px));
+        max-height: max(44px, calc(50% - 54px));
         overflow-y: auto;
         overscroll-behavior-y: contain;
         scrollbar-width: thin;
@@ -3117,6 +3141,7 @@
         gap: 8px;
         height: 100%;
         overflow-y: auto;
+        overflow-anchor: none;
         overscroll-behavior-y: contain;
         scrollbar-width: thin;
         padding-top: 0;
@@ -3859,15 +3884,19 @@
         box-sizing: border-box;
     }
 
-    .new-tab-more-button:hover .new-tab-hover-menu {
+    .new-tab-more-button:hover .new-tab-hover-menu:not(.menu-force-close) {
         opacity: 1;
         visibility: visible;
         pointer-events: auto;
     }
-    .new-tab-hover-menu:hover {
+    .new-tab-hover-menu:not(.menu-force-close):hover {
         opacity: 1;
         visibility: visible;
         pointer-events: auto;
+    }
+
+    .new-tab-hover-menu.menu-force-close {
+        transition: none;
     }
     
     .new-tab-hover-item {

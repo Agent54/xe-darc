@@ -17,10 +17,19 @@ export function showLinkPreview(node) {
     updatePosition()
     node.showPopover()
 
+    function dismiss() {
+        cancelAnimationFrame(animationFrame)
+        if (node.matches(':popover-open')) {
+            node.hidePopover()
+        }
+    }
+
+    window.addEventListener('darc-dismiss-overlays', dismiss)
+
     return {
         destroy() {
-            cancelAnimationFrame(animationFrame)
-            if (node.matches(':popover-open')) node.hidePopover()
+            window.removeEventListener('darc-dismiss-overlays', dismiss)
+            dismiss()
         }
     }
 }

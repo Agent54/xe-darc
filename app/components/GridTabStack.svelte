@@ -1,16 +1,21 @@
 <script>
-  import { onDestroy } from 'svelte'
+  import { onDestroy, tick } from 'svelte'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
   import { createTabGroupPreview, getFaviconWindow, getDefaultGroupTabIndex } from '../lib/tab-group-preview.svelte.js'
 
-  let { group, activeTabId, spaceActiveTabId = null, defaultTabId = null, onActivate, onClose, onWheel } = $props()
+  let { group, activeTabId, spaceActiveTabId = null, defaultTabId = null, inline = false, onActivate, onClose, onWheel } = $props()
   let dialog = $state(null)
   let expanded = $state(false)
+  let inlineExpanded = $state(false)
+  let inlineScroller = $state(null)
+  let expandButton = $state(null)
   let keyboardIndex = $state(null)
   let visiblePreviews = $state(new Set())
   let previewObserver
   const preview = createTabGroupPreview()
+  const activeGroup = $derived(group.tabs.some(tab => tab.id === activeTabId))
+  const inlineOpen = $derived(inline && (activeGroup || inlineExpanded))
   const scrubbing = $derived(preview.state.groupId === group.id)
   const defaultIndex = $derived(getDefaultGroupTabIndex(group.tabs, [activeTabId, spaceActiveTabId, defaultTabId]))
   const selectedIndex = $derived(Math.min(scrubbing ? preview.state.tabIndex : keyboardIndex ?? defaultIndex, group.tabs.length - 1))
@@ -22,20 +27,39 @@
     previewObserver?.disconnect()
   })
 
-  // Mount screenshot and favicon components only after visible cards have laid out.
+  $effect(() => {
+    if (inline && dialog?.open) dialog.close()
+  })
+
+  // Reveal the active member without moving the surrounding space overview.
+  $effect(() => {
+    const container = inlineScroller
+    const tabId = activeTabId
+    if (!container || !inlineOpen) return
+    const frame = requestAnimationFrame(() => {
+      const card = [...container.children].find(node => node.dataset.tabId === tabId)
+      if (card) container.scrollTo({ left: card.offsetLeft - (container.clientWidth - card.offsetWidth) / 2, behavior: 'instant' })
+    })
+    return () => cancelAnimationFrame(frame)
+  })
+
+  // Each expansion owns its scroll viewport; load only cards near that viewport.
   function observePreview(node) {
-    previewObserver ??= new IntersectionObserver(entries => {
-      if (!dialog?.open) return
-      const next = new Set(visiblePreviews)
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue
-        next.add(entry.target.dataset.tabId)
-        previewObserver.unobserve(entry.target)
-      }
-      if (next.size !== visiblePreviews.size) visiblePreviews = next
-    }, { root: node.parentElement, rootMargin: '120px' })
-    previewObserver.observe(node)
-    return { destroy: () => previewObserver.unobserve(node) }
+    if (previewObserver?.root !== node.parentElement) {
+      previewObserver?.disconnect()
+      previewObserver = new IntersectionObserver(entries => {
+        const next = new Set(visiblePreviews)
+        for (const entry of entries) {
+          if (!entry.isIntersecting || !entry.target.isConnected) continue
+          next.add(entry.target.dataset.tabId)
+          observer.unobserve(entry.target)
+        }
+        if (next.size !== visiblePreviews.size) visiblePreviews = next
+      }, { root: node.parentElement, rootMargin: '120px' })
+    }
+    const observer = previewObserver
+    observer.observe(node)
+    return { destroy: () => observer.unobserve(node) }
   }
 
   function scrub(event) {
@@ -49,11 +73,34 @@
     keyboardIndex = null
   }
 
+  function dismissOverlays() {
+    preview.dismiss()
+    keyboardIndex = null
+    if (dialog?.open) {
+      dialog.close()
+    }
+  }
+
   function openGroup() {
+    if (inline) {
+      resetPreview()
+      inlineExpanded = true
+      return
+    }
     if (!dialog?.isConnected || dialog.open) return
     resetPreview()
+    expandButton?.focus({ preventScroll: true })
     dialog.showModal()
+    dialog.focus({ preventScroll: true })
     expanded = true
+  }
+
+  async function collapseInlineGroup() {
+    if (activeGroup) return
+    inlineExpanded = false
+    visiblePreviews = new Set()
+    await tick()
+    expandButton?.focus({ preventScroll: true })
   }
 
   function handleExpandMouseDown(event) {
@@ -79,6 +126,8 @@
   }
 </script>
 
+<svelte:window ondarc-dismiss-overlays={dismissOverlays} />
+
 {#snippet thumbnail(tab, lazy = true)}
   {#if tab.screenshot}
     <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="" {lazy} fadeIn={false} />
@@ -90,12 +139,49 @@
   {/if}
 {/snippet}
 
+{#snippet groupCards()}
+  {#each group.tabs as tab, index (tab.id)}
+    <div class="dialog-card" class:active={tab.id === activeTabId} class:space-active-tab={tab.id === spaceActiveTabId} data-tab-id={tab.id} use:observePreview>
+      <div class="card-header">
+        <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} aria-label="Activate {tab.titleOverride || tab.title || 'Untitled'}">
+          <span class="tab-favicon">{#if visiblePreviews.has(tab.id)}<Favicon {tab} showButton={false} />{/if}</span>
+          <span class="title-text">{tab.titleOverride || tab.title || 'Untitled'}</span>
+        </button>
+        <button class="icon-button close-tab" onmousedown={(event) => { if (event.button === 0) onClose(event, tab, index) }} onclick={(event) => { if (event.detail === 0) onClose(event, tab, index) }} aria-label="Close {tab.titleOverride || tab.title || 'Untitled'}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
+        </button>
+      </div>
+      <button class="card-preview" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} onwheel={(event) => onWheel(event, tab, index)} aria-label="Activate {tab.titleOverride || tab.title || 'Untitled'}">
+        {#if visiblePreviews.has(tab.id)}{@render thumbnail(tab, false)}{/if}
+      </button>
+    </div>
+  {/each}
+{/snippet}
+
+{#if inlineOpen}
+  <div class="grid-tab-group inline-group" role="group" aria-label="{group.title}, {group.tabs.length} tabs">
+    <header class="inline-header">
+      <div class="inline-heading"><h2>{group.title}</h2><span class="stack-count">{group.tabs.length}</span></div>
+      {#if activeGroup}
+        <span class="current-group-label">Current group</span>
+      {:else}
+        <button class="icon-button collapse-button" onclick={collapseInlineGroup} aria-label="Collapse {group.title}" aria-expanded="true" title="Collapse group">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 6-6 6 6" /></svg>
+        </button>
+      {/if}
+    </header>
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex (Scrollable region supports keyboard navigation.) -->
+    <div class="inline-tabs" bind:this={inlineScroller} role="region" aria-label="{group.title} tabs" tabindex="0">
+      {@render groupCards()}
+    </div>
+  </div>
+{:else}
 <div class="grid-tab-group" class:scrubbing onpointerenter={scrub} onpointermove={scrub} onpointerleave={resetPreview} role="group" aria-label="{group.title}, {group.tabs.length} tabs">
   <div class="stack-layer stack-back" aria-hidden="true"></div>
   <div class="stack-layer stack-middle" aria-hidden="true"></div>
   <div class="stack-front" class:active={selectedTab.id === activeTabId} class:space-active-tab={selectedTab.id === spaceActiveTabId}>
     <div class="stack-header">
-      <button class="stack-title" onclick={() => onActivate(selectedTab, selectedIndex)} onkeydown={handleStackKey} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}. Use left and right arrows to browse tabs.">
+      <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}. Use left and right arrows to browse tabs.">
         <span class="group-favicons" aria-hidden="true" style:width="{faviconWindow.visible * 18}px">
           <span class="group-favicon-track" style:transform="translateX({-faviconWindow.offset * 18}px)">
             {#each group.tabs.slice(faviconWindow.start, faviconWindow.end) as tab (tab.id)}
@@ -106,11 +192,11 @@
         <span class="title-text">{selectedTab.titleOverride || selectedTab.title || 'Untitled'}</span>
       </button>
       <span class="stack-count">{group.tabs.length}</span>
-      <button class="icon-button expand-button" onmousedown={handleExpandMouseDown} onclick={(event) => { if (event.detail === 0) openGroup() }} aria-label="Expand {group.title}" aria-haspopup="dialog" aria-expanded={expanded} title="Expand group">
+      <button class="icon-button expand-button" bind:this={expandButton} onmousedown={handleExpandMouseDown} onclick={(event) => { if (event.detail === 0) openGroup() }} aria-label="Expand {group.title}" aria-haspopup={inline ? undefined : 'dialog'} aria-expanded={expanded} title="Expand group">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6m0-6-7 7M10 20H4v-6m0 6 7-7" /></svg>
       </button>
     </div>
-    <button class="stack-preview" onclick={() => onActivate(selectedTab, selectedIndex)} onkeydown={handleStackKey} onwheel={(event) => onWheel(event, selectedTab, selectedIndex)} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}">
+    <button class="stack-preview" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} onwheel={(event) => onWheel(event, selectedTab, selectedIndex)} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}">
       {#key selectedTab.id}
         <span class="preview-image">{@render thumbnail(selectedTab)}</span>
       {/key}
@@ -119,11 +205,12 @@
     </button>
   </div>
 </div>
+{/if}
 
 <!-- The native dialog provides focus containment, Escape, and focus restoration. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <dialog bind:this={dialog} class="group-dialog" aria-label={group.title} style:--columns={Math.min(3, group.tabs.length)}
-  onclose={() => { expanded = false; visiblePreviews = new Set() }} oncancel={(event) => event.stopPropagation()}
+  onclose={() => { expanded = false; if (!inlineOpen) visiblePreviews = new Set() }} oncancel={(event) => event.stopPropagation()}
   onkeydown={(event) => { if (event.key === 'Escape') event.stopPropagation() }}
   onmousedown={(event) => { event.stopPropagation(); if (event.button === 0) closeOutside(event) }}>
   <header class="dialog-header">
@@ -134,22 +221,7 @@
   </header>
   <div class="dialog-grid">
     {#if expanded}
-    {#each group.tabs as tab, index (tab.id)}
-      <div class="dialog-card" class:active={tab.id === activeTabId} class:space-active-tab={tab.id === spaceActiveTabId} data-tab-id={tab.id} use:observePreview>
-        <div class="card-header">
-          <button class="stack-title" onclick={() => onActivate(tab, index)} aria-label="Activate {tab.titleOverride || tab.title || 'Untitled'}">
-            <span class="tab-favicon">{#if visiblePreviews.has(tab.id)}<Favicon {tab} showButton={false} />{/if}</span>
-            <span class="title-text">{tab.titleOverride || tab.title || 'Untitled'}</span>
-          </button>
-          <button class="icon-button close-tab" onclick={(event) => onClose(event, tab, index)} aria-label="Close {tab.titleOverride || tab.title || 'Untitled'}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
-          </button>
-        </div>
-        <button class="card-preview" onclick={() => onActivate(tab, index)} onwheel={(event) => onWheel(event, tab, index)} aria-label="Activate {tab.titleOverride || tab.title || 'Untitled'}">
-          {#if visiblePreviews.has(tab.id)}{@render thumbnail(tab, false)}{/if}
-        </button>
-      </div>
-    {/each}
+      {@render groupCards()}
     {/if}
   </div>
 </dialog>
@@ -222,6 +294,40 @@
   .scrub-track span { position: absolute; top: 0; height: 100%; background: #ffffffa6; border-radius: inherit; transition: left 100ms ease-out; }
   .scrubbing .scrub-position, .scrubbing .scrub-track, .grid-tab-group:focus-within .scrub-position, .grid-tab-group:focus-within .scrub-track { opacity: 1; }
 
+  .inline-group {
+    grid-column: 1 / -1;
+    height: auto;
+    margin-bottom: 0;
+    border: 1px solid rgb(255 255 255 / 6%);
+    border-radius: 12px;
+    background: #0c0c0c;
+    color: #e5e5e5;
+    overflow: hidden;
+  }
+  .inline-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px 0; }
+  .inline-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .inline-heading h2 { font-size: 12px; font-weight: 500; letter-spacing: 0; }
+  .current-group-label { flex-shrink: 0; color: #808080; font-size: 10px; }
+  .collapse-button { width: 24px; height: 24px; }
+  .inline-tabs {
+    position: relative;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: min(320px, 100%);
+    gap: 20px;
+    min-width: 0;
+    padding: 12px 12px 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: #ffffff26 transparent;
+  }
+  .inline-tabs:focus-visible { outline: 2px solid #a8c7fa; outline-offset: -3px; }
+  .inline-tabs .dialog-card { height: 180px; display: flex; flex-direction: column; }
+  .inline-tabs .card-preview { flex: 1; aspect-ratio: auto; }
+
   .group-dialog {
     position: fixed;
     inset: 0;
@@ -233,6 +339,7 @@
     box-sizing: border-box;
     border: 1px solid rgb(255 255 255 / 6%);
     border-radius: 16px;
+    outline: none;
     background: #0c0c0cf5;
     color: #e5e5e5;
     box-shadow: 0 32px 100px #0009, 0 0 0 1px #0006;
@@ -245,6 +352,7 @@
   h2 { margin: 0; font-size: 17px; line-height: 1.4; font-weight: 600; letter-spacing: -.025em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dialog-heading > span { font-size: 12px; color: #999; white-space: nowrap; }
   .dismiss-button { width: 28px; height: 28px; background: #ffffff0a; border-radius: 50%; }
+  .dismiss-button:focus-visible { border-radius: 50%; outline-offset: 2px; }
   .dialog-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); grid-auto-rows: max-content; align-content: start; min-height: 0; gap: 18px; overflow-y: auto; overscroll-behavior: contain; padding: 2px 24px 24px; scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
   .dialog-card { min-width: 0; }
   .card-preview { aspect-ratio: 2 / 1; }

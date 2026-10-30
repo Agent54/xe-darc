@@ -363,6 +363,16 @@
     }
 
     // Handle clicks outside input/dropdown to clear completions
+    function dismissCompletions() {
+        clearTimeout(completionTimeout)
+        completionTimeout = null
+        currentAbortController?.abort()
+        currentAbortController = null
+        isGeneratingCompletions = false
+        completions = []
+        selectedCompletionIndex = -1
+    }
+
     function handleClickOutside(event) {
         const inputContainer = event.target.closest('.input-wrapper')
         const dropdown = event.target.closest('.completions-dropdown')
@@ -580,6 +590,8 @@
         }
     })
 </script>
+
+<svelte:window ondarc-dismiss-overlays={dismissCompletions} />
 
 <div class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
     <div class="content-container relative pt-[15vh] w-full">

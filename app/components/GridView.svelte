@@ -111,6 +111,12 @@
   let gridRenameInputValue = $state('')
   let gridRenameInputRef = $state(null)
 
+  function dismissOverlays() {
+    gridContextMenuId = null
+    gridColorPickerSpaceId = null
+    gridRenamingSpaceId = null
+  }
+
   function handleSpaceHeaderContext(e, id) {
     e.preventDefault()
     e.stopPropagation()
@@ -306,6 +312,8 @@
   }
 </script>
 
+<svelte:window ondarc-dismiss-overlays={dismissOverlays} />
+
 <div 
   class="grid-view"
   bind:this={gridContainer}
@@ -487,6 +495,7 @@
                   {@const firstActiveTabId = typeof firstActiveHistoryEntry === 'string' ? firstActiveHistoryEntry : firstActiveHistoryEntry?.id}
                   {#if group.tabGroupId}
                     <GridTabStack {group} {activeTabId}
+                      inline={spaceScope === 'current'}
                       spaceActiveTabId={spaceId !== activeSpaceId ? firstActiveTabId : null}
                       defaultTabId={data.getGroupActiveTab(group, spaceId)?.id}
                       onActivate={(tab, index) => handleFrameClick(tab, index, spaceId)}

@@ -28,6 +28,24 @@ function previewHarness () {
     }
 }
 
+Deno.test('view changes dismiss group scrubbing and cancel pending previews without retaining warm state', () => {
+    const h = previewHarness()
+    h.preview.move('first', 0.8, 10)
+    h.preview.dismiss()
+    h.advance(700)
+    assert.equal(h.preview.state.groupId, null)
+    assert.equal(h.timers.size, 0)
+    h.preview.move('second', 0.5, 10)
+    h.advance(700)
+    assert.equal(h.preview.state.groupId, 'second')
+    h.preview.dismiss()
+    assert.equal(h.preview.state.groupId, null)
+    h.preview.move('third', 0.3, 10)
+    assert.equal(h.preview.state.groupId, null)
+    h.advance(700)
+    assert.equal(h.preview.state.groupId, 'third')
+})
+
 Deno.test('grid stacks default to their current active member, then space or remembered activity', () => {
     const { defaultIndex } = previewHarness()
     const tabs = ['first', 'remembered', 'space-active', 'active'].map(id => ({ id }))
@@ -65,7 +83,7 @@ Deno.test('favicon scrubbing waits 700 ms and pointer movement retains the initi
     preview.destroy()
 })
 
-Deno.test('warmed scrubbing follows other groups immediately and resets after two seconds away', () => {
+Deno.test('warmed scrubbing follows other groups immediately and resets after one second away', () => {
     const { preview, advance } = previewHarness()
     preview.move('a', 0, 10)
     advance(700)
@@ -75,12 +93,12 @@ Deno.test('warmed scrubbing follows other groups immediately and resets after tw
     assert.equal(preview.state.groupId, 'b')
     assert.equal(preview.state.tabIndex, 4)
     preview.leave('b')
-    advance(1999)
+    advance(999)
     preview.enter('c')
     preview.move('c', 1, 5)
     assert.equal(preview.state.tabIndex, 4)
     preview.leave('c')
-    advance(2000)
+    advance(1000)
     preview.move('d', 0.5, 10)
     assert.equal(preview.state.groupId, null)
     advance(699)

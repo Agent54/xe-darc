@@ -106,6 +106,12 @@
         }
     }
 
+    function dismissOverlays() {
+        viewMenu = null
+        contextMenu = null
+        showAddAppModal = false
+    }
+
     function handleViewKey(event) {
         if (event.key === 'Escape' && viewMenu) {
             event.stopPropagation()
@@ -137,9 +143,7 @@
     export function close() {
         loadController?.abort()
         loadController = null
-        showAddAppModal = false
-        viewMenu = null
-        contextMenu = null
+        dismissOverlays()
     }
 
     function sectionForConfigPath(configPath) {
@@ -415,7 +419,7 @@
     }
 </script>
 
-<svelte:window onmousedown={dismissViewMenu} onfocusin={dismissViewMenu} />
+<svelte:window onmousedown={dismissViewMenu} onfocusin={dismissViewMenu} ondarc-dismiss-overlays={dismissOverlays} />
 
 {#snippet SectionHeader(name, count, key)}
     <button

@@ -18,6 +18,8 @@ const modules = {
         window.opened = []
         window.overlayClosed = false
         const tabDrag = { active: false }
+        let shortcutOverviewVisible = false
+        const helpMenu = null
         const showAppsOverlay = true
         const hovercardUrlBarExpanded = false, hoveredTab = null
         const closeAppsOverlay = () => { window.overlayClosed = true; window.apps.close() }
@@ -121,6 +123,18 @@ try {
         await page.waitForSelector('.app-docker-submenu')
     }
     const labels = () => page.$$eval('.app-docker-submenu button', buttons => buttons.map(button => button.textContent.trim()))
+
+    await openServiceMenu()
+    await page.evaluate(() => window.dispatchEvent(new Event('darc-dismiss-overlays')))
+    await page.waitForFunction(() => !document.querySelector('.app-context-menu'))
+    assert.equal(await page.$(':popover-open'), null, 'View changes close the app menu and its native popover')
+    for (const kind of ['sort', 'group']) {
+        await page.$eval(`[data-view-trigger="${kind}"]`, button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
+        await page.waitForSelector(`#apps-${kind}-menu`)
+        await page.evaluate(() => window.dispatchEvent(new Event('darc-dismiss-overlays')))
+        await page.waitForFunction(() => !document.querySelector('.apps-view-menu'))
+        assert.equal(await page.$eval(`[data-view-trigger="${kind}"]`, button => button.getAttribute('aria-expanded')), 'false')
+    }
 
     await openServiceMenu()
     assert.deepEqual(await labels(), ['Start', 'Stop', 'Restart', 'Pause', 'Start watching', 'Remove'])

@@ -5,6 +5,7 @@
     import Resources from './components/ResourcesPanel.svelte'
     import Settings from './components/Settings.svelte'
     import { openTabDevTools } from './lib/tab-devtools.js'
+    import { closeButtonHistory } from './lib/close-button-history.js'
     import UserMods from './components/UserMods.svelte'
     import Activity from './components/Activity.svelte'
     import AgentSidebar from './components/AgentSidebar.svelte'
@@ -108,9 +109,7 @@
     let isDragEnabled = $state(true)
     let hovercardRecentlyActive = $state(false)
     let hovercardResetTimer = null
-    let closeButtonHovered = $state(false)
     let closeButtonHoveredDelayed = $state(false)
-    let closeButtonHoverTimer = null
     let instantHovercardsMode = $state(false)
     let hovercardUrlBarExpanded = $state(false)
     let hovercardComponent = $state(null)
@@ -192,6 +191,23 @@
         isTrashItemHover = false
         hovercardShowTime = null
         stopHovercardPositionCheck()
+    }
+
+    function dismissViewOverlays() {
+        window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards'))
+        window.dispatchEvent(new CustomEvent('darc-dismiss-overlays'))
+        hideContextMenu()
+        appearanceMenu = null
+        menuForceClose = true
+        newTabMenuVisible = false
+        clearTimeout(newTabMenuHoverTimeout)
+        clearTimeout(newTabMenuLeaveTimeout)
+        newTabMenuHoverTimeout = null
+        newTabMenuLeaveTimeout = null
+        shortcutOverviewVisible = false
+        for (const popover of document.querySelectorAll(':popover-open')) {
+            popover.hidePopover()
+        }
     }
 
     function handleHovercardPointerDown(event) {
@@ -1492,12 +1508,7 @@
     function handleTabMouseEnter(tab, event, positionHint = null) {
         if (tabDrag.active) return
         // Reset close button hover state when entering a new tab
-        closeButtonHovered = false
         closeButtonHoveredDelayed = false
-        if (closeButtonHoverTimer) {
-            clearTimeout(closeButtonHoverTimer)
-            closeButtonHoverTimer = null
-        }
         
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
@@ -1781,6 +1792,7 @@
 
     let backToDefault = false
     function selectViewMode(mode, {fromZoomOrKey} = {}) {
+        dismissViewOverlays()
         // if (lastUsedViewMode !== mode) {
         //     window.instances.forEach(instance => {
         //         const wrapper = document.getElementById('backgroundFrames')
@@ -1802,6 +1814,7 @@
     }
     
     function toggleViewMode({fromTileMode} = {}) {
+        dismissViewOverlays()
         // window.instances.forEach(instance => {
         //         const wrapper = document.getElementById('backgroundFrames')
         //         const anchorFrame = document.getElementById('anchorFrame')
@@ -2390,6 +2403,7 @@
     let appsOverlayZenModeWasActive = false
 
     function openAppsOverlay() {
+        dismissViewOverlays()
         appsOverlayZenModeWasActive = focusModeEnabled
         appsOverlayHasOpened = true
         showAppsOverlay = true
@@ -2400,6 +2414,7 @@
     }
 
     function closeAppsOverlay() {
+        dismissViewOverlays()
         showAppsOverlay = false
         appsView?.close()
         if (!appsOverlayZenModeWasActive && focusModeEnabled) {
@@ -2416,6 +2431,7 @@
     }
 
     function toggleFocusMode() {
+        dismissViewOverlays()
         focusModeEnabled = !focusModeEnabled
         if (focusModeEnabled) {
             focusModeHovered = false
@@ -3375,25 +3391,7 @@
                                     aria-label="Close tab"
                                     onmousedown={() => closeTab(tab, event, true)} 
                                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTab(tab, e, true) } }}
-                                    onmouseenter={() => {
-                                        closeButtonHovered = true
-                                        if (closeButtonHoverTimer) clearTimeout(closeButtonHoverTimer)
-                                        if (instantHovercardsMode) {
-                                            closeButtonHoverTimer = setTimeout(() => {
-                                                closeButtonHoveredDelayed = true
-                                            }, 300)
-                                        } else {
-                                            closeButtonHoveredDelayed = true
-                                        }
-                                    }}
-                                    onmouseleave={() => {
-                                        closeButtonHovered = false
-                                        closeButtonHoveredDelayed = false
-                                        if (closeButtonHoverTimer) {
-                                            clearTimeout(closeButtonHoverTimer)
-                                            closeButtonHoverTimer = null
-                                        }
-                                    }}>
+                                    use:closeButtonHistory={{ instant: instantHovercardsMode, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                         <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                                     </svg>

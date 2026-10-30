@@ -1,6 +1,6 @@
 <script>
     import { fade, scale } from 'svelte/transition'
-    import { tick } from 'svelte'
+    import { onMount, tick } from 'svelte'
 
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
@@ -76,6 +76,41 @@
     let globalHoverPreviewExpanding = $state(false) // Track if preview is expanding to lightbox
     // Delay timer for hiding the global hover preview (prevents flicker while moving cursor)
     let hidePreviewDelayTimeout = null
+    let previewShowTimeout = null
+    let previewCleanupTimeout = null
+    let previewSwitchTimeout = null
+    let previewGeneration = 0
+
+    function dismissPreviews() {
+        previewGeneration++
+        clearTimeout(globalHoverPreviewTimeout)
+        clearTimeout(hidePreviewDelayTimeout)
+        clearTimeout(previewShowTimeout)
+        clearTimeout(previewCleanupTimeout)
+        clearTimeout(previewSwitchTimeout)
+        globalHoverPreviewTimeout = null
+        hidePreviewDelayTimeout = null
+        previewShowTimeout = null
+        previewCleanupTimeout = null
+        previewSwitchTimeout = null
+        hoveredLink = null
+        isHoveringPreview = false
+        globalHoverPreviewPinned = false
+        globalHoverPreviewExpanding = false
+        globalHoverPreviewShown = false
+        globalHoverPreviewVisible = false
+        globalHoverPreview = null
+        globalHoverPreviewTabId = null
+        globalHoverPreviewTab = null
+    }
+
+    onMount(() => {
+        window.addEventListener('darc-dismiss-overlays', dismissPreviews)
+        return () => {
+            window.removeEventListener('darc-dismiss-overlays', dismissPreviews)
+            dismissPreviews()
+        }
+    })
     
     // Instant-hide state for lightboxes (prevents slow close and reactivity loops)
     const closedLightboxes = $state({})
@@ -275,7 +310,9 @@
             globalHoverPreviewTimeout = null
         }
         globalHoverPreviewShown = false
-        setTimeout(() => {
+        clearTimeout(previewCleanupTimeout)
+        previewCleanupTimeout = setTimeout(() => {
+            previewCleanupTimeout = null
             if (!globalHoverPreviewExpanding) {
                 globalHoverPreviewVisible = false
                 globalHoverPreview = null
@@ -356,7 +393,10 @@
                 hidePreviewDelayTimeout = setTimeout(() => {
                     cleanupGlobalPreview()
                     // Start the new preview slightly after the old one begins hiding
-                    setTimeout(() => startGlobalPreview(), 100)
+                    previewSwitchTimeout = setTimeout(() => {
+                        previewSwitchTimeout = null
+                        startGlobalPreview()
+                    }, 100)
                 }, 150)
             } else if (!globalHoverPreviewVisible) {
                 console.log('📍 Calling startGlobalPreview()')
@@ -389,12 +429,17 @@
                 console.log('❌ No hovered link, aborting preview creation')
                 return
             }
-            const tab = await data.newTab(data.spaceMeta.activeSpace, { url: hoveredLink.href, preview: true, opener: tabId })
-            console.log('✅ Preview tab created:', { tabId: tab.id, url: hoveredLink.href })
+            const generation = previewGeneration
+            const link = hoveredLink
+            const tab = await data.newTab(data.spaceMeta.activeSpace, { url: link.href, preview: true, opener: tabId })
+            if (generation !== previewGeneration || hoveredLink?.href !== link.href) {
+                return
+            }
+            console.log('✅ Preview tab created:', { tabId: tab.id, url: link.href })
 
             globalHoverPreviewTabId = tab.id
             globalHoverPreviewTab = tab
-            globalHoverPreview = hoveredLink
+            globalHoverPreview = link
             globalHoverPreviewVisible = true
             console.log('✅ Preview state set visible')
             
@@ -402,7 +447,9 @@
             if (globalHoverPreviewPinned) {
                 globalHoverPreviewShown = true
             } else {
-                setTimeout(() => {
+                clearTimeout(previewShowTimeout)
+                previewShowTimeout = setTimeout(() => {
+                    previewShowTimeout = null
                     globalHoverPreviewShown = true
                 }, 300) // 300ms delay for page loading
             }

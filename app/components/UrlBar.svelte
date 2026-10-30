@@ -205,6 +205,8 @@
     }
 </script>
 
+<svelte:window ondarc-dismiss-overlays={() => setExpanded(false)} />
+
 <div class="url-bar-section" class:hovercard={variant === 'hovercard'} class:hover-expand-enabled={enableHoverExpand}
      bind:this={urlBarSection}
      role="group"
@@ -355,6 +357,7 @@
     
     .hovercard .url-bar-container {
         width: calc(100% + 9px);
+        min-width: calc(100% + 9px);
         margin: 0;
         height: 32px;
         border-radius: 8px;

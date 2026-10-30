@@ -3434,3 +3434,4 @@ hud video pip
 
 double click to rename?
 
+activity view gloal/current space

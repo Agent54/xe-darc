@@ -6,6 +6,15 @@
     let showTimeout = null
     let hideTimeout = null
     let tooltipEl = null
+
+    function dismiss() {
+        clearTimeout(showTimeout)
+        clearTimeout(hideTimeout)
+        showTimeout = null
+        hideTimeout = null
+        isVisible = false
+        tooltipEl?.remove()
+    }
     
     function handleMouseEnter() {
         if (hideTimeout) {
@@ -109,6 +118,8 @@
         }
     })
 </script>
+
+<svelte:window ondarc-dismiss-overlays={dismiss} />
 
 <div class="tooltip-container" 
      bind:this={targetRef}

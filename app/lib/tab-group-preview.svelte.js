@@ -1,5 +1,5 @@
 const PREVIEW_DELAY = 700
-const RESET_DELAY = 2000
+const RESET_DELAY = 1000
 
 export function getDefaultGroupTabIndex (tabs, preferredTabIds = []) {
     for (const id of preferredTabIds) {
@@ -69,10 +69,18 @@ export function createTabGroupPreview () {
         resetTimer = setTimeout(() => { warm = false; resetTimer = null }, RESET_DELAY)
     }
 
-    function destroy () {
+    function dismiss () {
         clearTimeout(previewTimer)
         clearTimeout(resetTimer)
+        previewTimer = null
+        resetTimer = null
+        pending = null
+        hoveredGroup = null
+        warm = false
+        state.groupId = null
+        state.tabIndex = 0
+        state.progress = 0
     }
 
-    return { state, enter, move, leaveStrip, leave, destroy }
+    return { state, enter, move, leaveStrip, leave, dismiss, destroy: dismiss }
 }

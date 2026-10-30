@@ -111,6 +111,19 @@ try {
     await checkPreview(page)
 
     await page.evaluate(() => {
+        window.dispatchEvent(new Event('darc-dismiss-overlays'))
+    })
+    assert.equal(await page.$(':popover-open'), null, 'Switching views hides the preview immediately, before its outro completes')
+    await page.setViewport({ width: 900, height: 800 })
+    assert.equal(await page.$(':popover-open'), null, 'Layout changes must not reopen a dismissed preview')
+
+    await page.evaluate(() => {
+        window.previewAction.destroy()
+        window.showPreview()
+    })
+    await checkPreview(page)
+
+    await page.evaluate(() => {
         window.previewAction.destroy()
         document.querySelector('.link-preview').remove()
     })

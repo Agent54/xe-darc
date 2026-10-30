@@ -42,6 +42,12 @@
     let viewMode = $derived(data.ui.viewMode)
 
     let linkPreviewTimeout = null
+
+    function dismissLinkPreview() {
+        clearTimeout(linkPreviewTimeout)
+        linkPreviewTimeout = null
+        hoveredLink = null
+    }
     let anchor = $state(null)
 
     // let usedUrl = $state('')
@@ -2437,7 +2443,7 @@ document.addEventListener('input', function(event) {
     })
 </script>
 
-<svelte:window onkeydown={handleOAuthKeydown} />
+<svelte:window onkeydown={handleOAuthKeydown} ondarc-dismiss-overlays={dismissLinkPreview} />
 {#key tab?.partition || 'default'}
     {#if oauthPopup}
         <!-- svelte-ignore a11y_click_events_have_key_events -->

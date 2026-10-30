@@ -42,7 +42,7 @@ const modules = {
             } })
         }
         mount(Sidebar, { target: document.body, props: {
-            showUrl: false,
+            get showUrl() { return !!data.ui.showUrl },
             get tabSidebarVisible() { return data.ui.sidebarVisible },
             get isDragEnabled() { return data.ui.dragEnabled },
             get customTabSidebarWidth() { return data.ui.sidebarWidth }
@@ -75,8 +75,10 @@ const modules = {
         data.updateTabOverrides = async (tabId, update) => Object.assign(data.docs[tabId], update)
         data.getSpacePins = spaceId => data.spaces[spaceId].pinnedTabs
         data.pinSidebarTab = options => data.menuActions.push({ action: 'sidebar-pin', ...options })
+        let newTabCount = 0
         data.newTab = async spaceId => {
-            const newTab = tab('new-normal', '/one.svg', { spaceId })
+            const id = newTabCount++ ? 'new-normal-' + newTabCount : 'new-normal'
+            const newTab = tab(id, '/one.svg', { spaceId })
             data.spaces[spaceId].tabs.unshift(newTab)
             data.docs[newTab.id] = newTab
             return newTab
@@ -171,6 +173,7 @@ try {
     await page.goto(`http://127.0.0.1:${server.addr.port}`)
     await page.waitForFunction(() => document.querySelector('.closed-tab-item .fallback-favicon'))
     assert.deepEqual(errors, [])
+    if (!Deno.args.includes('--sidebar-scroll-only')) {
     assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), false, 'loading closed history must not flash the preview')
     await page.evaluate(() => {
         window.previewFixtureClosedTabs = [...window.data.spaceMeta.closedTabs]
@@ -223,6 +226,7 @@ try {
         window.data.ui.sidebarVisible = true
     }))
     await new Promise(resolve => setTimeout(resolve, 250))
+    }
     assert.deepEqual(await page.$eval('.sidebar-window-drag', strip => {
         const rect = strip.getBoundingClientRect()
         const button = document.querySelector('.search-toggle-tab')
@@ -355,6 +359,10 @@ try {
         })
         for (const height of [600, 360]) {
             await page.setViewport({ width: 800, height })
+            await page.evaluate(() => window.flushSync(() => { window.data.ui.showUrl = true }))
+            await page.$eval('.space-content', space => { space.scrollTop = 0 })
+            assert.equal(await buttonVisible(), true, `New Tab must stay visible with the URL bar and crowded pins at ${height}px height`)
+            await page.evaluate(() => window.flushSync(() => { window.data.ui.showUrl = false }))
             await page.$eval('.space-content', space => { space.scrollTop = 0 })
             assert.equal(await buttonVisible(), true, `New Tab must stay fully visible with crowded pins at ${height}px height`)
             for (const selector of ['[data-pin-scope="global"]', '[data-pin-scope="space"]']) {
@@ -370,10 +378,27 @@ try {
         }
         await page.setViewport({ width: 800, height: 600 })
         await page.$eval('.space-content', space => { space.scrollTop = 0 })
+        assert.equal(await page.$eval('.new-tab-row', row => {
+            const rect = row.getBoundingClientRect()
+            const space = row.closest('.space-content').getBoundingClientRect()
+            return Math.abs(rect.top + rect.height / 2 - space.top - space.height / 2) < 12
+        }), true, 'crowded app pins should limit New Tab near the center rather than the bottom')
         await page.hover('.new-tab-button')
         await page.mouse.wheel({ deltaY: 500 })
         await page.waitForFunction(() => document.querySelector('.space-content').scrollTop > 0)
         assert.equal(await page.$eval('.new-tab-row', row => Math.abs(row.getBoundingClientRect().top - row.closest('.space-content').getBoundingClientRect().top) <= 1), true, 'New Tab must stick at the top when scrolling down')
+        await page.$eval('.tab-group-toggle', button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
+        await page.evaluate(() => window.flushSync(() => {
+            window.data.spaces.space.activeTabsOrder = ['group-tail-5', 'outside']
+            window.data.spaceMeta.activeTabId = 'group-tail-5'
+        }))
+        await page.waitForFunction(() => {
+            const tab = document.querySelector('.tab-group-content [data-tab-id="group-tail-5"]')
+            const row = tab?.getBoundingClientRect()
+            const content = tab?.closest('.tab-group-content').getBoundingClientRect()
+            return row && row.top >= content.top - 1 && row.bottom <= content.bottom + 1
+        })
+        assert.equal(await buttonVisible(), true, 'revealing a grouped tab must preserve the sticky New Tab button')
         await page.evaluate(() => window.flushSync(() => { window.data.spaceMeta.activeTabId = 'normal-59' }))
         await page.waitForFunction(() => {
             const row = document.querySelector('[data-tab-id="normal-59"]').getBoundingClientRect()
@@ -383,14 +408,25 @@ try {
         assert.equal(await buttonVisible(), true, 'revealing the active tab must keep New Tab visible')
         const previousScroll = await page.$eval('.space-content', space => space.scrollTop)
         await page.click('.new-tab-button')
-        await page.waitForFunction(() => {
-            const row = document.querySelector('.tabs-list > [data-tab-id="new-normal"]')?.getBoundingClientRect()
-            return row && row.top >= document.querySelector('.new-tab-row').getBoundingClientRect().bottom && row.bottom <= document.querySelector('.space-content').getBoundingClientRect().bottom
-        })
-        assert.equal(await page.$eval('.space-content', (space, previous) => space.scrollTop < previous, previousScroll), true, 'creating a tab must return to the top of the normal tab list')
+        await page.waitForSelector('.tabs-list > [data-tab-id="new-normal"]')
+        await new Promise(resolve => setTimeout(resolve, 100))
+        assert.equal(await page.$eval('.space-content', space => space.scrollTop), previousScroll, 'creating a tab must preserve scroll when New Tab is already visible')
         assert.equal(await buttonVisible(), true)
+        await page.$eval('.space-content', space => {
+            space.querySelector('.new-tab-row').style.position = 'relative'
+            space.scrollTop = space.scrollHeight
+        })
+        assert.equal(await buttonVisible(), false)
+        await page.$eval('.tabs-list-bottom-spacer', spacer => spacer.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })))
+        await page.waitForFunction(() => {
+            const row = document.querySelector('.new-tab-row').getBoundingClientRect()
+            const space = document.querySelector('.space-content').getBoundingClientRect()
+            return Math.abs(row.top + row.height / 2 - space.top - space.height / 2) < 12
+        })
+        assert.equal(await buttonVisible(), true, 'an out-of-view New Tab area should be recovered at the center')
+        await page.$eval('.new-tab-row', row => row.style.removeProperty('position'))
         await page.screenshot({ path: `${root}.cache/sidebar-new-tab-scroll.png` })
-        console.log('Chromium: sticky New Tab, crowded global/space pins, small-window limits, active-tab scrolling and new-tab scroll reset pass')
+        console.log('Chromium: centered New Tab limit, no scrolling while visible, recovery only when out of view, crowded pins and short windows pass')
     }
 
     const testTabOverrides = async () => {
@@ -435,7 +471,49 @@ try {
         console.log('Chromium: standalone and grouped tab title, emoji, image URL overrides and resets pass')
     }
 
-    if (Deno.args.includes('--closed-tabs-preview-only')) {
+    if (Deno.args.includes('--close-button-history-only')) {
+        const targets = [
+            { row: '.tab-item-container[data-tab-id="outside"]', close: '.tab-close' },
+            { row: '.closed-tab-item[data-tab-id="closed-two"]', close: '.closed-tab-remove' }
+        ]
+        for (const target of targets) {
+            const prepare = async () => {
+                await page.mouse.move(700, 100)
+                await page.reload()
+                await page.waitForSelector(target.row)
+                if (target.close === '.closed-tab-remove') {
+                    await page.hover('.closed-tabs-header')
+                    await page.waitForFunction(() => {
+                        const content = document.querySelector('.closed-tabs-content')
+                        return content.classList.contains('expanded') && content.getAnimations().every(animation => animation.playState === 'finished')
+                    })
+                }
+            }
+            await prepare()
+            await page.hover(`${target.row} .tab-title`)
+            await page.hover(`${target.row} ${target.close}`)
+            await page.waitForSelector('.tab-hovercard-sidebar .history-section')
+            assert.equal(await page.$eval('.tab-hovercard-sidebar .hovercard-title', el => el.textContent), target.close === '.tab-close' ? 'outside' : 'closed-two')
+
+            await prepare()
+            await page.hover(`${target.row} .tab-title`)
+            await page.waitForSelector('.tab-hovercard-sidebar .hovercard-content')
+            assert.equal(await page.$('.tab-hovercard-sidebar .history-section'), null, 'hovering a row alone keeps history collapsed')
+            await page.hover(`${target.row} ${target.close}`)
+            await new Promise(resolve => setTimeout(resolve, 100))
+            await page.hover(`${target.row} .tab-title`)
+            await new Promise(resolve => setTimeout(resolve, 350))
+            assert.equal(await page.$('.tab-hovercard-sidebar .history-section'), null, 'leaving either close button cancels the reveal')
+            await page.hover(`${target.row} ${target.close}`)
+            await new Promise(resolve => setTimeout(resolve, 200))
+            assert.equal(await page.$('.tab-hovercard-sidebar .history-section'), null, 'both warm close buttons wait 300 ms')
+            await page.waitForSelector('.tab-hovercard-sidebar .history-section', { timeout: 500 })
+            await page.hover(`${target.row} .tab-title`)
+            assert.ok(await page.$('.tab-hovercard-sidebar .history-section'), 'revealed history stays open after leaving either close button')
+        }
+        assert.deepEqual(errors, [])
+        console.log('Chromium: open and recently closed tab close buttons share initial history reveal, warm delay, cancellation and retention')
+    } else if (Deno.args.includes('--closed-tabs-preview-only')) {
         assert.deepEqual(errors, [])
         console.log('Chromium: closed-tab preview filtering, one-second expiry, repeated closes, ten-second cutoff, hidden sidebar and hover retention pass')
     } else if (Deno.args.includes('--tab-overrides-only')) {
@@ -607,7 +685,7 @@ try {
         const outerScrollTop = await page.evaluate(scrollTop => {
             window.flushSync(() => { window.data.spaces.space.activeTabsOrder = ['outside', scrollTop ? 'group-missing' : 'group-tail-5'] })
             document.querySelector('.tab-group-content').scrollTop = scrollTop
-            return document.querySelector('.tabs-list').scrollTop
+            return document.querySelector('.space-content').scrollTop
         }, scrollTop)
         await page.hover('.tab-group-main')
         await page.waitForFunction(() => {
@@ -615,7 +693,7 @@ try {
             const target = document.querySelector('.group-activation-target').getBoundingClientRect()
             return target.top >= content.top && target.bottom <= content.bottom
         })
-        assert.equal(await page.$eval('.tabs-list', list => list.scrollTop), outerScrollTop, 'revealing the remembered tab must only scroll inside its group')
+        assert.equal(await page.$eval('.space-content', list => list.scrollTop), outerScrollTop, 'revealing the remembered tab must only scroll inside its group')
     }
     await page.mouse.move(600, 500)
     const borderPoint = await page.evaluate(() => {
@@ -697,7 +775,7 @@ try {
     await page.hover('.new-tab-more-button')
     assert.equal(await page.$eval('.new-tab-button', button => button.matches(':hover')), false, 'new-tab controls must not hover during tab dragging')
     assert.equal(await page.$eval('.new-tab-hover-menu', menu => getComputedStyle(menu).visibility), 'hidden')
-    await page.$eval('.tabs-list', list => { list.scrollTop = 0 })
+    await page.$eval('.space-content', list => { list.scrollTop = 0 })
     await page.waitForSelector('.add-spacer-preview')
     await page.hover('.add-spacer-preview')
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.add-spacer-preview-line')).opacity === '0')
