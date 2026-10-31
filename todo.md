@@ -3441,3 +3441,5 @@ new tab in group context menu for tabgroup
 
 tabgroup resize scrollglitch
 
+picture in picture suport
+

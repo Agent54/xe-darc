@@ -274,11 +274,12 @@
   .custom-group-icon :global(.favicon-wrapper) { width: 14px; height: 14px; }
   .group-favicons { display: block; height: 16px; flex-shrink: 0; overflow: hidden; }
   .group-favicon-track { display: flex; width: max-content; height: 100%; }
-  .preview-favicon { display: flex; align-items: center; justify-content: center; width: 18px; height: 16px; flex-shrink: 0; opacity: .5; transition: opacity 200ms ease-out; }
+  .preview-favicon { display: flex; align-items: center; justify-content: center; width: 18px; height: 16px; flex-shrink: 0; }
+  .preview-favicon, .stack-header .custom-group-icon { opacity: .5; transition: opacity 200ms ease-out; }
   .preview-favicon :global(.favicon-wrapper) { width: 14px; height: 14px; }
-  .space-active-tab .preview-favicon { opacity: .87; }
-  .grid-tab-group:hover .preview-favicon { opacity: .85; }
-  .active .preview-favicon, .preview-favicon.selected { opacity: 1; }
+  .space-active-tab .preview-favicon, .space-active-tab .custom-group-icon { opacity: .87; }
+  .grid-tab-group:hover .preview-favicon, .grid-tab-group:hover .stack-header .custom-group-icon { opacity: .85; }
+  .active .preview-favicon, .active .custom-group-icon, .preview-favicon.selected { opacity: 1; }
   .title-text { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 11px; font-weight: 500; color: rgb(255 255 255 / 45%); mask: linear-gradient(to right, black 0%, black 85%, transparent 100%); transition: color 200ms ease-out; }
   .space-active-tab .title-text { color: #e5e5e5; text-shadow: 0 0 .3px currentColor; }
   .space-active-tab .tab-favicon { opacity: .87; }

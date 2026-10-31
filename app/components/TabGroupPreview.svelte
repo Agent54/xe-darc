@@ -45,12 +45,13 @@
     .favicon-viewport.at-end { mask: none; }
     .favicon-viewport.scrolled.at-end { mask: linear-gradient(to right, transparent, black 15%); }
     .favicon-track { display: flex; width: max-content; height: 100%; }
-    .preview-favicon { width: 18px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; opacity: 0.5; }
+    .preview-favicon { width: 18px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .preview-favicon, .custom-icon { opacity: 0.5; }
     .preview-favicon :global(.favicon-wrapper), .custom-icon :global(.favicon-wrapper) { width: 14px; height: 14px; }
     .custom-icon { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex-shrink: 0; font-size: 14px; line-height: 1; }
     :global(.tab-group-wrapper:hover) .preview-title { color: #ccc; }
-    :global(.tab-group-wrapper:hover) .preview-favicon { opacity: 0.85; }
+    :global(.tab-group-wrapper:hover) .preview-favicon, :global(.tab-group-wrapper:hover) .custom-icon { opacity: 0.85; }
     .group-preview.active .preview-title { color: #e5e5e5; }
-    .group-preview.active .preview-favicon { opacity: 0.87; }
+    .group-preview.active .preview-favicon, .group-preview.active .custom-icon { opacity: 0.87; }
     .group-preview .preview-favicon.selected { opacity: 1; }
 </style>

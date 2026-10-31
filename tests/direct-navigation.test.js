@@ -8,7 +8,7 @@ const handlers = parse(source).instance.content.body
     .filter(node => node.type === 'FunctionDeclaration' && names.includes(node.id.name))
     .map(node => source.slice(node.start, node.end)).join('\n')
 
-function navigationHarness({ direct = true, legacy = false } = {}) {
+function navigationHarness({ direct = true, legacy = false, command = false } = {}) {
     const listeners = {}
     const opened = []
     let stopped = 0
@@ -38,12 +38,13 @@ function navigationHarness({ direct = true, legacy = false } = {}) {
         origins: {},
         spaceMeta: { activeSpace: 'space' },
         isPermissionGranted: () => false,
+        getCurrentGroupTabId: () => 'current-group-tab',
         newTab: (space, options) => opened.push(options),
         updateTab: (id, update) => Object.assign(data.docs[id], update)
     }
     const noop = () => {}
     const api = new Function('data', 'tab', 'origin', 'window', 'console', 'setTimeout', `
-        let hoveredLink = null, isCommandKeyDown = false
+        let hoveredLink = null, isCommandKeyDown = ${command}
         const recentlyBlockedUrls = new Map(), BLOCK_DEDUP_TIMEOUT = 2000
         const instantlyCleanupGlobalPreview = () => {}, evaluateSecurityState = () => {}
         const showNetworkAccess = () => {}, showBlockedRequest = () => {}, captureTabScreenshot = () => {}
@@ -151,9 +152,33 @@ for (const legacy of [false, true]) {
         }
         assert.equal(h.opened[0].url, 'https://other.example/')
         assert.equal(h.opened[0].lightbox, true)
+        assert.equal(h.opened[0].groupTabId, undefined)
         assert.equal(h.opened[1].lightbox, false)
         assert.equal(h.opened[1].shouldFocus, false)
+        assert.equal(h.opened[1].groupTabId, 'current-group-tab')
         assert.equal(h.tab.url, 'https://original.example/')
+    })
+
+    Deno.test(`${api} command-clicks use the current group for new windows and off-origin fallbacks`, () => {
+        for (const navigation of ['new-window', 'request', 'loadstart']) {
+            const h = navigationHarness({ direct: false, legacy, command: true })
+            const url = 'https://other.example/'
+            if (navigation === 'new-window') {
+                const info = { targetUrl: url, windowOpenDisposition: 'new_foreground_tab' }
+                h.newWindow(legacy ? info : { newWindow: info })
+            } else if (navigation === 'request') {
+                assert.equal(h.request(url).cancel, true)
+            } else {
+                h.load(url)
+                assert.equal(h.stopped, 1)
+            }
+            assert.equal(h.opened.length, 1)
+            assert.equal(h.opened[0].url, url)
+            assert.equal(h.opened[0].groupTabId, 'current-group-tab')
+            assert.equal(h.opened[0].lightbox, false)
+            assert.equal(h.opened[0].shouldFocus, false)
+            assert.equal(h.tab.url, 'https://original.example/')
+        }
     })
 }
 

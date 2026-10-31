@@ -652,6 +652,7 @@
                     url: event.url,
                     title: '',
                     opener: tab.id,
+                    groupTabId: isCommandKeyDown ? data.getCurrentGroupTabId() : undefined,
                     lightbox: useLightbox,
                     shouldFocus
                 })     
@@ -788,6 +789,7 @@
                 url: e.targetUrl,
                 title: e.title,
                 opener: tab.id,
+                groupTabId: forceNewTab ? data.getCurrentGroupTabId() : undefined,
                 lightbox: useLightbox,
                 shouldFocus
             })         
@@ -1305,6 +1307,7 @@ document.addEventListener('input', function(event) {
                             url: url.href,
                             title: '',
                             opener: tab.id,
+                            groupTabId: isCommandKeyDown ? data.getCurrentGroupTabId() : undefined,
                             lightbox: useLightbox,
                             shouldFocus
                         })
