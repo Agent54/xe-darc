@@ -1,18 +1,23 @@
 import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
 import { getFrameShortcutScript } from '../app/lib/shortcuts.js'
+import { registerFrameWrapper } from '../app/lib/frame-lifecycle.js'
 
 const source = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
 const names = ['createControlledFrame', 'releaseControlledFrame', 'detach', 'closeOAuthPopup', 'appendPopupFrame', 'setupContentScripts', 'handleAudioStateChanged']
 const functions = parse(source).instance.content.body
     .filter(node => node.type === 'FunctionDeclaration' && names.includes(node.id.name))
     .map(node => source.slice(node.start, node.end)).join('\n')
+const destroyCallback = parse(source).instance.content.body
+    .find(node => node.type === 'ExpressionStatement' && node.expression.callee?.name === 'onDestroy').expression.arguments[0]
+const destroySource = source.slice(destroyCallback.start, destroyCallback.end)
 
 function harness() {
     const events = []
     const tab = { id: 'page', _id: 'page', url: 'https://example.com/', title: 'Example', favicon: 'icon' }
     const data = { docs: { page: tab }, frames: { page: {} } }
     const wrapper = {
+        isConnected: true,
         querySelector() { return frame.parentNode === wrapper ? frame : null },
         removeChild(node) { events.push('remove'); node.parentNode = null }
     }
@@ -40,6 +45,9 @@ function harness() {
     const api = new Function('data', 'tab', 'document', 'console', 'getFrameShortcutScript', `
         const tabId = tab.id
         let detached = false, oauthPopup = null
+        let frameRegistration
+        let linkPreviewTimeout = null
+        const tick = () => Promise.resolve()
         const userMods = { css: [], js: [] }
         const ipc = '', select = '', zoomControl = '', contextMenu = ''
         const untrack = fn => fn()
@@ -47,13 +55,15 @@ function harness() {
         return {
             createControlledFrame, detach, appendPopupFrame, closeOAuthPopup, setupContentScripts, handleAudioStateChanged,
             setPopup: frame => { oauthPopup = { frame } },
+            setRegistration: registration => { frameRegistration = registration },
+            destroy: ${destroySource},
             getPopup: () => oauthPopup,
             isDetached: () => detached
         }
     `)(data, tab, document, { log() {} }, getFrameShortcutScript)
     const frame = api.createControlledFrame()
     data.frames.page.frame = frame
-    data.frames.page.wrapper = wrapper
+    api.setRegistration(registerFrameWrapper(data, tab.id, wrapper, { parentNode: wrapper }, () => {}))
     return { ...api, tab, data, frame, events, wrapper, background }
 }
 
@@ -118,6 +128,39 @@ Deno.test('hibernating a parked frame blanks it before its native removal', () =
     assert.deepEqual(h.events, ['about:blank', 'remove'])
     assert.equal(h.tab.url, 'https://example.com/')
     assert.equal(h.frame.parentNode, null)
+})
+
+Deno.test('an outgoing wrapper cannot park the frame or unregister its new owner', () => {
+    const h = harness()
+    const destination = { isConnected: true }
+    const next = registerFrameWrapper(h.data, h.tab.id, destination, { parentNode: destination }, () => {})
+    h.frame.parentNode = destination
+    h.detach(h.wrapper)
+    assert.equal(h.frame.parentNode, destination)
+    assert.equal(h.data.frames.page.wrapper, destination)
+    assert.equal(next.owns(), true)
+    assert.deepEqual(h.events, [])
+})
+
+Deno.test('delayed component destruction cannot delete a newer owner of the same frame', async () => {
+    const h = harness()
+    const destroyed = h.destroy()
+    const destination = { isConnected: true }
+    const next = registerFrameWrapper(h.data, h.tab.id, destination, { parentNode: destination }, () => {})
+    await destroyed
+    assert.equal(h.data.frames.page.frame, h.frame)
+    assert.equal(h.data.frames.page.wrapper, destination)
+    assert.equal(next.owns(), true)
+})
+
+Deno.test('destroying the parked owner releases only its wrapper registration', async () => {
+    const h = harness()
+    h.detach(h.wrapper)
+    await h.destroy()
+    assert.equal(h.data.frames.page.frame, h.frame)
+    assert.equal(h.data.frames.page.wrapper, undefined)
+    assert.equal(h.data.frames.page.attach, undefined)
+    assert.equal(h.frame.parentNode, h.background)
 })
 
 Deno.test('pending content script setup cannot reload a released frame', async () => {

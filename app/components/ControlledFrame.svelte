@@ -12,6 +12,7 @@
     import ipc from '../inject/ipc.js?raw'
     import { connectFrameIPC } from '../lib/frame-ipc.js'
     import { getFrameShortcutScript } from '../lib/shortcuts.js'
+    import { registerFrameWrapper } from '../lib/frame-lifecycle.js'
     import contextMenu from '../inject/context-menu.js?raw'
     import zoomControl from '../inject/zoom-control.js?raw'
 
@@ -2066,39 +2067,37 @@ document.addEventListener('input', function(event) {
     }
 
     // user initiated clear data options clearData(options, types)
-    let attached = false
     let frameWrapper = $state(null)
-    let retry = $state(0)
-    $effect(async () => {
-        if (retry > 10) {
-            console.error('retry error')
-            return
-        }
-        
-        // IMPORTANT: Read reactive dependencies BEFORE await to ensure they are tracked
-        // In Svelte 5 async effects, only reads before the first await trigger re-runs
+    let frameRegistration = null
+    $effect(() => {
+        // Wrapper and anchor readiness must trigger attachment as well as URL changes.
         const currentTabUrl = tab?.url
-        const currentTabId = tab?.id
         const currentTab = tab
         const isInternalPage = isNewTabUrl(currentTabUrl) || isTabHistoryUrl(currentTabUrl)
         
-        await tick()
-
-        if (!anchor || !frameWrapper) { 
+        const wrapper = frameWrapper
+        const frameAnchor = anchor
+        if (!frameAnchor || !wrapper?.isConnected || !currentTab) {
             return
         }
 
+        untrack(() => mountControlledFrame(currentTab, isInternalPage, wrapper, frameAnchor))
+    })
+
+    function mountControlledFrame(currentTab, isInternalPage, wrapper, frameAnchor) {
+        const currentTabId = currentTab.id
         let controlledFrame = data.frames[currentTabId]?.frame
 
         // If transitioning from newtab to real URL, create frame if needed
-        const framesObj = untrack(() => $state.snapshot(data.frames[tabId]))
+        const framesObj = data.frames[tabId]
         if (!framesObj) {
             // console.log('resetting frame!!!!!')
             data.frames[tabId] = {}
         }
-        data.frames[tabId].wrapper = frameWrapper
+        if (!frameRegistration?.owns() || frameRegistration.wrapper !== wrapper || frameRegistration.anchor !== frameAnchor) {
+            frameRegistration = registerFrameWrapper(data, currentTabId, wrapper, frameAnchor, setupMessageListener)
+        }
 
-        let addNode = false
         if (!controlledFrame && currentTab && !isInternalPage) {
             controlledFrame = createControlledFrame()
             const mytab = untrack(() => tab)
@@ -2106,7 +2105,6 @@ document.addEventListener('input', function(event) {
             data.frames[tabId].frame = controlledFrame
             data.frames[tabId].pendingLoad = false
             data.frames[tabId].directNavigation = { urls: [mytab.url.split('#')[0]], requestId: null }
-            addNode = true
 
             controlledFrame.classList.add('frame-instance')
 
@@ -2165,39 +2163,21 @@ document.addEventListener('input', function(event) {
         }
         //  console.log('controlledFrame', controlledFrame, { attached, tab.url, addNode })
        
-        if (addNode) {
-            frameWrapper.insertBefore(controlledFrame, anchor)
-            attached = true
-        }
-
-        if (!attached && controlledFrame && anchor) {
-            try {
-                setupMessageListener(controlledFrame)
-                frameWrapper.moveBefore(controlledFrame, anchor)
-                attached = true
-
-                if (data.frames[tabId]?.promoted) {
-                    data.frames[tabId].promoted = false
-                }
-            } catch (err) {
-                console.error('Error attaching ControlledFrame:', err)
-                tab?.id && delete data.frames[tab.id]
-                setTimeout(() => {
-                    retry = retry + 1
-                }, 10)
-            }
-        }
-    })
+        frameRegistration.attach()
+    }
 
     let detached = false
     onDestroy(async () => {
         await tick()
         // console.log('------------------', $state.snapshot(data.frames[tab.id].forceHibernated))
-        if (tab?.id && !detached && !data.frames[tab.id]?.forceHibernated && !data.frames[tab.id]?.promoting) {
-            delete data.frames[tab.id]
-        }
-        if (tab?.id && data.frames[tab.id]?.promoting) {
-            data.frames[tab.id].promoting = false
+        if (frameRegistration?.owns()) {
+            const frameData = frameRegistration.frameData
+            if (!detached && !frameData.forceHibernated && !frameData.promoting) {
+                delete data.frames[tabId]
+            } else {
+                frameRegistration.destroy()
+                frameData.promoting = false
+            }
         }
         
         if (linkPreviewTimeout) {
@@ -2241,18 +2221,26 @@ document.addEventListener('input', function(event) {
         }
 
         if (!tab?._id) {
-            tab?.id && delete data.frames[tab.id]
+            if (frameRegistration?.owns()) {
+                delete data.frames[tabId]
+            }
             return {
                 duration: 0
             }
         }
         
+        if (!frameRegistration?.owns()) {
+            return { duration: 0 }
+        }
+
         let controlledFrame = data.frames[tab.id]?.frame
 
         if (controlledFrame) {
             const backgroundFrames = document.getElementById('backgroundFrames')
             const anchorFrame = document.getElementById('anchorFrame')
-            backgroundFrames.moveBefore(controlledFrame, anchorFrame)
+            if (controlledFrame.parentNode === node) {
+                backgroundFrames.moveBefore(controlledFrame, anchorFrame)
+            }
             detached = true
         }
 

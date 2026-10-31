@@ -4,6 +4,7 @@ import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
+import { getFrameMoveIds } from './lib/frame-lifecycle.js'
 import { ensureTabActivityView, getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
 import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
@@ -2421,6 +2422,22 @@ const data = {
             if (!spaces[destSpaceId]) return
             const updates = planTabMove(spaces[sourceSpaceId]?.tabs || [], spaces[destSpaceId].tabs || [], tabId,
                 { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode }, () => crypto.randomUUID())
+            const moveItems = sourceSpaceId === destSpaceId ? spaces[sourceSpaceId].tabs
+                : [...spaces[sourceSpaceId].tabs, ...spaces[destSpaceId].tabs]
+            const parked = []
+            for (const id of getFrameMoveIds(moveItems, updates)) {
+                const frameData = frames[id]
+                const frame = frameData?.frame
+                if (!frame || !frameData.wrapper?.isConnected || frame.parentNode !== frameData.wrapper) {
+                    continue
+                }
+                const background = document.getElementById('backgroundFrames')
+                const anchor = document.getElementById('anchorFrame')
+                if (background && anchor) {
+                    background.moveBefore(frame, anchor)
+                    parked.push({ id, frame })
+                }
+            }
             const saves = []
             const sourceGroup = data.getTabGroup(tabId, sourceSpaceId)
             const targetGroup = targetGroupTabId ? data.getTabGroup(targetGroupTabId, destSpaceId) : null
@@ -2433,12 +2450,6 @@ const data = {
                 if (!member) continue
                 if (Object.entries(update).every(([key, value]) => member[key] === value)) continue
                 const frameData = frames[id]
-                const controlledFrame = frameData?.frame
-                const background = document.getElementById('backgroundFrames')
-                const anchor = document.getElementById('anchorFrame')
-                if (controlledFrame && background && anchor) {
-                    background.moveBefore(controlledFrame, anchor)
-                }
                 if (update.spaceId && update.spaceId !== member.spaceId) {
                     if (frameData) {
                         frameData.promoting = true
@@ -2451,18 +2462,18 @@ const data = {
                     removedActiveTabId(id, sourceSpaceId)
                 }
                 saves.push(queueDocumentUpdate(id, update))
-                if (controlledFrame && (!update.spaceId || update.spaceId === sourceSpaceId)) {
-                    tick().then(() => {
-                        const wrapper = frames[id]?.wrapper
-                        const frameAnchor = wrapper?.querySelector('.hidden')
-                        if (frameAnchor) {
-                            wrapper.moveBefore(controlledFrame, frameAnchor)
-                        }
-                    })
-                }
             }
             for (const spaceId of new Set([sourceSpaceId, destSpaceId])) {
                 spaces[spaceId].tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+            }
+            if (parked.length) {
+                tick().then(() => {
+                    for (const { id, frame } of parked) {
+                        if (frames[id]?.frame === frame) {
+                            frames[id].attach?.()
+                        }
+                    }
+                })
             }
             if (sourceSpaceId !== destSpaceId) {
                 if (sourceSpaceId === spaceMeta.activeSpace && !spaces[sourceSpaceId].tabs.some(item => item.id === spaceMeta.activeTabId)) {

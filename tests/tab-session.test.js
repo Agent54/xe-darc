@@ -4,6 +4,7 @@ import { compileModule, parse } from 'svelte/compiler'
 import { getWindowSessionHints, getWindowSessionStartup, rememberWindowBounds, fitWindowBounds, openWindowSession } from '../app/lib/window-session.js'
 import * as tabGroups from '../app/lib/tab-groups.js'
 import * as tabActivity from '../app/lib/tab-activity.js'
+import * as frameLifecycle from '../app/lib/frame-lifecycle.js'
 import * as svelteServer from 'svelte/internal/server'
 import * as svelteClient from 'svelte/internal/client'
 
@@ -131,7 +132,7 @@ function tab(id, spaceId = defaultSpace, extra = {}) {
     return { _id: id, _rev: '1-test', type: 'tab', spaceId, order: 1, url: 'https://example.com', ...extra }
 }
 
-function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'window-1', storage = new Map(), delayedWindowId = false, runtime = 'server' }) {
+function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'window-1', storage = new Map(), delayedWindowId = false, runtime = 'server', frameEnvironment = {} }) {
     if (!storage.has(`activeSpaceId:${windowId}`)) {
         storage.set(`activeSpaceId:${windowId}`, activeSpace)
     }
@@ -186,6 +187,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         $: runtime === 'client' ? svelteClient : svelteServer,
         ...tabGroups,
         ...tabActivity,
+        ...frameLifecycle,
         findPlugin: {},
         bootstrap: [],
         testData: [],
@@ -198,7 +200,8 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         localStorage: localStorageFor(storage),
         crypto,
         console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')) } },
-        setInterval() {}
+        setInterval() {},
+        ...frameEnvironment
     }
     // Svelte only proxies objects created in its own realm.
     const { data, refresh } = runtime === 'client'
@@ -206,6 +209,45 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         : vm.runInNewContext(source, context)
     return { data, refresh, window, storage, queries, writes, db, emitChange: doc => changeListeners.get('change')({ id: doc._id, doc, seq: 1 }) }
 }
+
+Deno.test('sidebar group placement leaves a live single-tab frame attached', async () => {
+    const moves = []
+    let ticks = 0
+    const { data, refresh } = session({ tabs: [tab('one'), tab('two', defaultSpace, { order: 10 })],
+        frameEnvironment: {
+            document: { getElementById() { throw new Error('No parking needed') } },
+            tick() { ticks++; return Promise.resolve() }
+        }
+    })
+    await refresh()
+    const wrapper = { isConnected: true }
+    const frame = { parentNode: wrapper }
+    data.frames.one = { frame, wrapper, attach: () => moves.push('attach') }
+    await data.moveTab('one', { beforeTabId: 'two', scope: 'group' })
+    assert.equal(frame.parentNode, wrapper)
+    assert.deepEqual(moves, [])
+    assert.equal(ticks, 0)
+})
+
+Deno.test('a frame reorder parks all affected live siblings and restores through their current owners', async () => {
+    const parked = []
+    const attached = []
+    const background = { moveBefore(frame) { parked.push(frame.id); frame.parentNode = background } }
+    const { data, refresh } = session({ tabs: [
+        tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0 }),
+        tab('two', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1 }),
+        tab('three', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 2 })
+    ], frameEnvironment: { document: { getElementById: id => id === 'backgroundFrames' ? background : {} } } })
+    await refresh()
+    for (const id of ['one', 'two', 'three']) {
+        const wrapper = { isConnected: true }
+        const frame = { id, parentNode: wrapper }
+        data.frames[id] = { frame, wrapper, attach() { attached.push(id); frame.parentNode = wrapper } }
+    }
+    await data.moveTab('one', { targetGroupTabId: 'two', beforeTabId: 'three' })
+    assert.deepEqual(parked.sort(), ['one', 'three', 'two'])
+    assert.deepEqual(attached.sort(), ['one', 'three', 'two'])
+})
 
 Deno.test('dragged creation controls persist items at the dropped position, including below an existing spacer', async () => {
     const { data, refresh, db } = session({ tabs: [
