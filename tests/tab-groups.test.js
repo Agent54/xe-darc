@@ -106,7 +106,7 @@ Deno.test('group previews center on the active tab and clamp to three adjacent t
         assert.deepEqual(getTabGroupPreviewTabs(tabs, active).map(tab => tab.id), expected)
         const group = getTabGroups(tabs, ['outside', active])[0]
         assert.deepEqual(group.previewTabs.map(tab => tab.id), expected)
-        assert.equal(group.title, 'one')
+        assert.equal(group.title, active)
     }
     assert.deepEqual(getTabGroupPreviewTabs(tabs.slice(0, 2), 'two').map(tab => tab.id), ['one', 'two'])
     assert.deepEqual(getTabGroupPreviewTabs(tabs.slice(0, 1), 'one').map(tab => tab.id), ['one'])

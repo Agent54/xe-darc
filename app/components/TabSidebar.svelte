@@ -2721,6 +2721,7 @@
     }
 
     .space-content > .pinned-tabs-grid {
+        padding-inline: 0;
         max-height: max(44px, calc(50% - 54px));
         overflow-y: auto;
         overscroll-behavior-y: contain;
