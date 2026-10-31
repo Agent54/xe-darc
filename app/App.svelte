@@ -987,7 +987,7 @@
         // For unpinned tabs, use the original behavior
         if (tab.id === data.spaceMeta.activeTabId) {
             console.log('[DEBUG:PreviousTabSwitch]')
-            data.previous()
+            data.previous({ withinGroup: true })
         } else {
             // Set this tab as active using the data store function
             data.spaceMeta.activeTabId = tab.id  
@@ -1350,14 +1350,44 @@
         hideContextMenu()
     }
 
-    onDrop((event) => {
-        if (event.type === 'remove-divider') {
+    onDrop(async (event) => {
+        if (event.type === 'create') {
+            const spaceId = event.targetSpaceId || event.sourceSpaceId
+            if (!data.spaces[spaceId]) {
+                return
+            }
+            const item = event.itemType === 'divider'
+                ? data.addDivider(spaceId, { beforeTabId: event.beforeTabId, afterTabId: event.afterTabId })
+                : await data.newTab(spaceId, { groupTabId: event.targetGroupTabId })
+            if (!item) {
+                return
+            }
+            if (event.dropType === 'pin') {
+                if (event.pinScope === 'sidebar' || event.pinScope === 'sidebar-fixed') {
+                    await data.pinSidebarTab({ ...event, tabId: item.id, fixed: event.pinScope === 'sidebar-fixed' })
+                } else {
+                    await data.pin({ tabId: item.id, pinned: 'left', scope: event.pinScope, targetSpaceId: spaceId, beforeTabId: event.beforeTabId, afterTabId: event.afterTabId })
+                }
+            } else {
+                await data.moveTab(item.id, {
+                    activityMode: event.targetZone === 'sidebar',
+                    targetGroupTabId: event.targetGroupTabId,
+                    beforeTabId: event.beforeTabId,
+                    afterTabId: event.afterTabId,
+                    targetSpaceId: spaceId
+                })
+            }
+            if (event.itemType === 'tab') {
+                data.activateSpace(spaceId)
+                data.activate(item.id)
+            }
+        } else if (event.type === 'remove-divider') {
             data.removeDivider(event.dividerId)
         } else if (event.type === 'pin') {
             const tab = data.docs[event.tabId]
             if (!tab) return
-            if (event.pinScope === 'sidebar') {
-                data.pinSidebarTab(event)
+            if (event.pinScope === 'sidebar' || event.pinScope === 'sidebar-fixed') {
+                data.pinSidebarTab({ ...event, fixed: event.pinScope === 'sidebar-fixed' })
                 return
             }
             data.pin({
@@ -3228,11 +3258,6 @@
                 <div class="favicon-wrapper">    
                     <Favicon {tab} />
                 </div>
-                {#if tab.audioPlaying && !tab.muted}
-                    <span class="pinned-audio-indicator">🔊</span>
-                {:else if tab.muted}
-                    <span class="pinned-audio-indicator">🔇</span>
-                {/if}
             </div>
             <button class="pinned-toggle-btn" 
                     aria-label={isPinHidden(tab.id) ? "Expand pinned tab" : "Collapse pinned tab"}
@@ -3339,11 +3364,6 @@
                             <div class="favicon-wrapper">    
                                 <Favicon {tab} />
                             </div>
-                            {#if tab.audioPlaying && !tab.muted}
-                                <span class="pinned-audio-indicator">🔊</span>
-                            {:else if tab.muted}
-                                <span class="pinned-audio-indicator">🔇</span>
-                            {/if}
                         </div>
                         <button class="pinned-toggle-btn" 
                                 aria-label={isPinHidden(tab.id) ? "Expand pinned tab" : "Collapse pinned tab"}
@@ -3401,11 +3421,7 @@
                             <div class="favicon-wrapper">    
                                 <Favicon {tab} />
                             </div>
-                            <span class="tab-title"> {#if tab.audioPlaying && !tab.muted}
-                                🔊 &nbsp;
-                            {:else if tab.muted}
-                                🔇 &nbsp;
-                            {/if}{tab.titleOverride || tab.title || tab.url}</span>
+                            <span class="tab-title">{tab.titleOverride || tab.title || tab.url}</span>
                             <button class="close-btn" 
                                     aria-label="Close tab"
                                     onmousedown={() => closeTab(tab, event, true)} 
@@ -4283,6 +4299,9 @@
            onHeaderContextMenu={(event) => openAppearanceMenu(event, 'tab-sidebar')}
            headerMenuOpen={appearanceMenu?.area === 'tab-sidebar'}
            onNavigateHistory={navigateTabHistory}
+           onRevealPinnedTab={(tabId) => {
+               if (isPinHidden(tabId)) togglePinHidden(tabId)
+           }}
            {customTabSidebarWidth} 
            {tabSidebarVisible} 
            {isResizingTabSidebar} 
@@ -4788,8 +4807,8 @@
     "></div>
 {/if}
 
-{#if tabDrag.active && tabDrag.dragType !== 'divider' && data.docs[tabDrag.tabId]}
-    {@const dragTab = data.docs[tabDrag.tabId]}
+{#if tabDrag.active && tabDrag.dragType !== 'divider' && (tabDrag.creating || data.docs[tabDrag.tabId])}
+    {@const dragTab = tabDrag.creating ? { title: 'New Tab', url: 'about:newtab' } : data.docs[tabDrag.tabId]}
     {@const dragGroup = tabDrag.dragType === 'group' ? data.getTabGroup(tabDrag.tabId, tabDrag.sourceSpaceId) : null}
     <div class="tab-drag-preview" style="left: {tabDrag.mouseX - tabDrag.grabOffsetX}px; top: {tabDrag.mouseY - tabDrag.grabOffsetY}px; width: {tabDrag.previewWidth}px; height: {tabDrag.previewHeight}px;">
         {#if dragGroup}

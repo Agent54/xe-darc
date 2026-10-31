@@ -20,7 +20,9 @@
   const defaultIndex = $derived(getDefaultGroupTabIndex(group.tabs, [activeTabId, spaceActiveTabId, defaultTabId]))
   const selectedIndex = $derived(Math.min(scrubbing ? preview.state.tabIndex : keyboardIndex ?? defaultIndex, group.tabs.length - 1))
   const selectedTab = $derived(group.tabs[selectedIndex])
-  const faviconWindow = $derived(getFaviconWindow(group.tabs.length, scrubbing ? preview.state.progress : selectedIndex / Math.max(1, group.tabs.length - 1)))
+  const stackTitle = $derived((!scrubbing && keyboardIndex === null ? group.name : null) || selectedTab.titleOverride || selectedTab.title || 'Untitled')
+  const faviconSlots = $derived(group.metadata?.emoji || group.metadata?.favicon ? 2 : 3)
+  const faviconWindow = $derived(getFaviconWindow(group.tabs.length, scrubbing ? preview.state.progress : selectedIndex / Math.max(1, group.tabs.length - 1), faviconSlots))
 
   onDestroy(() => {
     preview.destroy()
@@ -128,6 +130,14 @@
 
 <svelte:window ondarc-dismiss-overlays={dismissOverlays} />
 
+{#snippet groupIcon()}
+  {#if group.metadata?.emoji}
+    <span class="custom-group-icon" aria-hidden="true">{group.metadata.emoji}</span>
+  {:else if group.metadata?.favicon}
+    <span class="custom-group-icon" aria-hidden="true"><Favicon tab={{ favicon: group.metadata.favicon, title: group.title }} showButton={false} /></span>
+  {/if}
+{/snippet}
+
 {#snippet thumbnail(tab, lazy = true)}
   {#if tab.screenshot}
     <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="" {lazy} fadeIn={false} />
@@ -161,7 +171,7 @@
 {#if inlineOpen}
   <div class="grid-tab-group inline-group" role="group" aria-label="{group.title}, {group.tabs.length} tabs">
     <header class="inline-header">
-      <div class="inline-heading"><h2>{group.title}</h2><span class="stack-count">{group.tabs.length}</span></div>
+      <div class="inline-heading">{@render groupIcon()}<h2>{group.title}</h2><span class="stack-count">{group.tabs.length}</span></div>
       {#if activeGroup}
         <span class="current-group-label">Current group</span>
       {:else}
@@ -182,6 +192,7 @@
   <div class="stack-front" class:active={selectedTab.id === activeTabId} class:space-active-tab={selectedTab.id === spaceActiveTabId}>
     <div class="stack-header">
       <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}. Use left and right arrows to browse tabs.">
+        {@render groupIcon()}
         <span class="group-favicons" aria-hidden="true" style:width="{faviconWindow.visible * 18}px">
           <span class="group-favicon-track" style:transform="translateX({-faviconWindow.offset * 18}px)">
             {#each group.tabs.slice(faviconWindow.start, faviconWindow.end) as tab (tab.id)}
@@ -189,7 +200,7 @@
             {/each}
           </span>
         </span>
-        <span class="title-text">{selectedTab.titleOverride || selectedTab.title || 'Untitled'}</span>
+        <span class="title-text">{stackTitle}</span>
       </button>
       <span class="stack-count">{group.tabs.length}</span>
       <button class="icon-button expand-button" bind:this={expandButton} onmousedown={handleExpandMouseDown} onclick={(event) => { if (event.detail === 0) openGroup() }} aria-label="Expand {group.title}" aria-haspopup={inline ? undefined : 'dialog'} aria-expanded={expanded} title="Expand group">
@@ -214,7 +225,7 @@
   onkeydown={(event) => { if (event.key === 'Escape') event.stopPropagation() }}
   onmousedown={(event) => { event.stopPropagation(); if (event.button === 0) closeOutside(event) }}>
   <header class="dialog-header">
-    <div class="dialog-heading"><h2>{group.title}</h2><span>{group.tabs.length} tabs</span></div>
+    <div class="dialog-heading">{@render groupIcon()}<h2>{group.title}</h2><span>{group.tabs.length} tabs</span></div>
     <button class="icon-button dismiss-button" onclick={() => dialog.close()} aria-label="Close group" title="Close group">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
     </button>
@@ -259,6 +270,8 @@
   button { font: inherit; color: inherit; cursor: pointer; }
   .stack-title { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; text-align: left; }
   .tab-favicon { display: flex; width: 14px; height: 14px; flex-shrink: 0; opacity: .5; transition: opacity 200ms ease-out; }
+  .custom-group-icon { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex-shrink: 0; font-size: 14px; line-height: 1; }
+  .custom-group-icon :global(.favicon-wrapper) { width: 14px; height: 14px; }
   .group-favicons { display: block; height: 16px; flex-shrink: 0; overflow: hidden; }
   .group-favicon-track { display: flex; width: max-content; height: 100%; }
   .preview-favicon { display: flex; align-items: center; justify-content: center; width: 18px; height: 16px; flex-shrink: 0; opacity: .5; transition: opacity 200ms ease-out; }

@@ -572,9 +572,10 @@ const ledIndicators = $state({
 
 const dividerCreationTasks = new Map()
 
-function createDivider(spaceId) {
+function createDivider(spaceId, { beforeTabId, afterTabId } = {}) {
     const space = spaces[spaceId]
-    if (!space || space.tabs?.[0]?.type === 'divider') return null
+    const positioned = beforeTabId !== undefined || afterTabId !== undefined
+    if (!space || (!positioned && space.tabs?.[0]?.type === 'divider')) return null
 
     space.tabs ??= []
     const firstItem = space.tabs[0]
@@ -584,7 +585,7 @@ function createDivider(spaceId) {
         id: _id,
         type: 'divider',
         spaceId,
-        order: firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
+        order: positioned ? orderBetween(docs[beforeTabId], docs[afterTabId]) : firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
         created: Date.now()
     }
 
@@ -1580,7 +1581,7 @@ const data = {
     isInternalPage,
     isTabHibernated,
 
-    previous: () => {
+    previous: ({ withinGroup = false } = {}) => {
         const activeSpace = spaces[spaceMeta.activeSpace]
         if (!activeSpace) {
             return false // No previous tab available
@@ -1590,6 +1591,8 @@ const data = {
         if (activeHistory.length < 2) {
             return false // No previous tab available
         }
+
+        const group = withinGroup ? getTabGroup(activeSpace.tabs, getCurrentGroupTabId(spaceMeta.activeSpace)) : null
         
         // Remove the current tab (at index 0) from the order
         const currentEntry = activeHistory.shift()
@@ -1625,6 +1628,11 @@ const data = {
                 activeHistory.shift()
                 continue
             }
+
+            if (withinGroup && !group?.tabs.some(member => member.id === tabId)) {
+                activeHistory.shift()
+                continue
+            }
             
             // Found a different valid non-pinned tab
             previousTabId = tabId
@@ -1634,7 +1642,7 @@ const data = {
         
         if (!previousTabId) {
             // No non-pinned previous tab found
-            if (currentEntry) {
+            if (currentEntry && !withinGroup) {
                 activeSpace.activeTabsOrder = [currentEntry, ...activeHistory]
                 persistTabActiveHistoryForSpace(spaceMeta.activeSpace)
             }
@@ -1699,7 +1707,7 @@ const data = {
         db.put(updated)
     },
 
-    pinSidebarTab({ tabId, pinned = true, beforeTabId, afterTabId, targetSpaceId }) {
+    pinSidebarTab({ tabId, pinned = true, fixed = false, beforeTabId, afterTabId, targetSpaceId }) {
         const tab = docs[tabId]
         if (tab?.type !== 'tab' || tab.archive || tab.preview || tab.lightbox) {
             return Promise.resolve()
@@ -1712,14 +1720,16 @@ const data = {
                 return Promise.resolve()
             }
             const moving = data.moveTab(tabId, { targetSpaceId })
-            const pinning = data.pinSidebarTab({ tabId, beforeTabId, afterTabId })
+            const pinning = data.pinSidebarTab({ tabId, fixed, beforeTabId, afterTabId })
             return Promise.all([moving, pinning])
         }
-        const pins = getSidebarPinnedTabs(spaces[tab.spaceId]?.tabs)
+        const pins = getSidebarPinnedTabs(spaces[tab.spaceId]?.tabs, fixed)
+        const sidebarPinned = fixed ? 'fixed' : true
+        const previousOrder = tab.sidebarPinned === sidebarPinned ? tab.sidebarPinOrder : null
         const sidebarPinOrder = beforeTabId || afterTabId
             ? orderBetween(docs[beforeTabId], docs[afterTabId], 'sidebarPinOrder')
-            : tab.sidebarPinOrder ?? Math.max(0, ...pins.map(pin => pin.sidebarPinOrder ?? pin.order ?? 0)) + 1
-        return queueDocumentUpdate(tabId, { sidebarPinned: true, sidebarPinOrder, pinned: null, pinScope: null, pinOrder: null })
+            : previousOrder ?? Math.max(0, ...pins.map(pin => pin.sidebarPinOrder ?? pin.order ?? 0)) + 1
+        return queueDocumentUpdate(tabId, { sidebarPinned, sidebarPinOrder, pinned: null, pinScope: null, pinOrder: null })
     },
 
     pin({ tabId, pinned, scope, groupTabId, beforeTabId, afterTabId, targetSpaceId }) {

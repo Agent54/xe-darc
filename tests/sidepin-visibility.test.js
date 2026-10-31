@@ -101,6 +101,47 @@ Deno.test('opening a pin closes only peers on the same side in the same scope', 
     } finally { h.destroy() }
 })
 
+for (const scope of ['space', 'global']) {
+    for (const side of ['left', 'right']) {
+        Deno.test(`sidebar clicks reveal collapsed ${scope} ${side} pins, including the active pin`, () => {
+            const sidebarSource = Deno.readTextFileSync(new URL('../app/components/TabSidebar.svelte', import.meta.url))
+            const activation = parse(sidebarSource).instance.content.body
+                .find(node => node.type === 'FunctionDeclaration' && node.id.name === 'activateTab')
+            const sidebar = parse(appSource).html.children.find(node => node.name === 'TabSidebar')
+            const reveal = sidebar.attributes.find(attribute => attribute.name === 'onRevealPinnedTab').value[0].expression
+            for (const alreadyActive of [false, true]) {
+                const id = 'selected-pin'
+                const h = harness({ [id]: true }, { tabs: [...pins(),
+                    pin('peer-pin', side, scope), pin(id, side, scope)] })
+                try {
+                    const onRevealPinnedTab = new Function('isPinHidden', 'togglePinHidden',
+                        `return (${appSource.slice(reveal.start, reveal.end)})`)(h.api.hidden, h.api.toggle)
+                    let previousCalls = 0
+                    const data = {
+                        docs: { [id]: { id, pinned: side } },
+                        spaceMeta: { activeTabId: alreadyActive ? id : 'center-a' },
+                        activateSpace: spaceId => { h.state.spaceId = spaceId },
+                        activate: tabId => { data.spaceMeta.activeTabId = tabId },
+                        previous: () => { previousCalls++ }
+                    }
+                    const activate = new Function('data', 'multiSpaceMode', 'onRevealPinnedTab',
+                        `${sidebarSource.slice(activation.start, activation.end)}\nreturn activateTab`)(data, false, onRevealPinnedTab)
+                    assert.equal(h.api.hidden(id), true)
+                    svelteClient.flush(() => activate(id, 'space'))
+                    assert.equal(data.spaceMeta.activeTabId, id)
+                    assert.equal(h.api.hidden(id), false)
+                    assert.equal(h.api.hidden('peer-pin'), true, 'opening the pin preserves slot exclusivity')
+                    assert.equal(h.saved()[id], undefined, 'the revealed state is persisted')
+                    const visible = h.visible()
+                    svelteClient.flush(() => activate(id, 'space'))
+                    assert.deepEqual(h.visible(), visible, 'clicking a visible pin keeps it open')
+                    assert.equal(previousCalls, 0)
+                } finally { h.destroy() }
+            }
+        })
+    }
+}
+
 Deno.test('toggling the open pin closes its slot without opening a replacement and survives restart', () => {
     const h = harness()
     try {

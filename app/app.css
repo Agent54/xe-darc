@@ -1897,12 +1897,6 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     opacity: 0.3;
 }
 
-.pinned-audio-indicator {
-    font-size: 10px;
-    line-height: 1;
-    margin-left: 2px;
-}
-
 .drag-enabled {
     -webkit-app-region: drag;
 }

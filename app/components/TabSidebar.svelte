@@ -21,6 +21,7 @@
         onNavigateHistory = null,
         onReload = null,
         onCloseTab = null,
+        onRevealPinnedTab = () => {},
         onSettings = null,
         onHeaderContextMenu = () => {},
         headerMenuOpen = false,
@@ -39,7 +40,7 @@
     import { getActivitySidebarItems, getActivityGroupTabs } from '../lib/tab-activity.js'
     import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
     import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
-    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, onGroupExpand } from '../lib/tab-drag.svelte.js'
+    import { tabDrag, startTabDrag, startCreationDrag, setActivateRafId, didDragOccurred, onGroupExpand } from '../lib/tab-drag.svelte.js'
     import { colors as spaceColors } from '../lib/utils.js'
     import { untrack, onMount, tick } from 'svelte'
     
@@ -171,19 +172,20 @@
         hovercardHistoryReady = false
     }
     
+    function dismissHovercards() {
+        hoveredTab = null
+        hoveredGroupTarget = null
+        hovercardAnchor = null
+        hovercardShowTime = null
+        expandedHovercardHistoryTabId = null
+        hovercardHistoryReady = false
+        hovercardUrlBarExpanded = false
+        expandedHovercardTabs = {}
+        if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+        stopHovercardPositionCheck()
+    }
+
     onMount(() => {
-        const dismissHovercards = () => {
-            hoveredTab = null
-            hoveredGroupTarget = null
-            hovercardAnchor = null
-            hovercardShowTime = null
-            expandedHovercardHistoryTabId = null
-            hovercardHistoryReady = false
-            hovercardUrlBarExpanded = false
-            expandedHovercardTabs = {}
-            if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
-            stopHovercardPositionCheck()
-        }
         const dismissOverlays = () => {
             dismissHovercards()
             hideTabContextMenu()
@@ -350,6 +352,21 @@
     let verticalScrollTimeout = null
     let isHorizontalScrolling = $state(false)
     let horizontalScrollTimeout = null
+
+    function markHorizontalScrolling() {
+        isHorizontalScrolling = true
+        dismissHovercards()
+        clearTimeout(scrollHoverTimeout)
+        scrollHoverTimeout = null
+        clearTimeout(instantModeResetTimer)
+        instantModeResetTimer = null
+        instantHovercardsMode = false
+        clearTimeout(horizontalScrollTimeout)
+        horizontalScrollTimeout = setTimeout(() => {
+            isHorizontalScrolling = false
+            horizontalScrollTimeout = null
+        }, 150)
+    }
     
     function handleTabContentWheel(event) {
         if (!tabListRef || tabSearchQuery) return
@@ -378,11 +395,7 @@
         if (isVerticalScrolling) return
         
         // Mark as horizontal scrolling to disable vertical scrolling in tabs list
-        isHorizontalScrolling = true
-        if (horizontalScrollTimeout) clearTimeout(horizontalScrollTimeout)
-        horizontalScrollTimeout = setTimeout(() => {
-            isHorizontalScrolling = false
-        }, 150)
+        markHorizontalScrolling()
         
         // Block all scroll during closing animation
         if (isClosingMultiSpace) {
@@ -799,14 +812,14 @@
             exitMultiSpaceMode()
         }
         
-        // If clicking on the currently active tab, switch to previous tab
         data.activateSpace(spaceId)
         const tab = data.docs[tabId]
+        if (tab?.pinned) {
+            onRevealPinnedTab(tabId)
+        }
         
-        // For unpinned tabs, use the original behavior
+        // Clicking the active pin reveals it; normal tabs return to the previous tab.
         if (tabId === data.spaceMeta.activeTabId) {
-            // For pinned tabs, don't activate them in the sidebar (they should only toggle visibility from main tabs)
-            // For now, just do nothing for pinned tabs in sidebar
             if (tab?.pinned) {
                 return
             }
@@ -838,7 +851,8 @@
     let hoveredSpaceInMultiMode = $state(null)
 
     function handleTabScroll(event) {
-        if (!tabListRef) return
+        if (!tabListRef || event.target !== tabListRef) return
+        markHorizontalScrolling()
         
         // console.log('[DEBUG:SCROLL] Tab list scroll event', {
         //     scrollLeft: tabListRef.scrollLeft,
@@ -1115,7 +1129,8 @@
                     }
                     const bounds = tabsList.getBoundingClientRect()
                     const row = activeTabElement.getBoundingClientRect()
-                    const top = bounds.top + (tabsList.querySelector('.new-tab-row')?.offsetHeight || 0)
+                    if (activeTabElement.closest('.space-sticky-tabs')) return
+                    const top = Math.max(bounds.top, tabsList.querySelector('.space-sticky-tabs')?.getBoundingClientRect().bottom || bounds.top)
                     if (row.top < top) {
                         tabsList.scrollTop += row.top - top
                     } else if (row.bottom > bounds.bottom) {
@@ -1209,6 +1224,8 @@
             if (hovercardResetTimer) {
                 clearTimeout(hovercardResetTimer)
             }
+            clearTimeout(horizontalScrollTimeout)
+            clearTimeout(scrollHoverTimeout)
             stopHovercardPositionCheck()
         }
     })
@@ -1263,7 +1280,7 @@
     }
 
     function showSidebarHovercard(target) {
-        if (tabDrag.active || !target.element.isConnected) return
+        if (tabDrag.active || isHorizontalScrolling || !target.element.isConnected) return
         hovercardAnchor = target.group ? target.element.closest('.tab-group-wrapper') : target.element
         hovercardHistoryBeside = canFitSidebarHovercardHistory(hovercardAnchor.getBoundingClientRect(), window.innerWidth)
         hovercardPosition = getSidebarHovercardPosition(
@@ -1353,7 +1370,7 @@
     }
     
     function handleTabMouseEnter(tab, event) {
-        if (tabDrag.active) return
+        if (tabDrag.active || isHorizontalScrolling) return
         const target = getSidebarHoverTarget(event.target, tab)
         if (!target) return
         // console.log('[DEBUG:HOVER] Tab mouse enter', {
@@ -1377,6 +1394,7 @@
         const delay = instantHovercardsMode ? 0 : 800
         
         hoverTimeout = setTimeout(() => {
+            if (isHorizontalScrolling) return
             if (instantModeResetTimer) {
                 clearTimeout(instantModeResetTimer)
             }
@@ -1862,6 +1880,7 @@
                         {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
                             {@const spacePins = data.getSpacePins(spaceId)}
                             {@const sidebarPins = getSidebarPinnedTabs(data.spaces[spaceId]?.tabs)}
+                            {@const fixedSidebarPins = getSidebarPinnedTabs(data.spaces[spaceId]?.tabs, true)}
                             {#if spaceHasMatchingTabs(spaceId)}
                                 {#if multiSpaceMode && index > 0}
                                     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1963,9 +1982,37 @@
                                     </div>
                                 {/if}
                                 
+                                <div class="space-sticky-tabs">
+                                {#if fixedSidebarPins.length || (tabDrag.active && tabDrag.dragType === 'tab')}
+                                    <div class="sidebar-pinned-tabs fixed-sidebar-pins" data-pin-scope="sidebar-fixed" data-pin-layout="rows"
+                                         class:pin-drop-active={tabDrag.active && tabDrag.dropTarget?.pinScope === 'sidebar-fixed' && tabDrag.dropTarget?.targetSpaceId === spaceId}
+                                         role="list" aria-label="Always visible pinned tabs">
+                                        {#each fixedSidebarPins as tab, i (tab.id)}
+                                            {@render sidebarTab(tab, i)}
+                                        {/each}
+                                        {#if !fixedSidebarPins.length && !tabSearchQuery}
+                                            <div class="sidebar-pins-placeholder">Drop tabs here to keep visible</div>
+                                        {/if}
+                                    </div>
+                                {/if}
                                 <div class="new-tab-row">
                                     <div class="new-tab-button" 
-                                            onmousedown={() => createSidebarTab(spaceId)}
+                                            onmousedown={(e) => {
+                                                if (!e.target.closest('.new-tab-more-button')) {
+                                                    startCreationDrag('tab', e.currentTarget, spaceId, e)
+                                                }
+                                            }}
+                                            onclick={(e) => {
+                                                if (!didDragOccurred() && !e.target.closest('.new-tab-more-button')) {
+                                                    createSidebarTab(spaceId)
+                                                }
+                                            }}
+                                            onkeydown={(e) => {
+                                                if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                                                    e.preventDefault()
+                                                    createSidebarTab(spaceId)
+                                                }
+                                            }}
                                             role="button"
                                             tabindex="0"
                                             aria-label="Create new tab">
@@ -1999,7 +2046,7 @@
                                     </div>
                                 </div>
                                 
-                                <div class="space-tabs-sections">
+                                </div>
                                    {#snippet sidebarTab(tab, i, groupActivationTarget = false)}
                                         {#if tab.type === 'divider'}
                                             {#if !tabSearchQuery}
@@ -2050,6 +2097,7 @@
                                             {/if}
                                         {/if}
                                     {/snippet}
+                                <div class="space-tabs-sections">
                                     <div class="sidebar-pinned-tabs" data-pin-scope="sidebar" data-pin-layout="rows"
                                          class:pin-drop-active={tabDrag.active && tabDrag.dropTarget?.pinScope === 'sidebar' && tabDrag.dropTarget?.targetSpaceId === spaceId}
                                          role="list" aria-label="Pinned tabs">
@@ -2066,7 +2114,11 @@
                                         <div class="add-spacer-insertion">
                                             <Tooltip text="Add spacer" position="top" delay={300}>
                                                 <button class="add-spacer-preview"
-                                                        onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); addTabsListSpacer(spaceId) } }}
+                                                        onmousedown={(e) => {
+                                                            e.stopPropagation()
+                                                            startCreationDrag('divider', e.currentTarget, spaceId, e)
+                                                        }}
+                                                        onclick={() => { if (!didDragOccurred()) { addTabsListSpacer(spaceId) } }}
                                                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
                                                         aria-label="Add spacer">
                                                     <span class="add-spacer-preview-line"></span>
@@ -2276,6 +2328,7 @@
 
 <TabContextMenu 
     menu={tabContextMenu} 
+    defaultPinScope="space"
     onHide={hideTabContextMenu} 
     onReload={(tab) => {
         if (!tab?.id) return
@@ -3445,6 +3498,21 @@
         font-size: 12px;
     }
 
+    .space-sticky-tabs {
+        position: sticky;
+        top: 0;
+        z-index: 12;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: black;
+    }
+
+    .fixed-sidebar-pins {
+        max-height: min(30vh, 240px);
+    }
+
     .pinned-tabs-divider {
         flex-shrink: 0;
         height: 1px;
@@ -3930,9 +3998,7 @@
     }
     
     .new-tab-row {
-        position: sticky;
-        top: 0;
-        z-index: 12;
+        position: relative;
         flex-shrink: 0;
         background: black;
         display: flex;
@@ -4462,12 +4528,12 @@
         background: rgba(0, 0, 0, 0.8);
         backdrop-filter: blur(15px);
         border: none;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45), 0 6px 20px rgba(0, 0, 0, 0.5);
         position: relative;
         z-index: 11;
         width: 100%;
         min-width: 0;
-        border: 1px solid #232323;
+        border: 1px solid #3b3b3b;
     }
     
     .closed-tabs-header:hover {
@@ -4504,11 +4570,11 @@
         left: 0;
         right: 0;
         background: rgba(0, 0, 0, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.22);
         border-radius: 13px 13px 0 0;
         border-bottom: none;
         backdrop-filter: blur(20px);
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.5), 0 -8px 28px rgba(0, 0, 0, 0.65);
         opacity: 0;
         visibility: hidden;
         transform: translateY(10px);
@@ -4840,7 +4906,7 @@
         overscroll-behavior: contain;
         scrollbar-width: thin;
         scrollbar-color: #ffffff33 transparent;
-        filter: drop-shadow(0 20px 20px rgb(0 0 0 / 40%)) drop-shadow(0 8px 8px rgb(0 0 0 / 20%));
+        filter: drop-shadow(0 20px 20px rgb(0 0 0 / 55%)) drop-shadow(0 8px 8px rgb(0 0 0 / 30%));
     }
 
     .tab-hovercard-sidebar.group-hovercards > .tab-hovercard-stack:has(:global(.history-beside)) {

@@ -132,6 +132,19 @@
     {/if}
 {/snippet}
 
+{#snippet audioIndicator()}
+    {#if currentTab?.muted || currentTab?.audioPlaying}
+        <svg class="favicon-audio-indicator" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label={currentTab.muted ? 'Tab muted' : 'Playing audio'}>
+            <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+            {#if currentTab.muted}
+                <path d="m16 9 5 6m0-6-5 6" />
+            {:else}
+                <path d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13" />
+            {/if}
+        </svg>
+    {/if}
+{/snippet}
+
 {#if showButton}
     <span 
         class="favicon-display" 
@@ -152,6 +165,7 @@
             {@render fallbackIcon()}
         {/if}
         {@render loadingIndicator()}
+        {@render audioIndicator()}
     </span>
 {:else}
     <span class="favicon-wrapper" class:small={size === 'small'}>
@@ -169,6 +183,7 @@
             {@render fallbackIcon()}
         {/if}
         {@render loadingIndicator()}
+        {@render audioIndicator()}
     </span>
 {/if}
 
@@ -253,6 +268,20 @@
         max-height: 16px;
         color: white;
         flex-shrink: 0;
+    }
+
+    .favicon-display .favicon-audio-indicator,
+    .favicon-wrapper .favicon-audio-indicator {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 10px;
+        height: 10px;
+        padding: 1px;
+        box-sizing: border-box;
+        border-radius: 2px;
+        background: #181818;
+        pointer-events: none;
     }
     
     /* Sidebar favicon opacity states - only target favicons inside sidebar elements */

@@ -4,7 +4,7 @@ import { compileModule } from 'svelte/compiler'
 
 const source = compileModule(Deno.readTextFileSync(new URL('../app/lib/tab-drag.svelte.js', import.meta.url)), { generate: 'server' }).js.code
     .replace(/^import .*$/gm, '')
-    .replace(/^export \{[\s\S]*$/m, '({ tabDrag: state, startTabDrag: startPending, onDrop, onGroupExpand, cancelDrag })')
+    .replace(/^export \{[\s\S]*$/m, '({ tabDrag: state, startTabDrag: startPending, startCreationDrag, didDragOccurred, onDrop, onGroupExpand, cancelDrag })')
 
 function element (id, x, y, width, height, dataset = {}, classes = []) {
     return {
@@ -73,6 +73,73 @@ function pinList (scope, children = []) {
     return list
 }
 
+Deno.test('creation drags place new tabs and spacers between neighbors without moving an existing item', () => {
+    for (const type of ['tab', 'divider']) {
+        const harness = dragHarness({ lists: [sidebar([element('first', 0, 100, 250, 36), element('second', 0, 144, 250, 36)])] })
+        harness.startCreationDrag(type, element('', 0, 40, 250, 16), 'source-space', { button: 0, clientX: 120, clientY: 48 })
+        assert.equal(harness.tabDrag.active, false)
+        assert.equal(harness.drops.length, 0)
+        harness.move(120, 140)
+        assert.equal(harness.tabDrag.creating, true)
+        assert.equal(harness.tabDrag.indicator.visible, true)
+        harness.release()
+        assert.deepEqual({ ...harness.drops[0] }, {
+            type: 'create', itemType: type, dropType: 'reorder', sourceSpaceId: 'source-space',
+            beforeTabId: 'first', afterTabId: 'second', targetSpaceId: 'target-space', targetZone: 'sidebar',
+            ...(type === 'tab' ? { targetGroupTabId: null, scope: 'tab' } : {})
+        })
+        assert.equal(harness.tabDrag.creating, false)
+        assert.equal(harness.didDragOccurred(), true)
+    }
+})
+
+Deno.test('creation drags accept empty lists and tabs can join groups or enter pin sections', () => {
+    for (const type of ['tab', 'divider']) {
+        const harness = dragHarness({ lists: [sidebar([])] })
+        harness.startCreationDrag(type, element('', 300, 40, 250, 16), 'source-space', { button: 0, clientX: 304, clientY: 44 })
+        harness.move(120, 100)
+        harness.release()
+        assert.equal(harness.drops[0].type, 'create')
+        assert.equal(harness.drops[0].targetSpaceId, 'target-space')
+        assert.equal(harness.drops[0].beforeTabId ?? null, null)
+        assert.equal(harness.drops[0].afterTabId ?? null, null)
+    }
+    const harness = dragHarness({ lists: [sidebar([element('group', 0, 100, 250, 36)])], pinLists: [pinList('space')] })
+    const start = () => harness.startCreationDrag('tab', element('', 300, 40, 250, 16), 'source-space', { button: 0, clientX: 304, clientY: 44 })
+    start()
+    harness.move(120, 118)
+    harness.advance(600)
+    harness.release()
+    assert.equal(harness.drops[0].targetGroupTabId, 'group')
+    start()
+    harness.move(20, 20)
+    harness.release()
+    assert.equal(harness.drops[1].type, 'create')
+    assert.equal(harness.drops[1].dropType, 'pin')
+    assert.equal(harness.drops[1].pinScope, 'space')
+})
+
+Deno.test('clicking, cancelling and dropping creation controls outside a list never commit a creation', () => {
+    for (const type of ['tab', 'divider']) {
+        const harness = dragHarness({ lists: [sidebar([])] })
+        const start = () => harness.startCreationDrag(type, element('', 0, 40, 250, 16), 'source-space', { button: 0, clientX: 120, clientY: 48 })
+        start()
+        harness.move(122, 50)
+        harness.release()
+        assert.equal(harness.didDragOccurred(), false)
+        start()
+        harness.move(120, 120)
+        harness.cancelDrag()
+        assert.equal(harness.didDragOccurred(), true)
+        start()
+        harness.move(900, 300)
+        assert.equal(harness.tabDrag.deleteZone, false)
+        assert.equal(harness.tabDrag.sidepinZone, null)
+        harness.release()
+        assert.equal(harness.drops.length, 0)
+    }
+})
+
 Deno.test('the titled pinned section accepts empty drops and reorders vertically', () => {
     const list = pinList('sidebar')
     list.dataset.pinLayout = 'rows'
@@ -106,6 +173,30 @@ Deno.test('tabs can enter empty space and global pin sections', () => {
         assert.equal(harness.drops[0].pinScope, scope)
         assert.equal(harness.drops[0].targetSpaceId, scope === 'space' ? 'target-space' : undefined)
     }
+})
+
+Deno.test('fixed pins accept row drops while the sticky header blocks obscured scrolling targets', () => {
+    const fixed = pinList('sidebar-fixed')
+    fixed.dataset.pinLayout = 'rows'
+    fixed.selectors['.sidebar-pins-placeholder'] = element('', 4, 4, 242, 36)
+    const sticky = element('', 0, 0, 250, 120)
+    fixed.parents['.space-sticky-tabs'] = sticky
+    const scrolling = pinList('sidebar')
+    const list = sidebar([element('normal', 0, 80, 250, 36)])
+    list.parents['.space-content'] = fixed.parents['.space-content']
+    scrolling.parents['.space-content'] = fixed.parents['.space-content']
+    fixed.parents['.space-content'].selectors['.space-sticky-tabs'] = sticky
+    const harness = dragHarness({ pinLists: [fixed, scrolling], lists: [list] })
+    harness.start('source', element('source', 300, 100, 100, 36))
+    harness.move(120, 20)
+    harness.release()
+    assert.equal(harness.drops[0].pinScope, 'sidebar-fixed')
+    assert.equal(harness.drops[0].targetSpaceId, 'target-space')
+    harness.start('source', element('source', 300, 100, 100, 36))
+    harness.move(120, 100)
+    assert.equal(harness.tabDrag.dropTarget, null, 'tabs obscured by New Tab cannot receive drops')
+    assert.equal(harness.tabDrag.indicator.visible, false)
+    harness.cancelDrag()
 })
 
 Deno.test('wrapped pin grids insert between the correct neighbors', () => {
@@ -195,7 +286,7 @@ Deno.test('topbar-to-sidebar edge drops detach individual tabs', () => {
     assert.equal(harness.drops[0].targetZone, 'sidebar')
 })
 
-Deno.test('joining a sidebar tab or group waits 700ms without resetting for pointer movement', () => {
+Deno.test('joining a sidebar tab or group waits 600ms without resetting for pointer movement', () => {
     for (const type of ['tab', 'group']) {
         for (const target of [element('target', 0, 100, 250, 36), collapsedGroup()]) {
             const harness = dragHarness({ lists: [sidebar([target])] })
@@ -203,7 +294,7 @@ Deno.test('joining a sidebar tab or group waits 700ms without resetting for poin
             harness.move(120, 118)
             assert.equal(harness.tabDrag.indicator.height, 2)
             assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
-            harness.advance(699)
+            harness.advance(599)
             harness.move(125, 119)
             assert.equal(harness.tabDrag.indicator.height, 2)
             harness.advance(1)
@@ -219,7 +310,7 @@ Deno.test('releasing before the merge delay keeps a normal sidebar reorder', () 
     const harness = dragHarness({ lists: [sidebar([element('target', 0, 100, 250, 36)])] })
     harness.start('source', element('source', 300, 0, 100, 40), 'topbar')
     harness.move(120, 118)
-    harness.advance(699)
+    harness.advance(599)
     harness.release()
     assert.equal(harness.drops[0].targetGroupTabId, null)
     assert.equal(harness.drops[0].afterTabId, 'target')
@@ -233,23 +324,25 @@ Deno.test('changing merge targets, returning to an edge and cancelling reset the
     const source = element('source', 300, 0, 100, 40)
     harness.start('source', source, 'topbar')
     harness.move(120, 118)
-    harness.advance(600)
+    harness.advance(500)
     harness.move(120, 168)
     harness.advance(100)
     assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
-    harness.advance(600)
+    harness.advance(499)
+    assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
+    harness.advance(1)
     assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, 'second')
     harness.move(120, 152)
     assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
     assert.equal(harness.tabDrag.indicator.height, 2)
     harness.move(120, 168)
-    harness.advance(699)
+    harness.advance(599)
     harness.cancelDrag()
     harness.start('source', source, 'topbar')
     harness.move(120, 168)
     harness.advance(1)
     assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
-    harness.advance(699)
+    harness.advance(599)
     assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, 'second')
     harness.release()
     assert.equal(harness.drops.length, 1)
@@ -359,14 +452,21 @@ function collapsedGroup(id = 'group') {
     return wrapper
 }
 
-Deno.test('a tab hovering over a collapsed group expands it after one second despite pointer movement', () => {
+Deno.test('a collapsed group expands one second after entering merge mode despite pointer movement', () => {
     for (const zone of ['topbar', 'sidebar']) {
         const harness = dragHarness({ lists: [sidebar([collapsedGroup()])] })
         harness.start('source', element('source', 300, 0, 100, 40), zone)
         harness.move(120, 118)
-        harness.advance(600)
+        harness.advance(599)
+        assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, null)
+        assert.equal(harness.expansions.length, 0)
         harness.move(125, 119)
-        harness.advance(399)
+        harness.advance(1)
+        assert.equal(harness.tabDrag.dropTarget.targetGroupTabId, 'first')
+        harness.advance(400)
+        assert.equal(harness.expansions.length, 0)
+        harness.move(130, 120)
+        harness.advance(599)
         assert.equal(harness.expansions.length, 0)
         harness.advance(1)
         assert.deepEqual(harness.expansions, [{ spaceId: 'target-space', tabGroupId: 'group' }])
@@ -387,12 +487,35 @@ Deno.test('leaving a group resets the expansion delay and ending a drag cancels 
         harness.advance(1000)
         assert.equal(harness.expansions.length, 0)
         harness.move(120, 118)
+        harness.advance(600)
         harness.advance(999)
         assert.equal(harness.expansions.length, 0)
         harness[finish]()
         harness.advance(1)
         assert.equal(harness.expansions.length, 0)
     }
+})
+
+Deno.test('leaving merge mode resets the expansion delay within the same group', () => {
+    const harness = dragHarness({ lists: [sidebar([collapsedGroup()])] })
+    harness.start('source', element('source', 300, 0, 100, 40), 'topbar')
+    harness.move(120, 102)
+    harness.advance(1600)
+    assert.equal(harness.expansions.length, 0)
+    harness.move(120, 118)
+    harness.advance(600)
+    harness.advance(900)
+    assert.equal(harness.expansions.length, 0)
+    harness.move(120, 102)
+    harness.advance(100)
+    assert.equal(harness.expansions.length, 0)
+    harness.move(120, 118)
+    harness.advance(600)
+    harness.advance(999)
+    assert.equal(harness.expansions.length, 0)
+    harness.advance(1)
+    assert.equal(harness.expansions.length, 1)
+    harness.cancelDrag()
 })
 
 Deno.test('ordinary tabs and whole-group drags do not trigger hover expansion', () => {

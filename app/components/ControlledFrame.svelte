@@ -417,7 +417,10 @@
         console.log(eventName, $state.snapshot(tab), event)
     }
     function handleAudioStateChanged (tab, event) {
-        tab.audioPlaying = event.audible
+        const currentTab = data.docs[tab.id]
+        if (currentTab) {
+            currentTab.audioPlaying = event.audible
+        }
     }
 
     function isDirectNavigation(url, requestId = null) {

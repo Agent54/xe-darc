@@ -3,7 +3,7 @@ import { parse } from 'svelte/compiler'
 import { getFrameShortcutScript } from '../app/lib/shortcuts.js'
 
 const source = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
-const names = ['createControlledFrame', 'releaseControlledFrame', 'detach', 'closeOAuthPopup', 'appendPopupFrame', 'setupContentScripts']
+const names = ['createControlledFrame', 'releaseControlledFrame', 'detach', 'closeOAuthPopup', 'appendPopupFrame', 'setupContentScripts', 'handleAudioStateChanged']
 const functions = parse(source).instance.content.body
     .filter(node => node.type === 'FunctionDeclaration' && names.includes(node.id.name))
     .map(node => source.slice(node.start, node.end)).join('\n')
@@ -11,7 +11,7 @@ const functions = parse(source).instance.content.body
 function harness() {
     const events = []
     const tab = { id: 'page', _id: 'page', url: 'https://example.com/', title: 'Example', favicon: 'icon' }
-    const data = { frames: { page: {} } }
+    const data = { docs: { page: tab }, frames: { page: {} } }
     const wrapper = {
         querySelector() { return frame.parentNode === wrapper ? frame : null },
         removeChild(node) { events.push('remove'); node.parentNode = null }
@@ -45,7 +45,7 @@ function harness() {
         const untrack = fn => fn()
         ${functions}
         return {
-            createControlledFrame, detach, appendPopupFrame, closeOAuthPopup, setupContentScripts,
+            createControlledFrame, detach, appendPopupFrame, closeOAuthPopup, setupContentScripts, handleAudioStateChanged,
             setPopup: frame => { oauthPopup = { frame } },
             getPopup: () => oauthPopup,
             isDetached: () => detached
@@ -74,6 +74,19 @@ Deno.test('closing a tab blanks its DOM instance even after the shared frame ref
     assert.deepEqual(h.tab, originalTab)
     assert.equal(h.frame.onloadabort, null)
     assert.equal(h.data.frames.page.frame, null)
+})
+
+Deno.test('audio events update the current document after metadata replaces the captured tab', () => {
+    const h = harness()
+    const currentTab = { ...h.tab }
+    h.data.docs.page = currentTab
+    h.handleAudioStateChanged(h.tab, { audible: true })
+    assert.equal(currentTab.audioPlaying, true)
+    assert.equal(h.tab.audioPlaying, undefined)
+    h.handleAudioStateChanged(h.tab, { audible: false })
+    assert.equal(currentTab.audioPlaying, false)
+    delete h.data.docs.page
+    assert.doesNotThrow(() => h.handleAudioStateChanged(h.tab, { audible: true }))
 })
 
 Deno.test('removing a transient tab blanks its frame before deleting the frame entry', () => {

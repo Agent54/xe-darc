@@ -16,6 +16,9 @@ const modules = {
         window.actions = []
         window.viewChanges = 0
         window.setActiveTab = id => flushSync(() => { data.spaceMeta.activeTabId = id })
+        window.setGroupMetadata = (id, properties) => flushSync(() => {
+            Object.assign(data.docs['darc:tabgroup_' + id], properties)
+        })
         mount(GridView, { target: document.body, props: {
             onTabActivate: tab => window.actions.push(['activate', tab.id]),
             onTabClose: tab => window.actions.push(['close', tab.id]),
@@ -45,8 +48,8 @@ const modules = {
             }
         })
         for (const space of Object.values(data.spaces)) for (const tab of space.tabs) data.docs[tab.id] = tab
-        data.docs[tabGroupMetadataId('research')] = { name: 'Research' }
-        data.docs[tabGroupMetadataId('reading')] = { name: 'Reading' }
+        data.docs[tabGroupMetadataId('research')] = { name: 'Research', favicon: '<svg viewBox="0 0 16 16" data-custom-group-icon="research"><path d="M2 2h12v12H2z"/></svg>' }
+        data.docs[tabGroupMetadataId('reading')] = { name: 'Reading', emoji: '📚' }
         data.getSpacePins = () => []
         data.getTabGroups = id => getTabGroups(data.spaces[id].tabs, [data.spaceMeta.activeTabId], data.docs)
         data.getGroupActiveTab = group => group.tabs.find(tab => tab.id === data.spaceMeta.activeTabId) || group.tabs[0]
@@ -105,6 +108,9 @@ try {
     await page.waitForSelector('.inline-group [data-tab-id="research-6"] .attachment-image')
     assert.equal(await page.$('dialog[open]'), null, 'the active group opens inline without a modal')
     assert.equal(await page.$('.inline-group .collapse-button'), null, 'the current group cannot be collapsed')
+    assert.ok(await page.$('.inline-heading [data-custom-group-icon="research"]'), 'the expanded group displays its custom favicon')
+    assert.equal(await page.$eval('[aria-label="Reading, 3 tabs"] .title-text', title => title.textContent), 'Reading', 'collapsed groups display their custom title')
+    assert.equal(await page.$eval('[aria-label="Reading, 3 tabs"] .custom-group-icon', icon => icon.textContent), '📚')
     assert.equal(await page.$eval('.inline-group', group => getComputedStyle(group).gridColumn), '1 / -1')
     assert.equal(await page.$eval('.inline-tabs', row => {
         const card = row.querySelector('.active').getBoundingClientRect()
@@ -136,11 +142,21 @@ try {
     await page.hover('[aria-label="Reading, 3 tabs"]')
     await page.click('[aria-label="Expand Reading"]')
     await page.waitForSelector('[aria-label="Reading, 3 tabs"].inline-group')
+    assert.equal(await page.$eval('[aria-label="Reading, 3 tabs"] .inline-heading .custom-group-icon', icon => icon.textContent), '📚')
     assert.equal(await page.$('dialog[open]'), null)
     await page.click('[aria-label="Collapse Reading"]')
     await page.waitForSelector('[aria-label="Expand Reading"]')
     assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'Expand Reading', 'collapse restores keyboard focus')
     assert.equal(await page.evaluate(() => window.viewChanges), 2, 'expanding and collapsing never closes the overview')
+
+    await page.mouse.move(0, 0)
+    await page.evaluate(() => window.setGroupMetadata('reading', { name: 'Saved reading', emoji: null, favicon: '<svg viewBox="0 0 16 16" data-custom-group-icon="reading"><circle cx="8" cy="8" r="6"/></svg>' }))
+    assert.equal(await page.$eval('[aria-label="Saved reading, 3 tabs"] .title-text', title => title.textContent), 'Saved reading', 'metadata edits update an open grid')
+    assert.ok(await page.$('[aria-label="Saved reading, 3 tabs"] .custom-group-icon [data-custom-group-icon="reading"]'))
+    await page.evaluate(() => window.setGroupMetadata('reading', { name: null, favicon: null }))
+    assert.equal(await page.$eval('[aria-label="Reading list, 3 tabs"] .title-text', title => title.textContent), 'Reading list', 'clearing a custom title restores the member title')
+    assert.equal(await page.$('[aria-label="Reading list, 3 tabs"] .custom-group-icon'), null)
+    await page.evaluate(() => window.setGroupMetadata('reading', { name: 'Reading', emoji: '📚' }))
 
     // Scope changes retain the modal behavior for All Spaces.
     await page.click('.grid-scope-toggle')
@@ -148,6 +164,7 @@ try {
     await page.hover('[aria-label="Research, 8 tabs"]')
     await page.click('[aria-label="Expand Research"]')
     await page.waitForSelector('dialog[open] [data-tab-id="research-6"] .attachment-image')
+    assert.ok(await page.$('dialog[open] .dialog-heading [data-custom-group-icon="research"]'), 'All Spaces dialogs display the group favicon')
     assert.equal(await page.$eval('dialog[open]', dialog => document.activeElement === dialog), true, 'opening a group focuses the dialog instead of outlining Close')
     await page.$eval('dialog[open]', dialog => Promise.all(dialog.getAnimations().map(animation => animation.finished)))
     await page.screenshot({ path: `${root}.cache/grid-tab-stack-modal.png` })

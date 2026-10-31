@@ -86,6 +86,7 @@ const modules = {
             return newTab
         }
         data.activateSpace = spaceId => { data.spaceMeta.activeSpace = spaceId }
+        data.addDivider = spaceId => data.menuActions.push({ action: 'add-divider', spaceId })
         data.activate = tabId => { data.spaceMeta.activeTabId = tabId }
         data.previous = () => {}
         data.isTabHibernated = () => false
@@ -175,6 +176,58 @@ try {
     await page.goto(`http://127.0.0.1:${server.addr.port}`)
     await page.waitForFunction(() => document.querySelector('.closed-tab-item .fallback-favicon'))
     assert.deepEqual(errors, [])
+    if (Deno.args.includes('--creation-only')) {
+        await new Promise(resolve => setTimeout(resolve, 300))
+        const tabCount = () => page.evaluate(() => window.data.spaces.space.tabs.length)
+        const initialCount = await tabCount()
+        const point = selector => page.$eval(selector, el => {
+            const rect = el.getBoundingClientRect()
+            return { x: rect.left + rect.width / 3, y: rect.top + rect.height / 2 }
+        })
+        for (const [selector, itemType] of [['.new-tab-button', 'tab'], ['.add-spacer-preview', 'divider']]) {
+            const source = await point(selector)
+            await page.mouse.move(source.x, source.y)
+            await page.mouse.down()
+            assert.equal(await tabCount(), initialCount, 'pressing a creation control must wait for click or drop')
+            await page.mouse.move(source.x + 8, source.y + 8)
+            await page.waitForFunction(() => window.tabDrag.active && window.tabDrag.creating)
+            const target = await page.$eval('.tabs-list > [data-tab-id="outside"]', el => {
+                const rect = el.getBoundingClientRect()
+                return { x: rect.left + rect.width / 2, y: rect.top + 2 }
+            })
+            await page.mouse.move(target.x, target.y, { steps: 8 })
+            await page.waitForFunction(() => window.tabDrag.active && window.tabDrag.creating && window.tabDrag.indicator.visible)
+            assert.equal(await tabCount(), initialCount, 'dragging must not create an item yet')
+            await page.mouse.up()
+            assert.deepEqual(await page.evaluate(() => {
+                const drop = window.pinDrops.at(-1)
+                return { type: drop.type, itemType: drop.itemType, afterTabId: drop.afterTabId, space: drop.targetSpaceId }
+            }), { type: 'create', itemType, afterTabId: 'outside', space: 'space' })
+            assert.equal(await tabCount(), initialCount, 'release must not also click the source control')
+            await page.mouse.move(source.x, source.y)
+            await page.mouse.down()
+            await page.mouse.move(target.x, target.y, { steps: 8 })
+            await page.keyboard.press('Escape')
+            await page.mouse.up()
+            assert.equal(await tabCount(), initialCount, 'cancelling must not create a tab')
+        }
+        assert.equal(await page.evaluate(() => window.pinDrops.length), 2)
+        assert.equal(await page.evaluate(() => window.data.menuActions.length), 0, 'dragging and cancelling the spacer must not click it')
+        await page.click('.add-spacer-preview')
+        assert.equal(await page.evaluate(() => window.data.menuActions.filter(action => action.action === 'add-divider').length), 1)
+        await page.focus('.add-spacer-preview')
+        await page.keyboard.press('Enter')
+        await page.keyboard.press('Space')
+        assert.equal(await page.evaluate(() => window.data.menuActions.filter(action => action.action === 'add-divider').length), 3)
+        await page.click('.new-tab-button')
+        assert.equal(await tabCount(), initialCount + 1)
+        await page.focus('.new-tab-button')
+        await page.keyboard.press('Enter')
+        await page.keyboard.press('Space')
+        assert.equal(await tabCount(), initialCount + 3)
+        assert.deepEqual(errors, [])
+        console.log('Chromium: new-tab and spacer creation drags, deferred creation, cancellation, click suppression and keyboard creation pass')
+    } else {
     const activityOrder = () => page.$$eval('.tabs-list > [data-tab-id]', rows => rows.map(row => row.dataset.tabId))
     const originalActivityOrder = await activityOrder()
     assert.deepEqual(await page.$eval('.activity-toggle', button => [button.offsetWidth, button.offsetHeight, button.getAttribute('aria-pressed')]), [20, 20, 'false'])
@@ -216,7 +269,7 @@ try {
         delete window.data.docs.outside.lastActivityAt
         delete window.data.docs['group-two'].lastActivityAt
     }))
-    if (!Deno.args.includes('--sidebar-scroll-only') && !Deno.args.includes('--activity-only')) {
+    if (!Deno.args.includes('--sidebar-scroll-only') && !Deno.args.includes('--activity-only') && !Deno.args.includes('--audio-only')) {
     assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), false, 'loading closed history must not flash the preview')
     await page.evaluate(() => {
         window.previewFixtureClosedTabs = [...window.data.spaceMeta.closedTabs]
@@ -514,7 +567,37 @@ try {
         console.log('Chromium: standalone and grouped tab title, emoji, image URL overrides and resets pass')
     }
 
-    if (Deno.args.includes('--activity-only')) {
+    async function testAudioIndicators() {
+        for (const id of ['outside', 'pin-two', 'group-two']) {
+            await page.evaluate(id => window.flushSync(() => {
+                window.data.docs[id] = { ...window.data.docs[id], audioPlaying: true }
+            }), id)
+            const selector = id === 'group-two' ? '.tab-group-main .favicon-audio-indicator' : `[data-tab-id="${id}"] .favicon-audio-indicator`
+            await page.waitForSelector(selector)
+            assert.equal(await page.$eval(selector, el => el.getAttribute('aria-label')), 'Playing audio')
+            const geometry = await page.$eval(selector, el => {
+                const icon = el.getBoundingClientRect()
+                const wrapper = el.parentElement.getBoundingClientRect()
+                return { icon: icon.toJSON(), wrapper: wrapper.toJSON() }
+            })
+            const { icon, wrapper } = geometry
+            assert.ok(icon.width === 10 && icon.height === 10 && icon.left >= wrapper.left && icon.top >= wrapper.top && icon.right <= wrapper.right && icon.bottom <= wrapper.bottom,
+                `${id}: audio overlay must fit inside favicon: ${JSON.stringify(geometry)}`)
+            await page.evaluate(id => window.flushSync(() => { window.data.docs[id].muted = true }), id)
+            assert.equal(await page.$eval(selector, el => el.getAttribute('aria-label')), 'Tab muted')
+            await page.evaluate(id => window.flushSync(() => {
+                window.data.docs[id].muted = false
+                window.data.docs[id].audioPlaying = false
+            }), id)
+            assert.equal(await page.$(selector), null)
+        }
+    }
+
+    if (Deno.args.includes('--audio-only')) {
+        await testAudioIndicators()
+        assert.deepEqual(errors, [])
+        console.log('Chromium: audio favicon overlays, mute transitions and group sizing pass')
+    } else if (Deno.args.includes('--activity-only')) {
         assert.deepEqual(errors, [])
         console.log('Chromium: activity toggle size, URL layout, continuous activity/fallback sorting, group bump and ordinary-order restoration pass')
     } else if (Deno.args.includes('--close-button-history-only')) {
@@ -689,6 +772,8 @@ try {
         }
     }), 0, 'title, layout and loading changes must not reparse favicon URLs')
     assert.ok(await page.$('[data-tab-id="outside"] .favicon-loading-spinner'))
+
+    await testAudioIndicators()
 
     for (const expanded of [true, false, true]) {
         await page.evaluate(() => {
@@ -1069,6 +1154,7 @@ try {
     await testTabOverrides()
     assert.deepEqual(errors, [])
     console.log('Chromium: responsive sidebar history, top-bar layout, shared group height, header previews, group menus, favicon regressions and link preview fallback/recovery pass')
+    }
     }
 } finally {
     await browser?.close()

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import vm from 'node:vm'
-import { compileModule } from 'svelte/compiler'
+import { compileModule, parse } from 'svelte/compiler'
 import { getWindowSessionHints, getWindowSessionStartup, rememberWindowBounds, fitWindowBounds, openWindowSession } from '../app/lib/window-session.js'
 import * as tabGroups from '../app/lib/tab-groups.js'
 import * as tabActivity from '../app/lib/tab-activity.js'
@@ -36,6 +36,9 @@ const readHovercardSource = compileModule(`
 
 const defaultSpace = 'darc:space_default'
 const otherSpace = 'darc:space_other'
+const appSource = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
+const dropHandler = parse(appSource).instance.content.body.find(node => node.type === 'ExpressionStatement' && node.expression.callee?.name === 'onDrop').expression.arguments[0]
+const handleDrop = data => new Function('data', `return ${appSource.slice(dropHandler.start, dropHandler.end)}`)(data)
 const workerSource = Deno.readTextFileSync(new URL('../public/test-shared-worker.js', import.meta.url))
 
 function localStorageFor(storage) {
@@ -203,6 +206,50 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         : vm.runInNewContext(source, context)
     return { data, refresh, window, storage, queries, writes, db, emitChange: doc => changeListeners.get('change')({ id: doc._id, doc, seq: 1 }) }
 }
+
+Deno.test('dragged creation controls persist items at the dropped position, including below an existing spacer', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('spacer', otherSpace, { type: 'divider', order: 0 }),
+        tab('first', otherSpace, { order: 10 }), tab('second', otherSpace, { order: 20 }), tab('source')
+    ], runtime: 'client' })
+    await refresh()
+    const drop = handleDrop(data)
+    for (const itemType of ['divider', 'tab']) {
+        const existingIds = new Set(Object.keys(data.docs))
+        await drop({ type: 'create', itemType, dropType: 'reorder', sourceSpaceId: defaultSpace,
+            targetSpaceId: otherSpace, targetZone: 'sidebar', beforeTabId: 'first', afterTabId: 'second', targetGroupTabId: null })
+        const created = Object.values(data.docs).find(item => !existingIds.has(item.id) && item.type === itemType)
+        assert.ok(created)
+        assert.equal(created.order, 15)
+        assert.equal(created.spaceId, otherSpace)
+        assert.equal((await db.get(created.id)).order, 15)
+        if (itemType === 'tab') {
+            assert.equal(data.spaceMeta.activeSpace, otherSpace)
+            assert.equal(data.spaceMeta.activeTabId, created.id)
+        }
+    }
+    assert.equal(data.addDivider(otherSpace), null, 'clicking the spacer control still avoids duplicate leading spacers')
+})
+
+Deno.test('dragged new tabs can join groups and dragged items respect activity ordering', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('first', defaultSpace, { order: 10, lastActivityAt: 300 }),
+        tab('second', defaultSpace, { order: 20, lastActivityAt: 100 })
+    ], runtime: 'client' })
+    await refresh()
+    const drop = handleDrop(data)
+    const existingIds = new Set(Object.keys(data.docs))
+    await drop({ type: 'create', itemType: 'tab', dropType: 'reorder', sourceSpaceId: defaultSpace,
+        targetSpaceId: defaultSpace, targetZone: 'sidebar', targetGroupTabId: 'first' })
+    const createdTab = Object.values(data.docs).find(item => item.type === 'tab' && !existingIds.has(item.id))
+    assert.deepEqual(data.getTabGroup('first').tabs.map(item => item.id), ['first', createdTab.id])
+    assert.equal((await db.get(createdTab.id)).tabGroupId, data.docs.first.tabGroupId)
+    data.toggleTabActivityMode()
+    await drop({ type: 'create', itemType: 'divider', dropType: 'reorder', sourceSpaceId: defaultSpace,
+        targetSpaceId: defaultSpace, targetZone: 'sidebar', beforeTabId: 'first', afterTabId: 'second' })
+    const divider = Object.values(data.docs).find(item => item.type === 'divider')
+    assert.equal((await db.get(divider.id)).lastActivityAt, 200)
+})
 
 Deno.test('explicit activity persists independently of tab visits and ordinary order', async () => {
     const { data, refresh, db, storage, writes } = session({ tabs: [tab('one', defaultSpace, { order: 0 }), tab('two', defaultSpace, { order: 10 })], runtime: 'client' })
@@ -1006,6 +1053,49 @@ Deno.test('group metadata creation retries conflicts without losing concurrent c
     assert.equal(saved.color, '#123456')
 })
 
+Deno.test('clicking the active tile tab stays in its group and preserves space history', async () => {
+    const { data, refresh } = session({ tabs: [
+        tab('one', defaultSpace, { tabGroupId: 'group' }),
+        tab('two', defaultSpace, { tabGroupId: 'group' }),
+        tab('pin', defaultSpace, { tabGroupId: 'group', pinned: 'left', pinScope: 'group' }),
+        tab('closed', defaultSpace, { tabGroupId: 'group', archive: 'closed' }),
+        tab('outside')
+    ], history: ['two', 'outside', 'pin', 'closed', 'missing', 'two', 'one'] })
+    await refresh()
+    const activationSource = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
+        .match(/    async function activateTab \(tab, index\) \{[\s\S]*?\n    \}/)[0]
+    const activateTileTab = new Function('data', 'tick', 'setTimeout', `
+        let isChangingTabs = false, tabChangeFromScroll = false
+        function activateWindowFocus () {}
+        ${activationSource}
+        return activateTab
+    `)(data, () => Promise.resolve(), () => {})
+    await activateTileTab(data.docs.two)
+    assert.equal(data.spaceMeta.activeTabId, 'one')
+    await activateTileTab(data.docs.one)
+    assert.equal(data.spaceMeta.activeTabId, 'two')
+    assert.ok(data.spaces[defaultSpace].activeTabsOrder.some(entry => entry.id === 'outside'))
+    assert.equal(data.previous(), true)
+    assert.equal(data.spaceMeta.activeTabId, 'one')
+})
+
+Deno.test('group history with no eligible sibling leaves the active tab and space history intact', async () => {
+    for (const grouped of [false, true]) {
+        const { data, refresh } = session({ tabs: [
+            tab('current', defaultSpace, grouped ? { tabGroupId: 'group' } : {}),
+            tab('unvisited', defaultSpace, { tabGroupId: 'group' }),
+            tab('outside')
+        ], history: ['current', 'outside', 'missing', 'current'] })
+        await refresh()
+        const history = JSON.stringify(data.spaces[defaultSpace].activeTabsOrder)
+        assert.equal(data.previous({ withinGroup: true }), false)
+        assert.equal(data.spaceMeta.activeTabId, 'current')
+        assert.equal(JSON.stringify(data.spaces[defaultSpace].activeTabsOrder), history)
+        assert.equal(data.previous(), true)
+        assert.equal(data.spaceMeta.activeTabId, 'outside')
+    }
+})
+
 Deno.test('clicking a group uses normal sidebar activation history and returns to its most recent tab', async () => {
     const { data, refresh } = session({ tabs: [tab('one', defaultSpace, { tabGroupId: 'group' }), tab('two', defaultSpace, { tabGroupId: 'group' }), tab('outside')], history: ['two', 'outside', 'one'] })
     await refresh()
@@ -1643,6 +1733,34 @@ Deno.test('sidebar pin order persists independently and new tabs always enter th
     await data.moveTab('one', { targetSpaceId: defaultSpace, targetGroupTabId: null, afterTabId: 'normal' })
     assert.equal(data.docs.one.sidebarPinned, null)
     assert.equal((await db.get('one')).sidebarPinned, null)
+})
+
+Deno.test('fixed sidebar drops persist, reorder, transfer spaces and move between both pin sections', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('one'), tab('two'), tab('scrolling'), tab('other', otherSpace)], history: ['one'], runtime: 'client' })
+    await refresh()
+    await data.pinSidebarTab({ tabId: 'scrolling' })
+    const drop = handleDrop(data)
+    await drop({ type: 'pin', tabId: 'one', pinScope: 'sidebar-fixed', targetSpaceId: defaultSpace })
+    await data.pinSidebarTab({ tabId: 'two', fixed: true, afterTabId: 'one' })
+    await refresh()
+    assert.equal((await db.get('one')).sidebarPinned, 'fixed')
+    assert.deepEqual(tabGroups.getSidebarPinnedTabs(data.spaces[defaultSpace].tabs, true).map(tab => tab.id), ['two', 'one'])
+    assert.deepEqual(tabGroups.getSidebarPinnedTabs(data.spaces[defaultSpace].tabs).map(tab => tab.id), ['scrolling'])
+    await data.pinSidebarTab({ tabId: 'other', fixed: true, targetSpaceId: defaultSpace })
+    assert.equal((await db.get('other')).spaceId, defaultSpace)
+    assert.equal((await db.get('other')).sidebarPinned, 'fixed')
+    await data.pinSidebarTab({ tabId: 'two' })
+    assert.deepEqual(tabGroups.getSidebarPinnedTabs(data.spaces[defaultSpace].tabs).map(tab => tab.id), ['scrolling', 'two'])
+    await data.pinSidebarTab({ tabId: 'scrolling', fixed: true })
+    assert.deepEqual(tabGroups.getSidebarPinnedTabs(data.spaces[defaultSpace].tabs, true).map(tab => tab.id), ['one', 'other', 'scrolling'])
+    const created = await data.newTab(defaultSpace)
+    assert.equal(!!created.sidebarPinned, false)
+    await drop({ type: 'create', itemType: 'tab', dropType: 'pin', pinScope: 'sidebar-fixed', targetSpaceId: defaultSpace })
+    assert.equal(data.docs[data.spaceMeta.activeTabId].sidebarPinned, 'fixed')
+    await data.pinSidebarTab({ tabId: 'one', pinned: false })
+    assert.equal((await db.get('one')).sidebarPinned, null)
+    await data.pin({ tabId: 'other', pinned: 'left', scope: 'space' })
+    assert.equal(data.docs.other.sidebarPinned, null)
 })
 
 Deno.test('new group tabs stay below the divider when their parent is pinned in the sidebar', async () => {

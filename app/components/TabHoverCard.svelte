@@ -539,8 +539,8 @@
         /* overflow-x: hidden;
         overflow-y: visible; */
         box-shadow: 
-            0 20px 40px rgba(0, 0, 0, 0.4),
-            0 8px 16px rgba(0, 0, 0, 0.2);
+            0 20px 40px rgba(0, 0, 0, 0.55),
+            0 8px 16px rgba(0, 0, 0, 0.3);
         width: 320px;
         max-width: 90vw;
         margin-top: 8px;
@@ -707,6 +707,21 @@
 
     .hovercard-screenshot {
         cursor: pointer;
+    }
+
+    .hovercard-screenshot :global(img) {
+        filter: brightness(0.5);
+        transition: filter 150ms ease;
+    }
+
+    .hovercard-screenshot:hover :global(img) {
+        filter: brightness(1);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .hovercard-screenshot :global(img) {
+            transition: none;
+        }
     }
 
     .hovercard-metadata {

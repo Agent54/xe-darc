@@ -24,6 +24,18 @@ Deno.test('dragging a sidebar pin into the normal section clears its sidebar pin
     assert.deepEqual(getSidebarItems(moved).map(item => item.id), ['tab:pin', 'tab:normal'])
 })
 
+Deno.test('fixed sidebar pins have their own order and stay out of scrolling sections', () => {
+    const items = [tab('normal', 0), tab('scrolling', 1, { sidebarPinned: true }),
+        grouped('fixed-two', 2, { sidebarPinned: 'fixed', sidebarPinOrder: 2 }),
+        grouped('fixed-one', 3, { sidebarPinned: 'fixed', sidebarPinOrder: 1 })]
+    assert.deepEqual(getSidebarPinnedTabs(items).map(tab => tab.id), ['scrolling'])
+    assert.deepEqual(getSidebarPinnedTabs(items, true).map(tab => tab.id), ['fixed-one', 'fixed-two'])
+    assert.deepEqual(getSidebarItems(items).flatMap(item => item.tabs.map(tab => tab.id)), ['normal'])
+    assert.deepEqual(getTabGroup(items, 'fixed-one').tabs.map(tab => tab.id), ['fixed-two', 'fixed-one'])
+    const moved = apply(items, move(items, 'fixed-one', { afterTabId: 'normal', targetGroupTabId: null }))
+    assert.equal(moved.find(tab => tab.id === 'fixed-one').sidebarPinned, null)
+})
+
 Deno.test('standalone tabs each derive their own group and non-browsing entries never become members', () => {
     const items = [tab('one', 1), tab('two', 2), tab('pin', 3, { pinned: 'left' }), tab('preview', 4, { preview: true }),
         tab('closed', 5, { archive: 'closed' }), tab('lightbox', 6, { lightbox: true }), { id: 'divider', type: 'divider', order: 0 }]

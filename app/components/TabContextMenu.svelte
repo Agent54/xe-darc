@@ -7,6 +7,7 @@
         menu = { visible: false, x: 0, y: 0, tab: null, index: null },
         onHide = () => {},
         onReload = null,
+        defaultPinScope = 'group',
         partitions = ['persist:1', 'persist:2', 'persist:3', 'ephemeral:1', 'ephemeral:2', 'ephemeral:3'],
         contextMenuOpenTime = 0,
         onToggleCertificateMonitor = null
@@ -17,14 +18,21 @@
     let adjustedX = $state(0)
     let groupMenuView = $state('menu')
     let groupNameInput = $state(null)
+    let moveSpaceOpen = $state(false)
+    let moveSpaceTrigger = $state(null)
+    let moveSpaceSubmenu = $state(null)
     const isGroup = $derived(menu.tab?.type === 'tabgroup')
+    const sourceSpaceId = $derived(menu.tab?.spaceId || data.docs[menu.tab?.id]?.spaceId)
     const customName = $derived(isGroup ? menu.tab?.name : (data.docs[menu.tab?.id] || menu.tab)?.titleOverride)
     const customEmoji = $derived(isGroup ? menu.tab?.metadata?.emoji : (data.docs[menu.tab?.id] || menu.tab)?.emojiOverride)
     const customFavicon = $derived(isGroup ? menu.tab?.metadata?.favicon : (data.docs[menu.tab?.id] || menu.tab)?.faviconOverride)
     const editorTitle = $derived(groupMenuView === 'rename' ? (isGroup ? 'Rename group' : 'Rename tab') : (isGroup ? 'Group icon' : 'Tab icon'))
 
     $effect(() => {
-        if (menu.visible && menu.tab) groupMenuView = 'menu'
+        if (menu.visible && menu.tab) {
+            groupMenuView = 'menu'
+            moveSpaceOpen = false
+        }
     })
     
     $effect(() => {
@@ -71,12 +79,12 @@
     
     function pinTabLeft(tab) {
         if (!data.spaceMeta.activeSpace || !tab) return
-        data.pin({ tabId: tab.id, pinned: 'left' })
+        data.pin({ tabId: tab.id, pinned: 'left', scope: defaultPinScope })
         onHide()
     }
     
     function pinTabRight(tab) {
-        data.pin({ tabId: tab.id, pinned: 'right' })
+        data.pin({ tabId: tab.id, pinned: 'right', scope: defaultPinScope })
         onHide()
     }
     
@@ -220,6 +228,54 @@
         onHide()
         return data.closeTabGroup(group.tabs[0].id, group.spaceId)
     }
+
+    function moveToSpace(targetSpaceId) {
+        const tabId = isGroup ? menu.tab.tabs[0]?.id : menu.tab.id
+        if (!tabId || targetSpaceId === sourceSpaceId) {
+            return
+        }
+        const moving = data.moveTab(tabId, { targetSpaceId, scope: isGroup ? 'group' : 'tab' })
+        onHide()
+        return moving
+    }
+
+    function positionMoveSubmenu(node) {
+        const anchor = moveSpaceTrigger.getBoundingClientRect()
+        const parent = node.parentElement.getBoundingClientRect()
+        const rect = node.getBoundingClientRect()
+        const left = anchor.right + rect.width + 8 > window.innerWidth ? anchor.left - rect.width : anchor.right
+        node.style.left = `${Math.max(8, Math.min(left, window.innerWidth - rect.width - 8)) - parent.left}px`
+        node.style.top = `${Math.max(8, Math.min(anchor.top, window.innerHeight - rect.height - 8)) - parent.top}px`
+    }
+
+    async function openMoveSubmenu(focus = false) {
+        moveSpaceOpen = true
+        if (focus) {
+            await tick()
+            moveSpaceSubmenu?.querySelector('button:not(:disabled)')?.focus()
+        }
+    }
+
+    function handleMoveKey(event) {
+        if (event.key === 'ArrowRight' && event.target === moveSpaceTrigger) {
+            event.preventDefault()
+            event.stopPropagation()
+            openMoveSubmenu(true)
+        } else if (moveSpaceOpen && (event.key === 'ArrowLeft' || event.key === 'Escape')) {
+            event.preventDefault()
+            event.stopPropagation()
+            moveSpaceOpen = false
+            moveSpaceTrigger?.focus()
+        } else if (moveSpaceOpen && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault()
+            event.stopPropagation()
+            const buttons = [...moveSpaceSubmenu.querySelectorAll('button:not(:disabled)')]
+            const index = buttons.indexOf(document.activeElement)
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 :
+                (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length
+            buttons[next]?.focus()
+        }
+    }
 </script>
 
 {#if menu.visible && menu.tab}
@@ -289,6 +345,37 @@
             <button class="context-menu-item" role="menuitem" type="button"
                         onmouseup={() => showGroupView('emoji')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>Change icon…</button>
+            <div class="context-menu-item has-submenu move-space-menu" role="presentation"
+                 onmouseenter={() => openMoveSubmenu()}
+                 onmouseleave={(event) => { if (!event.currentTarget.contains(document.activeElement)) { moveSpaceOpen = false } }}
+                 onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { moveSpaceOpen = false } }}
+                 onkeydown={handleMoveKey}>
+                <button class="context-menu-item" role="menuitem" type="button"
+                        bind:this={moveSpaceTrigger}
+                        aria-haspopup="menu" aria-expanded={moveSpaceOpen}
+                        onmouseup={(event) => { if (event.button === 0) { openMoveSubmenu() } }}
+                        onclick={(event) => { if (event.detail === 0) { openMoveSubmenu(true) } }}>
+                    <span>Move to Space</span>
+                    <span class="submenu-arrow" aria-hidden="true">›</span>
+                </button>
+                {#if moveSpaceOpen}
+                    <div class="context-submenu move-space-submenu" role="menu" aria-label="Move to Space"
+                         bind:this={moveSpaceSubmenu} use:positionMoveSubmenu>
+                        {#each data.spaceMeta.spaceOrder as spaceId (spaceId)}
+                            {#if data.spaces[spaceId]}
+                                <button class="context-submenu-item" type="button" role="menuitem"
+                                        disabled={spaceId === sourceSpaceId}
+                                        onmouseup={(event) => { if (event.button === 0) { moveToSpace(spaceId) } }}
+                                        onclick={(event) => { if (event.detail === 0) { moveToSpace(spaceId) } }}>
+                                    <span class="space-color" style:background-color={data.spaces[spaceId].color || '#888'} aria-hidden="true"></span>
+                                    <span class="space-name">{data.spaces[spaceId].name || 'Untitled Space'}</span>
+                                    {#if spaceId === sourceSpaceId}<span class="current-space" aria-label="Current space">✓</span>{/if}
+                                </button>
+                            {/if}
+                        {/each}
+                    </div>
+                {/if}
+            </div>
             {#if menu.tab.type === 'tabgroup'}
                 <button class="context-menu-item" role="menuitem" type="button"
                         onmouseup={ungroup}
@@ -560,6 +647,54 @@
 {/if}
 
 <style>
+    .context-menu-item.move-space-menu {
+        padding: 0;
+    }
+
+    .context-submenu.move-space-submenu {
+        min-width: min(200px, calc(100vw - 16px));
+        max-width: min(300px, calc(100vw - 16px));
+        max-height: calc(100vh - 16px);
+        overflow-y: auto;
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+    }
+
+    .move-space-submenu button {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        font-family: inherit;
+        text-align: left;
+    }
+
+    .move-space-submenu button:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+
+    .move-space-submenu button:focus-visible {
+        outline: 1px solid #a3a3a3;
+        outline-offset: -2px;
+    }
+
+    .space-color {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .space-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .current-space {
+        margin-left: auto;
+    }
+
     .pin-scope-label {
         padding: 10px 14px 6px;
         border-top: 1px solid #ffffff14;

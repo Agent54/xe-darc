@@ -123,6 +123,31 @@ Deno.test('lightbox uses the shared security indicator', () => {
     }
 })
 
+Deno.test('shared favicons show current audio and mute state in both display modes', () => {
+    const tab = { id: 'audio-tab', url: 'https://example.com', audioPlaying: false }
+    try {
+        for (const showButton of [true, false]) {
+            for (const size of ['normal', 'small']) {
+                const markup = () => render(Favicon, { props: { tab, showButton, size } }).body
+                data.docs[tab.id] = { ...tab, audioPlaying: true }
+                assert.match(markup(), /aria-label="Playing audio"/)
+                assert.match(markup(), /fallback-favicon/)
+                data.docs[tab.id] = { ...tab, audioPlaying: true, muted: true }
+                assert.match(markup(), /aria-label="Tab muted"/)
+                assert.doesNotMatch(markup(), /aria-label="Playing audio"/)
+                data.docs[tab.id].audioPlaying = false
+                assert.match(markup(), /aria-label="Tab muted"/)
+                data.docs[tab.id].muted = false
+                assert.doesNotMatch(markup(), /favicon-audio-indicator/)
+            }
+        }
+        delete data.docs[tab.id]
+        assert.match(lightboxFavicon({ ...tab, audioPlaying: true }), /aria-label="Playing audio"/)
+    } finally {
+        delete data.docs[tab.id]
+    }
+})
+
 Deno.test('link previews request only the encoded web origin and use shared favicon handling', () => {
     const html = render(LinkPreviewFavicon, { props: { url: 'https://example.com/path?q=one&size=999#section' } }).body
     const src = html.match(/<img src="([^"]+)"/)[1].replaceAll('&amp;', '&')

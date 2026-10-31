@@ -2,7 +2,7 @@
 // Used by both App.svelte (top bar) and TabSidebar.svelte (sidebar)
 
 const DRAG_THRESHOLD = 5
-const GROUP_JOIN_DELAY = 700
+const GROUP_JOIN_DELAY = 600
 const GROUP_EXPAND_DELAY = 1000
 const AUTO_SCROLL_EDGE = 60 // px from edge to start scrolling
 const AUTO_SCROLL_SPEED = 12 // px per frame
@@ -56,6 +56,9 @@ function startAutoScroll() {
         // Scroll the group before its containing sidebar, then continue outward at its edges.
         const sidebarLists = [...document.querySelectorAll('.tab-group-content'), ...document.querySelectorAll('[data-pin-scope]'), ...document.querySelectorAll('.space-content'), ...document.querySelectorAll('.tabs-list')]
         for (const list of sidebarLists) {
+            if (!isVisibleSidebarTarget(list, mx, my)) continue
+            const sticky = list.querySelector('.space-sticky-tabs')
+            if (sticky && my <= sticky.getBoundingClientRect().bottom) continue
             if (list.scrollHeight <= list.clientHeight) continue
             const r = list.getBoundingClientRect()
             if (mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom) {
@@ -89,6 +92,7 @@ const state = $state({
     sourceZone: null, // 'topbar' or 'sidebar'
     sourceSpaceId: null,
     dragType: 'tab',
+    creating: false,
     deleteZone: false,
     wasAlreadyActive: false,
     startX: 0,
@@ -166,6 +170,14 @@ function startPending(tabId, tabEl, sourceZone, sourceSpaceId, e, wasAlreadyActi
     window.addEventListener('keydown', handleKeyDown, true)
 }
 
+function startCreationDrag(type, element, spaceId, event) {
+    if (event.button !== 0) {
+        return
+    }
+    startPending(null, element, 'sidebar', spaceId, event, false, null, type)
+    pending.creating = true
+}
+
 function setActivateRafId(id) {
     if (activateRafId !== null) clearTimeout(activateRafId)
     activateRafId = id
@@ -190,6 +202,7 @@ function handleMouseMove(e) {
             state.sourceZone = pending.sourceZone
             state.sourceSpaceId = pending.sourceSpaceId
             state.dragType = pending.dragType
+            state.creating = !!pending.creating
             state.startX = pending.startX
             state.startY = pending.startY
             state.grabOffsetX = pending.startX - tabRect.left
@@ -240,7 +253,7 @@ function handleMouseMove(e) {
     if (state.dragType !== 'divider') {
         const target = findGroupDropTarget(mx, my)
         updateJoinHover(target?.join)
-        updateGroupHover(state.dragType === 'tab' ? target?.hoverGroup : null)
+        updateGroupHover(state.dragType === 'tab' && joinReady ? target?.hoverGroup : null)
         if (target) {
             state.sidepinZone = null
             state.dropTarget = target.join && joinReady ? target.joinDrop : target.drop
@@ -312,6 +325,7 @@ function handleMouseMove(e) {
     // Try sidebar tabs (vertical)
     const sidebarLists = document.querySelectorAll('.tabs-list')
     for (const list of sidebarLists) {
+        if (!isVisibleSidebarTarget(list, mx, my)) continue
         const listRect = list.getBoundingClientRect()
         // Skip lists clipped by a scroll container (e.g. off-screen spaces)
         const scrollParent = list.closest('.tab-content-container')
@@ -339,12 +353,12 @@ function handleMouseMove(e) {
         state.sidepinZone = null
         const sidebar = document.querySelector('.sidebar-box')
         const bounds = sidebar?.getBoundingClientRect()
-        state.deleteZone = !bounds || mx < bounds.left || mx > bounds.right || my < bounds.top || my > bounds.bottom
+        state.deleteZone = !state.creating && (!bounds || mx < bounds.left || mx > bounds.right || my < bounds.top || my > bounds.bottom)
         hideIndicator()
         return
     }
 
-    if (state.dragType === 'group') {
+    if (state.dragType === 'group' || state.creating) {
         state.sidepinZone = null
         hideIndicator()
         return
@@ -391,8 +405,18 @@ function isNoopDrop(tabs, hit) {
     return false
 }
 
+function isVisibleSidebarTarget(list, mx, my) {
+    const space = list.closest('.space-content')
+    if (!space) return true
+    const bounds = space.getBoundingClientRect()
+    if (mx < bounds.left || mx > bounds.right || my < bounds.top || my > bounds.bottom) return false
+    const sticky = space.querySelector('.space-sticky-tabs')
+    return !sticky || !!list.closest('.space-sticky-tabs') || my >= sticky.getBoundingClientRect().bottom
+}
+
 function findPinDropTarget(mx, my) {
     for (const list of document.querySelectorAll('[data-pin-scope]')) {
+        if (!isVisibleSidebarTarget(list, mx, my)) continue
         const rect = list.getBoundingClientRect()
         if (mx < rect.left || mx > rect.right || my < rect.top || my > rect.bottom) {
             continue
@@ -465,7 +489,7 @@ function findGroupDropTarget(mx, my) {
     }
     for (const list of document.querySelectorAll('.tabs-list')) {
         const scrollParent = list.closest('.tab-content-container')
-        if (!contains(list) || (scrollParent && !contains(scrollParent))) continue
+        if (!isVisibleSidebarTarget(list, mx, my) || !contains(list) || (scrollParent && !contains(scrollParent))) continue
         const targetSpaceId = list.closest('.space-content')?.dataset.spaceId
         for (const content of list.querySelectorAll('.tab-group-content')) {
             if (!contains(content)) continue
@@ -608,7 +632,12 @@ function handleMouseUp(event, cancelled = false) {
     document.body.classList.remove('tab-dragging-active')
     
     if (state.active && dropCallback && !cancelled) {
-        if (state.dropTarget) {
+        if (state.creating) {
+            const drop = state.dropTarget || (state.indicator.visible ? resolveDropTarget(state.mouseX, state.mouseY, null) : null)
+            if (drop) {
+                dropCallback({ ...drop, type: 'create', itemType: state.dragType, dropType: drop.type || 'reorder', sourceSpaceId: state.sourceSpaceId })
+            }
+        } else if (state.dropTarget) {
             dropCallback({ type: 'reorder', tabId: state.tabId, sourceSpaceId: state.sourceSpaceId, ...state.dropTarget })
         } else if (state.deleteZone) {
             dropCallback({ type: 'remove-divider', dividerId: state.tabId, sourceSpaceId: state.sourceSpaceId })
@@ -634,6 +663,7 @@ function handleMouseUp(event, cancelled = false) {
     state.sourceZone = null
     state.sourceSpaceId = null
     state.dragType = 'tab'
+    state.creating = false
     state.deleteZone = false
     state.indicator.visible = false
     state.sidepinZone = null
@@ -660,6 +690,7 @@ function resolveDropTarget(mx, my, dragTabId) {
     // Check sidebar lists
     const sidebarLists = document.querySelectorAll('.tabs-list')
     for (const list of sidebarLists) {
+        if (!isVisibleSidebarTarget(list, mx, my)) continue
         const listRect = list.getBoundingClientRect()
         const scrollParent = list.closest('.tab-content-container')
         if (scrollParent) {
@@ -757,4 +788,4 @@ function onGroupExpand(cb) {
     }
 }
 
-export { state as tabDrag, startPending as startTabDrag, cancelDrag, setActivateRafId, didDragOccurred, onDrop, onGroupExpand }
+export { state as tabDrag, startPending as startTabDrag, startCreationDrag, cancelDrag, setActivateRafId, didDragOccurred, onDrop, onGroupExpand }

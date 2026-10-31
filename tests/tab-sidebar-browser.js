@@ -1,0 +1,192 @@
+import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
+import { readFile, rm } from 'node:fs/promises'
+import { createRequire } from 'node:module'
+import { dirname, resolve } from 'node:path'
+import { rollup } from 'rollup'
+import { compile, compileModule } from 'svelte/compiler'
+import puppeteer from 'puppeteer'
+
+const root = new URL('../', import.meta.url).pathname
+const require = createRequire(import.meta.url)
+const modules = {
+    entry: `
+        import { mount, flushSync } from 'svelte'
+        import TabSidebar from './app/components/TabSidebar.svelte'
+        import data from 'fixture-data'
+        import { onDrop, tabDrag } from './app/lib/tab-drag.svelte.js'
+        window.data = data
+        window.tabDrag = tabDrag
+        window.activate = id => flushSync(() => data.activate(id))
+        window.pin = (id, fixed) => flushSync(() => data.pinSidebarTab({ tabId: id, fixed }))
+        onDrop(event => {
+            if (event.type === 'pin' && event.pinScope.startsWith('sidebar')) {
+                data.pinSidebarTab({ ...event, fixed: event.pinScope === 'sidebar-fixed' })
+            } else if (event.type === 'reorder') {
+                data.docs[event.tabId].sidebarPinned = null
+            }
+        })
+        mount(TabSidebar, { target: document.body, props: {
+            tabSidebarVisible: true, customTabSidebarWidth: 280, showUrl: false
+        } })
+    `,
+    'fixture-data': compileModule(`
+        import { getSidebarItems, getTabGroup, getSidebarPinnedTabs, orderBetween } from './app/lib/tab-groups.js'
+        const tab = (id, order, extra = {}) => ({ id, order, type: 'tab', title: id,
+            spaceId: 'work', url: 'about:blank', ...extra })
+        const tabs = [tab('saved', -1, { sidebarPinned: true }),
+            ...Array.from({ length: 35 }, (_, i) => tab('tab-' + i, i))]
+        const data = $state({
+            docs: {}, frames: {}, origins: {}, ui: { tabActivityMode: false },
+            spaceMeta: { spaceOrder: ['work', 'personal'], activeSpace: 'work', activeTabId: 'tab-0', globalPins: [], closedTabs: [] },
+            spaces: {
+                work: { name: 'Work', tabs, activeTabsOrder: ['tab-0'] },
+                personal: { name: 'Personal', tabs: [tab('personal', 0, { spaceId: 'personal' })], activeTabsOrder: [] }
+            }
+        })
+        for (const space of Object.values(data.spaces)) for (const tab of space.tabs) data.docs[tab.id] = tab
+        data.getSpacePins = () => []
+        data.isTabHibernated = () => false
+        data.getSidebarItems = id => getSidebarItems(data.spaces[id].tabs)
+        data.getTabGroup = (id, space = 'work') => getTabGroup(data.spaces[space].tabs, id)
+        data.getGroupActiveTab = group => group.tabs.find(tab => tab.id === data.spaceMeta.activeTabId) || group.tabs[0]
+        data.activateSpace = id => { data.spaceMeta.activeSpace = id }
+        data.activate = id => { data.spaceMeta.activeTabId = id }
+        data.previous = () => {}
+        data.pinSidebarTab = ({ tabId, fixed, beforeTabId, afterTabId }) => {
+            const tab = data.docs[tabId]
+            const pins = getSidebarPinnedTabs(data.spaces[tab.spaceId].tabs, fixed)
+            tab.sidebarPinOrder = beforeTabId || afterTabId
+                ? orderBetween(data.docs[beforeTabId], data.docs[afterTabId], 'sidebarPinOrder')
+                : Math.max(0, ...pins.map(tab => tab.sidebarPinOrder || 0)) + 1
+            tab.sidebarPinned = fixed ? 'fixed' : true
+        }
+        export default data
+    `, { generate: 'client' }).js.code,
+    'fixture-env': 'export const BROWSER = true, DEV = false, BUILD = false'
+}
+
+const bundle = await rollup({
+    input: 'entry',
+    onwarn(warning) {
+        if (warning.code !== 'CIRCULAR_DEPENDENCY') throw new Error(warning.message)
+    },
+    plugins: [{
+        name: 'tab-sidebar-fixture',
+        resolveId(source, importer) {
+            if (source in modules) return source
+            if (source === 'esm-env') return 'fixture-env'
+            if (source.endsWith('/data.svelte.js')) return 'fixture-data'
+            if (source === 'svelte') return require.resolve('svelte').replace('index-server.js', 'index-client.js')
+            if (source.startsWith('.')) return resolve(importer?.startsWith('/') ? dirname(importer) : root, source)
+            if (source === 'clsx') return createRequire(importer).resolve(source).replace(/\.js$/, '.mjs')
+            return createRequire(importer?.startsWith('/') ? importer : import.meta.url).resolve(source)
+        },
+        async load(id) {
+            if (id in modules) return modules[id]
+            const source = await readFile(id, 'utf8')
+            if (id.endsWith('.svelte')) return compile(source, { filename: id, generate: 'client', css: 'injected' }).js.code
+            if (id.endsWith('.svelte.js')) return compileModule(source, { filename: id, generate: 'client' }).js.code
+            return source
+        }
+    }]
+})
+const { output } = await bundle.generate({ format: 'es' })
+await bundle.close()
+const server = createServer((request, response) => {
+    response.setHeader('Content-Type', request.url === '/fixture.js' ? 'text/javascript' : 'text/html')
+    response.end(request.url === '/fixture.js' ? output[0].code : `<!doctype html><style>
+        *,::before,::after{box-sizing:border-box}body{margin:0;background:#111;color:#eee;font-family:system-ui}
+        button{font:inherit;color:inherit}svg{width:20px;height:20px}.flex-1{flex:1;min-height:0}
+    </style><body><script type="module" src="/fixture.js"></script>`)
+})
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+
+const profile = `${root}.cache/tab-sidebar-browser-${crypto.randomUUID()}`
+let browser
+const errors = []
+try {
+    browser = await puppeteer.launch({ headless: true, userDataDir: profile })
+    const page = await browser.newPage()
+    page.setDefaultTimeout(5000)
+    page.on('pageerror', error => errors.push(error.message))
+    await page.setViewport({ width: 1100, height: 800 })
+    await page.goto(`http://127.0.0.1:${server.address().port}`)
+    await page.waitForSelector('.tabs-list [data-tab-id="tab-0"]')
+    const space = '.space-content[data-space-id="work"]'
+    const fixed = `${space} [data-pin-scope="sidebar-fixed"]`
+    const scrolling = `${space} [data-pin-scope="sidebar"]`
+    const row = id => `${space} [data-tab-id="${id}"] .tab-item-main`
+    const drag = async (id, target) => {
+        const source = await page.$eval(row(id), el => {
+            const r = el.getBoundingClientRect()
+            return { x: r.left + 30, y: r.top + r.height / 2 }
+        })
+        await page.mouse.move(source.x, source.y)
+        await page.mouse.down()
+        await page.mouse.move(source.x + 8, source.y, { steps: 2 })
+        await page.waitForSelector(fixed)
+        const destination = await page.$eval(target, el => {
+            const r = el.getBoundingClientRect()
+            return { x: r.left + 80, y: r.top + 6 }
+        })
+        await page.mouse.move(destination.x, destination.y, { steps: 4 })
+        await page.mouse.up()
+    }
+    await drag('tab-0', fixed)
+    await page.waitForSelector(`${fixed} [data-tab-id="tab-0"]`)
+    assert.equal(await page.$$eval(`${scrolling} [data-tab-id]`, tabs => tabs.length), 1)
+    assert.equal(await page.$eval(`${space} .tabs-list`, el => !!el.querySelector('[data-tab-id="tab-0"]')), false)
+
+    await page.$eval(space, el => { el.scrollTop = 700 })
+    await page.waitForFunction(selector => document.querySelector(selector).scrollTop >= 700, {}, space)
+    const layout = await page.$eval(space, el => {
+        const bounds = el.getBoundingClientRect()
+        const pin = el.querySelector('.fixed-sidebar-pins').getBoundingClientRect()
+        const newTab = el.querySelector('.new-tab-row').getBoundingClientRect()
+        const saved = el.querySelector('[data-pin-scope="sidebar"]').getBoundingClientRect()
+        return { visible: pin.top >= bounds.top - 1 && pin.bottom <= newTab.top,
+            newTabVisible: newTab.bottom <= bounds.bottom, savedScrolled: saved.bottom < bounds.top }
+    })
+    assert.deepEqual(layout, { visible: true, newTabVisible: true, savedScrolled: true })
+    const before = await page.$eval(space, el => el.scrollTop)
+    await page.evaluate(() => window.activate('tab-0'))
+    await page.waitForFunction(() => document.querySelector('.fixed-sidebar-pins .active'))
+    // Let the sidebar's delayed active-tab reveal run.
+    await new Promise(resolve => setTimeout(resolve, 100))
+    assert.equal(await page.$eval(space, el => el.scrollTop), before, 'activating a fixed pin preserves normal-list scroll')
+
+    await page.evaluate(() => window.activate('tab-14'))
+    await new Promise(resolve => setTimeout(resolve, 100))
+    assert.equal(await page.$eval(`${space} [data-tab-id="tab-14"]`, el => {
+        const header = el.closest('.space-content').querySelector('.space-sticky-tabs').getBoundingClientRect()
+        return el.getBoundingClientRect().top >= header.bottom - 1
+    }), true, 'activating an ordinary tab reveals it below the entire sticky header')
+
+    await page.$eval(space, el => { el.scrollTop = 0 })
+    await drag('tab-0', scrolling)
+    await page.waitForSelector(`${scrolling} [data-tab-id="tab-0"]`)
+    assert.equal(await page.$(fixed), null, 'empty fixed section disappears after a drop')
+    await drag('saved', fixed)
+    await page.waitForSelector(`${fixed} [data-tab-id="saved"]`)
+    for (let i = 1; i < 12; i++) await page.evaluate(id => window.pin(id, true), `tab-${i}`)
+    assert.equal(await page.$eval(fixed, el => el.scrollHeight > el.clientHeight), true, 'many fixed pins scroll independently')
+    await page.$eval(fixed, el => { el.scrollTop = el.scrollHeight })
+    assert.equal(await page.$eval(space, el => el.scrollTop), 0)
+    await page.screenshot({ path: `${root}.cache/tab-sidebar-fixed-pins.png` })
+    for (const height of [800, 450]) {
+        await page.setViewport({ width: 1100, height })
+        await page.$eval(space, el => { el.scrollTop = el.scrollHeight })
+        assert.equal(await page.$eval(space, el => {
+            const bounds = el.getBoundingClientRect()
+            const header = el.querySelector('.space-sticky-tabs').getBoundingClientRect()
+            return header.top >= bounds.top - 1 && header.bottom <= bounds.bottom
+        }), true, 'fixed pins and New Tab remain visible at the bottom, including in short windows')
+    }
+    assert.deepEqual(errors, [])
+    console.log('Tab sidebar: empty fixed drops, both sections, sticky scrolling, activation, transfers and pin overflow pass')
+} finally {
+    await browser?.close()
+    await new Promise(resolve => server.close(resolve))
+    await rm(profile, { recursive: true, force: true })
+}

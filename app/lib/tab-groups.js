@@ -26,8 +26,9 @@ export function getGlobalPins (items = []) {
         .sort((a, b) => (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
 }
 
-export function getSidebarPinnedTabs (items = []) {
-    return items.filter(tab => isOpenTab(tab) && !tab.pinned && tab.sidebarPinned && !tab._deleted)
+export function getSidebarPinnedTabs (items = [], fixed = false) {
+    // Existing boolean pins scroll above the divider; 'fixed' pins stay above New Tab.
+    return items.filter(tab => isOpenTab(tab) && !tab.pinned && tab.sidebarPinned && !tab._deleted && (tab.sidebarPinned === 'fixed') === fixed)
         .sort((a, b) => (a.sidebarPinOrder ?? a.order ?? 0) - (b.sidebarPinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
 }
 
