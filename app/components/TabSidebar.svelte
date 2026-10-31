@@ -74,6 +74,22 @@
     let renameInputRef = $state(null)
     let colorPickerSpaceId = $state(null)
     let colorPickerFromMenu = $state(false)
+    let spaceTitlesVisible = $state(true)
+    let spaceTitlesHideTimeout = null
+
+    function revealSpaceTitles() {
+        spaceTitlesVisible = true
+        clearTimeout(spaceTitlesHideTimeout)
+        spaceTitlesHideTimeout = setTimeout(() => {
+            spaceTitlesVisible = false
+            spaceTitlesHideTimeout = null
+        }, 1000)
+    }
+
+    $effect(() => {
+        const activeSpace = data.spaceMeta.activeSpace
+        if (activeSpace) untrack(revealSpaceTitles)
+    })
     
     // Multi-space expansion state
     let multiSpaceMode = $state(false)
@@ -369,6 +385,7 @@
     }
     
     function handleTabContentWheel(event) {
+        revealSpaceTitles()
         if (!tabListRef || tabSearchQuery) return
         
         const scrollLeft = tabListRef.scrollLeft
@@ -1226,6 +1243,7 @@
             }
             clearTimeout(horizontalScrollTimeout)
             clearTimeout(scrollHoverTimeout)
+            clearTimeout(spaceTitlesHideTimeout)
             stopHovercardPositionCheck()
         }
     })
@@ -1850,6 +1868,7 @@
                      class:horizontal-scrolling={isHorizontalScrolling}
                      class:searching={tabSearchQuery.length > 0}
                      bind:this={tabListRef}
+                     onscrollcapture={revealSpaceTitles}
                      onscroll={handleTabScroll}
                      onwheel={handleTabContentWheel}
                      onscrollend={handleTabContentScrollEnd}
@@ -1897,7 +1916,8 @@
                                      onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
                                      role="group"
                                      aria-label="Space tabs">
-                                <div class="space-title-container">
+                                <div class="space-title-container"
+                                     class:titles-visible={spaceTitlesVisible || multiSpaceMode || tabSearchQuery.length > 0 || renamingSpaceId === spaceId || colorPickerSpaceId === spaceId || openMenuId === spaceId || spaceContextMenuId === spaceId}>
                                     {#if renamingSpaceId === spaceId}
                                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                                         <input class="space-title-rename"
@@ -2153,7 +2173,7 @@
                                                             onmousedown={(e) => { if (e.button === 0) { startTabDrag(item.tabs[0].id, e.currentTarget.closest('.tab-group-wrapper'), 'sidebar', spaceId, e, false, null, 'group') } }}
                                                             onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred())) { activateTab(activationTab.id, spaceId) } }}
                                                             ondblclick={(e) => { if (e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(activationTab.id); handleTabGroupToggle(expansionId, expanded) } }}>
-                                                            <TabGroupPreview group={{ ...item, tabs: sidebarGroupTabs }} groupId={expansionId} preview={groupPreview} active={active || spaceActive} disabled={tabDrag.active || tabDrag.pending} />
+                                                            <TabGroupPreview group={{ ...item, tabs: sidebarGroupTabs }} groupId={expansionId} activeTabId={activationTab.id} preview={groupPreview} active={active || spaceActive} disabled={tabDrag.active || tabDrag.pending} />
                                                         </button>
                                                         <span class="tab-group-count">{item.tabs.length}</span>
                                                         <button class="tab-group-toggle" aria-label="{expanded ? 'Collapse' : 'Expand'} {item.title}" aria-expanded={expanded}
@@ -2993,6 +3013,21 @@
         margin-bottom: -4px;
         flex-shrink: 0;
         position: relative;
+        opacity: 0;
+        transition: opacity 250ms ease;
+    }
+
+    .space-title-container.titles-visible,
+    .space-title-container:hover,
+    .space-title-container:focus-within {
+        opacity: 1;
+        transition-duration: 100ms;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .space-title-container {
+            transition: none;
+        }
     }
     
     .space-title {

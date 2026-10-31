@@ -1,10 +1,11 @@
 <script>
     import Favicon from './Favicon.svelte'
-    import { getFaviconWindow } from '../lib/tab-group-preview.svelte.js'
+    import { getFaviconWindow, getDefaultGroupTabIndex } from '../lib/tab-group-preview.svelte.js'
 
-    let { group, groupId, preview = null, active = false, disabled = false } = $props()
+    let { group, groupId, activeTabId = null, preview = null, active = false, disabled = false } = $props()
     const scrubbing = $derived(preview != null && preview.state.groupId === groupId)
-    const progress = $derived(scrubbing ? preview.state.progress : 0)
+    const defaultIndex = $derived(getDefaultGroupTabIndex(group.tabs, [activeTabId]))
+    const progress = $derived(scrubbing ? preview.state.progress : defaultIndex / Math.max(1, group.tabs.length - 1))
     const selectedTab = $derived(scrubbing ? group.tabs[Math.min(preview.state.tabIndex, group.tabs.length - 1)] : null)
     const faviconSlots = $derived(group.metadata?.emoji || group.metadata?.favicon ? 2 : 3)
     const window = $derived(getFaviconWindow(group.tabs.length, progress, faviconSlots))

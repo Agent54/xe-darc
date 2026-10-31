@@ -14,6 +14,7 @@ const destroySource = source.slice(destroyCallback.start, destroyCallback.end)
 
 function harness() {
     const events = []
+    const screenshotCancels = []
     const tab = { id: 'page', _id: 'page', url: 'https://example.com/', title: 'Example', favicon: 'icon' }
     const data = { docs: { page: tab }, frames: { page: {} } }
     const wrapper = {
@@ -42,7 +43,7 @@ function harness() {
         },
         getElementById(id) { return id === 'backgroundFrames' ? background : {} }
     }
-    const api = new Function('data', 'tab', 'document', 'console', 'getFrameShortcutScript', `
+    const api = new Function('data', 'tab', 'document', 'console', 'getFrameShortcutScript', 'frameScreenshots', `
         const tabId = tab.id
         let detached = false, oauthPopup = null
         let frameRegistration
@@ -60,11 +61,11 @@ function harness() {
             getPopup: () => oauthPopup,
             isDetached: () => detached
         }
-    `)(data, tab, document, { log() {} }, getFrameShortcutScript)
+    `)(data, tab, document, { log() {} }, getFrameShortcutScript, { cancel(frame) { screenshotCancels.push(frame) } })
     const frame = api.createControlledFrame()
     data.frames.page.frame = frame
     api.setRegistration(registerFrameWrapper(data, tab.id, wrapper, { parentNode: wrapper }, () => {}))
-    return { ...api, tab, data, frame, events, wrapper, background }
+    return { ...api, tab, data, frame, events, wrapper, background, screenshotCancels }
 }
 
 Deno.test('closing a tab blanks its DOM instance even after the shared frame reference is cleared', () => {
@@ -84,6 +85,7 @@ Deno.test('closing a tab blanks its DOM instance even after the shared frame ref
     assert.deepEqual(h.tab, originalTab)
     assert.equal(h.frame.onloadabort, null)
     assert.equal(h.data.frames.page.frame, null)
+    assert.ok(h.screenshotCancels.includes(h.frame))
 })
 
 Deno.test('audio events update the current document after metadata replaces the captured tab', () => {
@@ -119,6 +121,7 @@ Deno.test('parking a live frame preserves its page and handlers', () => {
     assert.equal(h.frame.parentNode, h.background)
     assert.equal(h.isDetached(), true)
     assert.equal(h.data.frames.page.wrapper, undefined)
+    assert.ok(h.screenshotCancels.includes(h.frame))
 })
 
 Deno.test('hibernating a parked frame blanks it before its native removal', () => {

@@ -13,6 +13,7 @@
     import { connectFrameIPC } from '../lib/frame-ipc.js'
     import { getFrameShortcutScript } from '../lib/shortcuts.js'
     import { registerFrameWrapper } from '../lib/frame-lifecycle.js'
+    import { frameScreenshots } from '../lib/frame-screenshot.js'
     import contextMenu from '../inject/context-menu.js?raw'
     import zoomControl from '../inject/zoom-control.js?raw'
 
@@ -495,72 +496,6 @@
         }
     }
 
-    async function captureTabScreenshot(tab) {
-        let frame = null
-        if (!frame) {
-            frame = data.frames[tab.id]?.frame
-        }
-        if (!frame) {
-            console.log('Frame not found for tab:', tab.id)
-            return
-        }
-
-        if (typeof frame.captureVisibleRegion !== 'function') {
-            return
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 1000))
-
-        try {
-            let screenshot = null
-            
-            // Check if frame is ready and loaded
-            // const isFrameReady = () => {
-            //     return frame.src && 
-            //            !frame.src.includes('about:blank') && 
-            //            frame.contentWindow !== null
-            // }
-            
-            // Wait for frame to be ready if needed
-            // if (!isFrameReady()) {
-            //     console.log('Frame not ready for screenshot, waiting...')
-            //     await new Promise(resolve => setTimeout(resolve, 1000))
-            //     if (!isFrameReady()) {
-            //         console.log('Frame still not ready, skipping screenshot')
-            //         return null
-            //     }
-            // }
-            
-            // Retry mechanism for flaky captures
-            // for (let attempt = 1; attempt <= 3; attempt++) {
-                try {
-                    // console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
-                    screenshot = await frame.captureVisibleRegion({
-                        format: 'png',
-                        quality: 80
-                    })
-                    // if (screenshot) {
-                    //     console.log(`Screenshot successful on attempt ${attempt}`)
-                    //     // break
-                    // }
-                } catch (captureError) {
-                    console.log(`Capture failed:`, captureError)
-                    // if (attempt < 3) {
-                    //     // Wait before retry, increasing delay each time
-                    //     await new Promise(resolve => setTimeout(resolve, attempt * 500))
-                    // }
-                }
-            // }
-            
-            if (screenshot) {
-                // tab.screenshot = screenshot
-                await data.updateTab(tab.id, { screenshot })
-            }
-        } catch (err) {
-            console.log('Error capturing screenshot:', err)
-        }
-    }
-
     // function handleContentLoad(tab) {
     //     // setTimeout(() => updateTabMeta(tab), 100)
 
@@ -603,6 +538,7 @@
             return
         }
 
+        frameScreenshots.cancel(data.frames[tab.id]?.frame)
         hoveredLink = null
         instantlyCleanupGlobalPreview()
         data.frames[tab.id].loading = true
@@ -721,15 +657,7 @@
         // Update title and capture screenshot after page loads (only if successful)
         updateTabMeta(tab)
         
-        // Queue screenshot capture during idle time to avoid blocking UI
-        if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(() => {
-                captureTabScreenshot(tab)
-            }, { timeout: 5000 })
-        } else {
-            // Fallback for browsers without requestIdleCallback
-            setTimeout(() => captureTabScreenshot(tab), 1000)
-        }
+        frameScreenshots.schedule(data, tab.id)
     }
 
     function handleNewWindow(tab, e) {
@@ -1764,6 +1692,14 @@ document.addEventListener('input', function(event) {
                 if (tabIdIndex === 0) {
                     const tabId = mytab.id
                     const zoomDirection = remainingMessage.substring(tabIdPattern.length)
+
+                    const zoomTab = data.docs[tabId]
+                    if (zoomTab?.lightbox && !zoomTab.archive && (zoomDirection === 'in' || zoomDirection === 'out')) {
+                        data.promoteLightboxToTab(tabId, zoomTab.opener, zoomDirection === 'in'
+                            ? { closeParent: true }
+                            : { toPreview: true })
+                        return
+                    }
                     
                     const gridViewOpen = viewMode === 'tile'
                     
@@ -2092,26 +2028,32 @@ document.addEventListener('input', function(event) {
         let controlledFrame = data.frames[currentTabId]?.frame
 
         // If transitioning from newtab to real URL, create frame if needed
-        const framesObj = data.frames[tabId]
-        if (!framesObj) {
-            // console.log('resetting frame!!!!!')
-            data.frames[tabId] = {}
-        }
-        if (!frameRegistration?.owns() || frameRegistration.wrapper !== wrapper || frameRegistration.anchor !== frameAnchor) {
+        const framesObj = data.frames[currentTabId] ??= {}
+        if (!frameRegistration?.owns() || frameRegistration.frameData !== framesObj ||
+            frameRegistration.wrapper !== wrapper || frameRegistration.anchor !== frameAnchor) {
+            if (frameRegistration?.owns() && frameRegistration.frameData !== framesObj) {
+                const previousFrame = frameRegistration.frameData.frame
+                if (previousFrame?.parentNode === frameRegistration.wrapper) {
+                    frameScreenshots.cancel(previousFrame)
+                    document.getElementById('backgroundFrames').moveBefore(previousFrame, document.getElementById('anchorFrame'))
+                }
+            }
+            frameRegistration?.destroy()
             frameRegistration = registerFrameWrapper(data, currentTabId, wrapper, frameAnchor, setupMessageListener)
+            detached = false
         }
 
         if (!controlledFrame && currentTab && !isInternalPage) {
             controlledFrame = createControlledFrame()
-            const mytab = untrack(() => tab)
+            const mytab = currentTab
 
-            data.frames[tabId].frame = controlledFrame
-            data.frames[tabId].pendingLoad = false
-            data.frames[tabId].directNavigation = { urls: [mytab.url.split('#')[0]], requestId: null }
+            framesObj.frame = controlledFrame
+            framesObj.pendingLoad = false
+            framesObj.directNavigation = { urls: [mytab.url.split('#')[0]], requestId: null }
 
             controlledFrame.classList.add('frame-instance')
 
-            controlledFrame.partition = tab.partition || 'persist:myapp'
+            controlledFrame.partition = mytab.partition || 'persist:myapp'
 
             controlledFrame.onnewwindow = e => handleNewWindow(mytab, e)
             controlledFrame.onaudiostatechanged = throttle(e => handleAudioStateChanged(mytab, e), 500, {leading: false})
@@ -2148,7 +2090,7 @@ document.addEventListener('input', function(event) {
             //     //         // }
             //     //         return false
             // }
-            controlledFrame.onpermissionrequest = e => handlePermissionRequest(tabId, e)
+            controlledFrame.onpermissionrequest = e => handlePermissionRequest(currentTabId, e)
             controlledFrame.onresize = e => handleEvent('onresize',mytab, e)
             controlledFrame.onresponsive = e => handleEvent('onresponsive',mytab, e)  
             controlledFrame.onsizechanged = e => handleEvent('onsizechanged',mytab, e)
@@ -2175,6 +2117,7 @@ document.addEventListener('input', function(event) {
         // console.log('------------------', $state.snapshot(data.frames[tab.id].forceHibernated))
         if (frameRegistration?.owns()) {
             const frameData = frameRegistration.frameData
+            frameScreenshots.cancel(frameData.frame)
             if (!detached && !frameData.forceHibernated && !frameData.promoting) {
                 delete data.frames[tabId]
             } else {
@@ -2201,6 +2144,7 @@ document.addEventListener('input', function(event) {
     }
 
     function releaseControlledFrame(frame) {
+        frameScreenshots.cancel(frame)
         frame.ipcPort?.close()
         frame.ipcPort = null
         // Keep the final navigation out of tab metadata and cancel queued callbacks.
@@ -2239,6 +2183,7 @@ document.addEventListener('input', function(event) {
         let controlledFrame = data.frames[tab.id]?.frame
 
         if (controlledFrame) {
+            frameScreenshots.cancel(controlledFrame)
             const backgroundFrames = document.getElementById('backgroundFrames')
             const anchorFrame = document.getElementById('anchorFrame')
             if (controlledFrame.parentNode === node) {

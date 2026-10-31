@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict'
+import { parse } from 'svelte/compiler'
 import { getFrameMoveIds, registerFrameWrapper } from '../app/lib/frame-lifecycle.js'
+
+const frameSource = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
+const mountNode = parse(frameSource).instance.content.body
+    .find(node => node.type === 'FunctionDeclaration' && node.id.name === 'mountControlledFrame')
+const mountSource = frameSource.slice(mountNode.start, mountNode.end)
 
 const tab = (id, extra = {}) => ({ id, type: 'tab', spaceId: 'space', order: 1, ...extra })
 
@@ -69,6 +75,45 @@ Deno.test('ready wrapper attaches a parked frame and repeated attachment is a no
     assert.equal(h.registration.attach(), true)
     assert.equal(h.node.moves, 1)
     assert.equal(h.node.inserts, 0)
+})
+
+Deno.test('reusing a wrapper for another tab parks the old frame and attaches the new owner', () => {
+    const data = {
+        docs: { first: tab('first', { url: 'https://first.example/' }), next: tab('next', { url: 'https://next.example/' }) },
+        frames: { first: {}, next: {} }
+    }
+    const node = wrapper()
+    const anchor = { parentNode: node }
+    const background = wrapper()
+    const backgroundAnchor = { parentNode: background }
+    const cancelled = []
+    const mount = new Function('data', 'registerFrameWrapper', 'document', 'frameScreenshots', `
+        let frameRegistration = null, detached = false
+        const setupMessageListener = () => {}, setupRequestHandler = () => {}
+        const setupContentScripts = () => {}, setupContextMenu = () => {}
+        const throttle = fn => fn
+        const createControlledFrame = () => ({ isConnected: false, classList: { add() {} } })
+        ${mountSource}
+        return mountControlledFrame
+    `)(data, registerFrameWrapper, {
+        getElementById: id => id === 'backgroundFrames' ? background : backgroundAnchor
+    }, { cancel: frame => cancelled.push(frame) })
+
+    mount(data.docs.first, false, node, anchor)
+    const first = data.frames.first.frame
+    const oldAttach = data.frames.first.attach
+    mount(data.docs.next, false, node, anchor)
+    const next = data.frames.next.frame
+
+    assert.equal(first.parentNode, background)
+    assert.equal(next.parentNode, node)
+    assert.equal(data.frames.first.wrapper, undefined)
+    assert.equal(data.frames.next.wrapper, node)
+    assert.equal(oldAttach(), false)
+    assert.deepEqual(cancelled, [first])
+    mount(data.docs.next, false, node, anchor)
+    assert.equal(data.frames.next.frame, next)
+    assert.equal(node.inserts, 2)
 })
 
 Deno.test('a newly mounted destination claims a waiting frame without timers', () => {

@@ -47,7 +47,8 @@ function navigationHarness({ direct = true, legacy = false, command = false } = 
         let hoveredLink = null, isCommandKeyDown = ${command}
         const recentlyBlockedUrls = new Map(), BLOCK_DEDUP_TIMEOUT = 2000
         const instantlyCleanupGlobalPreview = () => {}, evaluateSecurityState = () => {}
-        const showNetworkAccess = () => {}, showBlockedRequest = () => {}, captureTabScreenshot = () => {}
+        const showNetworkAccess = () => {}, showBlockedRequest = () => {}
+        const frameScreenshots = { schedule() {}, cancel() {} }
         const isCertificateError = () => false, isNetworkError = () => false
         const isNewTabUrl = url => url?.startsWith('about:'), isTabHistoryUrl = () => false
         const handleOAuthPopup = () => { throw new Error('Unexpected OAuth popup') }

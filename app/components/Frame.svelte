@@ -27,6 +27,12 @@
 
     const tab = $derived(data.docs[tabId])
 
+    function lightboxTransition(node, options) {
+        return node.parentElement.classList.contains('lightbox-legacy-effects')
+            ? scale(node, options)
+            : fade(node, options)
+    }
+
     // Immediately unhibernate unhidden pinned frames on initial load
     // Also unhibernate the last active non-pinned tab when the active tab is pinned
     // This runs once on component mount - no effect needed
@@ -953,12 +959,21 @@
 
         {#if data.previews[tab._id] && data.docs[data.previews[tab._id]?.lightbox] && !closedLightboxes[data.previews[tab._id]?.lightbox]}
             {@const lightboxChild = data.docs[data.previews[tab._id].lightbox]}
+            <!-- Restore the old effects with class="lightbox-backdrop lightbox-legacy-effects" below. -->
             <div 
                 class="lightbox-backdrop"
                 role="dialog"
                 aria-modal="true"
                 tabindex="-1"
                 in:fade={{duration: 100}}
+                onwheel={(e) => {
+                    if ((!e.ctrlKey && !e.metaKey) || !e.deltaY || !lightboxChild.lightbox) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    data.promoteLightboxToTab(lightboxChild._id, tab._id, e.deltaY < 0
+                        ? { closeParent: true }
+                        : { toPreview: true })
+                }}
                 onmousedown={(e) => {
                     if (e.target === e.currentTarget) {
                         closeLightbox(tab.spaceId, lightboxChild?._id)
@@ -971,7 +986,7 @@
                 }}
             >
                 <div class="lightbox-container" 
-                    in:scale={{duration: 100}}>
+                    in:lightboxTransition={{duration: 100}}>
                     <LightboxHeader
                         tab={lightboxChild}
                         onMoveToTab={(e) => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { focus: !e.metaKey })}
@@ -981,22 +996,24 @@
                         onClose={() => closeLightbox(tab.spaceId, lightboxChild?._id)}
                     />
                     <div class="lightbox-frame">
-                        <ControlledFrame
-                            {style}
-                            {isScrolling}
-                            class="lightbox-controlledframe"
-                            tabId={lightboxChild?.id}
-                            {headerPartOfMain}
-                            {onFrameFocus}
-                            {onFrameBlur}
-                            {userMods}
-                            {statusLightsEnabled}
-                            bind:hoveredLink
-                            
-                            bind:inputDiffVisible
-                            bind:inputDiffTimeout
-                            bind:inputDiffData
-                        />
+                        {#key lightboxChild.id}
+                            <ControlledFrame
+                                {style}
+                                {isScrolling}
+                                class="lightbox-controlledframe"
+                                tabId={lightboxChild.id}
+                                {headerPartOfMain}
+                                {onFrameFocus}
+                                {onFrameBlur}
+                                {userMods}
+                                {statusLightsEnabled}
+                                bind:hoveredLink
+
+                                bind:inputDiffVisible
+                                bind:inputDiffTimeout
+                                bind:inputDiffData
+                            />
+                        {/key}
                         <!-- bind:linkPreviewTimeout bind:linkPreviewVisible -->
                     </div>
                 </div>
@@ -1626,22 +1643,19 @@
         width: 100%;
         height: 100%;
         background: rgb(0 0 0 / 58%);
-        backdrop-filter: blur(1px);
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 40px;
         z-index: 1;
-        /* CSS optimization tricks */
+    }
+
+    .lightbox-backdrop:global(.lightbox-legacy-effects) {
+        backdrop-filter: blur(1px);
         will-change: opacity, backdrop-filter;
         transform: translateZ(0);
         backface-visibility: hidden;
-        /* Disable expensive effects during animation */
         transition: backdrop-filter 0.2s ease;
-    }
-
-    .lightbox-backdrop.animating {
-        backdrop-filter: none;
     }
 
     /* @media (min-width: 1800px) {
@@ -1662,16 +1676,13 @@
         display: flex;
         flex-direction: column;
         overflow: visible;
-        /* CSS optimization tricks */
+    }
+
+    .lightbox-backdrop:global(.lightbox-legacy-effects) .lightbox-container {
         will-change: transform, opacity, box-shadow;
         transform: translateZ(0);
         backface-visibility: hidden;
-        /* Optimize rendering during transitions */
         transition: box-shadow 0.15s ease;
-    }
-
-    .lightbox-container.animating {
-        box-shadow: none;
     }
     .lightbox-container :global(.frame > *) {
         border-radius: 15px;

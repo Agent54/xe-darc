@@ -612,6 +612,7 @@
             <span>Copy URL</span>
         </div>
 
+        <!-- TODO: use fullscreen capture via CDP -->
         <div class="context-menu-item" 
              class:disabled={!data.frames[menu.tab.id]?.frame}
              role="menuitem"
