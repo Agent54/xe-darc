@@ -996,12 +996,12 @@
                         onClose={() => closeLightbox(tab.spaceId, lightboxChild?._id)}
                     />
                     <div class="lightbox-frame">
-                        {#key lightboxChild.id}
+                        {#key lightboxChild?.id}
                             <ControlledFrame
                                 {style}
                                 {isScrolling}
                                 class="lightbox-controlledframe"
-                                tabId={lightboxChild.id}
+                                tabId={lightboxChild?.id}
                                 {headerPartOfMain}
                                 {onFrameFocus}
                                 {onFrameBlur}

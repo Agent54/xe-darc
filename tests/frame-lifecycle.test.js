@@ -8,6 +8,32 @@ const mountNode = parse(frameSource).instance.content.body
     .find(node => node.type === 'FunctionDeclaration' && node.id.name === 'mountControlledFrame')
 const mountSource = frameSource.slice(mountNode.start, mountNode.end)
 
+Deno.test('outgoing lightbox frame props remain readable after its preview reference is cleared', () => {
+    const source = Deno.readTextFileSync(new URL('../app/components/Frame.svelte', import.meta.url))
+    let component
+    function visit(node) {
+        if (!node || typeof node !== 'object') return
+        if (node.type === 'InlineComponent' && node.name === 'ControlledFrame' &&
+            node.attributes.some(attr => attr.name === 'class' && attr.value?.[0]?.data === 'lightbox-controlledframe')) {
+            component = node
+        }
+        for (const value of Object.values(node)) {
+            if (Array.isArray(value)) value.forEach(visit)
+            else if (value && typeof value === 'object') visit(value)
+        }
+    }
+    visit(parse(source).html)
+    assert.ok(component)
+    const expression = component.attributes.find(attr => attr.name === 'tabId').value[0].expression
+    const readTabId = new Function('lightboxChild', `return (${source.slice(expression.start, expression.end)})`)
+    const data = { docs: { lightbox: { id: 'lightbox' } }, previews: { parent: { lightbox: 'lightbox' } } }
+    // Svelte props are getters; an outgoing component can read them during its global outro.
+    const props = { get tabId() { return readTabId(data.docs[data.previews.parent.lightbox]) } }
+    assert.equal(props.tabId, 'lightbox')
+    data.previews.parent.lightbox = null
+    assert.equal(props.tabId, undefined)
+})
+
 const tab = (id, extra = {}) => ({ id, type: 'tab', spaceId: 'space', order: 1, ...extra })
 
 function frameMoves(items, updates) {
