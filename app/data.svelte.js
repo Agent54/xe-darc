@@ -1877,10 +1877,16 @@ const data = {
         const group = isGroupMember ? getTabGroup(spaces[spaceId]?.tabs, groupTabId) : null
         const tabGroupId = group ? group.tabs[0].tabGroupId || crypto.randomUUID() : null
         const canvasPosition = group ? groupCanvasPosition(group.tabs, spaceId) : null
+        let tabGroupOrder = null
         if (group) {
             for (const [index, member] of group.tabs.entries()) {
                 queueDocumentUpdate(member.id, { tabGroupId, order: group.order, tabGroupOrder: member.tabGroupOrder ?? index })
             }
+            const currentTab = group.tabs.find(member => member.id === spaceMeta.activeTabId) || group.tabs.find(member => member.id === groupTabId)
+            const currentIndex = group.tabs.indexOf(currentTab)
+            tabGroupOrder = localStorage.getItem('newTabPosition') === 'next' && currentIndex !== -1
+                ? orderBetween(currentTab, group.tabs[currentIndex + 1], 'tabGroupOrder')
+                : Math.max(...group.tabs.map((member, index) => member.tabGroupOrder ?? index)) + 1
         }
 
         const tab = {
@@ -1894,7 +1900,7 @@ const data = {
             title: url ? title : 'New Tab',
             order: group ? group.order : isGroupMember && firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
             tabGroupId,
-            tabGroupOrder: group ? Math.max(...group.tabs.map((member, index) => member.tabGroupOrder ?? index)) + 1 : null,
+            tabGroupOrder,
             ...(canvasPosition ? { canvas: { [spaceId]: canvasPosition } } : {}),
             opener,
             preview: !!preview,

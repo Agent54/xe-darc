@@ -801,6 +801,56 @@ Deno.test('adding from a pinned pane retains the previously active group', async
     assert.equal(data.getTabGroup('anchor').tabs.some(tab => tab.id === added.id), true)
 })
 
+Deno.test('new tab position applies immediately and persists group order across refresh and restart', async () => {
+    for (const runtime of ['server', 'client']) {
+        const { data, refresh, storage, db } = session({
+            tabs: ['one', 'two', 'three'].map((id, index) => tab(id, defaultSpace, { tabGroupId: 'group', tabGroupOrder: index })),
+            history: ['two'], runtime
+        })
+        await refresh()
+        const appended = await data.newGroupTab(defaultSpace)
+        assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two', 'three', appended.id])
+
+        storage.set('newTabPosition', 'next')
+        const first = await data.newGroupTab(defaultSpace, { url: 'https://first.example/', opener: 'two' })
+        const second = await data.newTab(defaultSpace, { url: 'https://second.example/', opener: 'two', groupTabId: 'two' })
+        const expected = ['one', 'two', second.id, first.id, 'three', appended.id]
+        assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), expected)
+        assert.equal(data.spaceMeta.activeTabId, 'two')
+        await refresh()
+        assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), expected)
+
+        const records = (await db.allDocs()).rows.map(row => row.doc).filter(doc => doc.type === 'tab')
+        const restarted = session({ tabs: records, storage, runtime })
+        await restarted.refresh()
+        assert.deepEqual(Array.from(restarted.data.getTabGroup('one').tabs, tab => tab.id), expected)
+        const focused = await restarted.data.newGroupTab(defaultSpace, { shouldFocus: true })
+        assert.deepEqual(Array.from(restarted.data.getTabGroup('one').tabs, tab => tab.id), ['one', 'two', focused.id, second.id, first.id, 'three', appended.id])
+        assert.equal(restarted.data.spaceMeta.activeTabId, focused.id)
+
+        storage.set('newTabPosition', 'right')
+        const last = await restarted.data.newGroupTab(defaultSpace)
+        assert.equal(restarted.data.getTabGroup('one').tabs.at(-1).id, last.id)
+    }
+})
+
+Deno.test('next-to-current placement uses the remembered group from a space pin and keeps standalone tabs separate', async () => {
+    const { data, refresh } = session({
+        tabs: [
+            ...['one', 'two'].map((id, index) => tab(id, defaultSpace, { tabGroupId: 'group', tabGroupOrder: index })),
+            tab('pin', defaultSpace, { pinned: 'left', pinScope: 'space' })
+        ], history: ['one'], storage: new Map([['newTabPosition', 'next']])
+    })
+    await refresh()
+    data.activate('pin')
+    const added = await data.newGroupTab(defaultSpace)
+    assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', added.id, 'two'])
+    assert.equal(data.spaceMeta.activeTabId, 'pin')
+    const standalone = await data.newTab(defaultSpace)
+    assert.equal(standalone.tabGroupId, null)
+    assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one', added.id, 'two'])
+})
+
 Deno.test('top tabs react immediately to repeated group additions and saved revisions in the client runtime', async () => {
     const { data, refresh } = session({ tabs: [tab('anchor'), tab('outside')], history: ['anchor'], runtime: 'client' })
     await refresh()
