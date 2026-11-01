@@ -45,7 +45,7 @@
     aria-label="Appearance"
     tabindex="-1"
     onkeydown={handleKey}
-    oncontextmenu={(event) => event.preventDefault()}
+    oncontextmenu={(event) => { event.preventDefault(); event.stopPropagation() }}
 >
     {#each items as item (item.id)}
         <button

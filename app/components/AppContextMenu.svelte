@@ -83,7 +83,7 @@
     aria-label={`Actions for ${menu.container?.name || menu.app.name}`}
     tabindex="-1"
     onkeydown={handleKey}
-    oncontextmenu={(event) => event.preventDefault()}
+    oncontextmenu={(event) => { event.preventDefault(); event.stopPropagation() }}
 >
     <div class="menu-heading menu-caption">{menu.container?.name || menu.app.name}</div>
     <button

@@ -21,6 +21,8 @@ const modules = {
         window.data = data
         let menu = null
         window.menuHides = 0
+        window.contextMenuLeaks = 0
+        window.addEventListener('contextmenu', () => { if (document.querySelector('.context-menu')) window.contextMenuLeaks++ })
         window.showMenu = (showDevTools = true, type = 'tab') => {
             if (menu) unmount(menu)
             menu = mount(TabContextMenu, { target: document.body, props: {
@@ -240,6 +242,14 @@ try {
     assert.equal(await page.$('.context-menu .tab-actions'), null, 'spacers retain their dedicated menu')
     await page.click('.context-menu-scrim')
 
+    await page.evaluate(() => window.showMenu())
+    const rename = await page.waitForSelector('.context-menu button ::-p-text(Rename…)')
+    await rename.evaluate(element => element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2 })))
+    await page.waitForSelector('#tab-group-name')
+    await page.$eval('#tab-group-name', input => input.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })))
+    assert.equal(await page.evaluate(() => window.contextMenuLeaks), 0, 'right-button release must not leak a contextmenu event to the global dismiss handler')
+    await page.click('.context-menu-scrim')
+
     // Releasing the held context-menu button selects a space without pressing inside the submenu.
     await page.mouse.move(10, 10)
     await page.mouse.down({ button: 'right' })
@@ -293,6 +303,8 @@ try {
         await page.waitForFunction(selector => document.activeElement === document.querySelector(selector), {}, input)
         await page.keyboard.type('https://edited.example/path?q=hello')
         assert.equal(await page.$eval(input, element => element.value), 'https://edited.example/path?q=hello', 'mouse-initiated URL edits retain focus and typed text')
+        await page.click(`#${id} [aria-label="Copy URL"]`)
+        assert.equal(await page.$eval(input, element => document.activeElement === element && element.value === 'https://edited.example/path?q=hello'), true, 'using an action preserves the focused URL draft')
         await page.keyboard.press('Enter')
         assert.deepEqual(await page.evaluate(() => window.actions.at(-1)), ['navigate', id, 'https://edited.example/path?q=hello'])
         await page.waitForSelector(input, { hidden: true })

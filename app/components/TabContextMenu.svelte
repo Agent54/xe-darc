@@ -342,7 +342,7 @@
                  showGroupView('menu')
              }
          }}
-         oncontextmenu={(e) => e.preventDefault()}>
+         oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation() }}>
         {#if groupMenuView !== 'menu'}
             <button class="group-editor-back" type="button"
                     onmouseup={() => showGroupView('menu')}
