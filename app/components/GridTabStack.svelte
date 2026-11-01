@@ -22,7 +22,8 @@
   const selectedTab = $derived(group.tabs[selectedIndex])
   const stackTitle = $derived((!scrubbing && keyboardIndex === null ? group.name : null) || selectedTab.titleOverride || selectedTab.title || 'Untitled')
   const faviconSlots = $derived(group.metadata?.emoji || group.metadata?.favicon ? 2 : 3)
-  const faviconWindow = $derived(getFaviconWindow(group.tabs.length, scrubbing ? preview.state.progress : selectedIndex / Math.max(1, group.tabs.length - 1), faviconSlots))
+  const faviconProgress = $derived(scrubbing ? preview.state.progress : selectedIndex / Math.max(1, group.tabs.length - 1))
+  const faviconWindow = $derived(getFaviconWindow(group.tabs.length, faviconProgress, faviconSlots))
 
   onDestroy(() => {
     preview.destroy()
@@ -193,7 +194,7 @@
     <div class="stack-header">
       <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}. Use left and right arrows to browse tabs.">
         {@render groupIcon()}
-        <span class="group-favicons" aria-hidden="true" style:width="{faviconWindow.visible * 18}px">
+        <span class="group-favicons" class:scrolled={group.tabs.length > faviconWindow.visible && faviconProgress > 0} class:at-end={group.tabs.length <= faviconWindow.visible || faviconProgress === 1} aria-hidden="true" style:width="{faviconWindow.visible * 18}px">
           <span class="group-favicon-track" style:transform="translateX({-faviconWindow.offset * 18}px)">
             {#each group.tabs.slice(faviconWindow.start, faviconWindow.end) as tab (tab.id)}
               <span class="preview-favicon" class:selected={scrubbing && selectedTab.id === tab.id}><Favicon {tab} showButton={false} /></span>
@@ -272,7 +273,10 @@
   .tab-favicon { display: flex; width: 14px; height: 14px; flex-shrink: 0; opacity: .5; transition: opacity 200ms ease-out; }
   .custom-group-icon { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex-shrink: 0; font-size: 14px; line-height: 1; }
   .custom-group-icon :global(.favicon-wrapper) { width: 14px; height: 14px; }
-  .group-favicons { display: block; height: 16px; flex-shrink: 0; overflow: hidden; }
+  .group-favicons { display: block; height: 16px; flex-shrink: 0; overflow: hidden; mask: linear-gradient(to right, black 0%, black 70%, transparent 100%); }
+  .group-favicons.scrolled { mask: linear-gradient(to right, transparent, black 15%, black 85%, transparent); }
+  .group-favicons.at-end { mask: none; }
+  .group-favicons.scrolled.at-end { mask: linear-gradient(to right, transparent, black 15%); }
   .group-favicon-track { display: flex; width: max-content; height: 100%; }
   .preview-favicon { display: flex; align-items: center; justify-content: center; width: 18px; height: 16px; flex-shrink: 0; }
   .preview-favicon, .stack-header .custom-group-icon { opacity: .5; transition: opacity 200ms ease-out; }
