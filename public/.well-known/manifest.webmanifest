@@ -1,6 +1,6 @@
 {
   "name": "Xe Computer",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "update_manifest_url": "https://github.com/Agent54/xe-darc/releases/download/iwa-manifest/iwa-updates.json",
   "short_name": "Xe Computer",
   "description": "A xenon browser",
