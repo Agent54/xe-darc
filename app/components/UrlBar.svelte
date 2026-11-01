@@ -3,7 +3,7 @@
     import TabActionButtons from './TabActionButtons.svelte'
     import data from '../data.svelte.js'
     import { overflowPopover } from '../lib/overflow-popover.js'
-    import { tick } from 'svelte'
+    import { tick, untrack } from 'svelte'
     
     let { 
         url = '',
@@ -25,7 +25,7 @@
         escapeOverflow = false
     } = $props()
     
-    let urlBarExpanded = $state(expanded)
+    let urlBarExpanded = $state(false)
     let urlInput = $state(null)
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
@@ -75,13 +75,13 @@
     }
     
     $effect(() => {
+        if (expanded) urlInputValue = untrack(() => url || '')
         urlBarExpanded = expanded
     })
     
     $effect(() => {
         if (urlBarExpanded && urlInput) {
             const input = urlInput
-            urlInputValue = url || ''
             tick().then(() => {
                 if (urlInput !== input || !urlBarExpanded) return
                 input.focus()
@@ -92,6 +92,7 @@
     
     function setExpanded(value) {
         if (value) {
+            if (!urlBarExpanded) urlInputValue = url || ''
             calculateMaxWidth()
         } else {
             maxExpandedWidth = null
@@ -192,7 +193,7 @@
                        aria-label="Tab URL"
                        bind:value={urlInputValue} 
                        class="url-bar-input"
-                       onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUrlSubmit(); } else if (e.key === 'Escape') { e.preventDefault(); setExpanded(false); } }} 
+                       onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleUrlSubmit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setExpanded(false); } }} 
                        onblur={() => { setExpanded(false) }} />
             {:else}
                 <button class="url-bar-url" 
@@ -201,7 +202,8 @@
                         bind:this={urlButtonEl}
                         use:initUrlFade
                         onscroll={handleUrlScroll}
-                        onmousedown={() => { if (!urlBarExpanded) { setExpanded(true); } }}>
+                        onmousedown={(event) => { if (event.button === 0) { event.preventDefault(); event.stopPropagation(); setExpanded(true) } }}
+                        onclick={(event) => { if (event.detail === 0) setExpanded(true) }}>
                     <UrlRenderer url={url} variant="compact" />
                 </button>
             {/if}
@@ -353,10 +355,10 @@
     .hovercard .url-bar-controls {
         left: 0;
         margin-top: 4px;
-        padding: 6px;
-        border-radius: 9px;
-        background: #161616;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        padding: 4px;
+        border-radius: 8px;
+        background: var(--menu-background, rgb(0 0 0 / 95%));
+        box-shadow: var(--menu-shadow, 0 4px 12px rgb(0 0 0 / 40%));
     }
 
     .url-bar-wrapper:focus-within .url-bar-controls,

@@ -95,7 +95,7 @@
         aria-expanded={dockerOpen}
         aria-controls="app-docker-submenu"
         onmouseenter={() => openDocker()}
-        onmousedown={(event) => { if (event.button === 0) { openDocker() } }}
+        onmouseup={() => openDocker()}
         onclick={(event) => { if (event.detail === 0) { openDocker(true) } }}
     >
         <span>Docker</span>
@@ -104,7 +104,9 @@
     {#if dockerOpen}
         <div id="app-docker-submenu" class="app-docker-submenu menu-surface" bind:this={submenu} use:positionSubmenu role="menu" aria-label="Docker" tabindex="-1">
             {#each items as item (item.id)}
-                <button class="menu-action" type="button" role="menuitem" onclick={() => onAction(item.id, menu.app, menu.container)}>{item.label}</button>
+                <button class="menu-action" type="button" role="menuitem"
+                    onmouseup={() => onAction(item.id, menu.app, menu.container)}
+                    onclick={(event) => { if (event.detail === 0) onAction(item.id, menu.app, menu.container) }}>{item.label}</button>
             {/each}
         </div>
     {/if}

@@ -3539,7 +3539,7 @@
                  class:active={data.ui.viewMode === 'default'}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); selectViewMode('default'); closeMenuImmediately() }}
+                 onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); selectViewMode('default'); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('default') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('default')}
@@ -3565,7 +3565,7 @@
                  class:active={data.ui.viewMode === 'leaflet'}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); selectViewMode('leaflet'); closeMenuImmediately() }}
+                 onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); selectViewMode('leaflet'); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('leaflet') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('leaflet')}
@@ -3578,7 +3578,7 @@
                     class:active={data.ui.viewMode === 'tile'}
                     role="button"
                     tabindex="0"
-                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('tile'); closeMenuImmediately() }}
+                    onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); selectViewMode('tile'); closeMenuImmediately() }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('tile') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('tile')}
@@ -3591,7 +3591,7 @@
                     class:active={data.ui.viewMode === 'canvas'}
                     role="button"
                     tabindex="0"
-                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('canvas'); closeMenuImmediately() }}
+                    onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); selectViewMode('canvas'); closeMenuImmediately() }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('canvas') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('canvas')}
@@ -3604,7 +3604,7 @@
                     class:active={data.ui.viewMode === 'reading'}
                     role="button"
                     tabindex="0"
-                    onmousedown={(e) => { e.stopPropagation(); selectViewMode('reading'); closeMenuImmediately() }}
+                    onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); selectViewMode('reading'); closeMenuImmediately() }}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('reading') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('reading')}
@@ -3617,7 +3617,7 @@
                  class:active={data.ui.viewMode === 'squat'}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); selectViewMode('squat'); closeMenuImmediately() }}
+                 onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); selectViewMode('squat'); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectViewMode('squat') } }}>
                 <span class="view-mode-icon-item menu-icon-item">
                     {@html getViewModeIcon('squat')}
@@ -3784,7 +3784,7 @@
                  class:active={globalTabComplete}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleGlobalTabComplete(); closeMenuImmediately() }}
+                 onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleGlobalTabComplete(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleGlobalTabComplete() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -3846,7 +3846,7 @@
                 class:active={devModeEnabled}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => { e.stopPropagation(); toggleDevMode(); closeMenuImmediately() }}
+                onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleDevMode(); closeMenuImmediately() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDevMode() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -3876,7 +3876,7 @@
                  class:active={showNavigationToolbar}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleShowNavigationToolbar(); closeMenuImmediately() }}
+                 onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleShowNavigationToolbar(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleShowNavigationToolbar() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -3891,7 +3891,7 @@
                  class:active={showSidebarUrl}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => { e.stopPropagation(); toggleShowSidebarUrl(); closeMenuImmediately() }}
+                 onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleShowSidebarUrl(); closeMenuImmediately() }}
                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleShowSidebarUrl() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -3908,7 +3908,7 @@
                 class:active={secondScreenActive}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => { e.stopPropagation(); toggleSecondScreen(); closeMenuImmediately() }}
+                onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleSecondScreen(); closeMenuImmediately() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSecondScreen() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -3923,7 +3923,7 @@
                 class:active={isFullscreen}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => { e.stopPropagation(); toggleFullscreen(); closeMenuImmediately() }}
+                onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleFullscreen(); closeMenuImmediately() }}
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleFullscreen() } }}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -4018,7 +4018,7 @@
                 <div class="dev-menu-item menu-item menu-action"
                      role="button"
                      tabindex="0"
-                     onmousedown={(e) => { e.stopPropagation(); data.loadSampleData(); closeMenuImmediately() }}
+                     onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); data.loadSampleData(); closeMenuImmediately() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.loadSampleData() } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -4030,7 +4030,7 @@
                 <div class="dev-menu-item menu-item menu-action"
                      role="button"
                      tabindex="0"
-                     onmousedown={(e) => { e.stopPropagation(); openTestSuite(); closeMenuImmediately() }}
+                     onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); openTestSuite(); closeMenuImmediately() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openTestSuite() } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -4042,7 +4042,7 @@
                 <div class="dev-menu-item menu-item menu-action"
                         role="button"
                         tabindex="0"
-                        onmousedown={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }); closeMenuImmediately() }}
+                        onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }); closeMenuImmediately() }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -4054,7 +4054,7 @@
                 <div class="dev-menu-item menu-item menu-action"
                      role="button"
                      tabindex="0"
-                     onmousedown={(e) => { e.stopPropagation(); openComposeUI() }}
+                     onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); openComposeUI() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openComposeUI() } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -4066,7 +4066,7 @@
                 <div class="dev-menu-item menu-item menu-action"
                      role="button"
                      tabindex="0"
-                     onmousedown={(e) => { e.stopPropagation(); openVSCodeWorkspace(); closeMenuImmediately() }}
+                     onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); openVSCodeWorkspace(); closeMenuImmediately() }}
                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openVSCodeWorkspace() } }}>
                     <span class="dev-menu-icon-item menu-icon-item">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -4106,12 +4106,12 @@
                     </svg>
                 {/if}
                 <div class="window-positioning-menu" role="menu">
-                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeLeft() }}>← Left Half</div>
-                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeRight() }}>Right Half →</div>
-                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeTop() }}>↑ Top Half</div>
-                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeBottom() }}>Bottom Half ↓</div>
-                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); centerGoldenRatio() }}>◈ Golden Center</div>
-                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); bottomRightPane() }}>↘ Corner Pane</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); maximizeLeft() }}>← Left Half</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); maximizeRight() }}>Right Half →</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); maximizeTop() }}>↑ Top Half</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); maximizeBottom() }}>Bottom Half ↓</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); centerGoldenRatio() }}>◈ Golden Center</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); bottomRightPane() }}>↘ Corner Pane</div>
                 </div>
             </button>
         </div>

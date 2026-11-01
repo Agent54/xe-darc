@@ -49,7 +49,9 @@
     onkeydown={handleKeyDown}
 >
     <div class="menu-caption">Help</div>
-    <button type="button" class="shortcut-menu-item menu-action" role="menuitem" onclick={() => { dismiss(); onShowShortcuts() }}>
+    <button type="button" class="shortcut-menu-item menu-action" role="menuitem"
+        onmouseup={() => { dismiss(); onShowShortcuts() }}
+        onclick={(event) => { if (event.detail === 0) { dismiss(); onShowShortcuts() } }}>
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
             <rect x="3" y="5" width="18" height="14" rx="2" />
             <path stroke-linecap="round" d="M7 9h.01M12 9h.01M17 9h.01M7 12h.01M12 12h.01M17 12h.01M8 15h8" />

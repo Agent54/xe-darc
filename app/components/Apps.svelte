@@ -601,7 +601,7 @@
                                 role="menuitemradio"
                                 class="menu-action menu-action-between"
                                 aria-checked={selected === option.value}
-                                onmousedown={(event) => { if (event.button === 0) setViewOption(kind, option.value) }}
+                                onmouseup={() => setViewOption(kind, option.value)}
                                 onkeydown={(event) => {
                                     if (event.key === 'Enter' || event.key === ' ') {
                                         event.preventDefault()

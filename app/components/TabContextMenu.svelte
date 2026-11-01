@@ -28,6 +28,14 @@
     let moveSpaceSubmenu = $state(null)
     const isGroup = $derived(menu.tab?.type === 'tabgroup')
     const sourceSpaceId = $derived(menu.tab?.spaceId || data.docs[menu.tab?.id]?.spaceId)
+    const targetTabs = $derived((isGroup ? menu.tab.tabs : menu.tab ? [menu.tab] : []).map(tab => data.docs[tab.id] || tab))
+    const allMuted = $derived(targetTabs.length > 0 && targetTabs.every(tab => tab.muted))
+    const hasLoadedTabs = $derived(targetTabs.some(tab => data.frames[tab.id]?.frame))
+    const hasSleepingTabs = $derived(targetTabs.some(tab => !data.frames[tab.id]?.frame))
+    const container = $derived.by(() => {
+        const partition = targetTabs[0]?.partition || 'default'
+        return targetTabs.every(tab => (tab.partition || 'default') === partition) ? partition : 'Mixed'
+    })
     const customName = $derived(isGroup ? menu.tab?.name : (data.docs[menu.tab?.id] || menu.tab)?.titleOverride)
     const customEmoji = $derived(isGroup ? menu.tab?.metadata?.emoji : (data.docs[menu.tab?.id] || menu.tab)?.emojiOverride)
     const customFavicon = $derived(isGroup ? menu.tab?.metadata?.favicon : (data.docs[menu.tab?.id] || menu.tab)?.faviconOverride)
@@ -120,25 +128,41 @@
         onHide()
     }
     
-    function toggleMuteTab(tab) {
-        if (!data.spaceMeta.activeSpace || !tab) return
-        const space = data.spaces[data.spaceMeta.activeSpace]
-        if (space && space.tabs) {
-            const tabIndex = space.tabs.findIndex(t => t.id === tab.id)
-            if (tabIndex !== -1) {
-                space.tabs[tabIndex].muted = !space.tabs[tabIndex].muted
-                const frame = data.frames[tab.id]?.frame
-                if (frame && typeof frame.setAudioMuted === 'function') {
-                    frame.setAudioMuted(space.tabs[tabIndex].muted)
-                }
-            }
+    function toggleMuteTabs() {
+        const muted = !allMuted
+        for (const tab of targetTabs) {
+            tab.muted = muted
+            data.frames[tab.id]?.frame?.setAudioMuted?.(muted)
         }
         onHide()
     }
     
-    function selectPartition(partition, tab) {
-        console.log('Selected partition:', partition, 'for tab:', tab.id)
-        tab.partition = partition
+    function selectPartition(partition) {
+        for (const tab of targetTabs) tab.partition = partition
+        onHide()
+    }
+
+    function hibernateTabs() {
+        for (const tab of targetTabs) {
+            if (data.frames[tab.id]?.frame) data.hibernate(tab.id, data.spaceMeta.activeTabId === tab.id)
+        }
+        onHide()
+    }
+
+    function unhibernateTabs() {
+        for (const tab of targetTabs) {
+            if (!data.frames[tab.id]?.frame) data.unhibernate(tab.id)
+        }
+        onHide()
+    }
+
+    function hibernateOthers() {
+        const keep = new Set(targetTabs.map(tab => tab.id))
+        for (const [id, frame] of Object.entries(data.frames)) {
+            if (frame?.frame && !keep.has(id) && !data.docs[id]?.pinned) {
+                data.hibernate(id, data.spaceMeta.activeTabId === id)
+            }
+        }
         onHide()
     }
     
@@ -365,10 +389,20 @@
             {/if}
             <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={() => showGroupView('rename')}
-                        onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>Rename…</button>
+                        onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>
+                <span class="context-menu-icon" aria-hidden="true">
+                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 0 1 2.652 2.652L9.582 17.07a4.5 4.5 0 0 1-1.897 1.13L4.5 19.125l.925-3.185a4.5 4.5 0 0 1 1.13-1.897L16.862 4.487Zm0 0 2.651 2.651M4.5 21h15" /></svg>
+                </span>
+                <span>Rename…</span>
+            </button>
             <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={() => showGroupView('emoji')}
-                        onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>Change icon…</button>
+                        onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>
+                <span class="context-menu-icon" aria-hidden="true">
+                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m3 16.5 5.25-5.25a1.5 1.5 0 0 1 2.12 0L15 15.879m-1.5-1.5 1.63-1.63a1.5 1.5 0 0 1 2.12 0L21 16.5M5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V5.25A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25v13.5A2.25 2.25 0 0 0 5.25 21ZM15 8.25h.008v.008H15V8.25Z" /></svg>
+                </span>
+                <span>Change icon…</span>
+            </button>
             <div class="context-menu-item has-submenu move-space-menu menu-action" role="presentation"
                  onmouseenter={() => openMoveSubmenu()}
                  onmouseleave={(event) => { if (!event.currentTarget.contains(document.activeElement)) { moveSpaceOpen = false } }}
@@ -377,8 +411,11 @@
                 <button class="context-menu-item menu-action" role="menuitem" type="button"
                         bind:this={moveSpaceTrigger}
                         aria-haspopup="menu" aria-expanded={moveSpaceOpen}
-                        onmouseup={(event) => { if (event.button === 0) { openMoveSubmenu() } }}
+                        onmouseup={() => openMoveSubmenu()}
                         onclick={(event) => { if (event.detail === 0) { openMoveSubmenu(true) } }}>
+                    <span class="context-menu-icon" aria-hidden="true">
+                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5.25A2.25 2.25 0 0 0 3 5.25v13.5A2.25 2.25 0 0 0 5.25 21H9m6-16.5L22.5 12 15 19.5M22.5 12H9" /></svg>
+                    </span>
                     <span>Move to Space</span>
                     <span class="submenu-arrow" aria-hidden="true">›</span>
                 </button>
@@ -389,7 +426,7 @@
                             {#if data.spaces[spaceId]}
                                 <button class="context-submenu-item menu-action" type="button" role="menuitem"
                                         disabled={spaceId === sourceSpaceId}
-                                        onmouseup={(event) => { if (event.button === 0) { moveToSpace(spaceId) } }}
+                                        onmouseup={() => { if (spaceId !== sourceSpaceId) moveToSpace(spaceId) }}
                                         onclick={(event) => { if (event.detail === 0) { moveToSpace(spaceId) } }}>
                                     <span class="space-color" style:background-color={data.spaces[spaceId].color || '#888'} aria-hidden="true"></span>
                                     <span class="space-name">{data.spaces[spaceId].name || 'Untitled Space'}</span>
@@ -420,7 +457,8 @@
                 </span>
                 <span>Remove spacer</span>
             </div>
-        {:else if groupMenuView === 'menu' && menu.tab.type !== 'tabgroup'}
+        {:else if groupMenuView === 'menu'}
+        {#if !isGroup}
         <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
@@ -495,13 +533,15 @@
             </div>
         {/if}
         
+        {/if}
+
         <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
-             onmouseup={() => toggleMuteTab(menu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(menu.tab) } }}>
+             onmouseup={toggleMuteTabs}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTabs() } }}>
             <span class="context-menu-icon">
-                {#if menu.tab.muted}
+                {#if allMuted}
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.59-.79-1.59-1.76V9.51c0-.97.71-1.76 1.59-1.76h2.24Z" />
                     </svg>
@@ -511,14 +551,15 @@
                     </svg>
                 {/if}
             </span>
-            <span>{menu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
+            <span>{allMuted ? 'Unmute' : 'Mute'} {isGroup ? 'Group' : 'Tab'}</span>
         </div>
 
+        {#if !isGroup}
         <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
-             onmouseup={() => toggleMuteTab(menu.tab)}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTab(menu.tab) } }}>
+             onmouseup={toggleMuteTabs}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMuteTabs() } }}>
             <span class="context-menu-icon">
                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -526,13 +567,14 @@
             </span>
             <span>Load at startup</span>
         </div>
+        {/if}
 
-        {#if data.frames[menu.tab.id]?.frame}
+        {#if hasLoadedTabs}
             <div class="context-menu-item menu-action"
                  role="menuitem"
                  tabindex="0"
-                 onmouseup={() => { data.hibernate(menu.tab.id, data.spaceMeta.activeTabId === menu.tab.id); onHide(); }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.hibernate(menu.tab.id, data.spaceMeta.activeTabId === menu.tab.id); onHide(); } }}>
+                 onmouseup={hibernateTabs}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hibernateTabs() } }}>
                 <span class="context-menu-icon">
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
@@ -540,12 +582,13 @@
                 </span>
                 <span>Hibernate</span>
             </div>
-        {:else if data.spaceMeta.activeTabId !== menu.tab.id}
+        {/if}
+        {#if hasSleepingTabs && (isGroup || data.spaceMeta.activeTabId !== menu.tab.id)}
             <div class="context-menu-item menu-action"
                  role="menuitem"
                  tabindex="0"
-                 onmouseup={() => { data.unhibernate(menu.tab.id); onHide(); }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.unhibernate(menu.tab.id); onHide(); } }}>
+                 onmouseup={unhibernateTabs}
+                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); unhibernateTabs() } }}>
                 <span class="context-menu-icon">
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
@@ -558,8 +601,8 @@
         <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
-             onmouseup={() => { data.hibernateOthers(menu.tab.id); onHide(); }}
-             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.hibernateOthers(menu.tab.id); onHide(); } }}>
+             onmouseup={hibernateOthers}
+             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hibernateOthers() } }}>
             <span class="context-menu-icon">
                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
@@ -576,7 +619,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
                 </svg>
             </span>
-            <span>Container: {menu.tab?.partition || 'default'}</span>
+            <span>Container: {container}</span>
             <span class="submenu-arrow">
                 <svg class="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
@@ -585,11 +628,11 @@
             <div class="context-submenu menu-surface">
                 {#each partitions as partition}
                     <div class="context-submenu-item menu-action"
-                         class:active={menu.tab?.partition === partition}
+                         class:active={container === partition}
                          role="menuitem"
                          tabindex="0"
-                         onmouseup={() => selectPartition(partition, menu.tab)}
-                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPartition(partition, menu.tab) } }}>
+                         onmouseup={() => selectPartition(partition)}
+                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPartition(partition) } }}>
                         <span class="partition-icon">
                             {#if partition.startsWith('persist')}
                                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -602,7 +645,7 @@
                             {/if}
                         </span>
                         <span>{partition}</span>
-                        {#if menu.tab?.partition === partition}
+                        {#if container === partition}
                             <span class="checkmark">•</span>
                         {/if}
                     </div>
@@ -610,6 +653,7 @@
             </div>
         </div>
 
+        {#if !isGroup}
         <!-- TODO: use fullscreen capture via CDP -->
         <div class="context-menu-item menu-action"
              class:disabled={!data.frames[menu.tab.id]?.frame}
@@ -626,6 +670,7 @@
             </span>
             <span>Take Screenshot</span>
         </div>
+        {/if}
         {/if}
     </div>
 {/if}
@@ -819,18 +864,17 @@
         overflow: hidden;
         opacity: 0;
         visibility: hidden;
-        transform: translateX(-4px);
-        transition: all 0.12s ease-out;
+        transition: opacity 70ms ease-out;
         z-index: 10003;
         pointer-events: auto;
         white-space: nowrap;
     }
 
     .context-menu-item.has-submenu:hover .context-submenu,
+    .context-menu-item.has-submenu:focus-within .context-submenu,
     .context-submenu:hover {
         opacity: 1;
         visibility: visible;
-        transform: translateX(0);
         pointer-events: auto;
     }
 

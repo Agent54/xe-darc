@@ -24,7 +24,9 @@ const modules = {
         window.showMenu = (showDevTools = true, type = 'tab') => {
             if (menu) unmount(menu)
             menu = mount(TabContextMenu, { target: document.body, props: {
-                menu: { visible: true, x: innerWidth - 270, y: 40, tab: { ...data.docs.single, type } },
+                menu: { visible: true, x: innerWidth - 270, y: 40, tab: type === 'tabgroup'
+                    ? { type, spaceId: 'space', tabGroupId: 'group', tabs: [data.docs.single, data.docs.grouped] }
+                    : { ...data.docs.single, type } },
                 showDevTools,
                 onHide: () => { window.menuHides++; unmount(menu); menu = null },
                 onNavigateHistory: (id, direction) => window.actions.push([direction, id]),
@@ -63,15 +65,21 @@ const modules = {
     `,
     'fixture-data': `
         const tab = id => ({ id, title: id, url: 'https://' + id + '.example/path', spaceId: 'space' })
-        export default {
-            docs: { single: tab('single'), grouped: tab('grouped') },
-            frames: { single: { frame: {} } }, spaces: { space: { name: 'Space' } }, ui: {},
-            spaceMeta: { activeTabId: 'unrelated', activeSpace: 'other-space', spaceOrder: ['space'] },
+        const frame = id => ({ setAudioMuted: muted => window.actions.push(['muted', id, muted]) })
+        const data = {
+            docs: { single: tab('single'), grouped: tab('grouped'), outside: tab('outside'), pinned: { ...tab('pinned'), pinned: 'left' } },
+            frames: Object.fromEntries(['single', 'grouped', 'outside', 'pinned'].map(id => [id, { frame: frame(id) }])),
+            spaces: { space: { name: 'Space' }, destination: { name: 'Destination' } }, ui: {},
+            spaceMeta: { activeTabId: 'unrelated', activeSpace: 'other-space', spaceOrder: ['space', 'destination'] },
             isTabHibernated: () => false,
             closeTab: (space, id) => window.actions.push(['close', id]),
-            unhibernate: id => window.actions.push(['wake', id]),
+            navigate: (id, url) => window.actions.push(['navigate', id, url]),
+            moveTab: (id, options) => window.actions.push(['move', id, options]),
+            hibernate: (id, force) => { window.actions.push(['hibernate', id, force]); data.frames[id].frame = null },
+            unhibernate: id => { window.actions.push(['wake', id]); data.frames[id].frame = frame(id) },
             newTab: async (space, tab) => window.actions.push(['devtools', space, tab])
         }
+        export default data
     `,
     'fixture-cdp': `export async function cdpFetch () {
         return Response.json(['single', 'grouped'].map(id => ({
@@ -160,7 +168,11 @@ try {
         await page.waitForFunction(prefix => document.querySelector(`${prefix} .url-bar-wrapper`).matches(':hover'), {}, prefix)
         assert.equal(await page.$eval(`${prefix} .url-bar-controls`, controls => getComputedStyle(controls).visibility), 'visible', 'crossing the gap retains the controls')
         const sizes = await page.$$eval(`${prefix} .url-bar-button`, buttons => buttons.map(button => ({ width: button.offsetWidth, height: button.offsetHeight })))
-        assert.ok(sizes.every(size => size.width === 36 && size.height === 36), 'hovercard actions have larger hit targets')
+        assert.ok(sizes.every(size => size.width === 28 && size.height === 28), 'hovercard actions use compact menu-sized targets')
+        assert.equal(await page.$eval(`${prefix} [aria-label="Close Tab"]`, button => {
+            const style = getComputedStyle(button)
+            return style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.borderWidth === '0px'
+        }), true, 'idle hovercard icons are borderless and have no individual boxes')
 
         for (const label of ['Back', 'Forward', 'Reload', 'Settings', 'Copy URL', 'Open Developer Tools', 'Close Tab']) {
             await reveal()
@@ -174,18 +186,23 @@ try {
         ])
     }
 
-    for (const keyboard of [false, true]) {
+    for (const mode of ['left', 'right', 'keyboard']) {
         for (const [label, action] of [['Back', 'back'], ['Forward', 'forward'], ['Reload', 'reload'], ['Settings', 'settings'], ['Copy URL', 'copy'], ['Open Developer Tools', 'devtools'], ['Close Tab', 'close']]) {
+            if (mode === 'right') {
+                await page.mouse.move(10, 10)
+                await page.mouse.down({ button: 'right' })
+            }
             await page.evaluate(() => window.showMenu())
             const selector = `.context-menu .tab-actions [aria-label="${label}"]`
             await page.waitForSelector(selector)
             const before = await page.evaluate(() => ({ count: window.actions.length, hides: window.menuHides }))
-            if (keyboard) {
+            if (mode === 'keyboard') {
                 await page.focus(selector)
                 await page.keyboard.press(label === 'Close Tab' ? 'Space' : 'Enter')
+            } else if (mode === 'right') {
+                await page.hover(selector)
+                await page.mouse.up({ button: 'right' })
             } else {
-                await page.click(selector, { button: 'right' })
-                assert.equal(await page.evaluate(() => window.actions.length), before.count, 'right clicks must not activate actions')
                 await page.click(selector)
             }
             await page.waitForFunction(count => window.actions.length === count, {}, before.count + 1)
@@ -197,6 +214,18 @@ try {
         }
     }
     await page.evaluate(() => window.showMenu())
+    const hoverStyle = async label => {
+        const selector = `.context-menu [aria-label="${label}"]`
+        await page.hover(selector)
+        await page.$eval(selector, button => Promise.all(button.getAnimations().map(animation => animation.finished)))
+        return page.$eval(selector, button => {
+            const style = getComputedStyle(button)
+            return [style.color, style.backgroundColor, style.backgroundImage]
+        })
+    }
+    assert.deepEqual(await hoverStyle('Close Tab'), await hoverStyle('Reload'), 'Close has the same neutral hover as other menu actions')
+    assert.equal(await page.$$eval('.context-menu > button', buttons => buttons.filter(button => ['Rename…', 'Change icon…'].includes(button.textContent.trim())).every(button => button.querySelector('.context-menu-icon svg'))), true)
+    assert.ok(await page.$('.move-space-menu > button .context-menu-icon svg'), 'Move to Space has an icon')
     assert.equal(await page.$$eval('.context-menu [aria-label="Reload"]', buttons => buttons.length), 1)
     assert.equal(await page.$$eval('.context-menu [aria-label="Close Tab"]', buttons => buttons.length), 1)
     const menuSizes = await page.$$eval('.context-menu .url-bar-button', buttons => buttons.map(button => ({ width: button.offsetWidth, height: button.offsetHeight })))
@@ -210,6 +239,70 @@ try {
     await page.evaluate(() => window.showMenu(false, 'divider'))
     assert.equal(await page.$('.context-menu .tab-actions'), null, 'spacers retain their dedicated menu')
     await page.click('.context-menu-scrim')
+
+    // Releasing the held context-menu button selects a space without pressing inside the submenu.
+    await page.mouse.move(10, 10)
+    await page.mouse.down({ button: 'right' })
+    await page.evaluate(() => window.showMenu())
+    await page.hover('.move-space-menu > button')
+    await page.waitForSelector('.move-space-submenu')
+    assert.equal(await page.$eval('.move-space-submenu', menu => getComputedStyle(menu).transitionProperty), 'opacity', 'submenu positioning is never animated')
+    await page.hover('.move-space-submenu button:not(:disabled)')
+    await page.mouse.up({ button: 'right' })
+    assert.deepEqual(await page.evaluate(() => window.actions.at(-1)), ['move', 'single', { targetSpaceId: 'destination', scope: 'tab', placement: 'start', preservePins: true }])
+
+    const selectGroupItem = async label => {
+        await page.evaluate(() => window.showMenu(true, 'tabgroup'))
+        const item = await page.waitForSelector(`.context-menu [role="menuitem"] ::-p-text(${label})`)
+        await item.evaluate(element => element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2 })))
+        await page.waitForSelector('.context-menu', { hidden: true })
+    }
+    await page.evaluate(() => { window.data.docs.grouped.muted = true })
+    await selectGroupItem('Mute Group')
+    assert.deepEqual(await page.evaluate(() => window.actions.slice(-2)), [['muted', 'single', true], ['muted', 'grouped', true]])
+    await selectGroupItem('Unmute Group')
+    assert.deepEqual(await page.evaluate(() => window.actions.slice(-2)), [['muted', 'single', false], ['muted', 'grouped', false]])
+    assert.equal(await page.evaluate(() => window.data.docs.outside.muted), undefined, 'group actions leave outside tabs unchanged')
+
+    await page.evaluate(() => { window.data.docs.single.partition = 'persist:1'; window.data.docs.grouped.partition = 'persist:2'; window.showMenu(true, 'tabgroup') })
+    const containerItem = await page.waitForSelector('.context-menu [role="menuitem"] ::-p-text(Container: Mixed)')
+    await containerItem.hover()
+    const partitionItem = await page.waitForSelector('.context-submenu-item ::-p-text(ephemeral:2)')
+    await partitionItem.evaluate(element => element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2 })))
+    assert.deepEqual(await page.evaluate(() => ['single', 'grouped', 'outside'].map(id => window.data.docs[id].partition || 'default')), ['ephemeral:2', 'ephemeral:2', 'default'])
+
+    await page.evaluate(() => { window.data.frames.grouped.frame = null; window.data.spaceMeta.activeTabId = 'single'; window.showMenu(true, 'tabgroup') })
+    assert.ok(await page.waitForSelector('.context-menu [role="menuitem"] ::-p-text(Hibernate)'))
+    const wake = await page.waitForSelector('.context-menu [role="menuitem"] ::-p-text(Unhibernate)')
+    await wake.evaluate(element => element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2 })))
+    assert.deepEqual(await page.evaluate(() => window.actions.at(-1)), ['wake', 'grouped'], 'mixed groups can wake only their sleeping members')
+    await selectGroupItem('Hibernate others')
+    assert.deepEqual(await page.evaluate(() => window.actions.at(-1)), ['hibernate', 'outside', false])
+    assert.equal(await page.evaluate(() => !!window.data.frames.single.frame && !!window.data.frames.grouped.frame && !!window.data.frames.pinned.frame), true, 'hibernate others preserves every group member and pinned tab')
+    await selectGroupItem('Hibernate')
+    assert.deepEqual(await page.evaluate(() => window.actions.slice(-2)), [['hibernate', 'single', true], ['hibernate', 'grouped', false]])
+    await selectGroupItem('Unhibernate')
+    assert.deepEqual(await page.evaluate(() => window.actions.slice(-2)), [['wake', 'single'], ['wake', 'grouped']])
+    await page.evaluate(() => { window.data.spaceMeta.activeTabId = 'unrelated' })
+
+    for (const id of ['single', 'grouped']) {
+        await page.hover(`#${id} .hovercard-title`)
+        await page.waitForSelector(`#${id} .hover-expand-enabled`)
+        await page.click(`#${id} .url-bar-url`)
+        const input = `#${id} [aria-label="Tab URL"]`
+        await page.waitForFunction(selector => document.activeElement === document.querySelector(selector), {}, input)
+        await page.keyboard.type('https://edited.example/path?q=hello')
+        assert.equal(await page.$eval(input, element => element.value), 'https://edited.example/path?q=hello', 'mouse-initiated URL edits retain focus and typed text')
+        await page.keyboard.press('Enter')
+        assert.deepEqual(await page.evaluate(() => window.actions.at(-1)), ['navigate', id, 'https://edited.example/path?q=hello'])
+        await page.waitForSelector(input, { hidden: true })
+        await page.click(`#${id} .url-bar-url`)
+        await page.waitForSelector(input)
+        await page.keyboard.type('discard this edit')
+        await page.keyboard.press('Escape')
+        await page.waitForSelector(input, { hidden: true })
+        assert.equal(await page.$eval(`#${id} .url-bar-url`, element => element.textContent.includes(`${id}.example`)), true, 'Escape cancels editing')
+    }
 
     await page.setViewport({ width: 320, height: 700 })
     await page.evaluate(() => { document.body.style.margin = '0'; document.querySelector('#grouped').style.display = 'none' })
@@ -292,7 +385,7 @@ try {
     await page.keyboard.up('Control')
     assert.equal(await page.evaluate(() => document.activeElement.id), 'focus-reference')
     assert.deepEqual(errors, [])
-    console.log('Tab menu mouse/keyboard actions, hovercard target sizes, narrow action rows, Cmd+L focus, held Cmd+T groups and shortcut help pass')
+    console.log('Held-button menu selection, neutral borderless actions, group mute/hibernate/container actions, mouse URL editing, narrow rows and keyboard shortcuts pass')
 } finally {
     await browser?.close()
     await server.shutdown()

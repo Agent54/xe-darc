@@ -53,7 +53,8 @@
             type="button"
             role="menuitemcheckbox"
             aria-checked={item.checked}
-            onclick={() => { item.toggle(); onHide() }}
+            onmouseup={() => { item.toggle(); onHide() }}
+            onclick={(event) => { if (event.detail === 0) { item.toggle(); onHide() } }}
         >
             <span>{item.checked ? 'Hide' : 'Show'} {item.label}</span>
             <span class="checkmark" aria-hidden="true">{item.checked ? '✓' : ''}</span>
