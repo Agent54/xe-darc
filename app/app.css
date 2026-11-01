@@ -671,6 +671,10 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     right: 133px;
 }
 
+.help-menu-icon {
+    right: 90px;
+}
+
 .focus-mode-icon {
     right: 4px;
 }
@@ -875,6 +879,7 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 .new-tab-button.hidden,
 .trash-icon.hidden,
 .tab-wrapper.hidden,
+.help-menu-icon.hidden,
 .settings-menu-icon.hidden {
     opacity: 0;
     visibility: hidden;

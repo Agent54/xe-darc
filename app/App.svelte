@@ -21,7 +21,6 @@
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import ShortcutOverlay from './components/ShortcutOverlay.svelte'
-    import HelpMenu from './components/HelpMenu.svelte'
     import Favicon from './components/Favicon.svelte'
     import UrlRenderer from './components/UrlRenderer.svelte'
     // import AttachmentImage from './components/AttachmentImage.svelte'
@@ -929,7 +928,10 @@
             shortcutOverviewVisible = false
             return true
         }
-        if (helpMenu?.dismiss()) return true
+        if (helpMenu && !menuForceClose && (helpMenu.matches(':hover') || helpMenu.contains(document.activeElement))) {
+            closeMenuImmediately()
+            return true
+        }
         if (tabDrag.active) {
             cancelDrag()
             return true
@@ -3743,11 +3745,37 @@
         {/if}
     </div>
 
-    <HelpMenu bind:this={helpMenu} hidden={focusModeEnabled && !focusModeHovered} onShowShortcuts={() => {
-        dismissHovercards()
-        closeMenuImmediately()
-        shortcutOverviewVisible = true
-    }} />
+    <div class="header-icon-button help-menu-icon hover-menu-button"
+        bind:this={helpMenu}
+        role="button"
+        tabindex="0"
+        title="Help"
+        aria-label="Help"
+        class:hidden={focusModeEnabled && !focusModeHovered}
+        onmouseenter={() => menuForceClose = false}
+        onmousedown={(e) => { e.stopPropagation(); closeMenuImmediately() }}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dismissHovercards(); closeMenuImmediately(); shortcutOverviewVisible = true } }}>
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9a2.25 2.25 0 1 1 3.81 1.62C12.5 11.3 12 11.75 12 13.5M12 16.5h.01" />
+        </svg>
+        <div class="settings-menu help-menu hover-menu menu-surface" class:menu-force-close={menuForceClose}>
+            <div class="menu-header menu-caption">Help</div>
+            <button type="button" class="settings-menu-item menu-item menu-action"
+                onmousedown={(e) => e.stopPropagation()}
+                onmouseup={(e) => { e.stopPropagation(); dismissHovercards(); closeMenuImmediately(); shortcutOverviewVisible = true }}
+                onclick={(e) => { if (e.detail === 0) { e.stopPropagation(); dismissHovercards(); closeMenuImmediately(); shortcutOverviewVisible = true } }}
+                onkeydown={(e) => e.stopPropagation()}>
+                <span class="menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <rect x="3" y="5" width="18" height="14" rx="2" />
+                        <path stroke-linecap="round" d="M7 9h.01M12 9h.01M17 9h.01M7 12h.01M12 12h.01M17 12h.01M8 15h8" />
+                    </svg>
+                </span>
+                <span>Keyboard shortcuts</span>
+            </button>
+        </div>
+    </div>
 
     <div class="header-icon-button settings-menu-icon hover-menu-button" 
         role="button"
