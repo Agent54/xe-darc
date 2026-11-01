@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
-import vm from 'node:vm'
 import { getSidebarItems, planTabMove } from '../app/lib/tab-groups.js'
-import { tabActivityMap, ensureTabActivityView, getActivitySidebarItems, getActivityGroupTabs, activityBetween, withOrderActivity } from '../app/lib/tab-activity.js'
+import { getActivitySidebarItems, getActivityGroupTabs, activityBetween, withOrderActivity } from '../app/lib/tab-activity.js'
 
 const tab = (id, order, extra = {}) => ({ _id: id, id, type: 'tab', spaceId: 'space', order, ...extra })
 const ids = items => items.map(item => item.id)
@@ -43,26 +42,6 @@ Deno.test('sidebar group members sort by activity or order without mutating trad
     assert.deepEqual(ids(getActivityGroupTabs(tabs, { one: { lastActivityAt: 400 } }, true)), ['one', 'two', 'three'])
 })
 
-Deno.test('serialized composite view emits unmodified timestamps and puts open documents first when descending', () => {
-    const rows = []
-    const map = vm.runInNewContext(`(${tabActivityMap.toString()})`, { emit: key => rows.push(Array.from(key)) })
-    for (const doc of [tab('first', 1), tab('recent', 1, { lastActivityAt: 1_800_000_000_001 }),
-        tab('older', 1, { lastActivityAt: 1_800_000_000_000 }),
-        tab('visit', 2, { lastActiveAt: 1_900_000_000_000 }),
-        tab('invalid', 3, { lastActivityAt: NaN }),
-        tab('closed', 4, { archive: 'closed', lastActivityAt: 1_900_000_000_000 }),
-        tab('deleted', 1, { archive: 'deleted', lastActivityAt: 999 }),
-        tab('unscoped', 1, { spaceId: undefined })]) map(doc)
-    assert.deepEqual(rows, [
-        ['space', true, 'tab', 1],
-        ['space', true, 'tab', 1_800_000_000_001],
-        ['space', true, 'tab', 1_800_000_000_000],
-        ['space', true, 'tab', 2],
-        ['space', true, 'tab', 3],
-        ['space', false, 'tab', 1_900_000_000_000]
-    ])
-})
-
 Deno.test('activity fractional indexing uses effective neighbor ranks and reverses the open ends', () => {
     const first = tab('first', 10, { lastActivityAt: 300 })
     const second = tab('second', 100)
@@ -94,17 +73,4 @@ Deno.test('changing ordinary order raises missing or older activity without lowe
     assert.deepEqual(withOrderActivity(tab('same', 10, { lastActivityAt: 0 }), { order: 10 }), { order: 10, lastActivityAt: 10 })
     assert.deepEqual(withOrderActivity(tab('explicit', 20, { lastActivityAt: 500 }), { order: 10, lastActivityAt: 200 }), { order: 10, lastActivityAt: 200 })
     assert.deepEqual(withOrderActivity(tab('unchanged', 10, { lastActivityAt: 0 }), { lastActivityAt: -1 }), { lastActivityAt: -1 })
-})
-
-Deno.test('activity view installation is idempotent and handles concurrent window creation', async () => {
-    let saved
-    let puts = 0
-    const db = {
-        async get() { if (!saved) throw { status: 404 }; return saved },
-        async put(doc) { puts++; saved = doc; throw { status: 409 } }
-    }
-    await ensureTabActivityView(db)
-    await ensureTabActivityView(db)
-    assert.equal(puts, 1)
-    assert.equal(saved.views.by_space.map, tabActivityMap.toString())
 })

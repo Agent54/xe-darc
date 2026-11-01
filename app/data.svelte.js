@@ -5,7 +5,9 @@ import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
 import { getFrameMoveIds } from './lib/frame-lifecycle.js'
-import { ensureTabActivityView, getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
+import { getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
+import { withDocumentSort } from './lib/document-sort.js'
+import { backfillDocumentSort } from './lib/legacy-document-sort-backfill.js'
 import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
@@ -264,8 +266,25 @@ let permissions = $state(permissionTypes)
 PouchDB.plugin(findPlugin)
 const db = new PouchDB('darc', { adapter: 'idb' })
 
-const sortOrder = ['archive', 'spaceId', 'type', 'order']
-let tabActivityViewReady = null
+const sortOrder = ['archive', 'spaceId', 'type', 'sort']
+let documentIndexReady = null
+
+function ensureDocumentIndex() {
+    documentIndexReady ??= backfillDocumentSort(db)
+        .then(() => db.createIndex({ index: { fields: sortOrder } }))
+        .catch(error => { documentIndexReady = null; throw error })
+    return documentIndexReady
+}
+
+function putDocument(doc) {
+    const prepared = withDocumentSort(doc)
+    doc.sort = prepared.sort
+    return db.put(prepared)
+}
+
+function bulkDocuments(documents) {
+    return db.bulkDocs(documents.map(withDocumentSort))
+}
 
 const docs = $state({})
 const origins = $state({})
@@ -393,7 +412,7 @@ async function persistCanvasShape(shapeId) {
         }
 
         try {
-            const result = await db.put({
+            const result = await putDocument({
                 ...shape,
                 ...(currentShape?._rev ? { _rev: currentShape._rev } : {})
             })
@@ -513,7 +532,8 @@ async function persistDocumentUpdate(tabId) {
 
         try {
             const savedUpdate = withOrderActivity(currentTab, update)
-            const result = await db.put({
+            savedUpdate.sort = withDocumentSort({ ...currentTab, ...savedUpdate }).sort
+            const result = await putDocument({
                 ...currentTab,
                 ...savedUpdate,
                 _rev: currentTab._rev
@@ -538,6 +558,7 @@ async function persistDocumentUpdate(tabId) {
 function queueDocumentUpdate(tabId, update) {
     if (!['tab', 'tabgroup', 'divider'].includes(docs[tabId]?.type)) return Promise.resolve()
     update = withOrderActivity(docs[tabId], update)
+    update = { ...update, sort: withDocumentSort({ ...docs[tabId], ...update }).sort }
 
     const desiredUpdate = {
         ...(desiredDocumentUpdates.get(tabId) || {}),
@@ -594,7 +615,7 @@ function createDivider(spaceId, { beforeTabId, afterTabId } = {}) {
     space.tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     docs[_id] = divider
 
-    const creation = db.put({ ...divider }).then(result => {
+    const creation = putDocument({ ...divider }).then(result => {
         divider._rev = result.rev
     }).catch(error => console.error('Failed to create divider:', error))
     dividerCreationTasks.set(_id, creation)
@@ -603,8 +624,8 @@ function createDivider(spaceId, { beforeTabId, afterTabId } = {}) {
     return divider
 }
 
-db.bulkDocs(bootstrap).then(async (res) => {
-    refresh()
+bulkDocuments(bootstrap).then(async (res) => {
+    ensureDocumentIndex().then(() => refresh())
 
     const docsToUpdate = []
     for (const doc of res) {
@@ -633,7 +654,7 @@ db.bulkDocs(bootstrap).then(async (res) => {
     // Update all conflicting documents
     if (docsToUpdate.length > 0) {
         try {
-            const updateRes = await db.bulkDocs(docsToUpdate)
+            const updateRes = await bulkDocuments(docsToUpdate)
             console.log('Updated bootstrap docs:', updateRes)
         } catch (error) {
             console.error('Failed to update bootstrap docs:', error)
@@ -747,19 +768,16 @@ const refresh = throttle(async function (spaceId) {
 
     // console.time('qry')
     // console.timeLog('updt', 'exec refresh')
-    tabActivityViewReady ??= ensureTabActivityView(db).catch(error => {
-        tabActivityViewReady = null
-        throw error
-    })
-    await tabActivityViewReady
-    const { rows } = await db.query('tab-activity/by_space', {
-        ...(spaceId ? { startkey: [spaceId, {}], endkey: [spaceId] } : {}),
-        descending: true,
-        include_docs: initialLoad,
-        reduce: false,
+    await ensureDocumentIndex()
+    const { docs: newDocs } = await db.find({
+        selector: {
+            archive: { $lt: 'deleted' },
+            spaceId: spaceId ? spaceId : { $exists: true }
+        },
+        fields: initialLoad ? undefined : ['_id'],
+        sort: sortOrder.map(key => ({ [key]: 'asc' })),
         limit: 4000
     })
-    const newDocs = rows.map(row => row.doc || { _id: row.id })
 
     // console.timeEnd('qry')
     // console.log('qry', newDocs.length)
@@ -969,6 +987,15 @@ live: true,
 }).on('change', async change => {
     lastLocalSeq = change.seq
     if (change.id.startsWith('_design/')) return
+    const prepared = withDocumentSort(change.doc)
+    if (prepared.sort !== change.doc.sort) {
+        try {
+            await putDocument(prepared)
+        } catch (error) {
+            if (error.status !== 409) throw error
+        }
+        return
+    }
 
     // console.log('change', change)
     // console.timeLog('updt', 'change')
@@ -1012,7 +1039,7 @@ live: true,
         }
 
         // fixme: deep comp
-        for (const key of ['canvas', 'element', 'files', 'pinned', 'pinScope', 'pinOrder', 'sidebarPinned', 'sidebarPinOrder', 'tabGroupId', 'tabGroupOrder', 'lastActivityAt', ...sortOrder]) { // force reload until using docs store
+        for (const key of ['canvas', 'element', 'files', 'pinned', 'pinScope', 'pinOrder', 'sidebarPinned', 'sidebarPinOrder', 'tabGroupId', 'tabGroupOrder', 'order', 'lastActivityAt', ...sortOrder]) { // force reload until using docs store
             if (!oldDoc || (oldDoc[key] !== change.doc[key])) {
                 if (change.doc.spaceId && change.doc.type !== 'space' && change.doc.type !== 'activity') {
                     console.log('refreshing', change.doc.spaceId)
@@ -1146,7 +1173,7 @@ function closeTab (spaceId, tabId, { createReplacement = true } = {}) {
         ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
     }
    
-    db.bulkDocs([
+    bulkDocuments([
         ...(previews[tabId]?.tabs.map(prev => {
             if (frames[prev.id])  {
                 frames[prev.id].frame = null
@@ -1236,7 +1263,7 @@ if (import.meta.hot) {
 }
 
 function loadSampleData () {
-    db.bulkDocs(testData).then((res) => {
+    bulkDocuments(testData).then((res) => {
         console.log('sample data loaded', res)
         refresh()
     })
@@ -1675,12 +1702,12 @@ const data = {
             name
         }
 
-        await db.put(space)
+        await putDocument(space)
         spaces[_id] = { ...space, tabs: [], activeTabsOrder: [] }
         spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
         if (createTab) await data.newTab(_id)
 
-        await db.put({
+        await putDocument({
             _id: `darc:activity_${crypto.randomUUID()}`,
             type: 'activity',
             archive: 'history',
@@ -1711,7 +1738,7 @@ const data = {
         if (!space) return
         const updated = { ...space, ...updates }
         spaces[spaceId] = updated
-        db.put(updated)
+        putDocument(updated)
     },
 
     pinSidebarTab({ tabId, pinned = true, fixed = false, beforeTabId, afterTabId, targetSpaceId }) {
@@ -1832,7 +1859,7 @@ const data = {
             space.tabs = space.tabs.filter(item => item.id !== dividerId)
         }
 
-        const persistRemoval = () => db.put({
+        const persistRemoval = () => putDocument({
             ...(docs[dividerId] || divider),
             archive: 'deleted',
             modified: Date.now()
@@ -1888,7 +1915,7 @@ const data = {
         
         docs[tab._id] = tab
         syncTabPreview(docs[tab._id])
-        const creation = db.put(tab).then(result => {
+        const creation = putDocument(tab).then(result => {
             applyDocumentUpdate(tab.id, { _rev: result.rev })
         }).finally(() => tabCreationTasks.delete(tab.id))
         tabCreationTasks.set(tab.id, creation)
@@ -2085,7 +2112,7 @@ const data = {
                 }
             }
 
-            db.put({ ...lbTab })
+            putDocument({ ...lbTab })
             return
         }
 
@@ -2581,7 +2608,7 @@ const data = {
         // Prevent change feed from triggering a redundant refresh
         editingId = tabId
         const creation = dividerCreationTasks.get(tabId)
-        const persistMove = creation ? creation.then(() => db.put({ ...tab })) : db.put({ ...tab })
+        const persistMove = creation ? creation.then(() => putDocument({ ...tab })) : putDocument({ ...tab })
 
         return persistMove.then((res) => {
             editingId = null
@@ -2596,7 +2623,7 @@ const data = {
         if (!tab) return
         spaceMeta.closedTabs = spaceMeta.closedTabs.filter(t => t.id !== tabId)
         const doc = { ...tab, deleted: true, archive: 'deleted', modified: Date.now() }
-        db.put(doc).catch(err => console.error('Failed to delete closed tab:', err))
+        putDocument(doc).catch(err => console.error('Failed to delete closed tab:', err))
     },
     clearClosedTabs: () => {
         // Update each closed tab to be marked as deleted
@@ -2610,7 +2637,7 @@ const data = {
         spaceMeta.closedTabs = []
         
         if (docsToUpdate.length > 0) {
-            db.bulkDocs(docsToUpdate).then((res) => {
+            bulkDocuments(docsToUpdate).then((res) => {
                 console.log('Closed tabs marked as deleted:', res)
             }).catch((err) => {
                 console.error('Failed to delete closed tabs:', err)
@@ -2794,7 +2821,7 @@ const data = {
                     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
                     const blob = new Blob([bytes], { type: mime })
                     
-                    await db.put({
+                    await putDocument({
                         ...tab,
                         _attachments: {
                             ...(tab._attachments || {}),

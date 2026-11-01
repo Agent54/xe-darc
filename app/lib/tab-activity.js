@@ -1,13 +1,3 @@
-// This function is serialized into a PouchDB view and must be self-contained.
-export function tabActivityMap(doc) {
-    if (typeof doc.spaceId !== 'string' || doc.archive >= 'deleted') return
-    const timestamp = typeof doc.lastActivityAt === 'number' && isFinite(doc.lastActivityAt)
-        ? doc.lastActivityAt
-        : typeof doc.order === 'number' && isFinite(doc.order) ? doc.order : 0
-    // Descending queries keep open documents ahead of archived ones, then prefer recent activity.
-    emit([doc.spaceId, !doc.archive, doc.type, timestamp])
-}
-
 export function getActivityTimestamp(item) {
     return Number.isFinite(item?.lastActivityAt) ? item.lastActivityAt
         : Number.isFinite(item?.order) ? item.order : 0
@@ -40,25 +30,6 @@ export function withOrderActivity(item, update) {
     const lastActivityAt = Math.max(update.order,
         Number.isFinite(activity) ? activity : -Infinity)
     return { ...update, lastActivityAt }
-}
-
-export async function ensureTabActivityView(db) {
-    const _id = '_design/tab-activity'
-    const views = { by_space: { map: tabActivityMap.toString() } }
-    let existing
-    try {
-        existing = await db.get(_id)
-    } catch (error) {
-        if (error.status !== 404) throw error
-    }
-    if (existing?.views?.by_space?.map === views.by_space.map) return
-    try {
-        await db.put({ ...existing, _id, views })
-    } catch (error) {
-        // Another window may have installed the same view concurrently.
-        if (error.status !== 409) throw error
-        return ensureTabActivityView(db)
-    }
 }
 
 export function getActivitySidebarItems(items, docs, activityMode, matchesSearch = () => true) {

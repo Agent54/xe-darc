@@ -4,6 +4,8 @@ import { compileModule, parse } from 'svelte/compiler'
 import { getWindowSessionHints, getWindowSessionStartup, rememberWindowBounds, fitWindowBounds, openWindowSession } from '../app/lib/window-session.js'
 import * as tabGroups from '../app/lib/tab-groups.js'
 import * as tabActivity from '../app/lib/tab-activity.js'
+import * as documentSort from '../app/lib/document-sort.js'
+import * as legacyDocumentSort from '../app/lib/legacy-document-sort-backfill.js'
 import * as frameLifecycle from '../app/lib/frame-lifecycle.js'
 import * as svelteServer from 'svelte/internal/server'
 import * as svelteClient from 'svelte/internal/client'
@@ -145,15 +147,14 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     if (!storage.has(`tabActiveHistory:${windowId}:${activeSpace}`)) {
         storage.set(`tabActiveHistory:${windowId}:${activeSpace}`, JSON.stringify(history))
     }
-    const records = [defaultSpace, otherSpace].map(_id => ({ _id, type: 'space', spaceId: _id }))
-    records.push(...structuredClone(tabs))
+    const records = [defaultSpace, otherSpace].map(_id => documentSort.withDocumentSort({ _id, type: 'space', spaceId: _id }))
+    records.push(...structuredClone(tabs).map(documentSort.withDocumentSort))
     const queries = []
+    const indexes = []
     const writes = []
-    const designDocs = new Map()
     const changeListeners = new Map()
     const db = {
         get: async id => {
-            if (designDocs.has(id)) return structuredClone(designDocs.get(id))
             const record = records.find(doc => doc._id === id)
             if (!record) {
                 throw { status: 404 }
@@ -161,20 +162,17 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
             return structuredClone(record)
         },
         bulkDocs: () => new Promise(() => {}),
+        allDocs: async () => ({ rows: structuredClone(records.map(doc => ({ id: doc._id, doc }))) }),
+        createIndex: async definition => { indexes.push(definition); return { result: 'created' } },
         changes: () => ({ on(event, callback) { changeListeners.set(event, callback); return this } }),
-        query: async (view, query) => {
-            assert.equal(view, 'tab-activity/by_space')
+        find: async query => {
             queries.push(query)
             const result = records.filter(doc => {
-                return doc.archive !== 'deleted' && (!query.startkey || doc.spaceId === query.startkey[0])
+                return doc.archive !== 'deleted' && (typeof query.selector.spaceId !== 'string' || doc.spaceId === query.selector.spaceId)
             })
-            return { rows: structuredClone(result.map(doc => ({ id: doc._id, ...(query.include_docs ? { doc } : {}) }))) }
+            return { docs: structuredClone(query.fields ? result.map(({ _id }) => ({ _id })) : result) }
         },
         put: async doc => {
-            if (doc._id.startsWith('_design/')) {
-                designDocs.set(doc._id, structuredClone(doc))
-                return { id: doc._id, rev: '1-design' }
-            }
             writes.push(doc)
             const index = records.findIndex(record => record._id === doc._id)
             if (index === -1) {
@@ -193,6 +191,8 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         $: runtime === 'client' ? svelteClient : svelteServer,
         ...tabGroups,
         ...tabActivity,
+        ...documentSort,
+        ...legacyDocumentSort,
         ...frameLifecycle,
         findPlugin: {},
         bootstrap: [],
@@ -213,7 +213,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     const { data, refresh } = runtime === 'client'
         ? new Function(...Object.keys(context), clientSource.replace('({ data, refresh });', 'return { data, refresh }'))(...Object.values(context))
         : vm.runInNewContext(source, context)
-    return { data, refresh, window, storage, queries, writes, db, emitChange: doc => changeListeners.get('change')({ id: doc._id, doc, seq: 1 }) }
+    return { data, refresh, window, storage, queries, indexes, writes, db, emitChange: (doc, { normalizeSort = true } = {}) => changeListeners.get('change')({ id: doc._id, doc: normalizeSort ? documentSort.withDocumentSort(doc) : doc, seq: 1 }) }
 }
 
 Deno.test('sidebar group placement leaves a live single-tab frame attached', async () => {
@@ -315,6 +315,7 @@ Deno.test('explicit activity persists independently of tab visits and ordinary o
     await data.bumpTabActivity('one')
     assert.ok(data.docs.one.lastActivityAt > firstActivity)
     assert.equal((await db.get('two')).lastActivityAt, firstActivity)
+    assert.equal((await db.get('two')).sort, -firstActivity)
     assert.deepEqual(data.spaces[defaultSpace].tabs.map(tab => tab.order), [0, 10])
     data.toggleTabActivityMode()
     const restarted = session({ tabs: [await db.get('one'), await db.get('two')], storage, runtime: 'client' })
@@ -322,6 +323,19 @@ Deno.test('explicit activity persists independently of tab visits and ordinary o
     assert.equal(restarted.data.ui.tabActivityMode, false)
     assert.equal(restarted.data.docs.two.lastActivityAt, firstActivity)
     assert.deepEqual(restarted.data.spaces[defaultSpace].tabs.map(tab => tab.id), ['one', 'two'])
+})
+
+Deno.test('replicated updates with stale sort fields are repaired before they reach the Mango query', async () => {
+    const { data, refresh, db, emitChange } = session({ tabs: [tab('one', defaultSpace, { order: 100, lastActivityAt: 200 })], runtime: 'client' })
+    await refresh()
+    const incoming = { ...await db.get('one'), lastActivityAt: 500, sort: -200 }
+    await emitChange(incoming, { normalizeSort: false })
+    const persisted = await db.get('one')
+    assert.equal(persisted.sort, -500)
+    assert.equal(persisted.order, 100)
+    await emitChange(persisted)
+    assert.equal(data.docs.one.lastActivityAt, 500)
+    assert.equal(data.docs.one.sort, -500)
 })
 
 Deno.test('activity reordering persists fractional activity ranks without changing ordinary order', async () => {
@@ -335,6 +349,7 @@ Deno.test('activity reordering persists fractional activity ranks without changi
     await data.moveTab('moving', { beforeTabId: 'one', afterTabId: 'two', activityMode: true })
     assert.equal(data.docs.moving.lastActivityAt, 200)
     assert.equal((await db.get('moving')).lastActivityAt, 200)
+    assert.equal((await db.get('moving')).sort, -200)
     assert.equal(data.docs.moving.order, 50)
     await data.moveTab('moving', { afterTabId: 'one', activityMode: true })
     assert.equal(data.docs.moving.lastActivityAt, 301)
@@ -465,7 +480,7 @@ Deno.test('bump to top exceeds tabs whose fallback order timestamp is newer than
 })
 
 Deno.test('a partial refresh at startup still restores the active tab from the complete session', async () => {
-    const { data, refresh, queries, writes } = session({
+    const { data, refresh, queries, indexes, writes } = session({
         tabs: [tab('first'), tab('last-active'), tab('other', otherSpace)],
         history: [{ id: 'last-active', activatedAt: 100 }, { id: 'first', activatedAt: 50 }]
     })
@@ -474,10 +489,11 @@ Deno.test('a partial refresh at startup still restores the active tab from the c
 
     assert.equal(data.spaceMeta.activeTabId, 'last-active')
     assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['first', 'last-active'])
-    assert.equal(queries[0].key, undefined)
-    assert.equal(queries[0].descending, true)
+    assert.equal(typeof queries[0].selector.spaceId, 'object')
     assert.equal(queries[0].limit, 4000)
-    assert.equal(queries[0].include_docs, true)
+    assert.equal(queries[0].fields, undefined)
+    assert.deepEqual(Array.from(indexes[0].index.fields), ['archive', 'spaceId', 'type', 'sort'])
+    assert.deepEqual(JSON.parse(JSON.stringify(queries[0].sort)), [{ archive: 'asc' }, { spaceId: 'asc' }, { type: 'asc' }, { sort: 'asc' }])
     assert.equal(writes.length, 0)
 })
 
@@ -575,11 +591,8 @@ Deno.test('activation survives another restart and later partial refreshes prese
     restarted.data.activate('last')
     await restarted.refresh(otherSpace)
     assert.equal(restarted.data.spaceMeta.activeTabId, 'last')
-    assert.equal(restarted.queries[1].include_docs, false)
-    assert.equal(restarted.queries[1].key, undefined)
-    assert.equal(restarted.queries[1].descending, true)
-    assert.deepEqual(Array.from(restarted.queries[1].startkey, value => JSON.parse(JSON.stringify(value))), [otherSpace, {}])
-    assert.deepEqual(Array.from(restarted.queries[1].endkey), [otherSpace])
+    assert.deepEqual(Array.from(restarted.queries[1].fields), ['_id'])
+    assert.equal(restarted.queries[1].selector.spaceId, otherSpace)
 })
 
 Deno.test('each activation has transient scroll intent, including repeated selections and previous-tab navigation', async () => {
