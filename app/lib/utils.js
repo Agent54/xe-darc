@@ -120,6 +120,46 @@ export function origin(url) {
   }
 }
 
+// Return a navigable URL, or null when omnibar input should be searched.
+export function detectUrl(input) {
+  const value = input.trim()
+  if (!value) return null
+
+  const authority = value.split(/[/?#]/, 1)[0]
+  const bareIPv6 = !authority.startsWith('[') && authority.split(':').length > 2
+  const scheme = /^([a-z][a-z\d+.-]*):/i.exec(value)
+
+  try {
+    // A dotted host followed by a port and bare IPv6 are not URL schemes.
+    if (scheme && !scheme[1].includes('.') && scheme[1].toLowerCase() !== 'localhost' && !bareIPv6) {
+      return new URL(value).href
+    }
+
+    if (/[\s@\\]/u.test(authority)) return null
+    const address = bareIPv6 ? `[${authority}]${value.slice(authority.length)}` : value
+    const url = new URL(`http://${address}`)
+    const hostname = url.hostname.replace(/\.$/, '')
+
+    // URL validates bracketed IPv6, including compressed and IPv4-mapped forms.
+    if (hostname.startsWith('[')) return url.href
+
+    if (/^[\d.]+$/.test(hostname)) {
+      const host = authority.replace(/:\d+$/, '')
+      const octets = host.split('.')
+      return octets.length === 4 && octets.every(octet => /^(0|[1-9]\d{0,2})$/.test(octet) && Number(octet) <= 255)
+        ? url.href : null
+    }
+
+    const labels = hostname.split('.')
+    const validDomain = labels.length > 1 && hostname.length <= 253
+      && labels.every(label => /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i.test(label))
+      && /^[a-z][a-z\d-]+$/i.test(labels.at(-1))
+    return hostname === 'localhost' || validDomain ? url.href : null
+  } catch {
+    return null
+  }
+}
+
 export const colors = [
   { name: "Magenta", color: "#b800bb" },
   { name: "Yellow", color: "#ffc100" },

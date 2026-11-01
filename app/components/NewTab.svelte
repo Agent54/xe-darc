@@ -2,6 +2,7 @@
     import { Canvas } from '@threlte/core'
     import Scene from './InteractiveLineScene.svelte'
     import data from '../data.svelte.js'
+    import { detectUrl } from '../lib/utils.js'
     // import { sandbox } from './sandbox.js'
     
     let { tab, isActive = false } = $props()
@@ -400,10 +401,10 @@
             return
         }
         
-        try {
-            let url = new URL(inputValue)
-            data.navigate(tab.id, url.href)
-        } catch {
+        const url = detectUrl(inputValue)
+        if (url) {
+            data.navigate(tab.id, url)
+        } else {
             // Not a valid URL, check for Kagi prefix or use default search engine
             if (inputValue.toLowerCase().startsWith('k ')) {
                 // Use Kagi search, remove the "k " prefix
