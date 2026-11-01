@@ -43,16 +43,24 @@ Deno.test('sidebar group members sort by activity or order without mutating trad
     assert.deepEqual(ids(getActivityGroupTabs(tabs, { one: { lastActivityAt: 400 } }, true)), ['one', 'two', 'three'])
 })
 
-Deno.test('serialized space view emits only the space key and excludes deleted or unscoped docs', () => {
+Deno.test('serialized composite view emits unmodified timestamps and puts open documents first when descending', () => {
     const rows = []
-    const map = vm.runInNewContext(`(${tabActivityMap.toString()})`, { emit: key => rows.push(key) })
+    const map = vm.runInNewContext(`(${tabActivityMap.toString()})`, { emit: key => rows.push(Array.from(key)) })
     for (const doc of [tab('first', 1), tab('recent', 1, { lastActivityAt: 1_800_000_000_001 }),
         tab('older', 1, { lastActivityAt: 1_800_000_000_000 }),
         tab('visit', 2, { lastActiveAt: 1_900_000_000_000 }),
         tab('invalid', 3, { lastActivityAt: NaN }),
+        tab('closed', 4, { archive: 'closed', lastActivityAt: 1_900_000_000_000 }),
         tab('deleted', 1, { archive: 'deleted', lastActivityAt: 999 }),
         tab('unscoped', 1, { spaceId: undefined })]) map(doc)
-    assert.deepEqual(rows, ['space', 'space', 'space', 'space', 'space'])
+    assert.deepEqual(rows, [
+        ['space', true, 'tab', 1],
+        ['space', true, 'tab', 1_800_000_000_001],
+        ['space', true, 'tab', 1_800_000_000_000],
+        ['space', true, 'tab', 2],
+        ['space', true, 'tab', 3],
+        ['space', false, 'tab', 1_900_000_000_000]
+    ])
 })
 
 Deno.test('activity fractional indexing uses effective neighbor ranks and reverses the open ends', () => {

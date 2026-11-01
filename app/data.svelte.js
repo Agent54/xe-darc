@@ -753,9 +753,11 @@ const refresh = throttle(async function (spaceId) {
     })
     await tabActivityViewReady
     const { rows } = await db.query('tab-activity/by_space', {
-        ...(spaceId ? { key: spaceId } : {}),
+        ...(spaceId ? { startkey: [spaceId, {}], endkey: [spaceId] } : {}),
+        descending: true,
         include_docs: initialLoad,
-        reduce: false
+        reduce: false,
+        limit: 4000
     })
     const newDocs = rows.map(row => row.doc || { _id: row.id })
 
@@ -763,6 +765,10 @@ const refresh = throttle(async function (spaceId) {
     // console.log('qry', newDocs.length)
 
     // console.timeLog('updt', 'exec received docs')
+
+    if (newDocs.length > 3000) {
+        console.error('approaching max data size, needs paging and partition support now')
+    }
 
     // console.log({ newDocs, docs })
 

@@ -1,8 +1,11 @@
 // This function is serialized into a PouchDB view and must be self-contained.
 export function tabActivityMap(doc) {
     if (typeof doc.spaceId !== 'string' || doc.archive >= 'deleted') return
-    // Fetch every document in the space; the UI owns tab ordering in both modes.
-    emit(doc.spaceId)
+    const timestamp = typeof doc.lastActivityAt === 'number' && isFinite(doc.lastActivityAt)
+        ? doc.lastActivityAt
+        : typeof doc.order === 'number' && isFinite(doc.order) ? doc.order : 0
+    // Descending queries keep open documents ahead of archived ones, then prefer recent activity.
+    emit([doc.spaceId, !doc.archive, doc.type, timestamp])
 }
 
 export function getActivityTimestamp(item) {

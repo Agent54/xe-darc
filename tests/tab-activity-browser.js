@@ -12,7 +12,7 @@ const { outputFiles } = await build({
         resolveDir: root,
         contents: `
             import PouchDB from 'pouchdb-browser'
-            import { ensureTabActivityView, getActivityGroupTabs } from './app/lib/tab-activity.js'
+            import { ensureTabActivityView } from './app/lib/tab-activity.js'
             window.testActivityView = async () => {
                 const db = new PouchDB('tab-activity-test-' + crypto.randomUUID())
                 const tab = (id, order, extra = {}) => ({ _id: id, type: 'tab', spaceId: 'space', archive: '', order, ...extra })
@@ -23,21 +23,27 @@ const { outputFiles } = await build({
                         tab('newer', 9001, { lastActivityAt: 1800000000001 }),
                         tab('tied', 9002, { lastActivityAt: 1800000000001 }),
                         tab('fallback-newest', 1800000000002),
+                        tab('zzzz-newest', 0, { lastActivityAt: 1900000000000 }),
+                        tab('closed', 0, { archive: 'closed', lastActivityAt: 2000000000000 }),
                         tab('other-space', 0, { spaceId: 'other', lastActivityAt: 1900000000000 }),
                         tab('deleted', 0, { archive: 'deleted', lastActivityAt: 1900000000000 })
                     ])
+                    // Upgrade the former scalar-key view as an existing installation would.
+                    await db.put({ _id: '_design/tab-activity', views: { by_space: { map: 'function(doc) { if (doc.spaceId) emit(doc.spaceId) }' } } })
                     await Promise.all([ensureTabActivityView(db), ensureTabActivityView(db)])
-                    const options = { key: 'space', reduce: false, include_docs: true }
-                    const first = await db.query('tab-activity/by_space', { ...options, include_docs: true })
+                    const options = { startkey: ['space', {}], endkey: ['space'], descending: true, reduce: false, include_docs: true, limit: 4000 }
+                    const first = await db.query('tab-activity/by_space', options)
                     const bump = await db.get('ordinary-4004')
-                    await db.put({ ...bump, lastActivityAt: 1900000000000 })
+                    await db.put({ ...bump, lastActivityAt: 1950000000000 })
                     const updated = await db.query('tab-activity/by_space', options)
                     return {
-                        first: getActivityGroupTabs(first.rows.map(row => ({ ...row.doc, id: row.id })), {}, true).slice(0, 5).map(tab => tab.id),
+                        first: first.rows.slice(0, 5).map(row => row.id),
                         count: first.rows.length,
+                        exactPrefixCount: (await db.query('tab-activity/by_space', { key: ['space'], reduce: false })).rows.length,
+                        scopedCount: (await db.query('tab-activity/by_space', { ...options, limit: undefined })).rows.length,
                         includesDocs: first.rows.every(row => row.doc?._id === row.id),
-                        excluded: first.rows.every(row => row.id !== 'other-space' && row.id !== 'deleted'),
-                        bumped: getActivityGroupTabs(updated.rows.map(row => ({ ...row.doc, id: row.id })), {}, true)[0].id,
+                        excluded: first.rows.every(row => !['other-space', 'deleted', 'closed'].includes(row.id)),
+                        bumped: updated.rows[0].id,
                         allCount: (await db.query('tab-activity/by_space', { reduce: false })).rows.length,
                         preservedOrder: (await db.get('ordinary-4004')).order
                     }
@@ -68,11 +74,11 @@ try {
     await page.goto(`http://127.0.0.1:${server.address().port}`)
     const result = await page.evaluate(() => window.testActivityView())
     assert.deepEqual(result, {
-        first: ['fallback-newest', 'newer', 'tied', 'older', 'ordinary-4004'],
-        count: 4009, allCount: 4010, includesDocs: true, excluded: true,
+        first: ['zzzz-newest', 'fallback-newest', 'tied', 'newer', 'older'],
+        count: 4000, scopedCount: 4011, exactPrefixCount: 0, allCount: 4012, includesDocs: true, excluded: true,
         bumped: 'ordinary-4004', preservedOrder: 4004
     })
-    console.log('Chromium/PouchDB: simple space lookup, uncapped fetch, scoped filtering and in-memory activity sorting pass')
+    console.log('Chromium/PouchDB: scalar-view upgrade, composite range bounds, descending timestamps and activity selection before the 4,000-document limit pass')
 } finally {
     await browser?.close()
     await new Promise(resolve => server.close(resolve))

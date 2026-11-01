@@ -136,6 +136,7 @@
     let sidebarShowTimeout = null
     
     // Tab group expansion state
+    let allGroupsExpanded = $state(false)
     let tabGroupExpansion = $state({})
     let groupResize = $state(null)
     const groupPreview = createTabGroupPreview()
@@ -1952,6 +1953,20 @@
                                         </div>
                                     {/if}
                                     <div class="space-menu">
+                                        <button class="space-group-toggle" type="button"
+                                                aria-label={allGroupsExpanded ? 'Collapse all tab groups' : 'Expand all tab groups'}
+                                                aria-expanded={allGroupsExpanded}
+                                                title={allGroupsExpanded ? 'Collapse all tab groups' : 'Expand all tab groups'}
+                                                onclick={(e) => { e.stopPropagation(); allGroupsExpanded = !allGroupsExpanded; tabGroupExpansion = {}; }}
+                                                ondblclick={(e) => e.stopPropagation()}>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                {#if allGroupsExpanded}
+                                                    <path d="m6 3 6 6 6-6M6 21l6-6 6 6" />
+                                                {:else}
+                                                    <path d="m6 9 6-6 6 6M6 15l6 6 6-6" />
+                                                {/if}
+                                            </svg>
+                                        </button>
                                         <button class="space-menu-button" 
                                                 onmousedown={(e) => { e.stopPropagation(); handleMenuToggle(spaceId); }}
                                                 aria-label="Space options">⋯</button>
@@ -2156,7 +2171,7 @@
                                                 {@render sidebarTab(item.tabs[0], i)}
                                             {:else}
                                                 {@const expansionId = `${spaceId}:${item.id}`}
-                                                {@const expanded = tabGroupExpansion[expansionId] ?? false}
+                                                {@const expanded = tabGroupExpansion[expansionId] ?? allGroupsExpanded}
                                                 {@const active = item.tabs.some(tab => tab.id === data.spaceMeta.activeTabId)}
                                                 {@const activationTab = data.getGroupActiveTab(item, spaceId)}
                                                 {@const sidebarGroupTabs = getActivityGroupTabs(item.tabs, data.docs, data.ui.tabActivityMode)}
@@ -2182,7 +2197,7 @@
                                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6" /></svg>
                                                         </button>
                                                     </div>
-                                                    {#if tabGroupExpansion[expansionId] !== undefined}
+                                                    {#if expanded || tabGroupExpansion[expansionId] !== undefined}
                                                         <div class="tab-group-scroll" hidden={!expanded}>
                                                             <div class="tab-group-content" data-group-tab-id={item.tabs[0].id} use:observeScrollEdges={item.tabs.length}>
                                                                 {#each sidebarGroupTabs as tab (tab.id)}
@@ -3110,9 +3125,14 @@
     .space-menu {
         position: relative;
         opacity: 1;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        flex-shrink: 0;
     }
     
-    .space-menu-button {
+    .space-menu-button,
+    .space-group-toggle {
         background: transparent;
         border: none;
         color: rgba(255, 255, 255, 0.4);
@@ -3125,13 +3145,30 @@
         opacity: 0;
     }
     
-    .space-title-container:hover .space-menu-button {
+    .space-title-container:hover .space-menu-button,
+    .space-title-container:hover .space-group-toggle,
+    .space-title-container:focus-within .space-menu-button,
+    .space-title-container:focus-within .space-group-toggle {
         opacity: 1;
     }
     
-    .space-menu-button:hover {
+    .space-menu-button:hover,
+    .space-group-toggle:hover {
         color: rgba(255, 255, 255, 0.8);
         background: rgba(255, 255, 255, 0.1);
+    }
+
+    .space-group-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+    }
+
+    .space-group-toggle:focus-visible {
+        outline: 1px solid currentColor;
+        outline-offset: 1px;
     }
     
     .space-menu-dropdown {

@@ -166,7 +166,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
             assert.equal(view, 'tab-activity/by_space')
             queries.push(query)
             const result = records.filter(doc => {
-                return doc.archive !== 'deleted' && (!query.key || doc.spaceId === query.key)
+                return doc.archive !== 'deleted' && (!query.startkey || doc.spaceId === query.startkey[0])
             })
             return { rows: structuredClone(result.map(doc => ({ id: doc._id, ...(query.include_docs ? { doc } : {}) }))) }
         },
@@ -475,7 +475,8 @@ Deno.test('a partial refresh at startup still restores the active tab from the c
     assert.equal(data.spaceMeta.activeTabId, 'last-active')
     assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['first', 'last-active'])
     assert.equal(queries[0].key, undefined)
-    assert.equal(queries[0].limit, undefined)
+    assert.equal(queries[0].descending, true)
+    assert.equal(queries[0].limit, 4000)
     assert.equal(queries[0].include_docs, true)
     assert.equal(writes.length, 0)
 })
@@ -575,7 +576,10 @@ Deno.test('activation survives another restart and later partial refreshes prese
     await restarted.refresh(otherSpace)
     assert.equal(restarted.data.spaceMeta.activeTabId, 'last')
     assert.equal(restarted.queries[1].include_docs, false)
-    assert.equal(restarted.queries[1].key, otherSpace)
+    assert.equal(restarted.queries[1].key, undefined)
+    assert.equal(restarted.queries[1].descending, true)
+    assert.deepEqual(Array.from(restarted.queries[1].startkey, value => JSON.parse(JSON.stringify(value))), [otherSpace, {}])
+    assert.deepEqual(Array.from(restarted.queries[1].endkey), [otherSpace])
 })
 
 Deno.test('each activation has transient scroll intent, including repeated selections and previous-tab navigation', async () => {
