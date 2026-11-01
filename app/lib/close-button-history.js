@@ -10,7 +10,7 @@ export function closeButtonHistory (node, options) {
 
     function enter () {
         leave()
-        if (options.instant) {
+        if (options.cardVisible) {
             timer = setTimeout(() => {
                 timer = null
                 options.onChange?.(true)

@@ -149,7 +149,7 @@ try {
     await page.hover('.app-context-menu > button')
     assert.deepEqual(await labels(), ['Start', 'Start watching', 'Remove'])
     assert.equal(await page.evaluate(() => window.opened.length), 0)
-    await page.click('.app-docker-submenu button')
+    await page.$eval('.app-docker-submenu button', button => button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2 })))
     await page.waitForFunction(() => window.requests.length === 1 && !document.querySelector('.app-context-menu'))
     assert.deepEqual(await page.evaluate(() => window.requests[0]), {
         path: '/v1.24/start/demo/container', method: 'POST', body: { path: '/stacks/demo/compose.yaml', container: 'web-2' }

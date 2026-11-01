@@ -301,7 +301,7 @@ try {
         await page.keyboard.type('discard this edit')
         await page.keyboard.press('Escape')
         await page.waitForSelector(input, { hidden: true })
-        assert.equal(await page.$eval(`#${id} .url-bar-url`, element => element.textContent.includes(`${id}.example`)), true, 'Escape cancels editing')
+        assert.equal(await page.$eval(`#${id} .url-bar-url`, (element, tabId) => element.textContent.includes(`${tabId}.example`), id), true, 'Escape cancels editing')
     }
 
     await page.setViewport({ width: 320, height: 700 })

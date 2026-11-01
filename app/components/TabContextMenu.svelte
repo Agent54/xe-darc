@@ -403,7 +403,7 @@
                 </span>
                 <span>Change icon…</span>
             </button>
-            <div class="context-menu-item has-submenu move-space-menu menu-action" role="presentation"
+            <div class="context-menu-item has-submenu move-space-menu" role="presentation"
                  onmouseenter={() => openMoveSubmenu()}
                  onmouseleave={(event) => { if (!event.currentTarget.contains(document.activeElement)) { moveSpaceOpen = false } }}
                  onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { moveSpaceOpen = false } }}

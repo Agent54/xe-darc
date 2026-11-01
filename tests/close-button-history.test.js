@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { closeButtonHistory } from '../app/lib/close-button-history.js'
 
-function harness (instant) {
+function harness (cardVisible) {
     let now = 0
     let nextId = 1
     const timers = new Map()
@@ -12,7 +12,7 @@ function harness (instant) {
         id => timers.delete(id)
     )
     const onChange = visible => changes.push(visible)
-    const action = create(node, { instant, onChange })
+    const action = create(node, { cardVisible, onChange })
     return {
         action, changes, timers, onChange,
         enter: () => node.dispatchEvent(new Event('mouseenter')),
@@ -26,23 +26,23 @@ function harness (instant) {
     }
 }
 
-Deno.test('cold close-button hover requests history before the initial card appears', () => {
+Deno.test('close-button hover requests history immediately when its card is not visible', () => {
     const h = harness(false)
     h.enter()
     assert.deepEqual(h.changes, [false, true])
     assert.equal(h.timers.size, 0)
-    h.action.update({ instant: true, onChange: h.onChange })
-    assert.deepEqual(h.changes, [false, true], 'warming the card does not restart the reveal')
+    h.action.update({ cardVisible: true, onChange: h.onChange })
+    assert.deepEqual(h.changes, [false, true], 'opening the card does not restart the reveal')
     h.leave()
     assert.equal(h.changes.at(-1), false)
     h.action.destroy()
 })
 
-Deno.test('warm close-button hover reveals after 300 ms and survives reactive updates', () => {
+Deno.test('close-button hover on a visible card reveals after 300 ms and survives reactive updates', () => {
     const h = harness(true)
     h.enter()
     h.advance(200)
-    h.action.update({ instant: true, onChange: h.onChange })
+    h.action.update({ cardVisible: true, onChange: h.onChange })
     h.advance(99)
     assert.deepEqual(h.changes, [false])
     h.advance(1)

@@ -2129,7 +2129,7 @@
                                                     
                                                     <button class="tab-close" aria-label="Close tab"
                                                             onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}
-                                                            use:closeButtonHistory={{ instant: instantHovercardsMode, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
+                                                            use:closeButtonHistory={{ cardVisible: !hoveredGroupTarget && hoveredTab?.id === tab.id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
                                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                                                 <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                                                             </svg>
@@ -2278,7 +2278,7 @@
                                         <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
                                     </div>
                                     <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}
-                                         use:closeButtonHistory={{ instant: instantHovercardsMode, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
+                                         use:closeButtonHistory={{ cardVisible: !hoveredGroupTarget && hoveredTab?.id === tab.id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                             <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                                         </svg>

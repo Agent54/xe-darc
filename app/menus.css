@@ -8,7 +8,7 @@
     --menu-color: #fff;
     --menu-muted-color: rgb(255 255 255 / 50%);
     --menu-focus-color: #a3a3a3;
-    --menu-hover-background: linear-gradient(135deg, rgb(255 255 255 / 12%), rgb(255 255 255 / 6%));
+    --menu-hover-background: rgb(255 255 255 / 6%);
     --menu-active-background: rgb(59 130 246 / 10%);
     --menu-active-hover-background: rgb(59 130 246 / 12%);
     --menu-active-color: rgb(59 130 246 / 90%);
@@ -17,7 +17,7 @@
 
 .menu-surface {
     box-sizing: border-box;
-    padding: 0;
+    padding: 4px;
     border: 1px solid var(--menu-border);
     border-radius: 8px;
     background: var(--menu-background);
@@ -39,9 +39,9 @@
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding: 8px 14px;
+    padding: 8px 10px;
     border: 0;
-    border-radius: 0;
+    border-radius: 4px;
     background: transparent;
     color: var(--menu-color);
     font: var(--menu-font);
@@ -75,37 +75,6 @@
         opacity: 0.4;
         cursor: default;
     }
-}
-
-/* Round only the outer corners, including menus with a split action row. */
-.menu-surface > .menu-action:first-child {
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-}
-
-.menu-surface > .menu-action:last-child {
-    border-bottom-left-radius: 8px;
-    border-bottom-right-radius: 8px;
-}
-
-.menu-surface > .menu-action-row:first-child > .menu-action:first-child {
-    border-top-left-radius: 8px;
-}
-
-.menu-surface > .menu-action-row:first-child > .menu-action:last-child {
-    border-top-right-radius: 8px;
-}
-
-.menu-surface > .menu-action-row:last-child > .menu-action:first-child {
-    border-bottom-left-radius: 8px;
-}
-
-.menu-surface > .menu-action-row:last-child > .menu-action:last-child {
-    border-bottom-right-radius: 8px;
-}
-
-.menu-action > .menu-action {
-    border-radius: inherit;
 }
 
 .menu-action-between {
