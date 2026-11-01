@@ -148,15 +148,15 @@ export function addTabGroupFrames (elements, groups) {
 }
 
 // Both sidebar and top-bar drops describe neighbors in sidebar order.
-export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, targetGroupTabId, beforeTabId, afterTabId, scope = 'tab', activityMode = false, placement = null, preservePins = false }, createGroupId) {
+export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, targetGroupTabId, beforeTabId, afterTabId, scope = 'tab', activityMode = false, placement = null, preservePins = false }, createGroupId, groups) {
     const tab = sourceItems.find(item => item.id === tabId)
     if (!tab || tab.type !== 'tab') {
         return []
     }
-    const sourceGroup = getTabGroup(sourceItems, tabId)
+    const sourceGroup = groups ? groups.sourceGroup : getTabGroup(sourceItems, tabId)
     const moving = scope === 'group' && sourceGroup ? sourceGroup.tabs : [tab]
     const movingIds = new Set(moving.map(item => item.id))
-    const targetGroup = getTabGroup(targetItems, targetGroupTabId)
+    const targetGroup = groups ? groups.targetGroup : targetGroupTabId ? getTabGroup(targetItems, targetGroupTabId) : null
     const updates = []
     if (targetGroup) {
         const remaining = targetGroup.tabs.filter(item => !movingIds.has(item.id))

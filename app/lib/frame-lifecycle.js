@@ -1,40 +1,114 @@
-import { getTabGroups, getPinScope } from './tab-groups.js'
+import { getPinScope, tabGroupKey } from './tab-groups.js'
 
-function frameLists(items) {
-    const spaces = Map.groupBy(items, item => item.spaceId)
-    const lists = new Map()
-    for (const [spaceId, tabs] of spaces) {
-        for (const group of getTabGroups(tabs)) {
-            const ids = group.tabs.filter(tab => !tab.pinned).map(tab => tab.id)
-            const list = JSON.stringify([spaceId, 'center', ids])
-            for (const id of ids) {
-                lists.set(id, list)
-            }
+function framePlacement(tab, update) {
+    const value = key => Object.hasOwn(update, key) ? update[key] : tab[key]
+    return {
+        id: tab.id, spaceId: value('spaceId'), pinned: value('pinned'), pinScope: value('pinScope'),
+        tabGroupId: value('tabGroupId'), tabGroupOrder: value('tabGroupOrder'),
+        pinOrder: value('pinOrder'), order: value('order')
+    }
+}
+
+function changesFramePlacement(tab, update) {
+    const next = framePlacement(tab, update)
+    if (tab.spaceId !== next.spaceId || (tab.tabGroupId || null) !== (next.tabGroupId || null) ||
+        (tab.pinned || null) !== (next.pinned || null)) {
+        return true
+    }
+    if (tab.pinned) {
+        return getPinScope(tab) !== getPinScope(next) ||
+            (tab.pinOrder ?? tab.order ?? 0) !== (next.pinOrder ?? next.order ?? 0)
+    }
+    return (tab.tabGroupOrder ?? tab.order ?? 0) !== (next.tabGroupOrder ?? next.order ?? 0)
+}
+
+function frameLists(items, updates) {
+    const spaces = new Map()
+    const lists = []
+    for (const item of items.values()) {
+        if (item.type !== 'tab' || item.archive || item.preview || item.lightbox) {
+            continue
         }
-        const pins = tabs.filter(tab => tab.type === 'tab' && tab.pinned && !tab.archive && !tab.preview && !tab.lightbox)
-            .sort((a, b) => (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
-        const panels = Map.groupBy(pins, tab => JSON.stringify([
-            tab.pinned === 'right' ? 'right' : 'left', getPinScope(tab),
-            getPinScope(tab) === 'group' ? tab.tabGroupId || tab.id : null
-        ]))
-        for (const [panel, members] of panels) {
-            const list = JSON.stringify([spaceId, panel, members.map(tab => tab.id)])
-            for (const tab of members) {
-                lists.set(tab.id, list)
-            }
+        const update = updates?.get(item.id)
+        const tab = update ? framePlacement(item, update) : item
+        const scope = tab.pinned ? getPinScope(tab) : null
+        const panel = tab.pinned ? `${tab.pinned === 'right' ? 'right' : 'left'}:${scope}` : 'center'
+        const groupKey = !tab.pinned || scope === 'group' ? tabGroupKey(tab) : null
+        if (!spaces.has(tab.spaceId)) {
+            spaces.set(tab.spaceId, new Map())
+        }
+        const panels = spaces.get(tab.spaceId)
+        if (!panels.has(panel)) {
+            panels.set(panel, new Map())
+        }
+        const groups = panels.get(panel)
+        if (!groups.has(groupKey)) {
+            const list = { spaceId: tab.spaceId, panel, groupKey, tabs: [] }
+            groups.set(groupKey, list)
+            lists.push(list)
+        }
+        groups.get(groupKey).tabs.push(tab)
+    }
+    for (const list of lists) {
+        if (updates || list.panel !== 'center') {
+            list.tabs.sort((a, b) => (list.panel === 'center'
+                ? (a.tabGroupOrder ?? a.order ?? 0) - (b.tabGroupOrder ?? b.order ?? 0)
+                : (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0)) || a.id.localeCompare(b.id))
         }
     }
     return lists
 }
 
-export function getFrameMoveIds(items, updates) {
-    const byId = new Map(updates.map(({ id, ...update }) => [id, update]))
-    const before = frameLists(items)
-    const after = frameLists(items.map(item => byId.has(item.id) ? { ...item, ...byId.get(item.id) } : item))
+export function getFrameMoveIds({ docs, frames }, updates, groups) {
     const moved = new Set()
-    for (const id of new Set([...before.keys(), ...after.keys()])) {
-        if (before.get(id) !== after.get(id)) {
-            moved.add(id)
+    const relevant = updates.filter(update => docs[update.id] && changesFramePlacement(docs[update.id], update))
+    if (!relevant.length) {
+        return moved
+    }
+    const items = new Map()
+    for (const group of new Set(groups)) {
+        for (const tab of group?.tabs || []) {
+            if (docs[tab.id]) {
+                items.set(tab.id, docs[tab.id])
+            }
+        }
+    }
+    for (const update of relevant) {
+        items.set(update.id, docs[update.id])
+    }
+    const mounted = id => {
+        const entry = frames[id]
+        return entry?.frame && entry.wrapper?.isConnected && entry.frame.parentNode === entry.wrapper
+    }
+    if (relevant.some(update => docs[update.id].pinned || update.pinned)) {
+        const spaces = new Set(relevant.flatMap(update => [docs[update.id].spaceId, update.spaceId ?? docs[update.id].spaceId]))
+        for (const id in frames) {
+            if (mounted(id) && docs[id]?.pinned && spaces.has(docs[id].spaceId)) {
+                items.set(id, docs[id])
+            }
+        }
+    }
+    if (![...items.keys()].some(mounted)) {
+        return moved
+    }
+    const byId = new Map(updates.map(update => [update.id, update]))
+    const before = frameLists(items)
+    const after = frameLists(items, byId)
+    const beforeById = new Map(before.flatMap(list => list.tabs.map(tab => [tab.id, list])))
+    const afterById = new Map(after.flatMap(list => list.tabs.map(tab => [tab.id, list])))
+    for (const [lists, counterparts] of [[before, afterById], [after, beforeById]]) {
+        for (const list of lists) {
+            const other = counterparts.get(list.tabs[0].id)
+            if (other && list.spaceId === other.spaceId && list.panel === other.panel &&
+                (list.panel === 'center' || list.groupKey === other.groupKey) &&
+                list.tabs.length === other.tabs.length && list.tabs.every((tab, index) => tab.id === other.tabs[index].id)) {
+                continue
+            }
+            for (const tab of list.tabs) {
+                if (mounted(tab.id)) {
+                    moved.add(tab.id)
+                }
+            }
         }
     }
     return moved

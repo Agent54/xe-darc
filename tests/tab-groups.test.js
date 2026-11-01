@@ -6,6 +6,26 @@ const grouped = (id, rank, extra = {}) => tab(id, 10, { tabGroupId: 'research', 
 const move = (items, id, options, targets = items) => planTabMove(items, targets, id, { targetSpaceId: 'space', ...options }, () => 'new-group')
 const apply = (items, updates) => items.map(item => ({ ...item, ...updates.find(update => update.id === item.id) }))
 
+Deno.test('move planning reuses resolved groups for activity-only member moves', () => {
+    const items = [grouped('one', 0), grouped('two', 1)]
+    const group = getTabGroup(items, 'one')
+    const resolved = new Proxy(items, {
+        get(target, key) {
+            if (key === 'filter') {
+                throw new Error('Resolved groups must not be rebuilt from the full space')
+            }
+            return Reflect.get(target, key)
+        }
+    })
+    const updates = planTabMove(resolved, resolved, 'one', {
+        targetSpaceId: 'space', targetGroupTabId: 'two', activityMode: true, beforeTabId: 'two'
+    }, () => 'new-group', { sourceGroup: group, targetGroup: group })
+    assert.equal(updates.length, 1)
+    assert.equal(updates[0].id, 'one')
+    assert.equal(Number.isFinite(updates[0].lastActivityAt), true)
+    assert.equal(updates[0].tabGroupOrder, undefined)
+})
+
 Deno.test('sidebar pins remain ordinary group members while appearing only in their own ordered section', () => {
     const items = [grouped('one', 0), grouped('pin', 1, { sidebarPinned: true, sidebarPinOrder: 2 }),
         tab('first-pin', 20, { sidebarPinned: true, sidebarPinOrder: 1 }),

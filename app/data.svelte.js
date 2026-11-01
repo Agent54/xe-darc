@@ -2420,12 +2420,16 @@ const data = {
             const sourceSpaceId = tabDoc.spaceId
             const destSpaceId = targetSpaceId || sourceSpaceId
             if (!spaces[destSpaceId]) return
+            const sourceGroup = data.getTabGroup(tabId, sourceSpaceId)
+            const targetGroup = targetGroupTabId
+                ? sourceSpaceId === destSpaceId && sourceGroup?.tabs.some(member => member.id === targetGroupTabId)
+                    ? sourceGroup : data.getTabGroup(targetGroupTabId, destSpaceId)
+                : null
             const updates = planTabMove(spaces[sourceSpaceId]?.tabs || [], spaces[destSpaceId].tabs || [], tabId,
-                { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode, placement, preservePins }, () => crypto.randomUUID())
-            const moveItems = sourceSpaceId === destSpaceId ? spaces[sourceSpaceId].tabs
-                : [...spaces[sourceSpaceId].tabs, ...spaces[destSpaceId].tabs]
+                { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode, placement, preservePins },
+                () => crypto.randomUUID(), { sourceGroup, targetGroup })
             const parked = []
-            for (const id of getFrameMoveIds(moveItems, updates)) {
+            for (const id of getFrameMoveIds(data, updates, [sourceGroup, targetGroup])) {
                 const frameData = frames[id]
                 const frame = frameData?.frame
                 if (!frame || !frameData.wrapper?.isConnected || frame.parentNode !== frameData.wrapper) {
@@ -2439,8 +2443,6 @@ const data = {
                 }
             }
             const saves = []
-            const sourceGroup = data.getTabGroup(tabId, sourceSpaceId)
-            const targetGroup = targetGroupTabId ? data.getTabGroup(targetGroupTabId, destSpaceId) : null
             if (updates.length && scope === 'group' && sourceGroup?.tabGroupId && targetGroup?.tabGroupId && sourceGroup.tabGroupId !== targetGroup.tabGroupId) {
                 const name = [targetGroup.name, sourceGroup.name].filter(Boolean).join(' + ') || null
                 saves.push(data.updateTabGroup(targetGroup.tabGroupId, { name }, destSpaceId))

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
 import { getFrameMoveIds, registerFrameWrapper } from '../app/lib/frame-lifecycle.js'
+import { getTabGroups } from '../app/lib/tab-groups.js'
 
 const frameSource = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
 const mountNode = parse(frameSource).instance.content.body
@@ -8,6 +9,15 @@ const mountNode = parse(frameSource).instance.content.body
 const mountSource = frameSource.slice(mountNode.start, mountNode.end)
 
 const tab = (id, extra = {}) => ({ id, type: 'tab', spaceId: 'space', order: 1, ...extra })
+
+function frameMoves(items, updates) {
+    const docs = Object.fromEntries(items.map(tab => [tab.id, tab]))
+    const frames = Object.fromEntries(items.map(tab => {
+        const wrapper = { isConnected: true }
+        return [tab.id, { wrapper, frame: { parentNode: wrapper } }]
+    }))
+    return getFrameMoveIds({ docs, frames }, updates, getTabGroups(items))
+}
 
 function wrapper() {
     const node = {
@@ -45,7 +55,7 @@ Deno.test('sidebar rank and activity updates leave intact frame lists untouched'
         [{ id: 'one', order: 100 }, { id: 'two', order: 100 }],
         [{ id: 'one', lastActivityAt: 200 }]
     ]) {
-        assert.equal(getFrameMoveIds(items, updates).size, 0)
+        assert.equal(frameMoves(items, updates).size, 0)
     }
 })
 
@@ -53,18 +63,61 @@ Deno.test('a real frame reorder protects live siblings as well as the updated me
     const items = [tab('one', { tabGroupId: 'group', tabGroupOrder: 0 }),
         tab('two', { tabGroupId: 'group', tabGroupOrder: 1 }),
         tab('three', { tabGroupId: 'group', tabGroupOrder: 2 }), tab('other')]
-    assert.deepEqual([...getFrameMoveIds(items, [{ id: 'one', tabGroupOrder: 3 }])].sort(), ['one', 'three', 'two'])
-    assert.deepEqual([...getFrameMoveIds(items, [{ id: 'one', tabGroupOrder: -1 }])], [])
+    assert.deepEqual([...frameMoves(items, [{ id: 'one', tabGroupOrder: 3 }])].sort(), ['one', 'three', 'two'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'one', tabGroupOrder: -1 }])], [])
 })
 
 Deno.test('space, membership and pin panel changes require frame protection', () => {
     const items = [tab('one'), tab('two', { tabGroupId: 'group' }),
         tab('left', { pinned: 'left', pinScope: 'space', pinOrder: 0 }),
         tab('next', { pinned: 'left', pinScope: 'space', pinOrder: 1 })]
-    assert.deepEqual([...getFrameMoveIds(items, [{ id: 'one', spaceId: 'other' }])], ['one'])
-    assert.deepEqual([...getFrameMoveIds(items, [{ id: 'one', tabGroupId: 'group' }])].sort(), ['one', 'two'])
-    assert.deepEqual([...getFrameMoveIds(items, [{ id: 'left', pinned: 'right' }])].sort(), ['left', 'next'])
-    assert.deepEqual([...getFrameMoveIds(items, [{ id: 'left', pinOrder: 2 }])].sort(), ['left', 'next'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'one', spaceId: 'other' }])], ['one'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'one', tabGroupId: 'group' }])].sort(), ['one', 'two'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'left', pinned: 'right' }])].sort(), ['left', 'next'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'left', pinOrder: 2 }])].sort(), ['left', 'next'])
+})
+
+Deno.test('activity-only updates do not inspect groups or enumerate frame state', () => {
+    const docs = { page: tab('page') }
+    const untouched = new Proxy({}, {
+        get() { throw new Error('Activity changes do not need frame layout') },
+        ownKeys() { throw new Error('Activity changes must not enumerate state') }
+    })
+    assert.equal(getFrameMoveIds({ docs, frames: untouched }, [{ id: 'page', lastActivityAt: 100 }], untouched).size, 0)
+})
+
+Deno.test('frame checks use resolved groups without scanning unrelated documents or frame entries', () => {
+    const one = tab('one', { tabGroupId: 'group', tabGroupOrder: 0 })
+    const two = tab('two', { tabGroupId: 'group', tabGroupOrder: 1 })
+    Object.defineProperty(one, 'canvas', { enumerable: true, get() { throw new Error('Frame layout must not copy document payloads') } })
+    const docs = new Proxy({ one, two }, {
+        get(target, id) {
+            assert.ok(id === 'one' || id === 'two', 'Only affected documents should be read')
+            return target[id]
+        },
+        ownKeys() { throw new Error('Documents must not be enumerated') }
+    })
+    const wrapper = { isConnected: true }
+    const frames = new Proxy({ one: { wrapper, frame: { parentNode: wrapper } } }, {
+        ownKeys() { throw new Error('Center reorders must not enumerate frames') }
+    })
+    const moved = getFrameMoveIds({ docs, frames }, [{ id: 'one', tabGroupOrder: 2 }], [{ tabs: [one, two] }])
+    assert.deepEqual([...moved], ['one'])
+    assert.equal(getFrameMoveIds({ docs, frames: {} }, [{ id: 'one', tabGroupOrder: 2 }], [{ tabs: [one, two] }]).size, 0)
+})
+
+Deno.test('pin changes inspect mounted siblings without reading hibernated documents', () => {
+    const docs = {
+        left: tab('left', { pinned: 'left', pinScope: 'space', pinOrder: 0 }),
+        next: tab('next', { pinned: 'left', pinScope: 'space', pinOrder: 1 }),
+        get sleeping() { throw new Error('Hibernated documents are unrelated to mounted pin order') }
+    }
+    const frames = { sleeping: { frame: null } }
+    for (const id of ['left', 'next']) {
+        const wrapper = { isConnected: true }
+        frames[id] = { wrapper, frame: { parentNode: wrapper } }
+    }
+    assert.deepEqual([...getFrameMoveIds({ docs, frames }, [{ id: 'left', pinOrder: 2 }], [])].sort(), ['left', 'next'])
 })
 
 Deno.test('ready wrapper attaches a parked frame and repeated attachment is a no-op', () => {
