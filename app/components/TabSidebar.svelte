@@ -1145,6 +1145,12 @@
                             innerList.scrollTop += innerRow.bottom - innerBounds.bottom
                         }
                     }
+
+                    // FIXME: not smooth? activeTabElement.scrollIntoView({
+                    //                         behavior: 'smooth',
+                    //                         block: 'nearest'
+                    //                     })
+
                     const bounds = tabsList.getBoundingClientRect()
                     const row = activeTabElement.getBoundingClientRect()
                     if (activeTabElement.closest('.space-sticky-tabs')) return
