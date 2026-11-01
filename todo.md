@@ -3445,3 +3445,4 @@ picture in picture suport
 
 replace ad hoc test compile and puppeteer with xe cdp based real setup!
 
+launcher detect crash and close crashed window reaopen on right desktop and screen!
