@@ -115,6 +115,46 @@ try {
     await page.goto(`http://127.0.0.1:${server.address().port}`)
     await page.waitForSelector('.tabs-list [data-tab-id="tab-0"]')
     const space = '.space-content[data-space-id="work"]'
+    const title = `${space} .space-title-container`
+    const waitForTitleOpacity = value => page.waitForFunction((selector, expected) =>
+        Number(getComputedStyle(document.querySelector(selector)).opacity) === expected, {}, title, value)
+    await page.mouse.move(900, 700)
+    await waitForTitleOpacity(0)
+
+    const tabBounds = await page.$eval(`${space} [data-tab-id="tab-3"]`, el => {
+        const r = el.getBoundingClientRect()
+        return { x: r.left + 30, y: r.top + r.height / 2 }
+    })
+    await page.mouse.move(tabBounds.x, tabBounds.y)
+    await page.mouse.wheel({ deltaY: 120 })
+    await page.waitForFunction(selector => document.querySelector(selector).scrollTop > 0, {}, space)
+    assert.equal(await page.$eval(title, el => el.classList.contains('titles-visible')), false,
+        'scrolling tabs down does not reveal space titles')
+    await page.mouse.wheel({ deltaY: -120 })
+    await page.waitForFunction(selector => document.querySelector(selector).scrollTop === 0, {}, space)
+    assert.equal(await page.$eval(title, el => el.classList.contains('titles-visible')), false,
+        'scrolling tabs up does not reveal space titles')
+    await page.mouse.move(900, 700)
+
+    await page.hover(title)
+    await waitForTitleOpacity(1)
+    await page.mouse.move(900, 700)
+    await new Promise(resolve => setTimeout(resolve, 300))
+    assert.equal(await page.$eval(title, el => getComputedStyle(el).opacity), '1',
+        'the title stays visible during the hover leave delay')
+    await page.hover(title)
+    await new Promise(resolve => setTimeout(resolve, 700))
+    assert.equal(await page.$eval(title, el => getComputedStyle(el).opacity), '1',
+        'hovering again cancels the pending hide')
+    await page.mouse.move(900, 700)
+    await waitForTitleOpacity(0)
+
+    await page.$eval('.tab-content-container', el => { el.scrollLeft = el.clientWidth + 20 })
+    await waitForTitleOpacity(1)
+    await waitForTitleOpacity(0)
+    await page.$eval('.tab-content-container', el => { el.scrollLeft = 0 })
+    await waitForTitleOpacity(0)
+
     const fixed = `${space} [data-pin-scope="sidebar-fixed"]`
     const scrolling = `${space} [data-pin-scope="sidebar"]`
     const row = id => `${space} [data-tab-id="${id}"] .tab-item-main`

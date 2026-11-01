@@ -76,6 +76,8 @@
     let colorPickerFromMenu = $state(false)
     let spaceTitlesVisible = $state(true)
     let spaceTitlesHideTimeout = null
+    let hoveredSpaceTitleId = $state(null)
+    let spaceTitleHoverHideTimeout = null
 
     function revealSpaceTitles() {
         spaceTitlesVisible = true
@@ -84,6 +86,20 @@
             spaceTitlesVisible = false
             spaceTitlesHideTimeout = null
         }, 1000)
+    }
+
+    function handleSpaceTitleMouseEnter(spaceId) {
+        clearTimeout(spaceTitleHoverHideTimeout)
+        spaceTitleHoverHideTimeout = null
+        hoveredSpaceTitleId = spaceId
+    }
+
+    function handleSpaceTitleMouseLeave() {
+        clearTimeout(spaceTitleHoverHideTimeout)
+        spaceTitleHoverHideTimeout = setTimeout(() => {
+            hoveredSpaceTitleId = null
+            spaceTitleHoverHideTimeout = null
+        }, 600)
     }
 
     $effect(() => {
@@ -386,7 +402,6 @@
     }
     
     function handleTabContentWheel(event) {
-        revealSpaceTitles()
         if (!tabListRef || tabSearchQuery) return
         
         const scrollLeft = tabListRef.scrollLeft
@@ -870,6 +885,7 @@
 
     function handleTabScroll(event) {
         if (!tabListRef || event.target !== tabListRef) return
+        if (!tabSearchQuery && !multiSpaceMode) revealSpaceTitles()
         markHorizontalScrolling()
         
         // console.log('[DEBUG:SCROLL] Tab list scroll event', {
@@ -1251,6 +1267,7 @@
             clearTimeout(horizontalScrollTimeout)
             clearTimeout(scrollHoverTimeout)
             clearTimeout(spaceTitlesHideTimeout)
+            clearTimeout(spaceTitleHoverHideTimeout)
             stopHovercardPositionCheck()
         }
     })
@@ -1875,7 +1892,6 @@
                      class:horizontal-scrolling={isHorizontalScrolling}
                      class:searching={tabSearchQuery.length > 0}
                      bind:this={tabListRef}
-                     onscrollcapture={revealSpaceTitles}
                      onscroll={handleTabScroll}
                      onwheel={handleTabContentWheel}
                      onscrollend={handleTabContentScrollEnd}
@@ -1924,7 +1940,10 @@
                                      role="group"
                                      aria-label="Space tabs">
                                 <div class="space-title-container"
-                                     class:titles-visible={spaceTitlesVisible || multiSpaceMode || tabSearchQuery.length > 0 || renamingSpaceId === spaceId || colorPickerSpaceId === spaceId || openMenuId === spaceId || spaceContextMenuId === spaceId}>
+                                     class:titles-visible={spaceTitlesVisible || multiSpaceMode || tabSearchQuery.length > 0 || renamingSpaceId === spaceId || colorPickerSpaceId === spaceId || openMenuId === spaceId || spaceContextMenuId === spaceId}
+                                     class:title-hovered={hoveredSpaceTitleId === spaceId}
+                                     onmouseenter={() => handleSpaceTitleMouseEnter(spaceId)}
+                                     onmouseleave={handleSpaceTitleMouseLeave}>
                                     {#if renamingSpaceId === spaceId}
                                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                                         <input class="space-title-rename"
@@ -3013,7 +3032,7 @@
     }
 
     .space-title-container.titles-visible,
-    .space-title-container:hover,
+    .space-title-container.title-hovered,
     .space-title-container:focus-within {
         opacity: 1;
         transition-duration: 100ms;
