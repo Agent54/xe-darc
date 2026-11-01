@@ -3245,6 +3245,7 @@
         <li 
             bind:this={tabButtons[tab.id]}
             class="tab-container pinned-tab-container" 
+            class:pin-scope-start={i > 0 && data.getPinScope(rightPinned) !== data.getPinScope(rightPinnedTabs[i - 1])}
             data-tab-id={tab.id}
             class:active={tab.id === data.spaceMeta.activeTabId} 
             class:hibernated={data.isTabHibernated(tab.id)}
@@ -3351,6 +3352,7 @@
                     <li 
                         bind:this={tabButtons[tab.id]}
                         class="tab-container pinned-tab-container" 
+                        class:pin-scope-start={i > 0 && data.getPinScope(tabPinned) !== data.getPinScope(leftPinnedTabs[i - 1])}
                         data-tab-id={tab.id}
                         class:active={tab.id === data.spaceMeta.activeTabId} 
                         class:hibernated={data.isTabHibernated(tab.id)}

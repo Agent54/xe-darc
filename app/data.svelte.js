@@ -1809,6 +1809,13 @@ const data = {
             return Promise.all([moving, pinning])
         }
         const items = spaces[tab.spaceId]?.tabs || []
+        const sourceGroup = getTabGroup(items, tabId)
+        const needsCenterTab = !tab.pinned && sourceGroup?.tabs.every(member => member.id === tabId || member.pinned)
+        // Create the center tab before removing its anchor from group membership (space/global pins).
+        const centerCreation = needsCenterTab ? data.newTab(tab.spaceId, {
+            groupTabId: tabId,
+            shouldFocus: spaceMeta.activeSpace === tab.spaceId && sourceGroup.tabs.some(member => member.id === getCurrentGroupTabId(tab.spaceId))
+        }) : null
         const anchor = groupTabId || (tab.pinned && getPinScope(tab) === 'space' ? getCurrentGroupTabId(tab.spaceId) : tabId)
         const group = pinScope === 'group' ? getTabGroup(items, anchor) : null
         const updates = []
@@ -1826,7 +1833,7 @@ const data = {
             : tab.pinned && getPinScope(tab) === pinScope ? tab.pinOrder ?? tab.order ?? 0 : nextPinOrder(pinItems)
         updates.push({ id: tabId, ...membership, pinned: pinned === true ? 'left' : pinned, pinScope, pinOrder, sidebarPinned: null, sidebarPinOrder: null })
         parkMovingFrames(updates, [group])
-        const saves = updates.map(({ id, ...update }) => queueDocumentUpdate(id, update))
+        const saves = [centerCreation, ...updates.map(({ id, ...update }) => queueDocumentUpdate(id, update))]
 
         if (spaceMeta.activeSpace === tab.spaceId && spaceMeta.activeTabId === tabId) {
             const candidates = (pinScope === 'group' ? getTabGroup(items, tabId)?.tabs || [] : items)

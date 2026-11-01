@@ -77,9 +77,18 @@ Deno.test('group pins appear once as members while space pins remain outside gro
         tab('other', 20), tab('other-pin', 20, { pinned: 'left', pinScope: 'group', tabGroupId: 'other' }),
         grouped('closed-pin', 3, { pinned: 'left', pinScope: 'group', archive: 'closed' })]
     assert.deepEqual(getTabGroups(items)[0].tabs.map(tab => tab.id), ['one', 'pin'])
-    assert.deepEqual(getSidepins(items, 'one').map(tab => tab.id), ['pin', 'space-pin'])
+    assert.deepEqual(getSidepins(items, 'one').map(tab => tab.id), ['space-pin', 'pin'])
     assert.deepEqual(getSidepins(items, 'other').map(tab => tab.id), ['space-pin'])
     assert.deepEqual(getSidepins(items, null).map(tab => tab.id), ['space-pin'])
+})
+
+Deno.test('space sidepins precede group sidepins while preserving each scope order', () => {
+    const items = [grouped('center', 0),
+        grouped('group-last', 1, { pinned: 'left', pinScope: 'group', pinOrder: -10 }),
+        grouped('group-first', 2, { pinned: 'right', pinScope: 'group', pinOrder: -20 }),
+        grouped('space-last', 3, { pinned: 'right', pinScope: 'space', pinOrder: 100 }),
+        grouped('space-first', 4, { pinned: 'left', pinScope: 'space', pinOrder: 50 })]
+    assert.deepEqual(getSidepins(items, 'center').map(tab => tab.id), ['space-first', 'space-last', 'group-first', 'group-last'])
 })
 
 Deno.test('dropping a group pin into another group unpins it and clears only its pin presentation', () => {

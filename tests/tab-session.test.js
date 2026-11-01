@@ -1911,22 +1911,48 @@ Deno.test('pin scope is per tab, survives restart and can attach a space pin to 
     assert.equal(restarted.data.getTabGroup('pin').tabs.some(tab => tab.id === 'other'), true)
 })
 
-Deno.test('pinning the only center tab keeps its group selected and group additions still work', async () => {
+Deno.test('pinning the only center tab immediately creates and selects a new tab in its group', async () => {
     const { data, refresh } = session({ tabs: [tab('solo'), tab('outside')], history: ['solo', 'outside'], runtime: 'client' })
     await refresh()
-    await data.pin({ tabId: 'solo', pinned: 'right' })
-    assert.equal(data.spaceMeta.activeTabId, 'solo')
-    assert.equal(data.getCurrentGroupTabId(), 'solo')
-    assert.equal(data.getLastActiveNonPinnedTabId(), null)
-    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['solo'])
-    const added = await data.newGroupTab(defaultSpace, { shouldFocus: true })
-    assert.equal(data.docs.solo.tabGroupId, added.tabGroupId)
-    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['solo'])
-    await data.pin({ tabId: added.id, pinned: 'left' })
+    const pinning = data.pin({ tabId: 'solo', pinned: 'right' })
+    const added = data.docs[data.spaceMeta.activeTabId]
+    assert.equal(added.url, 'about:newtab')
     assert.equal(data.getCurrentGroupTabId(), added.id)
-    assert.equal(data.getLastActiveNonPinnedTabId(), null)
-    await data.pin({ tabId: 'solo', pinned: null })
-    assert.equal(data.getLastActiveNonPinnedTabId(), 'solo')
+    assert.equal(data.getLastActiveNonPinnedTabId(), added.id)
+    assert.deepEqual(Array.from(data.getSidepins(), tab => tab.id), ['solo'])
+    await pinning
+    assert.equal(data.docs.solo.tabGroupId, added.tabGroupId)
+    await data.pin({ tabId: added.id, pinned: 'left' })
+    const next = data.docs[data.spaceMeta.activeTabId]
+    assert.equal(next.url, 'about:newtab')
+    assert.notEqual(next.id, added.id)
+    assert.equal(next.tabGroupId, added.tabGroupId)
+    assert.equal(data.getTabGroup(next.id).tabs.filter(tab => !tab.pinned).length, 1)
+})
+
+Deno.test('pinning a last group center tab preserves its group and background focus for every pin scope', async () => {
+    for (const scope of ['group', 'space', 'global']) {
+        for (const foreground of [true, false]) {
+            const { data, refresh, db } = session({ tabs: [
+                tab('center', defaultSpace, { tabGroupId: 'group' }),
+                tab('pin', defaultSpace, { tabGroupId: 'group', pinned: 'left', pinScope: 'group' }),
+                tab('outside')
+            ], history: [foreground ? 'center' : 'outside'], runtime: 'client' })
+            await refresh()
+            const pinning = data.pin({ tabId: 'center', pinned: 'right', scope })
+            const centers = data.getTabGroup('pin').tabs.filter(tab => !tab.pinned)
+            assert.equal(centers.length, 1)
+            const replacement = centers[0]
+            assert.equal(replacement.url, 'about:newtab')
+            assert.equal(replacement.tabGroupId, 'group')
+            assert.equal(data.spaceMeta.activeTabId, foreground ? replacement.id : 'outside')
+            await pinning
+            assert.equal((await db.get(replacement.id)).tabGroupId, 'group')
+            await data.pin({ tabId: 'center', pinned: 'left', scope })
+            await refresh()
+            assert.deepEqual(Array.from(data.getTabGroup('pin').tabs.filter(tab => !tab.pinned), tab => tab.id), [replacement.id])
+        }
+    }
 })
 
 Deno.test('activating a group pin selects its own group rather than the most recent other group', async () => {

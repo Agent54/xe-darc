@@ -1673,6 +1673,19 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     min-height: 18px;
 }
 
+.pinned-tab-container.pin-scope-start::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 16px;
+    background: currentColor;
+    opacity: 0.3;
+    pointer-events: none;
+}
+
 /* Pinned tab toggle button - overlays the entire pinned tab container */
 .pinned-toggle-btn {
     position: absolute;

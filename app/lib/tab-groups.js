@@ -18,7 +18,8 @@ export function getSidepins (items = [], groupTabId) {
     const groupKey = anchor ? tabGroupKey(anchor) : null
     return items.filter(tab => tab.type === 'tab' && tab.pinned && !tab.archive && !tab.preview && !tab.lightbox &&
         (getPinScope(tab) === 'space' || (getPinScope(tab) === 'group' && groupKey && tabGroupKey(tab) === groupKey)))
-        .sort((a, b) => (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
+        .sort((a, b) => Number(getPinScope(a) === 'group') - Number(getPinScope(b) === 'group') ||
+            (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
 }
 
 export function getGlobalPins (items = []) {

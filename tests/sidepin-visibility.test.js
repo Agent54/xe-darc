@@ -215,6 +215,17 @@ function elementsWithClass (node, className) {
 }
 
 const pinElements = elementsWithClass(parse(appSource).html, 'pinned-tab-container')
+Deno.test('both title-bar pin stacks show a divider only at scope boundaries', () => {
+    const tabs = ['space', 'space', 'group', 'group'].map((scope, i) => pin(`pin-${i}`, 'left', scope))
+    for (const element of pinElements) {
+        const expression = element.attributes.find(attribute => attribute.name === 'pin-scope-start').expression
+        const isBoundary = new Function('data', 'rightPinned', 'rightPinnedTabs', 'tabPinned', 'leftPinnedTabs', 'i',
+            `return (${appSource.slice(expression.start, expression.end)})`)
+        assert.deepEqual(tabs.map((tab, i) => isBoundary({ getPinScope }, tab, tabs, tab, tabs, i)), [false, false, true, false])
+        assert.equal(isBoundary({ getPinScope }, tabs[2], [tabs[2]], tabs[2], [tabs[2]], 0), false)
+    }
+})
+
 for (const side of ['left', 'right']) {
     Deno.test(`${side} toggle handles clicks and keyboard once while preserving drag initiation`, () => {
         const h = harness()
