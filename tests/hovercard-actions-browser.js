@@ -11,6 +11,7 @@ const modules = {
     entry: `
         import { mount, unmount } from 'svelte'
         import TabHoverCard from './app/components/TabHoverCard.svelte'
+        import TabContextMenu from './app/components/TabContextMenu.svelte'
         import ShortcutOverlay from './app/components/ShortcutOverlay.svelte'
         import { openTabDevTools } from './app/lib/tab-devtools.js'
         import data from 'fixture-data'
@@ -18,6 +19,19 @@ const modules = {
         window.actions = []
         window.shortcutActions = []
         window.data = data
+        let menu = null
+        window.menuHides = 0
+        window.showMenu = (showDevTools = true, type = 'tab') => {
+            if (menu) unmount(menu)
+            menu = mount(TabContextMenu, { target: document.body, props: {
+                menu: { visible: true, x: innerWidth - 270, y: 40, tab: { ...data.docs.single, type } },
+                showDevTools,
+                onHide: () => { window.menuHides++; unmount(menu); menu = null },
+                onNavigateHistory: (id, direction) => window.actions.push([direction, id]),
+                onReload: tab => window.actions.push(['reload', tab.id]),
+                onSettings: () => window.actions.push(['settings', 'single'])
+            } })
+        }
         const cards = {}
         let overlay = null
         const handle = createShortcutHandler(createShortcutMatcher(shortcuts, true), id => {
@@ -51,9 +65,11 @@ const modules = {
         const tab = id => ({ id, title: id, url: 'https://' + id + '.example/path', spaceId: 'space' })
         export default {
             docs: { single: tab('single'), grouped: tab('grouped') },
-            frames: {}, spaces: { space: { name: 'Space' } },
-            spaceMeta: { activeTabId: 'unrelated', activeSpace: 'other-space' },
+            frames: { single: { frame: {} } }, spaces: { space: { name: 'Space' } }, ui: {},
+            spaceMeta: { activeTabId: 'unrelated', activeSpace: 'other-space', spaceOrder: ['space'] },
             isTabHibernated: () => false,
+            closeTab: (space, id) => window.actions.push(['close', id]),
+            unhibernate: id => window.actions.push(['wake', id]),
             newTab: async (space, tab) => window.actions.push(['devtools', space, tab])
         }
     `,
@@ -112,7 +128,8 @@ const server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, req
     if (new URL(request.url).pathname === '/fixture.js') {
         return new Response(output[0].code, { headers: { 'content-type': 'text/javascript' } })
     }
-    return new Response('<!doctype html><style>*, ::before, ::after { box-sizing: border-box } body { background: #111; display: flex; gap: 40px; margin: 60px; color: white }</style><script type="module" src="/fixture.js"></script>', { headers: { 'content-type': 'text/html' } })
+    const menus = Deno.readTextFileSync(`${root}app/menus.css`)
+    return new Response(`<!doctype html><style>${menus} *, ::before, ::after { box-sizing: border-box } body { background: #111; display: flex; gap: 40px; margin: 60px; color: white }</style><script type="module" src="/fixture.js"></script>`, { headers: { 'content-type': 'text/html' } })
 })
 
 let browser
@@ -142,6 +159,8 @@ try {
         await page.mouse.move(gap.x, gap.y)
         await page.waitForFunction(prefix => document.querySelector(`${prefix} .url-bar-wrapper`).matches(':hover'), {}, prefix)
         assert.equal(await page.$eval(`${prefix} .url-bar-controls`, controls => getComputedStyle(controls).visibility), 'visible', 'crossing the gap retains the controls')
+        const sizes = await page.$$eval(`${prefix} .url-bar-button`, buttons => buttons.map(button => ({ width: button.offsetWidth, height: button.offsetHeight })))
+        assert.ok(sizes.every(size => size.width === 36 && size.height === 36), 'hovercard actions have larger hit targets')
 
         for (const label of ['Back', 'Forward', 'Reload', 'Settings', 'Copy URL', 'Open Developer Tools', 'Close Tab']) {
             await reveal()
@@ -154,6 +173,59 @@ try {
             ['close', id]
         ])
     }
+
+    for (const keyboard of [false, true]) {
+        for (const [label, action] of [['Back', 'back'], ['Forward', 'forward'], ['Reload', 'reload'], ['Settings', 'settings'], ['Copy URL', 'copy'], ['Open Developer Tools', 'devtools'], ['Close Tab', 'close']]) {
+            await page.evaluate(() => window.showMenu())
+            const selector = `.context-menu .tab-actions [aria-label="${label}"]`
+            await page.waitForSelector(selector)
+            const before = await page.evaluate(() => ({ count: window.actions.length, hides: window.menuHides }))
+            if (keyboard) {
+                await page.focus(selector)
+                await page.keyboard.press(label === 'Close Tab' ? 'Space' : 'Enter')
+            } else {
+                await page.click(selector, { button: 'right' })
+                assert.equal(await page.evaluate(() => window.actions.length), before.count, 'right clicks must not activate actions')
+                await page.click(selector)
+            }
+            await page.waitForFunction(count => window.actions.length === count, {}, before.count + 1)
+            assert.equal(await page.evaluate(() => window.menuHides), before.hides + 1, 'the action dismisses the menu once')
+            const last = await page.evaluate(() => window.actions.at(-1))
+            assert.equal(last[0], action)
+            assert.equal(last[1], action === 'copy' ? 'https://single.example/path' : action === 'devtools' ? 'space' : 'single')
+            if (action === 'devtools') assert.equal(last[2].groupTabId, 'single')
+        }
+    }
+    await page.evaluate(() => window.showMenu())
+    assert.equal(await page.$$eval('.context-menu [aria-label="Reload"]', buttons => buttons.length), 1)
+    assert.equal(await page.$$eval('.context-menu [aria-label="Close Tab"]', buttons => buttons.length), 1)
+    const menuSizes = await page.$$eval('.context-menu .url-bar-button', buttons => buttons.map(button => ({ width: button.offsetWidth, height: button.offsetHeight })))
+    assert.ok(menuSizes.every(size => size.width >= 28 && size.height === 28), 'menu actions retain compact menu sizing')
+    await page.focus('#single .url-bar-url')
+    await page.waitForSelector('#single [aria-label="Back"]', { visible: true })
+    await page.$eval('#single .url-bar-controls', row => Promise.all(row.getAnimations().map(animation => animation.finished)))
+    await page.screenshot({ path: `${root}.cache/tab-actions-desktop.png` })
+    await page.evaluate(() => window.showMenu(false))
+    assert.equal(await page.$('.context-menu [aria-label="Open Developer Tools"]'), null, 'developer tools follows the mode setting')
+    await page.evaluate(() => window.showMenu(false, 'divider'))
+    assert.equal(await page.$('.context-menu .tab-actions'), null, 'spacers retain their dedicated menu')
+    await page.click('.context-menu-scrim')
+
+    await page.setViewport({ width: 320, height: 700 })
+    await page.evaluate(() => { document.body.style.margin = '0'; document.querySelector('#grouped').style.display = 'none' })
+    await page.hover('#single .hovercard-title')
+    await page.waitForSelector('#single .hover-expand-enabled')
+    await page.hover('#single .url-bar-url')
+    await page.waitForSelector('#single [aria-label="Back"]', { visible: true })
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('#single .url-bar-controls')).opacity === '1')
+    const rowBounds = await page.$eval('#single .url-bar-controls', row => {
+        const rect = row.getBoundingClientRect()
+        return { left: rect.left, right: rect.right }
+    })
+    assert.ok(rowBounds.left >= 0 && rowBounds.right <= 320, 'all hovercard controls fit a narrow viewport')
+    await page.$eval('#single .url-bar-controls', row => Promise.all(row.getAnimations().map(animation => animation.finished)))
+    await page.screenshot({ path: `${root}.cache/tab-actions-mobile.png` })
+    await page.setViewport({ width: 1100, height: 700 })
     const checkLocation = async () => {
         await page.waitForFunction(() => {
             const input = document.querySelector('#single [aria-label="Tab URL"]')
@@ -220,7 +292,7 @@ try {
     await page.keyboard.up('Control')
     assert.equal(await page.evaluate(() => document.activeElement.id), 'focus-reference')
     assert.deepEqual(errors, [])
-    console.log('Hovercard controls, Cmd+L focus, held Cmd+T groups, two-second modifier help, focus preservation and mobile layout pass')
+    console.log('Tab menu mouse/keyboard actions, hovercard target sizes, narrow action rows, Cmd+L focus, held Cmd+T groups and shortcut help pass')
 } finally {
     await browser?.close()
     await server.shutdown()

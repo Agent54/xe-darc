@@ -2371,6 +2371,9 @@
     menu={tabContextMenu} 
     defaultPinScope="space"
     onHide={hideTabContextMenu} 
+    showDevTools={devModeEnabled}
+    {onSettings}
+    {onNavigateHistory}
     onReload={(tab) => {
         if (!tab?.id) return
         data.reloadTab(tab.id)

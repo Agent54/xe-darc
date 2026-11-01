@@ -4141,6 +4141,9 @@
 <TabContextMenu 
     menu={contextMenu} 
     onHide={hideContextMenu} 
+    showDevTools={devModeEnabled}
+    onSettings={switchToSettings}
+    onNavigateHistory={navigateTabHistory}
     onReload={(tab) => {
         if (!tab?.id) return
         data.reloadTab(tab.id)
