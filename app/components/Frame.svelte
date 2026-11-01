@@ -28,7 +28,7 @@
     const tab = $derived(data.docs[tabId])
 
     function lightboxTransition(node, options) {
-        return node.parentElement.classList.contains('lightbox-legacy-effects')
+        return node.parentElement.classList.contains('lightbox-effects')
             ? scale(node, options)
             : fade(node, options)
     }
@@ -959,9 +959,9 @@
 
         {#if data.previews[tab._id] && data.docs[data.previews[tab._id]?.lightbox] && !closedLightboxes[data.previews[tab._id]?.lightbox]}
             {@const lightboxChild = data.docs[data.previews[tab._id].lightbox]}
-            <!-- Restore the old effects with class="lightbox-backdrop lightbox-legacy-effects" below. -->
+            <!-- Remove lightbox-effects to compare the simpler fade without blur. -->
             <div 
-                class="lightbox-backdrop"
+                class="lightbox-backdrop lightbox-effects"
                 role="dialog"
                 aria-modal="true"
                 tabindex="-1"
@@ -1650,7 +1650,7 @@
         z-index: 1;
     }
 
-    .lightbox-backdrop:global(.lightbox-legacy-effects) {
+    .lightbox-backdrop:global(.lightbox-effects) {
         backdrop-filter: blur(1px);
         will-change: opacity, backdrop-filter;
         transform: translateZ(0);
@@ -1678,7 +1678,7 @@
         overflow: visible;
     }
 
-    .lightbox-backdrop:global(.lightbox-legacy-effects) .lightbox-container {
+    .lightbox-backdrop:global(.lightbox-effects) .lightbox-container {
         will-change: transform, opacity, box-shadow;
         transform: translateZ(0);
         backface-visibility: hidden;
