@@ -38,17 +38,19 @@ const modules = {
         const tab = (id, order, extra = {}) => ({ id, order, type: 'tab', title: id,
             spaceId: 'work', url: 'about:blank', ...extra })
         const tabs = [tab('saved', -1, { sidebarPinned: true }),
+            tab('left-app', -2, { pinned: 'left', pinScope: 'space' }),
+            tab('right-app', -3, { pinned: 'right', pinScope: 'space' }),
             ...Array.from({ length: 35 }, (_, i) => tab('tab-' + i, i))]
         const data = $state({
             docs: {}, frames: {}, origins: {}, ui: { tabActivityMode: false },
-            spaceMeta: { spaceOrder: ['work', 'personal'], activeSpace: 'work', activeTabId: 'tab-0', globalPins: [], closedTabs: [] },
+            spaceMeta: { spaceOrder: ['work', 'personal'], activeSpace: 'work', activeTabId: 'tab-0', globalPins: [tab('global-app', 0, { pinned: 'left', pinScope: 'global' })], closedTabs: [] },
             spaces: {
                 work: { name: 'Work', tabs, activeTabsOrder: ['tab-0'] },
                 personal: { name: 'Personal', tabs: [tab('personal', 0, { spaceId: 'personal' })], activeTabsOrder: [] }
             }
         })
         for (const space of Object.values(data.spaces)) for (const tab of space.tabs) data.docs[tab.id] = tab
-        data.getSpacePins = () => []
+        data.getSpacePins = id => data.spaces[id].tabs.filter(tab => tab.pinned && tab.pinScope === 'space')
         data.isTabHibernated = () => false
         data.getSidebarItems = id => getSidebarItems(data.spaces[id].tabs)
         data.getTabGroup = (id, space = 'work') => getTabGroup(data.spaces[space].tabs, id)
@@ -118,6 +120,17 @@ try {
     await page.goto(`http://127.0.0.1:${server.address().port}`)
     await page.waitForSelector('.tabs-list [data-tab-id="tab-0"]')
     const space = '.space-content[data-space-id="work"]'
+    const headerGeometry = () => page.evaluate(selector => [
+        '.sidebar-header', '.spaces-container',
+        selector + ' .space-title-container',
+        selector + ' [data-tab-id="left-app"]',
+        selector + ' [data-tab-id="right-app"]',
+        selector + ' .new-tab-row'
+    ].map(selector => {
+        const r = document.querySelector(selector).getBoundingClientRect()
+        return { top: r.top, bottom: r.bottom }
+    }), space)
+    const originalHeader = await headerGeometry()
     const title = `${space} .space-title-container`
     const waitForTitleOpacity = value => page.waitForFunction((selector, expected) =>
         Number(getComputedStyle(document.querySelector(selector)).opacity) === expected, {}, title, value)
@@ -131,6 +144,7 @@ try {
     await page.mouse.move(tabBounds.x, tabBounds.y)
     await page.mouse.wheel({ deltaY: 120 })
     await page.waitForFunction(selector => document.querySelector(selector).scrollTop > 0, {}, space)
+    assert.deepEqual(await headerGeometry(), originalHeader, 'wheel scrolling keeps the title, app pins, sidepins and upper sidebar fixed')
     assert.equal(await page.$eval(title, el => el.classList.contains('titles-visible')), false,
         'scrolling tabs down does not reveal space titles')
     await page.mouse.wheel({ deltaY: -120 })
@@ -203,8 +217,10 @@ try {
     assert.equal(await page.$$eval(`${scrolling} [data-tab-id]`, tabs => tabs.length), 1)
     assert.equal(await page.$eval(`${space} .tabs-list`, el => !!el.querySelector('[data-tab-id="tab-0"]')), false)
 
+    const pinnedHeader = await headerGeometry()
     await page.$eval(space, el => { el.scrollTop = 700 })
     await page.waitForFunction(selector => document.querySelector(selector).scrollTop >= 700, {}, space)
+    assert.deepEqual(await headerGeometry(), pinnedHeader, 'the whole header stays fixed above the fixed pinned tabs')
     const layout = await page.$eval(space, el => {
         const bounds = el.getBoundingClientRect()
         const pin = el.querySelector('.fixed-sidebar-pins').getBoundingClientRect()
@@ -245,7 +261,10 @@ try {
     await page.screenshot({ path: `${root}.cache/tab-sidebar-fixed-pins.png` })
     for (const height of [800, 450]) {
         await page.setViewport({ width: 1100, height })
+        await page.$eval(space, el => { el.scrollTop = 0 })
+        const headerBeforeScroll = await headerGeometry()
         await page.$eval(space, el => { el.scrollTop = el.scrollHeight })
+        assert.deepEqual(await headerGeometry(), headerBeforeScroll, 'all header elements stay in place at the bottom in both tall and short windows')
         assert.equal(await page.$eval(space, el => {
             const bounds = el.getBoundingClientRect()
             const header = el.querySelector('.space-sticky-tabs').getBoundingClientRect()

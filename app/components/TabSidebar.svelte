@@ -1787,7 +1787,7 @@
                 </div>
             {:else}
                 <div class="section global-pins-section">
-                    <div class="pinned-tabs-grid" data-pin-scope="global" class:pin-drop-active={tabDrag.active && tabDrag.dropTarget?.pinScope === 'global'}>
+                    <div class="pinned-tabs-grid" data-pin-scope="global">
                         <button class="pinned-tab search-toggle-tab"
                                 title="Search Tabs"
                                 onmousedown={(e) => { e.stopPropagation(); isSearchModeActive = true; setTimeout(() => searchInputRef?.focus(), 50); }}
@@ -1936,6 +1936,7 @@
                                      onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
                                      role="group"
                                      aria-label="Space tabs">
+                                <div class="space-sticky-tabs">
                                 <div class="space-title-container"
                                      data-pin-scope={spacePins.length ? undefined : 'space'} data-pin-layout="rows" data-pin-empty-edge="bottom"
                                      class:titles-visible={spaceTitlesVisible || multiSpaceMode || tabSearchQuery.length > 0 || renamingSpaceId === spaceId || colorPickerSpaceId === spaceId || openMenuId === spaceId || spaceContextMenuId === spaceId}
@@ -2023,7 +2024,7 @@
                                 </div>
                                 
                                 {#if spacePins.length > 0}
-                                    <div class="pinned-tabs-grid" data-pin-scope="space" class:pin-drop-active={tabDrag.active && tabDrag.dropTarget?.pinScope === 'space' && tabDrag.dropTarget?.targetSpaceId === spaceId}>
+                                    <div class="pinned-tabs-grid" data-pin-scope="space">
                                         {#each spacePins as tab (tab.id)}
                                             {#if tabMatchesSearch(tab)}
                                                 <button class="app-tab" data-tab-id={tab.id} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} title={tab.titleOverride || tab.title || tab.url} aria-label={tab.titleOverride || tab.title || tab.url}
@@ -2037,19 +2038,18 @@
                                     </div>
                                 {/if}
                                 
-                                <div class="space-sticky-tabs">
                                 {#if fixedSidebarPins.length}
                                     <div class="sidebar-pinned-tabs fixed-sidebar-pins" data-pin-scope="sidebar-fixed" data-pin-layout="rows"
-                                         class:pin-drop-active={tabDrag.active && tabDrag.dropTarget?.pinScope === 'sidebar-fixed' && tabDrag.dropTarget?.targetSpaceId === spaceId}
                                          role="list" aria-label="Always visible pinned tabs">
                                         {#each fixedSidebarPins as tab, i (tab.id)}
                                             {@render sidebarTab(tab, i)}
                                         {/each}
                                     </div>
-                                {:else}
-                                    <div class="fixed-pin-drop-anchor" data-pin-scope="sidebar-fixed" data-pin-layout="rows" data-pin-hit-padding="8" aria-hidden="true"></div>
                                 {/if}
                                 <div class="new-tab-row">
+                                    {#if !fixedSidebarPins.length}
+                                        <div class="fixed-pin-drop-anchor" data-pin-scope="sidebar-fixed" data-pin-layout="rows" data-pin-hit-padding="8" aria-hidden="true"></div>
+                                    {/if}
                                     <div class="new-tab-button" 
                                             onmousedown={(e) => {
                                                 if (!e.target.closest('.new-tab-more-button')) {
@@ -2154,7 +2154,6 @@
                                 <div class="space-tabs-sections">
                                     {#if sidebarPins.length}
                                     <div class="sidebar-pinned-tabs" data-pin-scope="sidebar" data-pin-layout="rows"
-                                         class:pin-drop-active={tabDrag.active && tabDrag.dropTarget?.pinScope === 'sidebar' && tabDrag.dropTarget?.targetSpaceId === spaceId}
                                          role="list" aria-label="Pinned tabs">
                                         {#each sidebarPins as tab, i (tab.id)}
                                             {@render sidebarTab(tab, i)}
@@ -2777,17 +2776,14 @@
         scrollbar-width: thin;
     }
 
-    .space-content > .pinned-tabs-grid {
+    .space-sticky-tabs > .pinned-tabs-grid {
         padding-inline: 0;
-        max-height: max(44px, calc(50% - 54px));
+        min-height: 44px;
+        max-height: min(25vh, 180px);
+        flex-shrink: 1;
         overflow-y: auto;
         overscroll-behavior-y: contain;
         scrollbar-width: thin;
-    }
-
-    .pin-drop-active {
-        background: rgb(255 255 255 / 4%);
-        border-radius: 12px;
     }
 
     .pinned-tab.tab-dragging,
@@ -3513,6 +3509,7 @@
         top: 0;
         z-index: 12;
         flex-shrink: 0;
+        max-height: calc(100% - 44px);
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -3521,6 +3518,7 @@
 
     .fixed-sidebar-pins {
         max-height: min(30vh, 240px);
+        flex-shrink: 1;
     }
 
     .pinned-tabs-divider {

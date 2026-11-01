@@ -20,7 +20,7 @@ await withSidebarFixture('sidebar-pins', async ({ page }) => {
         await page.mouse.move(target.x, target.y + (edge ? 2 : target.height / 2))
     }
     await beginPinDrag('[data-tab-id="outside"] .tab-item-main')
-    await moveToPinTarget('[data-pin-scope="space"] .pin-drop-placeholder')
+    await moveToPinTarget('.space-title-container[data-pin-scope="space"]')
     assert.equal(await page.evaluate(() => window.tabDrag.dropTarget?.pinScope), 'space')
     await page.mouse.up()
     assert.deepEqual(await page.evaluate(() => ({ type: window.pinDrops.at(-1).type, tabId: window.pinDrops.at(-1).tabId, space: window.pinDrops.at(-1).targetSpaceId })), { type: 'pin', tabId: 'outside', space: 'space' })
@@ -56,7 +56,11 @@ await withSidebarFixture('sidebar-pins', async ({ page }) => {
         window.data.spaces.space.pinnedTabs = []
     }))
     await beginPinDrag('[data-tab-id="outside"] .tab-item-main')
-    await moveToPinTarget('[data-pin-scope="global"] .pin-drop-placeholder')
+    const emptyGlobalTarget = await page.$eval('[data-pin-scope="global"] .all-apps-tab', el => {
+        const r = el.getBoundingClientRect()
+        return { x: r.right + 12, y: r.top + r.height / 2 }
+    })
+    await page.mouse.move(emptyGlobalTarget.x, emptyGlobalTarget.y)
     assert.equal(await page.evaluate(() => window.tabDrag.dropTarget?.pinScope), 'global')
     await page.mouse.up()
     await page.evaluate(() => window.flushSync(() => {
@@ -68,7 +72,7 @@ await withSidebarFixture('sidebar-pins', async ({ page }) => {
     await page.click('[data-pin-scope="global"] [data-tab-id="pin-one"]')
     await page.waitForFunction(() => window.data.spaceMeta.activeTabId === 'pin-one')
     await beginPinDrag('[data-tab-id="outside"] .tab-item-main')
-    await moveToPinTarget('.sidebar-pins-placeholder')
+    await moveToPinTarget('.pinned-tabs-divider[data-pin-scope="sidebar"]')
     assert.equal(await page.evaluate(() => window.tabDrag.dropTarget?.pinScope), 'sidebar')
     assert.equal(await page.evaluate(() => window.tabDrag.indicator.height), 2)
     await page.mouse.up()
