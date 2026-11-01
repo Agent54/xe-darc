@@ -594,13 +594,13 @@
                     <svg class="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
                 </button>
                 {#if viewMenu === kind}
-                    <div id={`apps-${kind}-menu`} role="menu" aria-label={`${label} apps`} tabindex="-1" onkeydown={(event) => { handleViewKey(event); handleMenuNavigation(event) }} class="apps-view-menu absolute right-0 top-full z-30 mt-2 w-48 rounded-xl border border-white/15 bg-neutral-950 p-1.5 shadow-xl">
+                    <div id={`apps-${kind}-menu`} role="menu" aria-label={`${label} apps`} tabindex="-1" onkeydown={(event) => { handleViewKey(event); handleMenuNavigation(event) }} class="apps-view-menu absolute right-0 top-full z-30 mt-2 w-48 menu-surface">
                         {#each [{ value: 'none', label: noneLabel }, ...appViewOptions] as option}
                             <button
                                 type="button"
                                 role="menuitemradio"
+                                class="menu-action menu-action-between"
                                 aria-checked={selected === option.value}
-                                class="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm text-white/75 hover:bg-white/10 focus-visible:outline-none focus-visible:bg-white/10 cursor-pointer"
                                 onmousedown={(event) => { if (event.button === 0) setViewOption(kind, option.value) }}
                                 onkeydown={(event) => {
                                     if (event.key === 'Enter' || event.key === ' ') {

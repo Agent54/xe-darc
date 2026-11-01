@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./menus.css";
 
 :root {
     touch-action: pan-x pan-y;

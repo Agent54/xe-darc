@@ -37,7 +37,7 @@
 <svelte:window onmousedown={dismiss} oncontextmenu={dismiss} onfocusin={dismiss} onresize={onHide} />
 
 <div
-    class="appearance-context-menu"
+    class="appearance-context-menu menu-surface"
     bind:this={root}
     use:positionMenu
     popover="manual"
@@ -49,6 +49,7 @@
 >
     {#each items as item (item.id)}
         <button
+            class="menu-action menu-action-between"
             type="button"
             role="menuitemcheckbox"
             aria-checked={item.checked}
@@ -63,40 +64,10 @@
 <style>
     .appearance-context-menu {
         position: fixed;
-        box-sizing: border-box;
         inset: auto;
         width: 248px;
         max-width: calc(100vw - 16px);
         margin: 0;
-        padding: 5px;
-        border: 1px solid #ffffff26;
-        border-radius: 10px;
-        background: #171717;
-        color: #ffffffe0;
-        box-shadow: 0 12px 30px #0008;
-        font: 13px/1.4 system-ui, sans-serif;
-        -webkit-app-region: no-drag;
-    }
-
-    button {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        width: 100%;
-        border: 0;
-        border-radius: 5px;
-        padding: 7px 9px;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        text-align: left;
-        cursor: pointer;
-    }
-
-    button:hover, button:focus-visible {
-        outline: none;
-        background: #ffffff14;
     }
 
     .checkmark {

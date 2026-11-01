@@ -292,7 +292,7 @@
          }}
          oncontextmenu={(e) => { e.preventDefault(); onHide(); }}></div>
     
-    <div class="context-menu" 
+    <div class="context-menu menu-surface"
          bind:this={menuElement}
          role={groupMenuView !== 'menu' ? 'dialog' : 'menu'}
          aria-label={groupMenuView !== 'menu' ? editorTitle : undefined}
@@ -321,7 +321,7 @@
                     </div>
                 </form>
                 {#if customName}
-                    <button class="context-menu-item" type="button"
+                    <button class="context-menu-item menu-action" type="button"
                             onmouseup={resetGroupName}
                             onclick={(e) => { if (e.detail === 0) resetGroupName() }}>{isGroup ? 'Use tab titles' : 'Use page title'}</button>
                 {/if}
@@ -337,22 +337,22 @@
             {/if}
         {:else if menu.tab.type !== 'divider'}
             {#if data.ui.tabActivityMode}
-                <button class="context-menu-item" role="menuitem" type="button"
+                <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={bumpToTop}
                         onclick={(e) => { if (e.detail === 0) bumpToTop() }}>Bump to top</button>
             {/if}
-            <button class="context-menu-item" role="menuitem" type="button"
+            <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={() => showGroupView('rename')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>Rename…</button>
-            <button class="context-menu-item" role="menuitem" type="button"
+            <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={() => showGroupView('emoji')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>Change icon…</button>
-            <div class="context-menu-item has-submenu move-space-menu" role="presentation"
+            <div class="context-menu-item has-submenu move-space-menu menu-action" role="presentation"
                  onmouseenter={() => openMoveSubmenu()}
                  onmouseleave={(event) => { if (!event.currentTarget.contains(document.activeElement)) { moveSpaceOpen = false } }}
                  onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { moveSpaceOpen = false } }}
                  onkeydown={handleMoveKey}>
-                <button class="context-menu-item" role="menuitem" type="button"
+                <button class="context-menu-item menu-action" role="menuitem" type="button"
                         bind:this={moveSpaceTrigger}
                         aria-haspopup="menu" aria-expanded={moveSpaceOpen}
                         onmouseup={(event) => { if (event.button === 0) { openMoveSubmenu() } }}
@@ -361,11 +361,11 @@
                     <span class="submenu-arrow" aria-hidden="true">›</span>
                 </button>
                 {#if moveSpaceOpen}
-                    <div class="context-submenu move-space-submenu" role="menu" aria-label="Move to Space"
+                    <div class="context-submenu move-space-submenu menu-surface" role="menu" aria-label="Move to Space"
                          bind:this={moveSpaceSubmenu} use:positionMoveSubmenu>
                         {#each data.spaceMeta.spaceOrder as spaceId (spaceId)}
                             {#if data.spaces[spaceId]}
-                                <button class="context-submenu-item" type="button" role="menuitem"
+                                <button class="context-submenu-item menu-action" type="button" role="menuitem"
                                         disabled={spaceId === sourceSpaceId}
                                         onmouseup={(event) => { if (event.button === 0) { moveToSpace(spaceId) } }}
                                         onclick={(event) => { if (event.detail === 0) { moveToSpace(spaceId) } }}>
@@ -379,16 +379,16 @@
                 {/if}
             </div>
             {#if menu.tab.type === 'tabgroup'}
-                <button class="context-menu-item" role="menuitem" type="button"
+                <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={ungroup}
                         onclick={(e) => { if (e.detail === 0) ungroup() }}>Ungroup</button>
-                <button class="context-menu-item" role="menuitem" type="button"
+                <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={closeGroup}
                         onclick={(e) => { if (e.detail === 0) closeGroup() }}>Close all</button>
             {/if}
         {/if}
         {#if groupMenuView === 'menu' && menu.tab.type === 'divider'}
-            <div class="context-menu-item" role="menuitem" tabindex="0"
+            <div class="context-menu-item menu-action" role="menuitem" tabindex="0"
                     onmouseup={() => removeDividerFromMenu(menu.tab)}
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeDividerFromMenu(menu.tab) } }}>
                 <span class="context-menu-icon">
@@ -399,7 +399,7 @@
                 <span>Remove spacer</span>
             </div>
         {:else if groupMenuView === 'menu' && menu.tab.type !== 'tabgroup'}
-        <div class="context-menu-item" 
+        <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
              onmouseup={() => reloadTab(menu.tab)}
@@ -412,7 +412,7 @@
             <span>Reload</span>
         </div>
         
-        <div class="context-menu-item" 
+        <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
              onmouseup={() => toggleCertificateMonitor(menu.tab)}
@@ -425,7 +425,7 @@
             <span>Certificate Info</span>
         </div>
         
-        <button class="context-menu-item" type="button" role="menuitem"
+        <button class="context-menu-item menu-action" type="button" role="menuitem"
                 onmouseup={() => toggleSidebarPin(menu.tab)}
                 onclick={(e) => { if (e.detail === 0) toggleSidebarPin(menu.tab) }}>
             <span class="context-menu-icon" aria-hidden="true">
@@ -436,7 +436,7 @@
             <span>{menu.tab.sidebarPinned ? 'Unpin from Sidebar' : 'Pin in Sidebar'}</span>
         </button>
         {#if menu.tab.pinned}
-            <div class="context-menu-item" 
+            <div class="context-menu-item menu-action"
                  role="menuitem"
                  tabindex="0"
                  onmouseup={() => unpinTab(menu.tab)}
@@ -450,7 +450,7 @@
             </div>
             <div class="pin-scope-label">Pin scope</div>
             {#each [['group', 'Tab group'], ['space', 'Space']] as [scope, label]}
-                <button class="context-menu-item" type="button" role="menuitemradio" aria-checked={data.getPinScope(menu.tab) === scope}
+                <button class="context-menu-item menu-action" type="button" role="menuitemradio" aria-checked={data.getPinScope(menu.tab) === scope}
                         onmouseup={() => setPinScope(scope)}
                         onclick={(e) => { if (e.detail === 0) setPinScope(scope) }}>
                     <span class="context-menu-icon" aria-hidden="true">{data.getPinScope(menu.tab) === scope ? '✓' : ''}</span>
@@ -458,8 +458,8 @@
                 </button>
             {/each}
         {:else}
-            <div class="context-menu-item-row">
-                <div class="context-menu-item context-menu-item-left" 
+            <div class="context-menu-item-row menu-action-row">
+                <div class="context-menu-item context-menu-item-left menu-action"
                      role="menuitem"
                      tabindex="0"
                      onmouseup={() => pinTabLeft(menu.tab)}
@@ -471,7 +471,7 @@
                     </span>
                     <span>Pin Left</span>
                 </div>
-                <div class="context-menu-item context-menu-item-right" 
+                <div class="context-menu-item context-menu-item-right menu-action"
                      role="menuitem"
                      tabindex="0"
                      onmouseup={() => pinTabRight(menu.tab)}
@@ -486,7 +486,7 @@
             </div>
         {/if}
         
-        <div class="context-menu-item" 
+        <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
              onmouseup={() => toggleMuteTab(menu.tab)}
@@ -505,7 +505,7 @@
             <span>{menu.tab.muted ? 'Unmute' : 'Mute'} Tab</span>
         </div>
 
-        <div class="context-menu-item" 
+        <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
              onmouseup={() => toggleMuteTab(menu.tab)}
@@ -519,7 +519,7 @@
         </div>
 
         {#if data.frames[menu.tab.id]?.frame}
-            <div class="context-menu-item" 
+            <div class="context-menu-item menu-action"
                  role="menuitem"
                  tabindex="0"
                  onmouseup={() => { data.hibernate(menu.tab.id, data.spaceMeta.activeTabId === menu.tab.id); onHide(); }}
@@ -532,7 +532,7 @@
                 <span>Hibernate</span>
             </div>
         {:else if data.spaceMeta.activeTabId !== menu.tab.id}
-            <div class="context-menu-item" 
+            <div class="context-menu-item menu-action"
                  role="menuitem"
                  tabindex="0"
                  onmouseup={() => { data.unhibernate(menu.tab.id); onHide(); }}
@@ -546,7 +546,7 @@
             </div>
         {/if}
 
-        <div class="context-menu-item" 
+        <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
              onmouseup={() => { data.hibernateOthers(menu.tab.id); onHide(); }}
@@ -559,7 +559,7 @@
             <span>Hibernate others</span>
         </div>
 
-        <div class="context-menu-item has-submenu" 
+        <div class="context-menu-item has-submenu menu-action"
              role="menuitem"
              tabindex="0">
             <span class="context-menu-icon">
@@ -573,9 +573,9 @@
                     <path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
                 </svg>
             </span>
-            <div class="context-submenu">
+            <div class="context-submenu menu-surface">
                 {#each partitions as partition}
-                    <div class="context-submenu-item" 
+                    <div class="context-submenu-item menu-action"
                          class:active={menu.tab?.partition === partition}
                          role="menuitem"
                          tabindex="0"
@@ -601,7 +601,7 @@
             </div>
         </div>
 
-        <div class="context-menu-item" 
+        <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
              onmouseup={() => copyTabUrl(menu.tab)}
@@ -615,7 +615,7 @@
         </div>
 
         <!-- TODO: use fullscreen capture via CDP -->
-        <div class="context-menu-item" 
+        <div class="context-menu-item menu-action"
              class:disabled={!data.frames[menu.tab.id]?.frame}
              role="menuitem"
              tabindex={!data.frames[menu.tab.id]?.frame ? -1 : 0}
@@ -631,9 +631,9 @@
             <span>Take Screenshot</span>
         </div>
 
-        <div class="context-menu-separator"></div>
+        <div class="context-menu-separator menu-divider"></div>
 
-        <div class="context-menu-item" 
+        <div class="context-menu-item menu-action"
              role="menuitem"
              tabindex="0"
              onmouseup={() => closeTabFromMenu(menu.tab)}
@@ -662,24 +662,6 @@
         opacity: 1;
         visibility: visible;
         transform: none;
-    }
-
-    .move-space-submenu button {
-        width: 100%;
-        border: 0;
-        background: transparent;
-        font-family: inherit;
-        text-align: left;
-    }
-
-    .move-space-submenu button:disabled {
-        opacity: 0.5;
-        cursor: default;
-    }
-
-    .move-space-submenu button:focus-visible {
-        outline: 1px solid #a3a3a3;
-        outline-offset: -2px;
     }
 
     .space-color {
@@ -721,7 +703,7 @@
     }
 
     .group-editor-back:hover { background: #ffffff0f; }
-    .group-editor-back:focus-visible, button.context-menu-item:focus-visible { outline: 1px solid #a3a3a3; outline-offset: -2px; }
+    .group-editor-back:focus-visible { outline: 1px solid #a3a3a3; outline-offset: -2px; }
 
     .group-name-form {
         display: flex;
@@ -770,14 +752,6 @@
         outline-offset: 2px;
     }
 
-    button.context-menu-item {
-        width: 100%;
-        border: 0;
-        background: transparent;
-        text-align: left;
-        font-family: inherit;
-    }
-
     .context-menu-scrim {
         position: fixed;
         top: 0;
@@ -791,19 +765,9 @@
     .context-menu {
         position: fixed;
         z-index: 10002;
-        background: rgba(0, 0, 0, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
         min-width: 200px;
-        box-shadow: 
-            0 20px 40px rgba(0, 0, 0, 0.4),
-            0 8px 16px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
         overflow: visible;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: antialiased;
         animation: context-menu-appear 0.1s ease-out;
-        -webkit-app-region: no-drag;
         white-space: nowrap;
     }
 
@@ -816,53 +780,6 @@
             opacity: 1;
             transform: scale(1) translateY(0);
         }
-    }
-
-    .context-menu-item {
-        padding: 8px 14px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: -0.008em;
-        color: #fff;
-        line-height: 1;
-        user-select: none;
-    }
-
-    .context-menu-item:hover:not(.disabled) {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
-    }
-
-    .context-menu-item.disabled {
-        opacity: 0.4;
-    }
-
-    .context-menu-item:first-child:not(.context-menu-item-left):not(.context-menu-item-right) {
-        border-radius: 8px 8px 0 0;
-    }
-
-    .context-menu-item:last-child:not(.context-menu-item-left):not(.context-menu-item-right) {
-        border-radius: 0 0 8px 8px;
-    }
-
-    .context-menu-item-row:first-child .context-menu-item-left {
-        border-radius: 8px 0 0 0;
-    }
-
-    .context-menu-item-row:first-child .context-menu-item-right {
-        border-radius: 0 8px 0 0;
-    }
-
-    .context-menu-item-row:last-child .context-menu-item-left {
-        border-radius: 0 0 0 8px;
-    }
-
-    .context-menu-item-row:last-child .context-menu-item-right {
-        border-radius: 0 0 8px 0;
     }
 
     .context-menu-icon {
@@ -882,12 +799,6 @@
         height: 16px;
     }
 
-    .context-menu-separator {
-        height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-        margin: 4px 0;
-    }
-
     .context-menu-item-row {
         display: flex;
         width: 100%;
@@ -896,20 +807,10 @@
     .context-menu-item-left,
     .context-menu-item-right {
         flex: 1;
-        border-radius: 0;
     }
 
     .context-menu-item-left {
         border-right: 1px solid transparent;
-    }
-
-    .context-menu-item-left:hover {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
-        border-right: 1px solid transparent;
-    }
-
-    .context-menu-item-right:hover {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
     }
 
     .context-menu-item.has-submenu {
@@ -934,13 +835,6 @@
         left: calc(100% + 4px);
         top: -1px;
         min-width: 180px;
-        background: rgba(0, 0, 0, 0.96);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        box-shadow: 
-            0 20px 40px rgba(0, 0, 0, 0.4),
-            0 8px 16px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
         overflow: hidden;
         opacity: 0;
         visibility: hidden;
@@ -972,43 +866,7 @@
     }
 
     .context-submenu-item {
-        padding: 8px 14px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: -0.008em;
-        color: #fff;
-        line-height: 1;
-        user-select: none;
         position: relative;
-        white-space: nowrap;
-    }
-
-    .context-submenu-item:hover {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .context-submenu-item.active {
-        background: rgba(59, 130, 246, 0.1);
-        color: rgba(59, 130, 246, 0.9);
-    }
-
-    .context-submenu-item.active:hover {
-        background: rgba(59, 130, 246, 0.12);
-        color: rgba(59, 130, 246, 1);
-    }
-
-    .context-submenu-item:first-child {
-        border-radius: 8px 8px 0 0;
-    }
-
-    .context-submenu-item:last-child {
-        border-radius: 0 0 8px 8px;
     }
 
     .partition-icon {
@@ -1019,7 +877,7 @@
 
     .context-submenu-item .checkmark {
         margin-left: auto;
-        color: rgba(59, 130, 246, 0.8);
+        color: var(--menu-active-color);
         font-weight: bold;
         font-size: 14px;
     }

@@ -697,63 +697,13 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .dev-menu {
     z-index: 10010;
-    font-family: 'Inter', sans-serif;
     position: absolute;
     top: 0;
     right: 0;
     margin-top: 17px;
-    background: rgba(8, 8, 8, 0.98);
-    backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
     min-width: 180px;
     max-width: 200px;
-    box-shadow: 
-        0 12px 32px rgba(0, 0, 0, 0.6),
-        0 4px 12px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.03);
     overflow: hidden;
-}
-
-.dev-menu-header {
-    padding: 8px 12px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-}
-
-.dev-menu-item {
-    padding: 8px 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
-    position: relative;
-    overflow: hidden;
-}
-
-.dev-menu-item:last-of-type {
-    border-bottom: none;
-    border-radius: 0 0 8px 8px;
-}
-
-.dev-menu-item:hover {
-    background: rgb(255 255 255 / 8%);
-}
-
-.dev-menu-item span {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 12px;
-    font-weight: 400;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    line-height: 1.3;
 }
 
 .dev-menu-item span:nth-child(2) {
@@ -785,34 +735,14 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .settings-menu {
     z-index: 10010;
-    font-family: 'Inter', sans-serif;
     position: absolute;
     top: 0;
     right: 0;
     margin-top: 17px;
-    background: rgba(8, 8, 8, 0.98);
-    backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
     min-width: 180px;
     max-width: 200px;
-    box-shadow: 
-        0 12px 32px rgba(0, 0, 0, 0.6),
-        0 4px 12px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.03);
-
     z-index: 10000;
     overflow: hidden;
-}
-
-.menu-header {
-    padding: 8px 12px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .settings-menu-header {
@@ -830,50 +760,18 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 }
 
 .menu-item {
-    padding: 8px 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
     position: relative;
     overflow: hidden;
 }
 
-.menu-item:last-of-type {
-    border-bottom: none;
-    border-radius: 0 0 8px 8px;
-}
-
-.menu-item:hover {
-    background: rgb(255 255 255 / 8%);
-}
-
 .menu-item span {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 12px;
-    font-weight: 400;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    line-height: 1.3;
-}
-
-.menu-item:hover span {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.menu-item.active span {
-    color: rgba(255, 255, 255, 0.8);
 }
 
 .menu-item span:nth-child(2) {
     flex: 1;
-}
-
-.menu-item span:not(.menu-icon-item) {
-    padding-top:2px;
 }
 
 .menu-icon-item {
@@ -934,9 +832,6 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 } */
 
 .settings-menu-separator {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-    margin: 8px 0;
     flex-shrink: 0;
 }
 
@@ -988,22 +883,12 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .view-mode-menu {
     z-index: 10010;
-    font-family: 'Inter', sans-serif;
     position: absolute;
     top: 0;
     right: 0;
     margin-top: 17px;
-    background: rgba(8, 8, 8, 0.98);
-    backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
     min-width: 160px;
     max-width: 180px;
-    box-shadow: 
-        0 12px 32px rgba(0, 0, 0, 0.6),
-        0 4px 12px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.03);
-
     z-index: 10000;
     overflow: hidden;
 }
@@ -1039,10 +924,9 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 
 
-.view-mode-menu-item:hover,
 .trash-menu-item:hover,
 .trash-menu-clear:hover {
-    background: rgb(255 255 255 / 8%);
+    background: var(--menu-hover-background);
 }
 /* 
 .view-mode-menu-item.active {
@@ -1651,18 +1535,12 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     position: fixed;
     top: 38px;
     left: auto;
-    background: rgba(0, 0, 0, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 0;
     min-width: 200px;
     z-index: 10000;
     opacity: 0;
     visibility: hidden;
     transition: opacity 250ms ease, visibility 250ms ease;
-    backdrop-filter: blur(12px);
     pointer-events: none;
-    box-sizing: border-box;
 }
 
 .new-tab-header-menu.visible {
@@ -1690,38 +1568,8 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 }
 
 .new-tab-header-menu-item {
-    padding: 6px 12px;
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 12px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-    -webkit-font-smoothing: subpixel-antialiased;
-    text-rendering: optimizeLegibility;
-    cursor: pointer;
-    background: transparent;
-    border: none;
-    width: 100%;
-    text-align: left;
-    display: flex;
-    align-items: center;
-    gap: 8px;
     position: relative;
-    white-space: nowrap;
     min-width: 0;
-}
-
-.new-tab-header-menu-item:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.95);
-}
-
-.new-tab-header-menu-item:first-child:hover {
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-}
-
-.new-tab-header-menu-item:last-child:hover {
-    border-bottom-left-radius: 8px;
-    border-bottom-right-radius: 8px;
 }
 
 .new-tab-header-menu-item.has-submenu {
@@ -1748,15 +1596,10 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     left: 100%;
     top: 0;
     margin-left: 2px;
-    background: rgba(0, 0, 0, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 0;
     min-width: 140px;
     opacity: 0;
     visibility: hidden;
     transition: opacity 150ms ease, visibility 150ms ease;
-    backdrop-filter: blur(12px);
     pointer-events: none;
 }
 
@@ -1764,33 +1607,6 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-}
-
-.new-tab-header-submenu-item {
-    padding: 6px 12px;
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 12px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
-}
-
-.new-tab-header-submenu-item:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.95);
-}
-
-.new-tab-header-submenu-item:first-child:hover {
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-}
-
-.new-tab-header-submenu-item:last-child:hover {
-    border-bottom-left-radius: 8px;
-    border-bottom-right-radius: 8px;
 }
 
 .new-tab-header-submenu-item .partition-dot {

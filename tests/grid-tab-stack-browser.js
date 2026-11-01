@@ -90,7 +90,7 @@ const server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, req
     if (new URL(request.url).pathname === '/fixture.js') {
         return new Response(output[0].code, { headers: { 'content-type': 'text/javascript' } })
     }
-    return new Response('<!doctype html><style>*,::before,::after{box-sizing:border-box}body{margin:0;background:#000;color:#e5e5e5;font-family:-apple-system,BlinkMacSystemFont,sans-serif}</style><body><script type="module" src="/fixture.js"></script>', {
+    return new Response(`<!doctype html><style>${Deno.readTextFileSync(`${root}app/menus.css`)}</style><style>*,::before,::after{box-sizing:border-box}body{margin:0;background:#000;color:#e5e5e5;font-family:-apple-system,BlinkMacSystemFont,sans-serif}</style><body><script type="module" src="/fixture.js"></script>`, {
         headers: { 'content-type': 'text/html' }
     })
 })

@@ -39,7 +39,7 @@
 
 <div
     id="help-menu"
-    class="settings-menu help-menu"
+    class="help-menu menu-surface"
     popover="auto"
     role="menu"
     aria-label="Help"
@@ -48,8 +48,8 @@
     ontoggle={(event) => { open = event.newState === 'open' }}
     onkeydown={handleKeyDown}
 >
-    <div class="menu-header">Help</div>
-    <button type="button" class="shortcut-menu-item" role="menuitem" onclick={() => { dismiss(); onShowShortcuts() }}>
+    <div class="menu-caption">Help</div>
+    <button type="button" class="shortcut-menu-item menu-action" role="menuitem" onclick={() => { dismiss(); onShowShortcuts() }}>
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
             <rect x="3" y="5" width="18" height="14" rx="2" />
             <path stroke-linecap="round" d="M7 9h.01M12 9h.01M17 9h.01M7 12h.01M12 12h.01M17 12h.01M8 15h8" />
@@ -85,33 +85,9 @@
         position: fixed;
         inset: 30px 90px auto auto;
         margin: 0;
-        padding: 0;
         min-width: 210px;
         max-width: calc(100vw - 100px);
-        color: white;
-        border: 1px solid rgb(255 255 255 / 6%);
-        border-radius: 8px;
-        background: rgb(8 8 8 / 98%);
-        backdrop-filter: blur(24px);
-        box-shadow: 0 12px 32px rgb(0 0 0 / 60%), 0 4px 12px rgb(0 0 0 / 40%), inset 0 1px 0 rgb(255 255 255 / 3%);
         overflow: hidden;
-        font-family: 'Inter', sans-serif;
     }
-    .menu-header { padding: 8px 12px; border-bottom: 1px solid rgb(255 255 255 / 3%); color: rgb(255 255 255 / 50%); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .5px; }
-    .shortcut-menu-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        width: 100%;
-        padding: 10px 12px;
-        border: 0;
-        background: transparent;
-        color: rgb(255 255 255 / 80%);
-        font: 400 12px 'Inter', sans-serif;
-        text-align: left;
-        cursor: pointer;
-    }
-    .shortcut-menu-item:hover, .shortcut-menu-item:focus-visible { background: rgb(255 255 255 / 8%); }
-    .shortcut-menu-item:focus-visible { outline: 1px solid #a3aab8; outline-offset: -2px; }
     .shortcut-menu-item svg { flex-shrink: 0; }
 </style>

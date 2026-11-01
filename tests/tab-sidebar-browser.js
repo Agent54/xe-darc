@@ -93,9 +93,10 @@ const bundle = await rollup({
 })
 const { output } = await bundle.generate({ format: 'es' })
 await bundle.close()
+const menuStyles = await readFile(`${root}app/menus.css`, 'utf8')
 const server = createServer((request, response) => {
     response.setHeader('Content-Type', request.url === '/fixture.js' ? 'text/javascript' : 'text/html')
-    response.end(request.url === '/fixture.js' ? output[0].code : `<!doctype html><style>
+    response.end(request.url === '/fixture.js' ? output[0].code : `<!doctype html><style>${menuStyles}</style><style>
         *,::before,::after{box-sizing:border-box}body{margin:0;background:#111;color:#eee;font-family:system-ui}
         button{font:inherit;color:inherit}svg{width:20px;height:20px}.flex-1{flex:1;min-height:0}
     </style><body><script type="module" src="/fixture.js"></script>`)

@@ -75,7 +75,7 @@
 <svelte:window onmousedown={dismiss} onfocusin={dismiss} onresize={onHide} />
 
 <div
-    class="app-context-menu"
+    class="app-context-menu menu-surface"
     bind:this={root}
     use:positionMenu
     popover="manual"
@@ -85,8 +85,9 @@
     onkeydown={handleKey}
     oncontextmenu={(event) => event.preventDefault()}
 >
-    <div class="menu-heading">{menu.container?.name || menu.app.name}</div>
+    <div class="menu-heading menu-caption">{menu.container?.name || menu.app.name}</div>
     <button
+        class="menu-action menu-action-between"
         bind:this={dockerTrigger}
         type="button"
         role="menuitem"
@@ -101,9 +102,9 @@
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg>
     </button>
     {#if dockerOpen}
-        <div id="app-docker-submenu" class="app-docker-submenu" bind:this={submenu} use:positionSubmenu role="menu" aria-label="Docker" tabindex="-1">
+        <div id="app-docker-submenu" class="app-docker-submenu menu-surface" bind:this={submenu} use:positionSubmenu role="menu" aria-label="Docker" tabindex="-1">
             {#each items as item (item.id)}
-                <button type="button" role="menuitem" onclick={() => onAction(item.id, menu.app, menu.container)}>{item.label}</button>
+                <button class="menu-action" type="button" role="menuitem" onclick={() => onAction(item.id, menu.app, menu.container)}>{item.label}</button>
             {/each}
         </div>
     {/if}
@@ -113,18 +114,10 @@
     .app-context-menu,
     .app-docker-submenu {
         position: fixed;
-        box-sizing: border-box;
         inset: auto;
         width: 216px;
         max-width: calc(100vw - 16px);
         margin: 0;
-        padding: 5px;
-        border: 1px solid #ffffff26;
-        border-radius: 10px;
-        background: #171717;
-        color: #ffffffe0;
-        box-shadow: 0 12px 30px #0008;
-        font: 13px/1.4 system-ui, sans-serif;
         overflow: visible;
     }
     .app-docker-submenu {
@@ -133,29 +126,7 @@
     }
     .menu-heading {
         overflow: hidden;
-        padding: 6px 9px;
-        color: #ffffff70;
-        font-size: 11px;
         text-overflow: ellipsis;
         white-space: nowrap;
-    }
-    button {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        width: 100%;
-        border: 0;
-        border-radius: 5px;
-        padding: 7px 9px;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        text-align: left;
-        cursor: pointer;
-    }
-    button:hover,
-    button:focus-visible {
-        outline: none;
-        background: #ffffff14;
     }
 </style>

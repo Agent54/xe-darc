@@ -159,7 +159,7 @@ const server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, req
             headers: { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' }
         })
     }
-    return new Response('<!doctype html><style>*, ::before, ::after { box-sizing: border-box; } :root { --tab-hover-background: #181818; --tab-hover-border: rgb(255 255 255 / 2.5%); --tab-group-tab-hover-background: #242424; } body { background: black; }</style><body><script type="module" src="/fixture.js"></script>', { headers: { 'content-type': 'text/html' } })
+    return new Response(`<!doctype html><style>${Deno.readTextFileSync(`${root}app/menus.css`)}</style><style>*, ::before, ::after { box-sizing: border-box; } :root { --tab-hover-background: #181818; --tab-hover-border: rgb(255 255 255 / 2.5%); --tab-group-tab-hover-background: #242424; } body { background: black; }</style><body><script type="module" src="/fixture.js"></script>`, { headers: { 'content-type': 'text/html' } })
 })
 
 let browser

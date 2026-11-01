@@ -3455,7 +3455,7 @@
                         <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
                     </svg>
                 </button>
-                <div class="new-tab-header-menu" 
+                <div class="new-tab-header-menu menu-surface"
                      class:visible={newTabMenuVisible}
                      style="left: {newTabMenuPosition.left}px;"
                      bind:this={inlineNewTabMenuElement}
@@ -3464,17 +3464,17 @@
                      role="menu"
                      tabindex="-1"
                      aria-label="New tab options">
-                    <span class="new-tab-header-menu-item" onmouseup={handleNewFromClipboard} role="menuitem" tabindex="0">
+                    <span class="new-tab-header-menu-item menu-action" onmouseup={handleNewFromClipboard} role="menuitem" tabindex="0">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
                         <span>New from clipboard</span>
                     </span>
-                    <div class="new-tab-header-menu-item has-submenu" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+                    <div class="new-tab-header-menu-item has-submenu menu-action" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
                         <span>New tab in container…</span>
                         <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
-                        <div class="new-tab-header-submenu" role="menu">
+                        <div class="new-tab-header-submenu menu-surface" role="menu">
                             {#each partitions as partition}
-                                <span class="new-tab-header-submenu-item" onmouseup={() => handleNewTabInPartition(partition)} role="menuitem" tabindex="0">
+                                <span class="new-tab-header-submenu-item menu-action" onmouseup={() => handleNewTabInPartition(partition)} role="menuitem" tabindex="0">
                                     <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
                                     <span>{partition}</span>
                                 </span>
@@ -3533,9 +3533,9 @@
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleViewMode() } }}
         class:hidden={focusModeEnabled && !focusModeHovered}>
         {@html getViewModeIcon(data.ui.viewMode)}
-        <div class="view-mode-menu hover-menu" class:menu-force-close={menuForceClose}>
-            <div class="view-mode-menu-header menu-header">View Mode</div>
-            <div class="view-mode-menu-item menu-item" 
+        <div class="view-mode-menu hover-menu menu-surface" class:menu-force-close={menuForceClose}>
+            <div class="view-mode-menu-header menu-header menu-caption">View Mode</div>
+            <div class="view-mode-menu-item menu-item menu-action"
                  class:active={data.ui.viewMode === 'default'}
                  role="button"
                  tabindex="0"
@@ -3548,7 +3548,7 @@
                 {#if data.ui.viewMode === 'default'}<span class="checkmark">•</span>{/if}
             </div>
 
-            <!-- TODO: stage manager view <div class="view-mode-menu-item menu-item" 
+            <!-- TODO: stage manager view <div class="view-mode-menu-item menu-item menu-action"
                     class:active={data.ui.viewMode === 'stage'}
                     role="button"
                     tabindex="0"
@@ -3561,7 +3561,7 @@
                 {#if data.ui.viewMode === 'stage'}<span class="checkmark">•</span>{/if}
             </div> -->
 
-            <div class="view-mode-menu-item menu-item"
+            <div class="view-mode-menu-item menu-item menu-action"
                  class:active={data.ui.viewMode === 'leaflet'}
                  role="button"
                  tabindex="0"
@@ -3574,7 +3574,7 @@
                 {#if data.ui.viewMode === 'leaflet'}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="view-mode-menu-item menu-item"
+            <div class="view-mode-menu-item menu-item menu-action"
                     class:active={data.ui.viewMode === 'tile'}
                     role="button"
                     tabindex="0"
@@ -3587,7 +3587,7 @@
                 {#if data.ui.viewMode === 'tile'}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="view-mode-menu-item menu-item"
+            <div class="view-mode-menu-item menu-item menu-action"
                     class:active={data.ui.viewMode === 'canvas'}
                     role="button"
                     tabindex="0"
@@ -3600,7 +3600,7 @@
                 {#if data.ui.viewMode === 'canvas'}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="view-mode-menu-item menu-item"
+            <div class="view-mode-menu-item menu-item menu-action"
                     class:active={data.ui.viewMode === 'reading'}
                     role="button"
                     tabindex="0"
@@ -3613,7 +3613,7 @@
                 {#if data.ui.viewMode === 'reading'}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="view-mode-menu-item menu-item"
+            <div class="view-mode-menu-item menu-item menu-action"
                  class:active={data.ui.viewMode === 'squat'}
                  role="button"
                  tabindex="0"
@@ -3626,7 +3626,7 @@
                 {#if data.ui.viewMode === 'squat'}<span class="checkmark">•</span>{/if}
             </div>
 
-            <!--TODO: <div class="view-mode-menu-item menu-item"
+            <!--TODO: <div class="view-mode-menu-item menu-item menu-action"
                 class:active={data.ui.viewMode === 'notebook'}
                 role="button"
                 tabindex="0"
@@ -3658,7 +3658,7 @@
                  <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
              </svg>
         </div>
-        <div class="new-tab-header-menu fixed-menu" 
+        <div class="new-tab-header-menu fixed-menu menu-surface"
              class:visible={newTabMenuVisible}
              bind:this={fixedNewTabMenuElement}
              onmouseenter={handleNewTabMenuMouseEnter}
@@ -3666,17 +3666,17 @@
              role="menu"
              tabindex="-1"
              aria-label="New tab options">
-            <span class="new-tab-header-menu-item" onmouseup={handleNewFromClipboard} role="menuitem" tabindex="0">
+            <span class="new-tab-header-menu-item menu-action" onmouseup={handleNewFromClipboard} role="menuitem" tabindex="0">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
                 <span>New from clipboard</span>
             </span>
-            <div class="new-tab-header-menu-item has-submenu" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+            <div class="new-tab-header-menu-item has-submenu menu-action" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
                 <span>New tab in container…</span>
                 <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
-                <div class="new-tab-header-submenu" role="menu">
+                <div class="new-tab-header-submenu menu-surface" role="menu">
                     {#each partitions as partition}
-                        <span class="new-tab-header-submenu-item" onmouseup={() => handleNewTabInPartition(partition)} role="menuitem" tabindex="0">
+                        <span class="new-tab-header-submenu-item menu-action" onmouseup={() => handleNewTabInPartition(partition)} role="menuitem" tabindex="0">
                             <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
                             <span>{partition}</span>
                         </span>
@@ -3759,13 +3759,13 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
         </svg>
-        <div class="settings-menu hover-menu" class:menu-force-close={menuForceClose}>
-            <div class="settings-menu-header menu-header">
+        <div class="settings-menu hover-menu menu-surface" class:menu-force-close={menuForceClose}>
+            <div class="settings-menu-header menu-header menu-caption">
                 <span>Options</span>
                 <span class="settings-menu-version" title={`Darc IWA version ${iwaVersion}`}>v{iwaVersion}</span>
             </div>
             
-            <!-- TODO: theming supoort <div class="settings-menu-item menu-item" 
+            <!-- TODO: theming supoort <div class="settings-menu-item menu-item menu-action"
                  class:active={darkMode}
                  role="button"
                  tabindex="0"
@@ -3780,7 +3780,7 @@
                 {#if darkMode}<span class="checkmark">•</span>{/if}
             </div> -->
 
-            <div class="settings-menu-item menu-item" 
+            <div class="settings-menu-item menu-item menu-action"
                  class:active={globalTabComplete}
                  role="button"
                  tabindex="0"
@@ -3795,7 +3795,7 @@
                 {#if globalTabComplete}<span class="checkmark">•</span>{/if}
             </div>
 
-            <!-- TODO: <div class="settings-menu-item menu-item" 
+            <!-- TODO: <div class="settings-menu-item menu-item menu-action"
                  class:active={batterySaver}
                  role="button"
                  tabindex="0"
@@ -3810,7 +3810,7 @@
                 {#if batterySaver}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="settings-menu-item menu-item" 
+            <div class="settings-menu-item menu-item menu-action"
                  class:active={dataSaver}
                  role="button"
                  tabindex="0"
@@ -3825,7 +3825,7 @@
                 {#if dataSaver}<span class="checkmark">•</span>{/if}
             </div> -->
           
-            <!-- <div class="settings-menu-item menu-item" 
+            <!-- <div class="settings-menu-item menu-item menu-action"
                 class:active={statusLightsEnabled}
                 role="button"
                 tabindex="0"
@@ -3842,7 +3842,7 @@
                 {#if statusLightsEnabled}<span class="checkmark">•</span>{/if}
             </div> -->
 
-            <div class="settings-menu-item menu-item" 
+            <div class="settings-menu-item menu-item menu-action"
                 class:active={devModeEnabled}
                 role="button"
                 tabindex="0"
@@ -3857,7 +3857,7 @@
                 {#if devModeEnabled}<span class="checkmark">•</span>{/if}
             </div>
 
-            <!-- <div class="settings-menu-item menu-item" 
+            <!-- <div class="settings-menu-item menu-item menu-action"
                  class:active={tabsOpenRight}
                  role="button"
                  tabindex="0"
@@ -3872,7 +3872,7 @@
                 {#if tabsOpenRight}<span class="checkmark">•</span>{/if}
             </div> -->
 
-            <div class="settings-menu-item menu-item" 
+            <div class="settings-menu-item menu-item menu-action"
                  class:active={showNavigationToolbar}
                  role="button"
                  tabindex="0"
@@ -3887,7 +3887,7 @@
                 {#if showNavigationToolbar}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="settings-menu-item menu-item" 
+            <div class="settings-menu-item menu-item menu-action"
                  class:active={showSidebarUrl}
                  role="button"
                  tabindex="0"
@@ -3902,9 +3902,9 @@
                 {#if showSidebarUrl}<span class="checkmark">•</span>{/if}
             </div>
             
-            <div class="settings-menu-separator"></div>
+            <div class="settings-menu-separator menu-divider"></div>
 
-            <div class="settings-menu-item menu-item" 
+            <div class="settings-menu-item menu-item menu-action"
                 class:active={secondScreenActive}
                 role="button"
                 tabindex="0"
@@ -3919,7 +3919,7 @@
                 {#if secondScreenActive}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="settings-menu-item menu-item"
+            <div class="settings-menu-item menu-item menu-action"
                 class:active={isFullscreen}
                 role="button"
                 tabindex="0"
@@ -3938,7 +3938,7 @@
                 {#if isFullscreen}<span class="checkmark">•</span>{/if}
             </div>
             
-            <!-- <div class="settings-menu-item menu-item"
+            <!-- <div class="settings-menu-item menu-item menu-action"
                  class:active={openSidebars.has('resources')}
                  role="button"
                  tabindex="0"
@@ -3953,7 +3953,7 @@
                 {#if openSidebars.has('resources')}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="settings-menu-item menu-item" 
+            <div class="settings-menu-item menu-item menu-action"
                  class:active={openSidebars.has('activity')}
                  role="button"
                  tabindex="0"
@@ -3968,7 +3968,7 @@
                 {#if openSidebars.has('activity')}<span class="checkmark">•</span>{/if}
             </div>
             
-            <div class="settings-menu-item menu-item" 
+            <div class="settings-menu-item menu-item menu-action"
                  class:active={openSidebars.has('userMods')}
                  role="button"
                  tabindex="0"
@@ -3983,7 +3983,7 @@
                 {#if openSidebars.has('userMods')}<span class="checkmark">•</span>{/if}
             </div>
 
-            <div class="settings-menu-item menu-item" 
+            <div class="settings-menu-item menu-item menu-action"
                 class:active={openSidebars.has('settings')}
                 role="button"
                 tabindex="0"
@@ -4013,9 +4013,9 @@
             <svg class="w-4 h-4" fill="none" viewBox="1 1 21 21" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
             </svg>
-            <div class="dev-menu hover-menu" class:menu-force-close={menuForceClose}>
-                <div class="dev-menu-header">Developer</div>
-                <div class="dev-menu-item menu-item" 
+            <div class="dev-menu hover-menu menu-surface" class:menu-force-close={menuForceClose}>
+                <div class="dev-menu-header menu-caption">Developer</div>
+                <div class="dev-menu-item menu-item menu-action"
                      role="button"
                      tabindex="0"
                      onmousedown={(e) => { e.stopPropagation(); data.loadSampleData(); closeMenuImmediately() }}
@@ -4027,7 +4027,7 @@
                     </span>
                     <span>Load Sample Data</span>
                 </div>
-                <div class="dev-menu-item menu-item" 
+                <div class="dev-menu-item menu-item menu-action"
                      role="button"
                      tabindex="0"
                      onmousedown={(e) => { e.stopPropagation(); openTestSuite(); closeMenuImmediately() }}
@@ -4039,7 +4039,7 @@
                     </span>
                     <span>Open Test Suite</span>
                 </div>
-                <div class="dev-menu-item menu-item" 
+                <div class="dev-menu-item menu-item menu-action"
                         role="button"
                         tabindex="0"
                         onmousedown={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }); closeMenuImmediately() }}
@@ -4051,7 +4051,7 @@
                     </span>
                     <span>Logs</span>
                 </div>
-                <div class="dev-menu-item menu-item"
+                <div class="dev-menu-item menu-item menu-action"
                      role="button"
                      tabindex="0"
                      onmousedown={(e) => { e.stopPropagation(); openComposeUI() }}
@@ -4063,7 +4063,7 @@
                     </span>
                     <span>Compose UI</span>
                 </div>
-                <div class="dev-menu-item menu-item" 
+                <div class="dev-menu-item menu-item menu-action"
                      role="button"
                      tabindex="0"
                      onmousedown={(e) => { e.stopPropagation(); openVSCodeWorkspace(); closeMenuImmediately() }}
@@ -4106,12 +4106,12 @@
                     </svg>
                 {/if}
                 <div class="window-positioning-menu" role="menu">
-                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeLeft() }}>← Left Half</div>
-                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeRight() }}>Right Half →</div>
-                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeTop() }}>↑ Top Half</div>
-                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeBottom() }}>Bottom Half ↓</div>
-                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); centerGoldenRatio() }}>◈ Golden Center</div>
-                    <div class="menu-item" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); bottomRightPane() }}>↘ Corner Pane</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeLeft() }}>← Left Half</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeRight() }}>Right Half →</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeTop() }}>↑ Top Half</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); maximizeBottom() }}>Bottom Half ↓</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); centerGoldenRatio() }}>◈ Golden Center</div>
+                    <div class="menu-item menu-action" role="menuitem" tabindex="-1" onmousedown={(e) => { e.stopPropagation(); bottomRightPane() }}>↘ Corner Pane</div>
                 </div>
             </button>
         </div>

@@ -1686,22 +1686,22 @@
     <div class="sidebar">
         {#if spaceContextMenuId}
     <div class="space-context-menu-overlay">
-        <div class="space-context-menu-dropdown" 
+        <div class="space-context-menu-dropdown menu-surface"
             class:open={spaceContextMenuId !== null}
             style="top: {contextMenuPosition.y}px; left: {contextMenuPosition.x}px;">
-            <button class="space-context-menu-item" 
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('rename', spaceContextMenuId)}
                     role="menuitem">Rename</button>
-            <button class="space-context-menu-item"
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('change-color', spaceContextMenuId)}
                     role="menuitem">Change Color</button>
-            <button class="space-context-menu-item"
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('change-icon', spaceContextMenuId)}
                     role="menuitem">Change Icon</button>
-            <button class="space-context-menu-item"
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('container', spaceContextMenuId)}
                     role="menuitem">Container</button>
-            <button class="space-context-menu-item delete"
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('delete', spaceContextMenuId)}
                     role="menuitem">Delete</button>
         </div>
@@ -1844,14 +1844,14 @@
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div class="menu-scrim" onmousedown={() => newSpaceMenuOpen = false}></div>
                         {/if}
-                        <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
-                            <button class="new-space-menu-item"
+                        <div class="new-space-menu-dropdown menu-surface" class:open={newSpaceMenuOpen}>
+                            <button class="new-space-menu-item menu-action"
                                     onmouseup={() => handleNewSpaceMenuAction('new-space')}
                                     role="menuitem">New Space</button>
-                            <button class="new-space-menu-item"
+                            <button class="new-space-menu-item menu-action"
                                     onmouseup={() => handleNewSpaceMenuAction('new-divider')}
                                     role="menuitem">New Divider</button>
-                            <button class="new-space-menu-item"
+                            <button class="new-space-menu-item menu-action"
                                     onmouseup={() => handleNewSpaceMenuAction('new-folder')}
                                     role="menuitem">New Folder</button>
                         </div>
@@ -1959,24 +1959,24 @@
                                         {#if openMenuId === spaceId}
                                             <div class="menu-scrim" onmousedown={() => openMenuId = null}></div>
                                         {/if}
-                                        <div class="space-menu-dropdown" class:open={openMenuId === spaceId}>
-                                            <button class="space-menu-item" 
+                                        <div class="space-menu-dropdown menu-surface" class:open={openMenuId === spaceId}>
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('rename', spaceId)}
                                                     role="menuitem">Rename</button>
-                                            <button class="space-menu-item"
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('change-color', spaceId)}
                                                     role="menuitem">Change Color</button>
-                                            <button class="space-menu-item"
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('change-icon', spaceId)}
                                                     role="menuitem">Change Icon</button>
-                                            <button class="space-menu-item"
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('container', spaceId)}
                                                     role="menuitem">Container</button>
-                                            <button class="space-menu-item delete"
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('delete', spaceId)}
                                                     role="menuitem">Delete</button>
@@ -2043,18 +2043,18 @@
 
                                         <span class="new-tab-more-button" role="group" aria-label="New tab options" onmouseenter={() => { hoverMenusDismissed = false }}>
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="down-icon"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
-                                            <div class="new-tab-hover-menu" class:menu-force-close={hoverMenusDismissed} role="menu" aria-label="New tab options">
-                                          <span class="new-tab-hover-item" onmouseup={() => handleNewFromClipboard(spaceId)} role="menuitem" tabindex="0">
+                                            <div class="new-tab-hover-menu menu-surface" class:menu-force-close={hoverMenusDismissed} role="menu" aria-label="New tab options">
+                                          <span class="new-tab-hover-item menu-action" onmouseup={() => handleNewFromClipboard(spaceId)} role="menuitem" tabindex="0">
                                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
                                               <span>New from clipboard</span>
                                           </span>
-                                         <div class="new-tab-hover-item has-submenu" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
+                                         <div class="new-tab-hover-item has-submenu menu-action" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
                                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
                                              <span>New tab in container…</span>
                                              <svg class="chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
-                                             <div class="new-tab-submenu" role="menu">
+                                             <div class="new-tab-submenu menu-surface" role="menu">
                                                  {#each partitions as partition}
-                                                     <span class="new-tab-submenu-item" onmouseup={() => handleNewTabInPartition(spaceId, partition)} role="menuitem" tabindex="0">
+                                                     <span class="new-tab-submenu-item menu-action" onmouseup={() => handleNewTabInPartition(spaceId, partition)} role="menuitem" tabindex="0">
                                                          <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
                                                          <span>{partition}</span>
                                                      </span>
@@ -2961,17 +2961,12 @@
         position: absolute;
         top: 100%;
         right: 0;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 4px 0;
         min-width: 120px;
         z-index: 10000;
         opacity: 0;
         visibility: hidden;
         transform: translateY(-4px);
         transition: all 150ms ease;
-        backdrop-filter: blur(12px);
         overflow: hidden;
     }
 
@@ -2979,30 +2974,6 @@
         opacity: 1;
         visibility: visible;
         transform: translateY(0);
-    }
-
-    .new-space-menu-item {
-        padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
-        cursor: pointer;
-        transition: background 150ms ease;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-    }
-
-    .new-space-menu-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .new-space-menu-item:active {
-        background: rgba(255, 255, 255, 0.15);
     }
 
     .space-title-container {
@@ -3167,17 +3138,12 @@
         position: absolute;
         top: 100%;
         right: 0;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 4px 0;
         min-width: 180px;
         z-index: 10000;
         opacity: 0;
         visibility: hidden;
         transform: translateY(-4px);
         transition: all 150ms ease;
-        backdrop-filter: blur(12px);
         overflow: visible;
     }
     
@@ -3187,45 +3153,6 @@
         transform: translateY(0);
     }
     
-    .space-menu-item {
-        padding: 8px 14px;
-        color: #fff;
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: -0.008em;
-        line-height: 1;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: antialiased;
-        cursor: pointer;
-        transition: background 150ms ease;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-    }
-    
-    .space-menu-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-    
-    .space-menu-item:active {
-        background: rgba(255, 255, 255, 0.15);
-    }
-
-    .space-menu-item.delete {
-        color: #ff6b6b;
-    }
-
-    .space-menu-item.delete:hover {
-        color: #ff4444;
-        background: rgba(255, 107, 107, 0.1);
-    }
-
-    .space-menu-item.delete:active {
-        background: rgba(255, 107, 107, 0.2);
-    }
-
     .space-item.scrolled {
         background: rgba(255, 255, 255, 0.3);
     }
@@ -4045,18 +3972,12 @@
         position: absolute;
         top: 10px;
         right: 0;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 0;
         min-width: 200px;
         z-index: 1000;
         opacity: 0;
         visibility: hidden;
         transition: opacity 150ms ease, visibility 150ms ease;
-        backdrop-filter: blur(12px);
         pointer-events: none;
-        box-sizing: border-box;
     }
 
     .new-tab-more-button:hover .new-tab-hover-menu:not(.menu-force-close) {
@@ -4075,38 +3996,8 @@
     }
     
     .new-tab-hover-item {
-        padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
-        cursor: pointer;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-        display: flex;
-        align-items: center;
-        gap: 8px;
         position: relative;
-        white-space: nowrap;
         min-width: 0;
-    }
-    
-    .new-tab-hover-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .new-tab-hover-item:first-child:hover {
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
-    }
-
-    .new-tab-hover-item:last-child:hover {
-        border-bottom-left-radius: 8px;
-        border-bottom-right-radius: 8px;
     }
     
     .new-tab-hover-item.has-submenu {
@@ -4133,16 +4024,11 @@
         position: absolute;
         top: 95%;
         right: 5px;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 0;
         min-width: 170px;
         z-index: 1001;
         opacity: 0;
         visibility: hidden;
         transition: opacity 120ms ease, visibility 120ms ease;
-        backdrop-filter: blur(12px);
         pointer-events: none;
         margin-top: -4px;
     }
@@ -4151,38 +4037,6 @@
         opacity: 1;
         visibility: visible;
         pointer-events: auto;
-    }
-    
-    .new-tab-submenu-item {
-        padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
-        cursor: pointer;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    
-    .new-tab-submenu-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .new-tab-submenu-item:first-child:hover {
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
-    }
-
-    .new-tab-submenu-item:last-child:hover {
-        border-bottom-left-radius: 8px;
-        border-bottom-right-radius: 8px;
     }
     
     .partition-dot {
@@ -4809,17 +4663,12 @@
 
     .space-context-menu-dropdown {
         position: fixed;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 4px 0;
         min-width: 180px;
         z-index: 10000;
         opacity: 0;
         visibility: hidden;
         transform: translateY(-4px);
         transition: all 150ms ease;
-        backdrop-filter: blur(12px);
         overflow: visible;
         pointer-events: auto;
     }
@@ -4830,44 +4679,6 @@
         transform: translateY(0);
     }
 
-    .space-context-menu-item {
-        padding: 8px 14px;
-        color: #fff;
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: -0.008em;
-        line-height: 1;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: antialiased;
-        cursor: pointer;
-        transition: background 150ms ease;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-    }
-
-    .space-context-menu-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .space-context-menu-item:active {
-        background: rgba(255, 255, 255, 0.15);
-    }
-
-    .space-context-menu-item.delete {
-        color: #ff6b6b;
-    }
-
-    .space-context-menu-item.delete:hover {
-        color: #ff4444;
-        background: rgba(255, 107, 107, 0.1);
-    }
-
-    .space-context-menu-item.delete:active {
-        background: rgba(255, 107, 107, 0.2);
-    }
     
     /* Tab sidebar resize handle - positioned next to the fading divider line */
     .sidebar .resize-handle {

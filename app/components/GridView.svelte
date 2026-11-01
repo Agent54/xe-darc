@@ -357,12 +357,12 @@
   {#if gridContextMenuId}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="grid-menu-scrim" onmousedown={(e) => { e.stopPropagation(); gridContextMenuId = null; }}></div>
-    <div class="grid-context-menu" style="top: {gridContextMenuPosition.y}px; left: {gridContextMenuPosition.x}px;">
-      <button class="grid-context-item" onmouseup={() => handleGridContextAction('rename', gridContextMenuId)} role="menuitem">Rename</button>
-      <button class="grid-context-item" onmouseup={() => handleGridContextAction('change-icon', gridContextMenuId)} role="menuitem">Change icon</button>
-      <button class="grid-context-item" onmouseup={() => handleGridContextAction('change-color', gridContextMenuId)} role="menuitem">Change color</button>
-      <button class="grid-context-item" onmouseup={() => handleGridContextAction('container', gridContextMenuId)} role="menuitem">Container</button>
-      <button class="grid-context-item delete" onmouseup={() => handleGridContextAction('delete', gridContextMenuId)} role="menuitem">Delete</button>
+    <div class="grid-context-menu menu-surface" style="top: {gridContextMenuPosition.y}px; left: {gridContextMenuPosition.x}px;">
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('rename', gridContextMenuId)} role="menuitem">Rename</button>
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('change-icon', gridContextMenuId)} role="menuitem">Change icon</button>
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('change-color', gridContextMenuId)} role="menuitem">Change color</button>
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('container', gridContextMenuId)} role="menuitem">Container</button>
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('delete', gridContextMenuId)} role="menuitem">Delete</button>
     </div>
   {/if}
   {#if gridRenamingSpaceId}
@@ -1418,53 +1418,14 @@
     position: fixed;
     display: flex;
     flex-direction: column;
-    background: rgba(0, 0, 0, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 4px 0;
     width: max-content;
     z-index: 10001;
-    backdrop-filter: blur(12px);
     transform: translateY(-4px);
     animation: grid-menu-in 150ms ease forwards;
   }
 
   @keyframes grid-menu-in {
     to { transform: translateY(0); opacity: 1; }
-  }
-
-  .grid-context-item {
-    padding: 8px 14px;
-    color: #fff;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: -0.008em;
-    line-height: 1;
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-    -webkit-font-smoothing: antialiased;
-    cursor: pointer;
-    transition: background 150ms ease;
-    background: transparent;
-    border: none;
-    text-align: left;
-  }
-
-  .grid-context-item:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.95);
-  }
-
-  .grid-context-item:active {
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  .grid-context-item.delete {
-    color: #ff6b6b;
-  }
-
-  .grid-context-item.delete:hover {
-    color: #ff4444;
-    background: rgba(255, 107, 107, 0.1);
   }
 
   .grid-color-picker-dropdown {

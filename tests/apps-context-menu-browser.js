@@ -98,7 +98,7 @@ const server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, req
     if (new URL(request.url).pathname === '/fixture.js') {
         return new Response(output[0].code, { headers: { 'content-type': 'text/javascript' } })
     }
-    return new Response(`<!doctype html><style>
+    return new Response(`<!doctype html><style>${Deno.readTextFileSync(`${root}app/menus.css`)}</style><style>
         body { background: #111; color: white; font-family: system-ui; margin: 70px 20px; }
         .app-card { display: inline-block; vertical-align: top; width: 210px; padding: 10px; margin: 10px; border: 1px solid #444; border-radius: 10px; }
         .app-card-actions { display: flex; gap: 4px; }
