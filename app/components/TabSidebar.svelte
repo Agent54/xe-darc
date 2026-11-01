@@ -54,11 +54,12 @@
     let closedTabsHideTimeout = null
     let closedTabsPreviewUntil = $state(0)
     let closedTabsPreviewNow = $state(0)
+    let closedTabsPreviewRetained = $state(false)
     const recentClosedTabs = $derived(data.spaceMeta.closedTabs.filter(tab =>
         tab.closedAt > closedTabsPreviewNow - 10_000 && tab.closedAt <= closedTabsPreviewNow
     ))
     const closedTabsPreviewVisible = $derived(closedTabsPreviewUntil > closedTabsPreviewNow && recentClosedTabs.length > 0)
-    const displayedClosedTabs = $derived(closedTabsPreviewVisible && !closedTabsHovered ? recentClosedTabs : data.spaceMeta.closedTabs)
+    const displayedClosedTabs = $derived(closedTabsPreviewRetained && !closedTabsHovered ? recentClosedTabs : data.spaceMeta.closedTabs)
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
@@ -1239,7 +1240,8 @@
             previousClosedTabs.get(id) !== closedAt
         )) {
             closedTabsPreviewNow = now
-            closedTabsPreviewUntil = now + 1000
+            closedTabsPreviewUntil = now + 3000
+            closedTabsPreviewRetained = true
         }
         previousClosedTabs = closedTabs
     })
@@ -1249,6 +1251,13 @@
         if (!closedTabsPreviewVisible) return
         const nextExpiry = Math.min(closedTabsPreviewUntil, ...recentClosedTabs.map(tab => tab.closedAt + 10_000))
         const timeout = setTimeout(() => { closedTabsPreviewNow = Date.now() }, Math.max(1, nextExpiry - Date.now()))
+        return () => clearTimeout(timeout)
+    })
+
+    // Keep the filtered rows and offscreen-sidebar offset until the 200 ms fade finishes.
+    $effect(() => {
+        if (!closedTabsPreviewRetained || closedTabsPreviewVisible) return
+        const timeout = setTimeout(() => { closedTabsPreviewRetained = false }, 250)
         return () => clearTimeout(timeout)
     })
     
@@ -1697,7 +1706,8 @@
 {/if}
 
 <div class="sidebar-box" 
-     class:closed-tabs-preview={closedTabsPreviewVisible}
+     class:closed-tabs-preview={closedTabsPreviewRetained}
+     class:closed-tabs-preview-closing={closedTabsPreviewRetained && !closedTabsPreviewVisible && !closedTabsHovered}
      class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || headerMenuOpen || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
@@ -4443,6 +4453,12 @@
     /* Reveal only the closed-tab menu when the rest of the sidebar is tucked away. */
     .sidebar-box.closed-tabs-preview:not(:hover):not(.hovered):not(.visible):not(.resizing) .closed-tabs-section {
         transform: translateX(calc(100% + 9px));
+        transition: opacity 200ms ease;
+    }
+
+    .sidebar-box.closed-tabs-preview.closed-tabs-preview-closing:not(:hover):not(.hovered):not(.visible):not(.resizing) .closed-tabs-section {
+        opacity: 0;
+        pointer-events: none;
     }
 
     :global(.sidebar-box.visible .closed-tabs-section)   {
