@@ -14,7 +14,6 @@ const { outputFiles } = await build({
             import PouchDB from 'pouchdb-browser'
             import findPlugin from 'pouchdb-find'
             import { withDocumentSort } from './app/lib/document-sort.js'
-            import { backfillDocumentSort } from './app/lib/legacy-document-sort-backfill.js'
             PouchDB.plugin(findPlugin)
             window.testActivityView = async () => {
                 const db = new PouchDB('tab-activity-test-' + crypto.randomUUID())
@@ -30,8 +29,7 @@ const { outputFiles } = await build({
                         tab('closed', 0, { archive: 'closed', lastActivityAt: 2000000000000 }),
                         tab('other-space', 0, { spaceId: 'other', lastActivityAt: 1900000000000 }),
                         tab('deleted', 0, { archive: 'deleted', lastActivityAt: 1900000000000 })
-                    ])
-                    await Promise.all([backfillDocumentSort(db), backfillDocumentSort(db)])
+                    ].map(withDocumentSort))
                     const sortOrder = ['archive', 'spaceId', 'type', 'sort']
                     await db.createIndex({ index: { fields: sortOrder } })
                     const options = {
@@ -87,7 +85,7 @@ try {
         fieldsOnly: [{ _id: 'ordinary-4004' }],
         bumped: 'ordinary-4004', preservedOrder: 4004
     })
-    console.log('Chromium/PouchDB: legacy sort backfill, generic Mango index, fields-only queries and activity selection before the 4,000-document limit pass')
+    console.log('Chromium/PouchDB: persisted document sorts, generic Mango index, fields-only queries and selection before the 4,000-document limit pass')
 } finally {
     await browser?.close()
     await new Promise(resolve => server.close(resolve))

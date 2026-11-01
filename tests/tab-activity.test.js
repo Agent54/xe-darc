@@ -6,7 +6,23 @@ const tab = (id, order, extra = {}) => ({ _id: id, id, type: 'tab', spaceId: 'sp
 const ids = items => items.map(item => item.id)
 const display = (tabs, enabled = true, docs = {}, search) => getActivitySidebarItems(getSidebarItems(tabs), docs, enabled, search)
 
-Deno.test('activity uses the latest effective group timestamp and preserves ordinary order and member order', () => {
+Deno.test('enabling activity without recorded activity preserves existing sidebar order, groups and tied spacers', () => {
+    const tabs = [tab('one', 10), tab('two', 20),
+        tab('group-first', 30, { tabGroupId: 'group', tabGroupOrder: 0 }),
+        tab('group-last', 40, { tabGroupId: 'group', tabGroupOrder: 1 }),
+        { id: 'aaa-spacer', type: 'divider', order: 30 }, tab('last', 50)]
+    assert.deepEqual(ids(display(tabs, true)), ids(display(tabs, false)))
+    assert.deepEqual(ids(display(tabs, false)), ['tab:last', 'group:group', 'aaa-spacer', 'tab:two', 'tab:one'])
+})
+
+Deno.test('sidebar groups without activity preserve their traditional member order', () => {
+    const tabs = [tab('one', 300, { tabGroupOrder: 0 }), tab('two', 100, { tabGroupOrder: 1 }), tab('three', 200, { tabGroupOrder: 2 })]
+    assert.deepEqual(ids(getActivityGroupTabs(tabs, {}, true)), ['three', 'two', 'one'])
+    const copiedOrders = tabs.map(tab => ({ ...tab, lastActivityAt: tab.order }))
+    assert.deepEqual(ids(getActivityGroupTabs(copiedOrders, {}, true)), ids(getActivityGroupTabs(copiedOrders, {}, false)))
+})
+
+Deno.test('activity and manual group ranks both follow newest-first ordering', () => {
     const tabs = [tab('first', 0, { lastActiveAt: 99999 }), tab('older', 10, { lastActivityAt: 100 }),
         tab('group-first', 20, { tabGroupId: 'group', tabGroupOrder: 0 }),
         tab('group-last', 20, { tabGroupId: 'group', tabGroupOrder: 1, lastActivityAt: 200 }),
@@ -15,7 +31,7 @@ Deno.test('activity uses the latest effective group timestamp and preserves ordi
     const items = display(tabs)
     assert.deepEqual(ids(items), ['group:group', 'tab:older', 'tab:last', 'spacer', 'tab:first'])
     assert.deepEqual(ids(items[0].tabs), ['group-first', 'group-last'])
-    assert.deepEqual(ids(display(tabs, false)), ['tab:first', 'tab:older', 'spacer', 'group:group', 'tab:last'])
+    assert.deepEqual(ids(display(tabs, false)), ['tab:last', 'group:group', 'spacer', 'tab:older', 'tab:first'])
     assert.deepEqual(tabs, before)
 })
 
@@ -36,13 +52,13 @@ Deno.test('sidebar group members sort by activity or order without mutating trad
     const tabs = [tab('one', 10, { tabGroupOrder: 0, lastActivityAt: 100 }),
         tab('two', 10, { tabGroupOrder: 1, lastActivityAt: 300 }),
         tab('three', 200, { tabGroupOrder: 2 })]
-    assert.deepEqual(ids(getActivityGroupTabs(tabs, {}, true)), ['two', 'three', 'one'])
+    assert.deepEqual(ids(getActivityGroupTabs(tabs, {}, true)), ['two', 'one', 'three'])
     assert.deepEqual(ids(tabs), ['one', 'two', 'three'])
-    assert.equal(getActivityGroupTabs(tabs, {}, false), tabs)
+    assert.deepEqual(ids(getActivityGroupTabs(tabs, {}, false)), ['three', 'two', 'one'])
     assert.deepEqual(ids(getActivityGroupTabs(tabs, { one: { lastActivityAt: 400 } }, true)), ['one', 'two', 'three'])
 })
 
-Deno.test('activity fractional indexing uses effective neighbor ranks and reverses the open ends', () => {
+Deno.test('activity fractional indexing follows manual placement at both open ends', () => {
     const first = tab('first', 10, { lastActivityAt: 300 })
     const second = tab('second', 100)
     assert.equal(activityBetween(first, second), 200)
@@ -54,6 +70,23 @@ Deno.test('activity fractional indexing uses effective neighbor ranks and revers
     assert.equal(update.lastActivityAt, 200)
     assert.equal(Object.hasOwn(update, 'order'), false)
     assert.deepEqual(ids(display(tabs.map(tab => ({ ...tab, ...(tab.id === update.id ? update : {}) })))), ['tab:first', 'tab:moving', 'tab:second'])
+})
+
+Deno.test('manual sidebar placement uses descending endpoints and keeps title-bar member order ascending', () => {
+    const tabs = [tab('one', 10, { tabGroupId: 'group', tabGroupOrder: 0 }),
+        tab('two', 10, { tabGroupId: 'group', tabGroupOrder: 1 }),
+        tab('three', 10, { tabGroupId: 'group', tabGroupOrder: 2 })]
+    const updates = planTabMove(tabs, tabs, 'one', { targetSpaceId: 'space', targetGroupTabId: 'two', beforeTabId: 'three', afterTabId: 'two', sidebar: true }, () => 'group')
+    const moved = tabs.map(tab => ({ ...tab, ...updates.find(update => update.id === tab.id) }))
+    const traditional = getSidebarItems(moved)[0].tabs
+    assert.deepEqual(ids(traditional), ['two', 'one', 'three'])
+    assert.deepEqual(ids(getActivityGroupTabs(traditional, {}, false)), ['three', 'one', 'two'])
+    const standalone = [tab('moving', 5), tab('first', 100), tab('last', 10)]
+    const options = { targetSpaceId: 'space', sidebar: true }
+    const top = planTabMove(standalone, standalone, 'moving', { ...options, afterTabId: 'first' }, () => 'group')[0]
+    const bottom = planTabMove(standalone, standalone, 'moving', { ...options, beforeTabId: 'last' }, () => 'group')[0]
+    assert.equal(top.order, 101)
+    assert.equal(bottom.order, 9)
 })
 
 Deno.test('activity group moves use the effective neighboring group rank and preserve every member order', () => {

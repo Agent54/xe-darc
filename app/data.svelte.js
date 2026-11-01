@@ -7,7 +7,6 @@ import { tick } from 'svelte'
 import { getFrameMoveIds } from './lib/frame-lifecycle.js'
 import { getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
 import { withDocumentSort } from './lib/document-sort.js'
-import { backfillDocumentSort } from './lib/legacy-document-sort-backfill.js'
 import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
@@ -270,8 +269,7 @@ const sortOrder = ['archive', 'spaceId', 'type', 'sort']
 let documentIndexReady = null
 
 function ensureDocumentIndex() {
-    documentIndexReady ??= backfillDocumentSort(db)
-        .then(() => db.createIndex({ index: { fields: sortOrder } }))
+    documentIndexReady ??= db.createIndex({ index: { fields: sortOrder } })
         .catch(error => { documentIndexReady = null; throw error })
     return documentIndexReady
 }
@@ -597,17 +595,18 @@ const dividerCreationTasks = new Map()
 function createDivider(spaceId, { beforeTabId, afterTabId } = {}) {
     const space = spaces[spaceId]
     const positioned = beforeTabId !== undefined || afterTabId !== undefined
-    if (!space || (!positioned && space.tabs?.[0]?.type === 'divider')) return null
+    if (!space) return null
 
     space.tabs ??= []
-    const firstItem = space.tabs[0]
+    const firstItem = getSidebarItems(space.tabs).at(-1)
+    if (!positioned && firstItem?.type === 'divider') return null
     const _id = `darc:divider_${crypto.randomUUID()}`
     const divider = {
         _id,
         id: _id,
         type: 'divider',
         spaceId,
-        order: positioned ? orderBetween(docs[beforeTabId], docs[afterTabId]) : firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
+        order: positioned ? orderBetween(docs[afterTabId], docs[beforeTabId]) : firstItem ? (firstItem.order ?? Date.now()) + 1 : Date.now(),
         created: Date.now()
     }
 
@@ -1472,10 +1471,10 @@ const data = {
     },
     bumpTabActivity: (tabId) => {
         if (!ui.tabActivityMode || docs[tabId]?.type !== 'tab') return Promise.resolve()
-        const latestActivity = Math.max(0, ...Object.values(docs)
+        const latestActivity = Math.max(Date.now(), ...Object.values(docs)
             .filter(doc => ['tab', 'divider'].includes(doc.type) && !doc.archive)
-            .map(getActivityTimestamp))
-        const lastActivityAt = Math.max(Date.now(), latestActivity + 1)
+            .flatMap(doc => [getActivityTimestamp(doc), getActivityTimestamp(doc, 'tabGroupOrder')]))
+        const lastActivityAt = latestActivity + 1
         return queueDocumentUpdate(tabId, { lastActivityAt, modified: Date.now() })
     },
 
@@ -1905,7 +1904,7 @@ const data = {
     newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned, pinScope = 'group', groupTabId } = {}) => {
         // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
-        const firstItem = spaces[spaceId]?.tabs?.[0]
+        const firstItem = getSidebarItems(spaces[spaceId]?.tabs).at(-1)
         const isGroupMember = !preview && !lightbox && (!pinned || pinScope === 'group')
         const group = isGroupMember ? getTabGroup(spaces[spaceId]?.tabs, groupTabId) : null
         const tabGroupId = group ? group.tabs[0].tabGroupId || crypto.randomUUID() : null
@@ -1931,7 +1930,7 @@ const data = {
             favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64` : undefined,
             url: url || 'about:newtab',
             title: url ? title : 'New Tab',
-            order: group ? group.order : isGroupMember && firstItem ? (firstItem.order ?? Date.now()) - 1 : Date.now(),
+            order: group ? group.order : isGroupMember && firstItem ? (firstItem.order ?? Date.now()) + 1 : Date.now(),
             tabGroupId,
             tabGroupOrder,
             ...(canvasPosition ? { canvas: { [spaceId]: canvasPosition } } : {}),
@@ -2483,6 +2482,7 @@ const data = {
         const tabDoc = docs[tabId]
         if (!tabDoc) return
         // Only sidebar drops opt into activity ordering; title-bar drops keep traditional member order.
+        const sidebar = activityMode
         activityMode = activityMode && ui.tabActivityMode
 
         if (tabDoc.type === 'tab' && scope === 'pinned') {
@@ -2498,7 +2498,7 @@ const data = {
                     ? sourceGroup : data.getTabGroup(targetGroupTabId, destSpaceId)
                 : null
             const updates = planTabMove(spaces[sourceSpaceId]?.tabs || [], spaces[destSpaceId].tabs || [], tabId,
-                { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode, placement, preservePins },
+                { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode, sidebar, placement, preservePins },
                 () => crypto.randomUUID(), { sourceGroup, targetGroup })
             parkMovingFrames(updates, [sourceGroup, targetGroup])
             const saves = []
@@ -2522,7 +2522,13 @@ const data = {
                     spaces[destSpaceId].tabs.push(member)
                     removedActiveTabId(id, sourceSpaceId)
                 }
-                saves.push(queueDocumentUpdate(id, update))
+                if (activityMode && targetGroup && Number.isFinite(update.order) && update.lastActivityAt < update.order) {
+                    // Joining changes shared order first; activity placement is a separate member rank.
+                    const { lastActivityAt, ...membership } = update
+                    saves.push(queueDocumentUpdate(id, membership).then(() => queueDocumentUpdate(id, { lastActivityAt })))
+                } else {
+                    saves.push(queueDocumentUpdate(id, update))
+                }
             }
             for (const spaceId of new Set([sourceSpaceId, destSpaceId])) {
                 spaces[spaceId].tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -2579,7 +2585,7 @@ const data = {
         const neighbor = id => sidebarItems.find(item => item.id === id || item.tabs?.some(tab => tab.id === id))
         Object.assign(tab, activityMode
             ? { lastActivityAt: activityBetween(neighbor(beforeTabId), neighbor(afterTabId)) }
-            : withOrderActivity(tab, { order: newOrder }))
+            : withOrderActivity(tab, { order: sidebar ? orderBetween(afterTab, beforeTab) : newOrder }))
         if (isSpaceMove) {
             // Cross-space: protect frame from destruction via onDestroy
             if (frameData) {

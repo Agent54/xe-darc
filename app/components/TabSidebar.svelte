@@ -709,7 +709,7 @@
     }
     
     function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
-        if (!spaceId || tabSearchQuery || data.spaces[spaceId]?.tabs?.[0]?.type === 'divider') return
+        if (!spaceId || tabSearchQuery || data.getSidebarItems(spaceId).at(-1)?.type === 'divider') return
 
         ensureNewTabVisible(spaceId)
 
@@ -2163,7 +2163,7 @@
                                     <div class="pinned-tabs-divider" role="separator" aria-label="Pinned and normal tabs"
                                          data-pin-scope={sidebarPins.length ? undefined : 'sidebar'} data-pin-layout="rows" data-pin-hit-padding="8"></div>
                                     <div class="tabs-list-container">
-                                    {#if !tabSearchQuery && data.spaces[spaceId]?.tabs?.[0]?.type !== 'divider' && !tabsListScrolled[spaceId]}
+                                    {#if !tabSearchQuery && data.getSidebarItems(spaceId).at(-1)?.type !== 'divider' && !tabsListScrolled[spaceId]}
                                         <div class="add-spacer-insertion">
                                             <Tooltip text="Add spacer" position="top" delay={300}>
                                                 <button class="add-spacer-preview"
@@ -4463,12 +4463,12 @@
         background: rgba(0, 0, 0, 0.8);
         backdrop-filter: blur(15px);
         border: none;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45), 0 6px 20px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
         position: relative;
         z-index: 11;
         width: 100%;
         min-width: 0;
-        border: 1px solid #3b3b3b;
+        border: 1px solid #232323;
     }
     
     .closed-tabs-header:hover {
@@ -4505,7 +4505,7 @@
         left: 0;
         right: 0;
         background: rgba(0, 0, 0, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.22);
+        border: 1px solid var(--menu-border);
         border-radius: 13px 13px 0 0;
         border-bottom: none;
         backdrop-filter: blur(20px);

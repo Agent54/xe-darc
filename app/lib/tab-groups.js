@@ -148,7 +148,7 @@ export function addTabGroupFrames (elements, groups) {
 }
 
 // Both sidebar and top-bar drops describe neighbors in sidebar order.
-export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, targetGroupTabId, beforeTabId, afterTabId, scope = 'tab', activityMode = false, placement = null, preservePins = false }, createGroupId, groups) {
+export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, targetGroupTabId, beforeTabId, afterTabId, scope = 'tab', activityMode = false, sidebar = activityMode, placement = null, preservePins = false }, createGroupId, groups) {
     const tab = sourceItems.find(item => item.id === tabId)
     if (!tab || tab.type !== 'tab') {
         return []
@@ -167,11 +167,12 @@ export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, t
             return []
         }
         const groupId = targetGroup.tabs[0].tabGroupId || createGroupId()
-        const beforeIndex = remaining.findIndex(item => item.id === beforeTabId)
-        const afterIndex = remaining.findIndex(item => item.id === afterTabId)
+        const reverseManualDrop = sidebar && !activityMode
+        const beforeIndex = remaining.findIndex(item => item.id === (reverseManualDrop ? afterTabId : beforeTabId))
+        const afterIndex = remaining.findIndex(item => item.id === (reverseManualDrop ? beforeTabId : afterTabId))
         const activityTabs = activityMode ? getActivityGroupTabs(remaining, {}, true) : []
         const lastActivityAt = activityMode ? activityBetween(
-            remaining[beforeIndex] || (afterIndex === -1 ? activityTabs.at(-1) : null), remaining[afterIndex]
+            remaining[beforeIndex] || (afterIndex === -1 ? activityTabs.at(-1) : null), remaining[afterIndex], 'tabGroupOrder'
         ) : null
         if (activityMode && sourceGroup?.id === targetGroup.id) {
             return moving.map(member => ({ id: member.id, lastActivityAt,
@@ -206,10 +207,10 @@ export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, t
         const entries = getSidebarItems(targetItems).filter(item => !item.tabs?.every(member => movingIds.has(member.id)))
         const neighbor = id => entries.find(item => item.tabs?.some(member => member.id === id) || item.id === id)
         const rank = placement === 'start'
-            ? { order: orderBetween(null, entries[0]), lastActivityAt: Math.max(Date.now(), ...entries.map(item => getSidebarActivityTimestamp(item))) + 1 }
+            ? { order: orderBetween(entries.at(-1), null), lastActivityAt: Math.max(Date.now(), ...entries.map(item => getSidebarActivityTimestamp(item))) + 1 }
             : activityMode
             ? { lastActivityAt: activityBetween(neighbor(beforeTabId), neighbor(afterTabId)) }
-            : { order: orderBetween(neighbor(beforeTabId), neighbor(afterTabId)) }
+            : { order: sidebar ? orderBetween(neighbor(afterTabId), neighbor(beforeTabId)) : orderBetween(neighbor(beforeTabId), neighbor(afterTabId)) }
         let pinOrder = nextPinOrder(targetItems)
         let sidebarPinOrder = Math.max(0, ...getSidebarPinnedTabs(targetItems).map(tab => tab.sidebarPinOrder ?? tab.order ?? 0)) + 1
         let fixedPinOrder = Math.max(0, ...getSidebarPinnedTabs(targetItems, true).map(tab => tab.sidebarPinOrder ?? tab.order ?? 0)) + 1

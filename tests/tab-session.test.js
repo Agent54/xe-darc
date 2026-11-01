@@ -5,7 +5,6 @@ import { getWindowSessionHints, getWindowSessionStartup, rememberWindowBounds, f
 import * as tabGroups from '../app/lib/tab-groups.js'
 import * as tabActivity from '../app/lib/tab-activity.js'
 import * as documentSort from '../app/lib/document-sort.js'
-import * as legacyDocumentSort from '../app/lib/legacy-document-sort-backfill.js'
 import * as frameLifecycle from '../app/lib/frame-lifecycle.js'
 import * as svelteServer from 'svelte/internal/server'
 import * as svelteClient from 'svelte/internal/client'
@@ -192,7 +191,6 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         ...tabGroups,
         ...tabActivity,
         ...documentSort,
-        ...legacyDocumentSort,
         ...frameLifecycle,
         findPlugin: {},
         bootstrap: [],
@@ -346,7 +344,7 @@ Deno.test('pin transfers restore through the new wrapper and cancel stale or clo
 
 Deno.test('dragged creation controls persist items at the dropped position, including below an existing spacer', async () => {
     const { data, refresh, db } = session({ tabs: [
-        tab('spacer', otherSpace, { type: 'divider', order: 0 }),
+        tab('spacer', otherSpace, { type: 'divider', order: 30 }),
         tab('first', otherSpace, { order: 10 }), tab('second', otherSpace, { order: 20 }), tab('source')
     ], runtime: 'client' })
     await refresh()
@@ -491,7 +489,23 @@ Deno.test('sidebar member drags persist activity ranks while title-bar member or
     assert.deepEqual(sidebarIds(), ['one', 'two', 'three'])
     assert.deepEqual(readTabs().map(tab => tab.id), ['one', 'two', 'three'])
     data.toggleTabActivityMode()
-    assert.deepEqual(sidebarIds(), ['one', 'two', 'three'])
+    assert.deepEqual(sidebarIds(), ['three', 'two', 'one'])
+})
+
+Deno.test('activity group drops between untouched members use their traditional member ranks', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('one', defaultSpace, { order: 1000, tabGroupId: 'group', tabGroupOrder: 0 }),
+        tab('two', defaultSpace, { order: 1000, tabGroupId: 'group', tabGroupOrder: 1 }),
+        tab('incoming', defaultSpace, { order: 2000 })
+    ], history: ['one'], runtime: 'client' })
+    await refresh()
+    data.toggleTabActivityMode()
+    await data.moveTab('incoming', { targetGroupTabId: 'one', beforeTabId: 'two', afterTabId: 'one', activityMode: true })
+    const group = data.getTabGroup('one')
+    assert.deepEqual(group.tabs.map(tab => tab.id), ['one', 'two', 'incoming'])
+    assert.deepEqual(tabActivity.getActivityGroupTabs(group.tabs, data.docs, true).map(tab => tab.id), ['two', 'incoming', 'one'])
+    assert.equal((await db.get('incoming')).lastActivityAt, 0.5)
+    assert.equal((await db.get('incoming')).order, 1000)
 })
 
 Deno.test('activity sidebar joins preserve existing title-bar order and append incoming members', async () => {
@@ -559,7 +573,7 @@ Deno.test('activity group and spacer drops use neighboring group timestamps and 
     assert.equal(data.docs.spacer.order, 40)
 })
 
-Deno.test('bump to top exceeds tabs whose fallback order timestamp is newer than the clock', async () => {
+Deno.test('bump to top precedes existing activity, manual and member ranks', async () => {
     const future = Date.now() + 1000000
     const { data, refresh } = session({ tabs: [tab('one'), tab('future', defaultSpace, { order: future })], runtime: 'client' })
     await refresh()
@@ -876,7 +890,7 @@ Deno.test('group additions append members without moving the group and space add
     assert.equal(group.order, 10)
     assert.equal(first.tabGroupId, second.tabGroupId)
     const standalone = await data.newTab(defaultSpace)
-    assert.equal(data.getTabGroups()[0].tabs[0].id, standalone.id)
+    assert.equal(tabActivity.getActivitySidebarItems(data.getSidebarItems(), data.docs, false)[0].tabs[0].id, standalone.id)
     assert.equal(standalone.tabGroupId, null)
     assert.equal(writes.every(write => write.type === 'tab'), true)
     assert.equal(writes.some(write => write._id === 'anchor' && write.tabGroupId === first.tabGroupId), true)
@@ -1649,7 +1663,7 @@ Deno.test('Move to Space puts groups first while carrying their pins to the bott
     ], history: ['one'], runtime: 'client' })
     await refresh()
     await moveFromSpaceMenu(data, { ...data.getTabGroup('one'), type: 'tabgroup', spaceId: defaultSpace }, true)
-    assert.equal(data.getSidebarItems(otherSpace)[0].tabs[0].id, 'one')
+    assert.equal(tabActivity.getActivitySidebarItems(data.getSidebarItems(otherSpace), data.docs, false)[0].tabs[0].id, 'one')
     assert.deepEqual(Array.from(data.getSidepins(otherSpace, 'one'), tab => tab.id), ['existing-pin', 'pin'])
     assert.deepEqual(tabGroups.getSidebarPinnedTabs(data.spaces[otherSpace].tabs).map(tab => tab.id), ['existing-saved', 'saved'])
     assert.equal(data.docs.pin.pinScope, 'group')

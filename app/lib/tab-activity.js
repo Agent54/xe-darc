@@ -1,23 +1,34 @@
-export function getActivityTimestamp(item) {
-    return Number.isFinite(item?.lastActivityAt) ? item.lastActivityAt
+export function getActivityTimestamp(item, orderField = 'order') {
+    // Copying a group's shared order into activity is still manual member placement.
+    const activity = item?.lastActivityAt
+    if (Number.isFinite(activity) && (orderField === 'order' || activity !== item.order)) return activity
+    return Number.isFinite(item?.[orderField]) ? item[orderField]
         : Number.isFinite(item?.order) ? item.order : 0
 }
 
-export function getSidebarActivityTimestamp(item, docs = {}) {
+export function getSidebarActivityTimestamp(item, docs = {}, orderField = 'order') {
     return item.tabs?.length
-        ? Math.max(...item.tabs.map(tab => getActivityTimestamp(docs[tab.id] || tab)))
-        : getActivityTimestamp(docs[item.id] || item)
+        ? Math.max(...item.tabs.map(tab => {
+            const current = docs[tab.id] || tab
+            return Number.isFinite(current.lastActivityAt) && current.lastActivityAt !== current.order
+                ? current.lastActivityAt : item.order ?? getActivityTimestamp(current, orderField)
+        }))
+        : getActivityTimestamp(docs[item.id] || item, orderField)
 }
 
 export function getActivityGroupTabs(tabs, docs = {}, activityMode = false) {
-    if (!activityMode) return tabs
-    return tabs.toSorted((a, b) => getActivityTimestamp(docs[b.id] || b) - getActivityTimestamp(docs[a.id] || a))
+    const rank = tab => {
+        const current = docs[tab.id] || tab
+        return activityMode ? getActivityTimestamp(current, 'tabGroupOrder')
+            : Number.isFinite(current.tabGroupOrder) ? current.tabGroupOrder : current.order ?? 0
+    }
+    return tabs.toSorted((a, b) => rank(b) - rank(a))
 }
 
-// Activity order runs newest first, so either open end uses the opposite sign to ordinary order.
-export function activityBetween(before, after) {
-    const first = before ? getSidebarActivityTimestamp(before) : null
-    const second = after ? getSidebarActivityTimestamp(after) : null
+// Both sidebar modes run newest first; the title bar retains its traditional member order.
+export function activityBetween(before, after, orderField = 'order') {
+    const first = before ? getSidebarActivityTimestamp(before, {}, orderField) : null
+    const second = after ? getSidebarActivityTimestamp(after, {}, orderField) : null
     if (first !== null && second !== null) return (first + second) / 2
     if (first !== null) return first - 1
     if (second !== null) return second + 1
@@ -34,8 +45,8 @@ export function withOrderActivity(item, update) {
 
 export function getActivitySidebarItems(items, docs, activityMode, matchesSearch = () => true) {
     const visible = items.filter(item => !item.tabs || item.tabs.some(matchesSearch))
-        .toSorted((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .toSorted((a, b) => (b.order ?? 0) - (a.order ?? 0))
     if (!activityMode) return visible
 
-    return visible.sort((a, b) => getSidebarActivityTimestamp(b, docs) - getSidebarActivityTimestamp(a, docs) || a.id.localeCompare(b.id))
+    return visible.sort((a, b) => getSidebarActivityTimestamp(b, docs) - getSidebarActivityTimestamp(a, docs))
 }

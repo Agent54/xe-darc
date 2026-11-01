@@ -76,7 +76,9 @@ const modules = {
         data.getSpacePins = spaceId => data.spaces[spaceId].pinnedTabs
         data.pinSidebarTab = options => data.menuActions.push({ action: 'sidebar-pin', ...options })
         data.toggleTabActivityMode = () => { data.ui.tabActivityMode = !data.ui.tabActivityMode }
-        data.bumpTabActivity = tabId => { data.docs[tabId].lastActivityAt = Date.now() }
+        data.bumpTabActivity = tabId => {
+            data.docs[tabId].lastActivityAt = Math.max(Date.now(), ...data.spaces.space.tabs.flatMap(tab => [tab.lastActivityAt ?? tab.order ?? 0, tab.tabGroupOrder ?? tab.order ?? 0])) + 1
+        }
         let newTabCount = 0
         data.newTab = async spaceId => {
             const id = newTabCount++ ? 'new-normal-' + newTabCount : 'new-normal'
