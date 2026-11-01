@@ -12,6 +12,8 @@ body, html {
     margin: 0;
     /* -webkit-app-region: drag;
     app-region: drag; */
-    font-family: 'Inter', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
     touch-action: manipulation;
 }
