@@ -13,6 +13,7 @@
     import Excalidraw from './components/Excalidraw.svelte'
     import GridView from './components/GridView.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
+    import TabDragIndicator from './components/TabDragIndicator.svelte'
     import TabGroupPreview from './components/TabGroupPreview.svelte'
     import TabHoverCard from './components/TabHoverCard.svelte'
     import TabContextMenu from './components/TabContextMenu.svelte'
@@ -4805,14 +4806,7 @@
     </div>
 {/if}
 
-{#if tabDrag.indicator.visible}
-    <div class="tab-drag-indicator" class:joining-group={tabDrag.dropTarget?.targetGroupTabId && tabDrag.indicator.height > 2 && tabDrag.indicator.width > 2} style="
-        left: {tabDrag.indicator.x}px;
-        top: {tabDrag.indicator.y}px;
-        width: {tabDrag.indicator.width}px;
-        height: {tabDrag.indicator.height}px;
-    "></div>
-{/if}
+<TabDragIndicator />
 
 {#if tabDrag.active && tabDrag.dragType !== 'divider' && (tabDrag.creating || data.docs[tabDrag.tabId])}
     {@const dragTab = tabDrag.creating ? { title: 'New Tab', url: 'about:newtab' } : data.docs[tabDrag.tabId]}

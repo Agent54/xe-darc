@@ -242,9 +242,9 @@ function handleMouseMove(e) {
         } else if (pinTarget.hit) {
             showIndicator(pinTarget.tabs, pinTarget.hit.index, pinTarget.hit.after, pinTarget.axis)
         } else {
-            const rect = pinTarget.placeholder.getBoundingClientRect()
+            const rect = pinTarget.emptyRect
             Object.assign(state.indicator, pinTarget.axis === 'y'
-                ? { visible: true, x: rect.left + rect.width / 2, y: rect.top + 4, width: rect.width, height: 2 }
+                ? { visible: true, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width, height: 2 }
                 : { visible: true, x: rect.left, y: rect.top + rect.height / 2, width: 2, height: rect.height })
         }
         return
@@ -411,14 +411,15 @@ function isVisibleSidebarTarget(list, mx, my) {
     const bounds = space.getBoundingClientRect()
     if (mx < bounds.left || mx > bounds.right || my < bounds.top || my > bounds.bottom) return false
     const sticky = space.querySelector('.space-sticky-tabs')
-    return !sticky || !!list.closest('.space-sticky-tabs') || my >= sticky.getBoundingClientRect().bottom
+    return !sticky || list.dataset.pinScope === 'space' || !!list.closest('.space-sticky-tabs') || my >= sticky.getBoundingClientRect().bottom
 }
 
 function findPinDropTarget(mx, my) {
     for (const list of document.querySelectorAll('[data-pin-scope]')) {
         if (!isVisibleSidebarTarget(list, mx, my)) continue
         const rect = list.getBoundingClientRect()
-        if (mx < rect.left || mx > rect.right || my < rect.top || my > rect.bottom) {
+        const padding = Number(list.dataset.pinHitPadding) || 0
+        if (mx < rect.left || mx > rect.right || my < rect.top - padding || my > rect.bottom + padding) {
             continue
         }
         const scrollParent = list.closest('.tab-content-container')
@@ -439,11 +440,11 @@ function findPinDropTarget(mx, my) {
         const axis = list.dataset.pinLayout === 'rows' ? 'y' : 'x'
         const drop = { type: 'pin', pinScope: list.dataset.pinScope, targetSpaceId: list.closest('.space-content')?.dataset.spaceId }
         if (!tabs.length) {
-            const placeholder = list.querySelector('.sidebar-pins-placeholder') || list.querySelector('.pin-drop-placeholder')
-            if (placeholder) {
-                return { drop, placeholder, axis }
-            }
-            continue
+            const apps = appsButton?.getBoundingClientRect()
+            const emptyRect = apps
+                ? { left: apps.right + 4, top: apps.top, width: 36, height: apps.height }
+                : { left: rect.left, top: list.dataset.pinEmptyEdge === 'bottom' ? rect.bottom : rect.top, width: rect.width, height: axis === 'y' ? 0 : rect.height }
+            return { drop, emptyRect, axis }
         }
         if (axis === 'y') {
             const hit = findClosestTab(tabs, my, axis)

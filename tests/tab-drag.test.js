@@ -69,7 +69,6 @@ function pinList (scope, children = []) {
     const list = element('', 0, 0, 250, 80, { pinScope: scope })
     list.parents['.space-content'] = scope !== 'global' ? element('', 0, 0, 250, 680, { spaceId: 'target-space' }) : null
     list.selectors[':scope > [data-tab-id]'] = children
-    list.selectors['.pin-drop-placeholder'] = element('', 4, 4, 36, 36)
     return list
 }
 
@@ -143,12 +142,11 @@ Deno.test('clicking, cancelling and dropping creation controls outside a list ne
 Deno.test('the titled pinned section accepts empty drops and reorders vertically', () => {
     const list = pinList('sidebar')
     list.dataset.pinLayout = 'rows'
-    list.selectors['.sidebar-pins-placeholder'] = element('', 4, 4, 242, 36)
     const harness = dragHarness({ pinLists: [list] })
     harness.start('source', element('source', 300, 100, 100, 36))
     harness.move(120, 20)
     assert.equal(harness.tabDrag.indicator.height, 2)
-    assert.equal(harness.tabDrag.indicator.width, 242)
+    assert.equal(harness.tabDrag.indicator.width, 250)
     harness.release()
     assert.equal(harness.drops[0].pinScope, 'sidebar')
     assert.equal(harness.drops[0].targetSpaceId, 'target-space')
@@ -178,7 +176,6 @@ Deno.test('tabs can enter empty space and global pin sections', () => {
 Deno.test('fixed pins accept row drops while the sticky header blocks obscured scrolling targets', () => {
     const fixed = pinList('sidebar-fixed')
     fixed.dataset.pinLayout = 'rows'
-    fixed.selectors['.sidebar-pins-placeholder'] = element('', 4, 4, 242, 36)
     const sticky = element('', 0, 0, 250, 120)
     fixed.parents['.space-sticky-tabs'] = sticky
     const scrolling = pinList('sidebar')
@@ -197,6 +194,38 @@ Deno.test('fixed pins accept row drops while the sticky header blocks obscured s
     assert.equal(harness.tabDrag.dropTarget, null, 'tabs obscured by New Tab cannot receive drops')
     assert.equal(harness.tabDrag.indicator.visible, false)
     harness.cancelDrag()
+})
+
+Deno.test('empty pin sections use existing edges without placeholder elements', () => {
+    for (const scope of ['sidebar-fixed', 'sidebar']) {
+        const anchor = element('', 0, 140, 250, 0, { pinScope: scope, pinLayout: 'rows', pinHitPadding: '8' })
+        anchor.parents['.space-content'] = element('', 0, 80, 250, 600, { spaceId: 'target-space' })
+        const harness = dragHarness({ pinLists: [anchor] })
+        harness.start('source', element('source', 300, 200, 250, 36))
+        harness.move(120, 145)
+        assert.equal(harness.tabDrag.indicator.y, 140)
+        assert.equal(harness.tabDrag.indicator.height, 2)
+        harness.release()
+        assert.equal(harness.drops[0].pinScope, scope)
+        harness.start('source', element('source', 300, 200, 250, 36))
+        harness.move(120, 155)
+        assert.equal(harness.tabDrag.dropTarget, null)
+        harness.cancelDrag()
+    }
+})
+
+Deno.test('the space title accepts empty space pins above the sticky header', () => {
+    const title = pinList('space')
+    title.dataset.pinLayout = 'rows'
+    title.dataset.pinEmptyEdge = 'bottom'
+    title.parents['.space-content'].selectors['.space-sticky-tabs'] = element('', 0, 88, 250, 36)
+    const harness = dragHarness({ pinLists: [title] })
+    harness.start('source', element('source', 300, 200, 250, 36))
+    harness.move(120, 60)
+    assert.equal(harness.tabDrag.dropTarget.pinScope, 'space')
+    assert.equal(harness.tabDrag.indicator.y, 80)
+    harness.release()
+    assert.equal(harness.drops[0].pinScope, 'space')
 })
 
 Deno.test('wrapped pin grids insert between the correct neighbors', () => {

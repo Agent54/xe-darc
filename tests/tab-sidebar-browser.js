@@ -13,12 +13,14 @@ const modules = {
     entry: `
         import { mount, flushSync } from 'svelte'
         import TabSidebar from './app/components/TabSidebar.svelte'
+        import TabDragIndicator from './app/components/TabDragIndicator.svelte'
         import data from 'fixture-data'
         import { onDrop, tabDrag } from './app/lib/tab-drag.svelte.js'
         window.data = data
         window.tabDrag = tabDrag
         window.activate = id => flushSync(() => data.activate(id))
         window.pin = (id, fixed) => flushSync(() => data.pinSidebarTab({ tabId: id, fixed }))
+        window.unpin = id => flushSync(() => { data.docs[id].sidebarPinned = null })
         onDrop(event => {
             if (event.type === 'pin' && event.pinScope.startsWith('sidebar')) {
                 data.pinSidebarTab({ ...event, fixed: event.pinScope === 'sidebar-fixed' })
@@ -29,6 +31,7 @@ const modules = {
         mount(TabSidebar, { target: document.body, props: {
             tabSidebarVisible: true, customTabSidebarWidth: 280, showUrl: false
         } })
+        mount(TabDragIndicator, { target: document.body })
     `,
     'fixture-data': compileModule(`
         import { getSidebarItems, getTabGroup, getSidebarPinnedTabs, orderBetween } from './app/lib/tab-groups.js'
@@ -158,7 +161,16 @@ try {
     const fixed = `${space} [data-pin-scope="sidebar-fixed"]`
     const scrolling = `${space} [data-pin-scope="sidebar"]`
     const row = id => `${space} [data-tab-id="${id}"] .tab-item-main`
-    const drag = async (id, target) => {
+    const geometry = () => page.$eval(space, el => ({
+        scrollTop: el.scrollTop, scrollHeight: el.scrollHeight,
+        rows: ['.new-tab-row', '.pinned-tabs-divider', '.tabs-list'].map(selector => {
+            const r = el.querySelector(selector).getBoundingClientRect()
+            return { top: r.top, height: r.height }
+        })
+    }))
+    assert.equal(await page.$('.sidebar-pins-placeholder, .pin-drop-placeholder'), null, 'empty sections have no placeholder text or cells')
+    const drag = async (id, target, { cancel = false, label = null } = {}) => {
+        const before = await geometry()
         const source = await page.$eval(row(id), el => {
             const r = el.getBoundingClientRect()
             return { x: r.left + 30, y: r.top + r.height / 2 }
@@ -167,14 +179,26 @@ try {
         await page.mouse.down()
         await page.mouse.move(source.x + 8, source.y, { steps: 2 })
         await page.waitForSelector(fixed)
+        assert.deepEqual(await geometry(), before, 'starting a drag does not move or resize the sidebar')
         const destination = await page.$eval(target, el => {
             const r = el.getBoundingClientRect()
-            return { x: r.left + 80, y: r.top + 6 }
+            return { x: r.left + 80, y: r.top + Math.min(6, r.height / 2) }
         })
         await page.mouse.move(destination.x, destination.y, { steps: 4 })
+        assert.deepEqual(await geometry(), before, 'showing the drop target does not move or resize the sidebar')
+        if (label) {
+            await page.waitForSelector('.tab-drag-indicator .pin-label')
+            assert.equal(await page.$eval('.pin-label', el => el.textContent), label)
+            assert.equal(await page.$eval('.tab-drag-indicator', el => getComputedStyle(el).position), 'fixed')
+            assert.equal(await page.$eval('.tab-drag-indicator', el => el.getBoundingClientRect().height), 2)
+        }
+        if (cancel) await page.keyboard.press('Escape')
         await page.mouse.up()
+        if (cancel) assert.deepEqual(await geometry(), before, 'cancelling a drag preserves the original layout')
     }
-    await drag('tab-0', fixed)
+    await drag('tab-0', fixed, { cancel: true, label: 'Pin above New Tab' })
+    assert.equal(await page.$('.tab-drag-indicator'), null)
+    await drag('tab-0', fixed, { label: 'Pin above New Tab' })
     await page.waitForSelector(`${fixed} [data-tab-id="tab-0"]`)
     assert.equal(await page.$$eval(`${scrolling} [data-tab-id]`, tabs => tabs.length), 1)
     assert.equal(await page.$eval(`${space} .tabs-list`, el => !!el.querySelector('[data-tab-id="tab-0"]')), false)
@@ -207,9 +231,13 @@ try {
     await page.$eval(space, el => { el.scrollTop = 0 })
     await drag('tab-0', scrolling)
     await page.waitForSelector(`${scrolling} [data-tab-id="tab-0"]`)
-    assert.equal(await page.$(fixed), null, 'empty fixed section disappears after a drop')
+    assert.equal(await page.$eval(fixed, el => el.getBoundingClientRect().height), 0, 'empty fixed section takes no layout space')
     await drag('saved', fixed)
     await page.waitForSelector(`${fixed} [data-tab-id="saved"]`)
+    await page.evaluate(() => window.unpin('tab-0'))
+    await drag('tab-1', scrolling, { cancel: true, label: 'Pin above divider' })
+    await drag('tab-1', scrolling, { label: 'Pin above divider' })
+    await page.waitForSelector(`${scrolling} [data-tab-id="tab-1"]`)
     for (let i = 1; i < 12; i++) await page.evaluate(id => window.pin(id, true), `tab-${i}`)
     assert.equal(await page.$eval(fixed, el => el.scrollHeight > el.clientHeight), true, 'many fixed pins scroll independently')
     await page.$eval(fixed, el => { el.scrollTop = el.scrollHeight })
