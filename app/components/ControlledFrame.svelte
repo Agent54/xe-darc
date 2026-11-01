@@ -1580,6 +1580,8 @@ document.addEventListener('input', function(event) {
             
             if (message === `iwa:ipc-ready:${mytab.id}`) {
                 connectFrameIPC(frame, mytab.id)
+            } else if (message.startsWith('[IPC]')) {
+                console.log(message, '| tabId:', mytab.id)
             } else if (message === 'iwa:focus') {
                 // console.log('####### 🎯 [FOCUS-RECV] Received iwa:focus from inside frame | tabId:', tab?.id || tabId)
                 onFrameFocus(tab?.id || tabId)

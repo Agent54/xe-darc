@@ -4,10 +4,16 @@ if (window === window.top) {
     let ipcPort = null
 
     window.addEventListener('message', event => {
-        if (event.data?.type !== 'darc:ipc-connect' || event.data.tabId !== tabId || !event.ports[0] || ipcPort) {
+        if (event.data?.type !== 'darc:ipc-connect' || event.data.tabId !== tabId || ipcPort) {
             return
         }
 
+        if (!event.ports[0]) {
+            console.warn('[IPC] Connection message arrived without a MessagePort')
+            return
+        }
+
+        console.log('[IPC] Content script received the MessagePort')
         ipcPort = event.ports[0]
         ipcPort.onmessage = ({ data }) => {
             if (data?.type === 'darc:ipc-reply' && data.message === 'Hello world') {
