@@ -40,6 +40,12 @@ const otherSpace = 'darc:space_other'
 const appSource = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
 const dropHandler = parse(appSource).instance.content.body.find(node => node.type === 'ExpressionStatement' && node.expression.callee?.name === 'onDrop').expression.arguments[0]
 const handleDrop = data => new Function('data', `return ${appSource.slice(dropHandler.start, dropHandler.end)}`)(data)
+const contextMenuSource = Deno.readTextFileSync(new URL('../app/components/TabContextMenu.svelte', import.meta.url))
+const spaceMoveHandler = parse(contextMenuSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'moveToSpace')
+function moveFromSpaceMenu(data, tab, isGroup = false) {
+    return new Function('data', 'menu', 'isGroup', 'sourceSpaceId', 'onHide',
+        `${contextMenuSource.slice(spaceMoveHandler.start, spaceMoveHandler.end)}; return moveToSpace`)(data, { tab }, isGroup, tab.spaceId, () => {})(otherSpace)
+}
 const workerSource = Deno.readTextFileSync(new URL('../public/test-shared-worker.js', import.meta.url))
 
 function localStorageFor(storage) {
@@ -1420,6 +1426,95 @@ Deno.test('cross-space group moves update both lists, persistence and the source
     assert.equal(data.spaceMeta.activeTabId, 'outside')
     assert.deepEqual(Array.from(data.getTabGroup('one', otherSpace).tabs, tab => tab.id), ['one', 'two'])
     assert.equal(writes.filter(write => write.spaceId === otherSpace).length, 2)
+})
+
+Deno.test('Move to Space puts tabs and groups first in both manual and activity order', async () => {
+    for (const activityMode of [false, true]) {
+        for (const isGroup of [false, true]) {
+            const { data, refresh, db } = session({ tabs: [
+                tab('one', defaultSpace, { order: 100, tabGroupId: 'group', tabGroupOrder: 1 }),
+                tab('two', defaultSpace, { order: 100, tabGroupId: 'group', tabGroupOrder: 2 }),
+                tab('outside'),
+                tab('destination', otherSpace, { order: -50, lastActivityAt: Date.now() + 100000 }),
+                tab('divider', otherSpace, { type: 'divider', order: -100, lastActivityAt: Date.now() + 200000 })
+            ], history: ['one'], runtime: 'client' })
+            await refresh()
+            if (activityMode) {
+                data.toggleTabActivityMode()
+            }
+            const menuTab = isGroup ? { ...data.getTabGroup('one'), type: 'tabgroup', spaceId: defaultSpace } : data.docs.one
+            await moveFromSpaceMenu(data, menuTab, isGroup)
+            const firstId = mode => tabActivity.getActivitySidebarItems(data.getSidebarItems(otherSpace), data.docs, mode)[0].tabs?.[0].id
+            assert.equal(firstId(false), 'one')
+            assert.equal(firstId(true), 'one')
+            assert.equal((await db.get('one')).spaceId, otherSpace)
+            assert.equal(data.docs.two.spaceId, isGroup ? otherSpace : defaultSpace)
+            if (isGroup) {
+                assert.deepEqual(Array.from(data.getTabGroup('one', otherSpace).tabs, tab => tab.id), ['one', 'two'])
+            } else {
+                assert.equal(data.docs.one.tabGroupId, null)
+            }
+            await refresh(otherSpace)
+            assert.equal(firstId(false), 'one')
+            assert.equal(firstId(true), 'one')
+        }
+    }
+})
+
+Deno.test('Move to Space keeps sidebar pins and appends them to their destination pin stack', async () => {
+    for (const sidebarPinned of [true, 'fixed']) {
+        const { data, refresh, db } = session({ tabs: [
+            tab('moving', defaultSpace, { sidebarPinned, sidebarPinOrder: -100, tabGroupId: 'source' }),
+            tab('sibling', defaultSpace, { tabGroupId: 'source' }),
+            tab('first', otherSpace, { sidebarPinned, sidebarPinOrder: 10 }),
+            tab('last', otherSpace, { sidebarPinned, sidebarPinOrder: 20 }),
+            tab('normal', otherSpace)
+        ], history: ['sibling'], runtime: 'client' })
+        await refresh()
+        await moveFromSpaceMenu(data, data.docs.moving)
+        assert.equal(data.docs.moving.sidebarPinned, sidebarPinned)
+        assert.equal(data.docs.moving.tabGroupId, null)
+        assert.deepEqual(tabGroups.getSidebarPinnedTabs(data.spaces[otherSpace].tabs, sidebarPinned === 'fixed').map(tab => tab.id), ['first', 'last', 'moving'])
+        assert.equal((await db.get('moving')).sidebarPinned, sidebarPinned)
+        await refresh(otherSpace)
+        assert.deepEqual(tabGroups.getSidebarPinnedTabs(data.spaces[otherSpace].tabs, sidebarPinned === 'fixed').map(tab => tab.id), ['first', 'last', 'moving'])
+    }
+})
+
+Deno.test('Move to Space puts groups first while carrying their pins to the bottom of each pin stack', async () => {
+    const { data, refresh } = session({ tabs: [
+        tab('one', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0 }),
+        tab('pin', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1, pinned: 'left', pinScope: 'group', pinOrder: -10 }),
+        tab('saved', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 2, sidebarPinned: true, sidebarPinOrder: -10 }),
+        tab('outside'),
+        tab('destination', otherSpace, { order: -100 }),
+        tab('existing-pin', otherSpace, { pinned: 'right', pinScope: 'space', pinOrder: 10 }),
+        tab('existing-saved', otherSpace, { sidebarPinned: true, sidebarPinOrder: 10 })
+    ], history: ['one'], runtime: 'client' })
+    await refresh()
+    await moveFromSpaceMenu(data, { ...data.getTabGroup('one'), type: 'tabgroup', spaceId: defaultSpace }, true)
+    assert.equal(data.getSidebarItems(otherSpace)[0].tabs[0].id, 'one')
+    assert.deepEqual(Array.from(data.getSidepins(otherSpace, 'one'), tab => tab.id), ['existing-pin', 'pin'])
+    assert.deepEqual(tabGroups.getSidebarPinnedTabs(data.spaces[otherSpace].tabs).map(tab => tab.id), ['existing-saved', 'saved'])
+    assert.equal(data.docs.pin.pinScope, 'group')
+    assert.equal(data.docs.saved.sidebarPinned, true)
+})
+
+Deno.test('Move to Space preserves individual sidepins and appends them after destination pins', async () => {
+    for (const pinScope of ['space', 'group', undefined]) {
+        const { data, refresh, db } = session({ tabs: [
+            tab('moving', defaultSpace, { pinned: 'left', pinScope, pinOrder: -100, tabGroupId: 'source' }),
+            tab('sibling', defaultSpace, { tabGroupId: 'source' }),
+            tab('existing', otherSpace, { pinned: 'right', pinScope: 'space', pinOrder: 20 }),
+            tab('normal', otherSpace)
+        ], history: ['sibling'], runtime: 'client' })
+        await refresh()
+        await moveFromSpaceMenu(data, data.docs.moving)
+        assert.equal(data.docs.moving.pinned, 'left')
+        assert.equal(data.docs.moving.pinScope, pinScope || 'group')
+        assert.deepEqual(Array.from(data.getSidepins(otherSpace, 'moving'), tab => tab.id), ['existing', 'moving'])
+        assert.equal((await db.get('moving')).pinOrder, 21)
+    }
 })
 
 Deno.test('ungrouping releases members in place and persists their order without changing selection or pins', async () => {

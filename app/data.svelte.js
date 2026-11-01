@@ -2407,7 +2407,7 @@ const data = {
 
     closeTab,
 
-    moveTab: (tabId, { beforeTabId, afterTabId, targetSpaceId, targetGroupTabId, scope = 'tab', activityMode = false }) => {
+    moveTab: (tabId, { beforeTabId, afterTabId, targetSpaceId, targetGroupTabId, scope = 'tab', activityMode = false, placement = null, preservePins = false }) => {
         const tabDoc = docs[tabId]
         if (!tabDoc) return
         // Only sidebar drops opt into activity ordering; title-bar drops keep traditional member order.
@@ -2421,7 +2421,7 @@ const data = {
             const destSpaceId = targetSpaceId || sourceSpaceId
             if (!spaces[destSpaceId]) return
             const updates = planTabMove(spaces[sourceSpaceId]?.tabs || [], spaces[destSpaceId].tabs || [], tabId,
-                { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode }, () => crypto.randomUUID())
+                { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode, placement, preservePins }, () => crypto.randomUUID())
             const moveItems = sourceSpaceId === destSpaceId ? spaces[sourceSpaceId].tabs
                 : [...spaces[sourceSpaceId].tabs, ...spaces[destSpaceId].tabs]
             const parked = []

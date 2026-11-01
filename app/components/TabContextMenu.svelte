@@ -234,7 +234,9 @@
         if (!tabId || targetSpaceId === sourceSpaceId) {
             return
         }
-        const moving = data.moveTab(tabId, { targetSpaceId, scope: isGroup ? 'group' : 'tab' })
+        const moving = data.moveTab(tabId, {
+            targetSpaceId, scope: isGroup ? 'group' : 'tab', placement: 'start', preservePins: true
+        })
         onHide()
         return moving
     }
