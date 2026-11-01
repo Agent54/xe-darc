@@ -235,7 +235,7 @@ Deno.test('sidebar group placement leaves a live single-tab frame attached', asy
     assert.equal(ticks, 0)
 })
 
-Deno.test('a frame reorder parks all affected live siblings and restores through their current owners', async () => {
+Deno.test('a frame reorder parks affected neighbors and restores through their current owners', async () => {
     const parked = []
     const attached = []
     const background = { moveBefore(frame) { parked.push(frame.id); frame.parentNode = background } }
@@ -250,9 +250,98 @@ Deno.test('a frame reorder parks all affected live siblings and restores through
         const frame = { id, parentNode: wrapper }
         data.frames[id] = { frame, wrapper, attach() { attached.push(id); frame.parentNode = wrapper } }
     }
-    await data.moveTab('one', { targetGroupTabId: 'two', beforeTabId: 'three' })
-    assert.deepEqual(parked.sort(), ['one', 'three', 'two'])
-    assert.deepEqual(attached.sort(), ['one', 'three', 'two'])
+    await data.moveTab('one', { targetGroupTabId: 'two', beforeTabId: 'two', afterTabId: 'three' })
+    assert.deepEqual(parked.sort(), ['one', 'two'])
+    assert.deepEqual(attached.sort(), ['one', 'two'])
+})
+
+function mountFrame(data, id, attached) {
+    const wrapper = { isConnected: true, moveBefore(frame) { attached.push(id); frame.parentNode = wrapper } }
+    const frame = { id, isConnected: true, parentNode: wrapper }
+    data.frames[id] = { frame }
+    frameLifecycle.registerFrameWrapper(data, id, wrapper, { parentNode: wrapper }, () => {})
+    return { frame, wrapper }
+}
+
+Deno.test('sparse frame reorders leave unchanged leading and trailing frames attached', async () => {
+    const parked = []
+    const attached = []
+    const background = { moveBefore(frame) { parked.push(frame.id); frame.parentNode = background } }
+    const ids = ['one', 'two', 'three', 'four']
+    const { data, refresh } = session({ tabs: ids.map((id, index) =>
+        tab(id, defaultSpace, { tabGroupId: 'group', tabGroupOrder: index + 1 })),
+        frameEnvironment: { document: { getElementById: id => id === 'backgroundFrames' ? background : {} } }
+    })
+    await refresh()
+    ids.forEach(id => mountFrame(data, id, attached))
+    await data.moveTab('three', { targetGroupTabId: 'one', beforeTabId: 'one', afterTabId: 'two' })
+    assert.deepEqual(parked, ['two', 'three'])
+    assert.deepEqual(attached, ['two', 'three'])
+    assert.equal(data.docs.two.tabGroupOrder, 2)
+})
+
+Deno.test('pinned frame reorders protect mixed-scope neighbors and skip no-op drops', async () => {
+    const parked = []
+    const attached = []
+    let ticks = 0
+    const background = { moveBefore(frame) { parked.push(frame.id); frame.parentNode = background } }
+    const { data, refresh } = session({ tabs: [
+        tab('parent', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 0 }),
+        tab('group-pin', defaultSpace, { tabGroupId: 'group', tabGroupOrder: 1, pinned: 'left', pinScope: 'group', pinOrder: 0 }),
+        tab('space-pin', defaultSpace, { pinned: 'left', pinScope: 'space', pinOrder: 1 }),
+        tab('tail', defaultSpace, { pinned: 'left', pinScope: 'space', pinOrder: 3 }),
+        tab('global-pin', otherSpace, { pinned: 'left', pinScope: 'global', pinOrder: -100 }),
+        tab('right-pin', defaultSpace, { pinned: 'right', pinScope: 'space', pinOrder: 0 })
+    ], history: ['parent'], frameEnvironment: {
+        document: { getElementById: id => id === 'backgroundFrames' ? background : {} },
+        tick() { ticks++; return Promise.resolve() }
+    } })
+    await refresh()
+    for (const id of ['parent', 'group-pin', 'space-pin', 'tail', 'global-pin', 'right-pin']) {
+        mountFrame(data, id, attached)
+    }
+    const drop = { scope: 'pinned', beforeTabId: 'space-pin', afterTabId: 'tail' }
+    await data.moveTab('group-pin', drop)
+    assert.deepEqual(parked, ['group-pin', 'space-pin'])
+    assert.deepEqual(attached, parked)
+    assert.equal(ticks, 1)
+    await data.moveTab('group-pin', drop)
+    assert.equal(ticks, 1)
+    assert.equal(parked.length, 2)
+})
+
+Deno.test('pin transfers restore through the new wrapper and cancel stale or closed frames', async () => {
+    for (const change of ['new-wrapper', 'replaced', 'closed', 'space']) {
+        const attached = []
+        const ticks = []
+        const background = { moveBefore(frame) { frame.parentNode = background } }
+        const { data, refresh } = session({ tabs: [
+            tab('parent'), tab('pin', defaultSpace, { pinned: 'left', pinScope: 'space', pinOrder: 0 })
+        ], history: ['parent'], frameEnvironment: {
+            document: { getElementById: id => id === 'backgroundFrames' ? background : {} },
+            tick: () => new Promise(resolve => ticks.push(resolve))
+        } })
+        await refresh()
+        const { frame } = mountFrame(data, 'pin', attached)
+        const pending = data.pin({ tabId: 'pin', pinned: 'right' })
+        assert.equal(frame.parentNode, background)
+        assert.equal(ticks.length, 1)
+        const destination = { isConnected: true, moveBefore(frame) { attached.push('destination'); frame.parentNode = destination } }
+        if (change === 'new-wrapper') {
+            frameLifecycle.registerFrameWrapper(data, 'pin', destination, { parentNode: destination }, () => {})
+        } else if (change === 'replaced') {
+            data.frames.pin.frame = { isConnected: true }
+        } else if (change === 'closed') {
+            data.docs.pin.archive = 'closed'
+        } else {
+            data.docs.pin.spaceId = otherSpace
+        }
+        ticks[0]()
+        await pending
+        assert.deepEqual(attached, change === 'new-wrapper' ? ['destination'] : [])
+        assert.equal(frame.parentNode, change === 'new-wrapper' ? destination : background)
+        assert.equal(ticks.length, 1)
+    }
 })
 
 Deno.test('dragged creation controls persist items at the dropped position, including below an existing spacer', async () => {

@@ -180,11 +180,15 @@ export function planTabMove (sourceItems, targetItems, tabId, { targetSpaceId, t
         // Sidebar activity placement is independent of the traditional member order used by the title bar.
         const insertIndex = activityMode ? remaining.length : afterIndex !== -1 ? afterIndex : beforeIndex !== -1 ? beforeIndex + 1 : remaining.length
         const members = [...remaining.slice(0, insertIndex), ...moving, ...remaining.slice(insertIndex)]
-        const targetGroups = getTabGroups(targetItems.filter(item => !movingIds.has(item.id)))
-        const targetIndex = targetGroups.findIndex(group => group.tabs.some(tab => tab.id === targetGroupTabId))
-        const placement = sourceGroup?.id !== targetGroup.id || tab.spaceId !== targetSpaceId ? groupCanvasPosition(remaining, targetSpaceId) || {
-            x: 200 + remaining.length * 1080, y: 200 + Math.max(0, targetIndex) * 860, width: 1000, height: 700
-        } : null
+        let placement = null
+        if (sourceGroup?.id !== targetGroup.id || tab.spaceId !== targetSpaceId) {
+            placement = groupCanvasPosition(remaining, targetSpaceId)
+            if (!placement) {
+                const targetGroups = getTabGroups(targetItems.filter(item => !movingIds.has(item.id)))
+                const targetIndex = targetGroups.findIndex(group => group.tabs.some(tab => tab.id === targetGroupTabId))
+                placement = { x: 200 + remaining.length * 1080, y: 200 + Math.max(0, targetIndex) * 860, width: 1000, height: 700 }
+            }
+        }
         const nextMemberOrder = targetGroup.tabGroupId
             ? Math.max(...remaining.map(member => member.tabGroupOrder ?? member.order ?? 0)) + 1
             : remaining.length

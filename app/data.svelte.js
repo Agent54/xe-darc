@@ -1425,6 +1425,31 @@ function getTabLastActiveAt(tabId, spaceId = spaceMeta.activeSpace) {
     return frames[tabId]?.active || 0
 }
 
+function parkMovingFrames(updates, groups = []) {
+    const ids = getFrameMoveIds(data, updates, groups)
+    if (!ids.size) {
+        return
+    }
+    const background = document.getElementById('backgroundFrames')
+    const anchor = document.getElementById('anchorFrame')
+    if (!background || !anchor) {
+        return
+    }
+    const parked = []
+    for (const id of ids) {
+        const frame = frames[id].frame
+        background.moveBefore(frame, anchor)
+        parked.push({ id, frame })
+    }
+    tick().then(() => {
+        for (const { id, frame } of parked) {
+            if (frames[id]?.frame === frame) {
+                frames[id].attach?.()
+            }
+        }
+    })
+}
+
 const data = {
     origins,
     spaceMeta,
@@ -1763,13 +1788,19 @@ const data = {
         const sidebarPinOrder = beforeTabId || afterTabId
             ? orderBetween(docs[beforeTabId], docs[afterTabId], 'sidebarPinOrder')
             : previousOrder ?? Math.max(0, ...pins.map(pin => pin.sidebarPinOrder ?? pin.order ?? 0)) + 1
-        return queueDocumentUpdate(tabId, { sidebarPinned, sidebarPinOrder, pinned: null, pinScope: null, pinOrder: null })
+        const update = { sidebarPinned, sidebarPinOrder, pinned: null, pinScope: null, pinOrder: null }
+        parkMovingFrames([{ id: tabId, ...update }])
+        return queueDocumentUpdate(tabId, update)
     },
 
     pin({ tabId, pinned, scope, groupTabId, beforeTabId, afterTabId, targetSpaceId }) {
         const tab = docs[tabId]
         if (tab?.type !== 'tab') return Promise.resolve()
-        if (!pinned) return queueDocumentUpdate(tabId, { pinned: null, pinScope: null, pinOrder: null })
+        if (!pinned) {
+            const update = { pinned: null, pinScope: null, pinOrder: null }
+            parkMovingFrames([{ id: tabId, ...update }])
+            return queueDocumentUpdate(tabId, update)
+        }
 
         const pinScope = scope || (tab.pinned ? getPinScope(tab) : 'group')
         if (targetSpaceId && targetSpaceId !== tab.spaceId) {
@@ -1781,20 +1812,22 @@ const data = {
         const items = spaces[tab.spaceId]?.tabs || []
         const anchor = groupTabId || (tab.pinned && getPinScope(tab) === 'space' ? getCurrentGroupTabId(tab.spaceId) : tabId)
         const group = pinScope === 'group' ? getTabGroup(items, anchor) : null
-        const saves = []
+        const updates = []
         let membership = {}
         if (group && !group.tabs.some(member => member.id === tabId) && (!tab.tabGroupId || tab.tabGroupId !== group.tabs[0].tabGroupId)) {
-            const updates = planTabMove(items, items, tabId, { targetSpaceId: tab.spaceId, targetGroupTabId: anchor }, () => crypto.randomUUID())
-            for (const { id, ...update } of updates) {
+            const membershipUpdates = planTabMove(items, items, tabId, { targetSpaceId: tab.spaceId, targetGroupTabId: anchor }, () => crypto.randomUUID())
+            for (const { id, ...update } of membershipUpdates) {
                 if (id === tabId) membership = update
-                else saves.push(queueDocumentUpdate(id, update))
+                else updates.push({ id, ...update })
             }
         }
         const pinItems = pinScope === 'global' ? spaceMeta.globalPins : items
         const pinOrder = beforeTabId || afterTabId
             ? orderBetween(docs[beforeTabId], docs[afterTabId], 'pinOrder')
             : tab.pinned && getPinScope(tab) === pinScope ? tab.pinOrder ?? tab.order ?? 0 : nextPinOrder(pinItems)
-        saves.push(queueDocumentUpdate(tabId, { ...membership, pinned: pinned === true ? 'left' : pinned, pinScope, pinOrder, sidebarPinned: null, sidebarPinOrder: null }))
+        updates.push({ id: tabId, ...membership, pinned: pinned === true ? 'left' : pinned, pinScope, pinOrder, sidebarPinned: null, sidebarPinOrder: null })
+        parkMovingFrames(updates, [group])
+        const saves = updates.map(({ id, ...update }) => queueDocumentUpdate(id, update))
 
         if (spaceMeta.activeSpace === tab.spaceId && spaceMeta.activeTabId === tabId) {
             const candidates = (pinScope === 'group' ? getTabGroup(items, tabId)?.tabs || [] : items)
@@ -2467,20 +2500,7 @@ const data = {
             const updates = planTabMove(spaces[sourceSpaceId]?.tabs || [], spaces[destSpaceId].tabs || [], tabId,
                 { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode, placement, preservePins },
                 () => crypto.randomUUID(), { sourceGroup, targetGroup })
-            const parked = []
-            for (const id of getFrameMoveIds(data, updates, [sourceGroup, targetGroup])) {
-                const frameData = frames[id]
-                const frame = frameData?.frame
-                if (!frame || !frameData.wrapper?.isConnected || frame.parentNode !== frameData.wrapper) {
-                    continue
-                }
-                const background = document.getElementById('backgroundFrames')
-                const anchor = document.getElementById('anchorFrame')
-                if (background && anchor) {
-                    background.moveBefore(frame, anchor)
-                    parked.push({ id, frame })
-                }
-            }
+            parkMovingFrames(updates, [sourceGroup, targetGroup])
             const saves = []
             if (updates.length && scope === 'group' && sourceGroup?.tabGroupId && targetGroup?.tabGroupId && sourceGroup.tabGroupId !== targetGroup.tabGroupId) {
                 const name = [targetGroup.name, sourceGroup.name].filter(Boolean).join(' + ') || null
@@ -2506,15 +2526,6 @@ const data = {
             }
             for (const spaceId of new Set([sourceSpaceId, destSpaceId])) {
                 spaces[spaceId].tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-            }
-            if (parked.length) {
-                tick().then(() => {
-                    for (const { id, frame } of parked) {
-                        if (frames[id]?.frame === frame) {
-                            frames[id].attach?.()
-                        }
-                    }
-                })
             }
             if (sourceSpaceId !== destSpaceId) {
                 if (sourceSpaceId === spaceMeta.activeSpace && !spaces[sourceSpaceId].tabs.some(item => item.id === spaceMeta.activeTabId)) {

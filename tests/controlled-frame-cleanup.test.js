@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
 import { getFrameShortcutScript } from '../app/lib/shortcuts.js'
-import { registerFrameWrapper } from '../app/lib/frame-lifecycle.js'
+import { isLiveFrameTab, registerFrameWrapper, releasedFrames } from '../app/lib/frame-lifecycle.js'
 
 const source = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
 const names = ['createControlledFrame', 'releaseControlledFrame', 'detach', 'closeOAuthPopup', 'appendPopupFrame', 'setupContentScripts', 'handleAudioStateChanged']
@@ -43,7 +43,7 @@ function harness() {
         },
         getElementById(id) { return id === 'backgroundFrames' ? background : {} }
     }
-    const api = new Function('data', 'tab', 'document', 'console', 'getFrameShortcutScript', 'frameScreenshots', `
+    const api = new Function('data', 'tab', 'document', 'console', 'getFrameShortcutScript', 'frameScreenshots', 'releasedFrames', 'isLiveFrameTab', `
         const tabId = tab.id
         let detached = false, oauthPopup = null
         let frameRegistration
@@ -61,7 +61,7 @@ function harness() {
             getPopup: () => oauthPopup,
             isDetached: () => detached
         }
-    `)(data, tab, document, { log() {} }, getFrameShortcutScript, { cancel(frame) { screenshotCancels.push(frame) } })
+    `)(data, tab, document, { log() {} }, getFrameShortcutScript, { cancel(frame) { screenshotCancels.push(frame) } }, releasedFrames, isLiveFrameTab)
     const frame = api.createControlledFrame()
     data.frames.page.frame = frame
     api.setRegistration(registerFrameWrapper(data, tab.id, wrapper, { parentNode: wrapper }, () => {}))
@@ -166,6 +166,20 @@ Deno.test('destroying the parked owner releases only its wrapper registration', 
     assert.equal(h.frame.parentNode, h.background)
 })
 
+Deno.test('a new frame at about:blank navigates to the search URL after script setup', async () => {
+    const h = harness()
+    h.frame.src = 'about:blank'
+    h.events.length = 0
+    h.tab.url = 'https://search.example/?q=hello'
+    let finishInjection
+    h.frame.addContentScripts = () => new Promise(resolve => { finishInjection = resolve })
+    h.setupContentScripts(h.frame)
+    finishInjection()
+    await Promise.resolve()
+    assert.equal(h.frame.src, h.tab.url)
+    assert.deepEqual(h.events, [h.tab.url])
+})
+
 Deno.test('pending content script setup cannot reload a released frame', async () => {
     const h = harness()
     let finishInjection
@@ -176,6 +190,33 @@ Deno.test('pending content script setup cannot reload a released frame', async (
     await Promise.resolve()
     assert.deepEqual(h.events, ['about:blank', 'remove'])
     assert.equal(h.frame.src, 'about:blank')
+})
+
+Deno.test('content script completion navigates live previews but not closed previews', async () => {
+    for (const closed of [false, true]) {
+        const h = harness()
+        Object.assign(h.tab, { preview: true, archive: 'preview' })
+        let finishInjection
+        h.frame.addContentScripts = () => new Promise(resolve => { finishInjection = resolve })
+        h.setupContentScripts(h.frame)
+        if (closed) {
+            h.tab.archive = 'closed'
+        }
+        finishInjection()
+        await Promise.resolve()
+        assert.deepEqual(h.events, closed ? [] : [h.tab.url])
+    }
+})
+
+Deno.test('script completion cannot navigate a replaced frame', async () => {
+    const h = harness()
+    let finishInjection
+    h.frame.addContentScripts = () => new Promise(resolve => { finishInjection = resolve })
+    h.setupContentScripts(h.frame)
+    h.data.frames.page.frame = {}
+    finishInjection()
+    await Promise.resolve()
+    assert.deepEqual(h.events, [])
 })
 
 Deno.test('both popup close and popup action cleanup blank the frame before removing it', () => {

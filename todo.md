@@ -3446,3 +3446,5 @@ picture in picture suport
 replace ad hoc test compile and puppeteer with xe cdp based real setup!
 
 launcher detect crash and close crashed window reaopen on right desktop and screen!
+
+test:  esc dnd abort, escape menu close, cmd t, cmd long t,  cmd l, zoom reset, cmd w, grid overview gesture, ctl alt, from frame and shell,  cmd r, dismiss hovercards scroll + esc, 

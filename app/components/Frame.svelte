@@ -521,7 +521,7 @@
     $effect(() => {
         // Don't create new object here - let data layer handle initialization
         // Just set wrapper if frames object exists
-        if (data.frames[tab.id] && frameWrapper) {
+        if (!controlledFrameSupported && data.frames[tab.id] && frameWrapper) {
             data.frames[tab.id].wrapper = frameWrapper
         }
         

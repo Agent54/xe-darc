@@ -1,12 +1,109 @@
 import assert from 'node:assert/strict'
-import { parse } from 'svelte/compiler'
-import { getFrameMoveIds, registerFrameWrapper } from '../app/lib/frame-lifecycle.js'
-import { getTabGroups } from '../app/lib/tab-groups.js'
+import { compileModule, parse } from 'svelte/compiler'
+import * as svelteClient from 'svelte/internal/client'
+import { getFrameMoveIds, isLiveFrameTab, registerFrameWrapper } from '../app/lib/frame-lifecycle.js'
+import { getTabGroups, planTabMove } from '../app/lib/tab-groups.js'
 
 const frameSource = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
 const mountNode = parse(frameSource).instance.content.body
     .find(node => node.type === 'FunctionDeclaration' && node.id.name === 'mountControlledFrame')
 const mountSource = frameSource.slice(mountNode.start, mountNode.end)
+const mountEffectNode = parse(frameSource).instance.content.body.find(node =>
+    node.type === 'ExpressionStatement' && node.expression.callee?.name === '$effect' &&
+    frameSource.slice(node.start, node.end).includes('mountControlledFrame'))
+const mountEffect = mountEffectNode.expression.arguments[0]
+const mountEffectSource = frameSource.slice(mountEffect.start, mountEffect.end)
+
+// Exercise the installed reconciler rather than assuming it moves the dragged wrapper.
+const eachSource = `<script>${Deno.readTextFileSync(new URL('../node_modules/svelte/src/internal/client/dom/blocks/each.js', import.meta.url))}</script>`
+const eachFunctions = parse(eachSource).instance.content.body.filter(node =>
+    node.type === 'FunctionDeclaration' && ['reconcile', 'move', 'link'].includes(node.id.name))
+    .map(node => eachSource.slice(node.start, node.end)).join('\n')
+const reconcile = new Function('get_next_sibling', 'pause_effects', `
+    const EACH_IS_ANIMATED = 1, EACH_IS_CONTROLLED = 2, EFFECT_OFFSCREEN = 4, INERT = 8
+    ${eachFunctions}
+    return reconcile
+`)(() => null, () => { throw new Error('Unexpected removal during reorder') })
+
+function movedWrappers(before, after) {
+    const moved = []
+    const node = id => ({ id, before(other) { moved.push(other.id) } })
+    const effects = before.map(id => {
+        const element = node(id)
+        return { f: 0, id, nodes: { start: element, end: element } }
+    })
+    effects.forEach((effect, index) => {
+        effect.prev = effects[index - 1] || null
+        effect.next = effects[index + 1] || null
+    })
+    reconcile({ effect: { first: effects[0], last: effects.at(-1) },
+        items: new Map(effects.map(e => [e.id, { e }])), outrogroups: null }, after, node('anchor'), 0, id => id)
+    return moved
+}
+
+function attachmentEffect() {
+    const tab = { id: 'page', spaceId: 'space', url: 'https://search.example/?q=one' }
+    const data = { docs: { page: tab } }
+    const wrapper = { isConnected: true }
+    const anchor = { parentNode: wrapper }
+    const ticks = []
+    const mounted = []
+    const effect = new Function('data', 'tab', 'tabId', 'frameWrapper', 'anchor', 'tick', 'untrack', 'mountControlledFrame', 'isLiveFrameTab', `
+        const isNewTabUrl = url => url.startsWith('about:')
+        const isTabHistoryUrl = () => false
+        return ${mountEffectSource}
+    `)(data, tab, tab.id, wrapper, anchor, () => new Promise(resolve => ticks.push(resolve)), fn => fn(),
+        current => mounted.push(current.url), isLiveFrameTab)
+    return { effect, tab, data, wrapper, anchor, ticks, mounted }
+}
+
+Deno.test('attachment waits until the pending Svelte flush completes', async () => {
+    const h = attachmentEffect()
+    h.effect()
+    assert.deepEqual(h.mounted, [])
+    h.ticks[0]()
+    await Promise.resolve()
+    assert.deepEqual(h.mounted, [h.tab.url])
+})
+
+Deno.test('live previews mount while closed and deleted tabs cannot mount', async () => {
+    for (const archive of ['preview', 'closed', 'deleted']) {
+        const h = attachmentEffect()
+        h.tab.archive = archive
+        h.tab.preview = true
+        h.effect()
+        h.ticks[0]()
+        await Promise.resolve()
+        assert.equal(h.mounted.length, archive === 'preview' ? 1 : 0)
+    }
+})
+
+Deno.test('superseded attachment effects cannot mount the previous navigation', async () => {
+    const h = attachmentEffect()
+    const cancel = h.effect()
+    cancel()
+    h.tab.url = 'https://search.example/?q=two'
+    h.effect()
+    h.ticks.forEach(resolve => resolve())
+    await Promise.resolve()
+    assert.deepEqual(h.mounted, ['https://search.example/?q=two'])
+})
+
+Deno.test('a pending attachment cannot reclaim a transferred tab or removed wrapper', async () => {
+    for (const change of [
+        h => { h.tab.spaceId = 'other' },
+        h => { h.wrapper.isConnected = false },
+        h => { h.anchor.parentNode = {} },
+        h => { delete h.data.docs.page }
+    ]) {
+        const h = attachmentEffect()
+        h.effect()
+        change(h)
+        h.ticks[0]()
+        await Promise.resolve()
+        assert.deepEqual(h.mounted, [])
+    }
+})
 
 Deno.test('outgoing lightbox frame props remain readable after its preview reference is cleared', () => {
     const source = Deno.readTextFileSync(new URL('../app/components/Frame.svelte', import.meta.url))
@@ -85,22 +182,74 @@ Deno.test('sidebar rank and activity updates leave intact frame lists untouched'
     }
 })
 
-Deno.test('a real frame reorder protects live siblings as well as the updated member', () => {
+Deno.test('frame reorders protect affected neighbors without hiding unchanged ends', () => {
     const items = [tab('one', { tabGroupId: 'group', tabGroupOrder: 0 }),
         tab('two', { tabGroupId: 'group', tabGroupOrder: 1 }),
         tab('three', { tabGroupId: 'group', tabGroupOrder: 2 }), tab('other')]
-    assert.deepEqual([...frameMoves(items, [{ id: 'one', tabGroupOrder: 3 }])].sort(), ['one', 'three', 'two'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'one', tabGroupOrder: 3 }])], ['one', 'two', 'three'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'two', tabGroupOrder: 3 }])], ['two', 'three'])
     assert.deepEqual([...frameMoves(items, [{ id: 'one', tabGroupOrder: -1 }])], [])
 })
 
-Deno.test('space, membership and pin panel changes require frame protection', () => {
+Deno.test('normalizing sparse member ranks protects a neighbor whose numeric rank did not change', () => {
+    const items = ['one', 'two', 'three', 'four'].map((id, index) => tab(id, { tabGroupId: 'group', tabGroupOrder: index + 1 }))
+    const updates = planTabMove(items, items, 'three', {
+        targetSpaceId: 'space', targetGroupTabId: 'one', beforeTabId: 'one', afterTabId: 'two'
+    }, () => 'group')
+    assert.equal(updates.find(update => update.id === 'two').tabGroupOrder, items[1].tabGroupOrder)
+    assert.deepEqual([...frameMoves(items, updates)], ['two', 'three'])
+})
+
+Deno.test('parking covers actual Svelte wrapper moves across dense, sparse, and fractional member orders', () => {
+    for (const rank of [index => index, index => index + 1, index => index / 2 + 0.25]) {
+        const items = ['a', 'b', 'c', 'd', 'e', 'f'].map((id, index) => tab(id, { tabGroupId: 'group', tabGroupOrder: rank(index) }))
+        for (const moving of items) {
+            const remaining = items.filter(item => item !== moving)
+            for (let index = 0; index <= remaining.length; index++) {
+                const updates = planTabMove(items, items, moving.id, {
+                    targetSpaceId: 'space', targetGroupTabId: remaining[0].id,
+                    beforeTabId: remaining[index - 1]?.id, afterTabId: remaining[index]?.id
+                }, () => 'group')
+                const parked = frameMoves(items, updates)
+                const after = getTabGroups(items.map(item => ({ ...item, ...updates.find(update => update.id === item.id) })))[0].tabs.map(item => item.id)
+                for (const id of movedWrappers(items.map(item => item.id), after)) {
+                    assert.ok(parked.has(id), `Svelte moved unprotected wrapper ${id}: ${after.join(',')}`)
+                }
+            }
+        }
+    }
+})
+
+Deno.test('same-group move planning does not regroup the entire destination space', () => {
+    const items = ['one', 'two', 'three'].map((id, index) => tab(id, { tabGroupId: 'group', tabGroupOrder: index }))
+    const group = getTabGroups(items)[0]
+    const target = new Proxy(items, { get(items, key) {
+        if (key === 'filter') {
+            throw new Error('The resolved group already contains the required members')
+        }
+        return items[key]
+    } })
+    assert.equal(planTabMove(items, target, 'three', {
+        targetSpaceId: 'space', targetGroupTabId: 'one', afterTabId: 'one'
+    }, () => 'group', { sourceGroup: group, targetGroup: group }).length, 3)
+})
+
+Deno.test('space, membership and pin changes only park frames whose placement changed', () => {
     const items = [tab('one'), tab('two', { tabGroupId: 'group' }),
         tab('left', { pinned: 'left', pinScope: 'space', pinOrder: 0 }),
         tab('next', { pinned: 'left', pinScope: 'space', pinOrder: 1 })]
     assert.deepEqual([...frameMoves(items, [{ id: 'one', spaceId: 'other' }])], ['one'])
-    assert.deepEqual([...frameMoves(items, [{ id: 'one', tabGroupId: 'group' }])].sort(), ['one', 'two'])
-    assert.deepEqual([...frameMoves(items, [{ id: 'left', pinned: 'right' }])].sort(), ['left', 'next'])
-    assert.deepEqual([...frameMoves(items, [{ id: 'left', pinOrder: 2 }])].sort(), ['left', 'next'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'one', tabGroupId: 'group' }])], ['one'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'left', pinned: 'right' }])], ['left'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'left', pinOrder: 2 }])], ['left', 'next'])
+})
+
+Deno.test('space and group pins share ordering while global pins remain appended', () => {
+    const items = [tab('group-pin', { tabGroupId: 'group', pinned: 'left', pinScope: 'group', pinOrder: 0 }),
+        tab('space-pin', { pinned: 'left', pinScope: 'space', pinOrder: 1 }),
+        tab('global-pin', { spaceId: 'other', pinned: 'left', pinScope: 'global', pinOrder: -100 })]
+    assert.deepEqual([...frameMoves(items, [{ id: 'group-pin', pinOrder: 2 }])], ['group-pin', 'space-pin'])
+    assert.deepEqual([...frameMoves(items, [{ id: 'global-pin', pinOrder: 100 }])], [])
 })
 
 Deno.test('activity-only updates do not inspect groups or enumerate frame state', () => {
@@ -143,7 +292,7 @@ Deno.test('pin changes inspect mounted siblings without reading hibernated docum
         const wrapper = { isConnected: true }
         frames[id] = { wrapper, frame: { parentNode: wrapper } }
     }
-    assert.deepEqual([...getFrameMoveIds({ docs, frames }, [{ id: 'left', pinOrder: 2 }], [])].sort(), ['left', 'next'])
+    assert.deepEqual([...getFrameMoveIds({ docs, frames }, [{ id: 'left', pinned: 'right' }], [])], ['left'])
 })
 
 Deno.test('ready wrapper attaches a parked frame and repeated attachment is a no-op', () => {
@@ -154,6 +303,43 @@ Deno.test('ready wrapper attaches a parked frame and repeated attachment is a no
     assert.equal(h.registration.attach(), true)
     assert.equal(h.node.moves, 1)
     assert.equal(h.node.inserts, 0)
+})
+
+Deno.test('preview attachment remains eligible until the preview closes', () => {
+    const h = harness()
+    Object.assign(h.data.docs.page, { preview: true, archive: 'preview' })
+    assert.equal(h.registration.attach(), true)
+    h.data.docs.page.archive = 'closed'
+    assert.equal(h.registration.attach(), false)
+})
+
+Deno.test('outer frame effects cannot overwrite native attachment ownership after metadata changes', () => {
+    const source = Deno.readTextFileSync(new URL('../app/components/Frame.svelte', import.meta.url))
+    const effect = parse(source).instance.content.body.find(node => node.type === 'ExpressionStatement' &&
+        node.expression.callee?.name === '$effect' && source.slice(node.start, node.end).includes('data.frames[tab.id].wrapper = frameWrapper'))
+    const code = compileModule(`export function mount(data, frameWrapper, controlledFrameSupported) {
+        const tabId = 'page', observer = null
+        const tab = $derived(data.docs[tabId])
+        ${source.slice(effect.start, effect.end)}
+    }`, { generate: 'client' }).js.code.replace(/^import .*$/gm, '').replace('export function mount', 'function mount')
+    const mount = new Function('$', `${code}; return mount`)(svelteClient)
+    const outer = Object.assign(Object.create({}), wrapper())
+    const inner = Object.assign(Object.create({}), wrapper())
+    const frame = Object.assign(Object.create({}), { isConnected: true, parentNode: inner })
+    const data = svelteClient.proxy({ docs: { page: tab('page') }, frames: { page: { frame } } })
+    const destroy = svelteClient.effect_root(() => mount(data, outer, true))
+    try {
+        svelteClient.flush()
+        const registration = registerFrameWrapper(data, 'page', inner, { parentNode: inner }, () => {})
+        data.docs.page = { ...data.docs.page, title: 'New metadata' }
+        svelteClient.flush()
+        data.docs.page.pinned = 'left'
+        svelteClient.flush()
+        assert.equal(data.frames.page.wrapper, inner)
+        assert.equal(registration.attach(), true)
+    } finally {
+        destroy()
+    }
 })
 
 Deno.test('reusing a wrapper for another tab parks the old frame and attaches the new owner', () => {

@@ -1,5 +1,11 @@
 import { getPinScope, tabGroupKey } from './tab-groups.js'
 
+export const releasedFrames = new WeakSet()
+
+export function isLiveFrameTab(tab) {
+    return !!tab && !tab._deleted && (!tab.archive || tab.archive === 'preview')
+}
+
 function framePlacement(tab, update) {
     const value = key => Object.hasOwn(update, key) ? update[key] : tab[key]
     return {
@@ -31,19 +37,19 @@ function frameLists(items, updates) {
         }
         const update = updates?.get(item.id)
         const tab = update ? framePlacement(item, update) : item
-        const scope = tab.pinned ? getPinScope(tab) : null
-        const panel = tab.pinned ? `${tab.pinned === 'right' ? 'right' : 'left'}:${scope}` : 'center'
-        const groupKey = !tab.pinned || scope === 'group' ? tabGroupKey(tab) : null
-        if (!spaces.has(tab.spaceId)) {
-            spaces.set(tab.spaceId, new Map())
+        const panel = tab.pinned ? tab.pinned === 'right' ? 'right' : 'left' : 'center'
+        const groupKey = tab.pinned ? null : tabGroupKey(tab)
+        const spaceId = tab.pinned ? null : tab.spaceId
+        if (!spaces.has(spaceId)) {
+            spaces.set(spaceId, new Map())
         }
-        const panels = spaces.get(tab.spaceId)
+        const panels = spaces.get(spaceId)
         if (!panels.has(panel)) {
             panels.set(panel, new Map())
         }
         const groups = panels.get(panel)
         if (!groups.has(groupKey)) {
-            const list = { spaceId: tab.spaceId, panel, groupKey, tabs: [] }
+            const list = { spaceId, panel, groupKey, tabs: [] }
             groups.set(groupKey, list)
             lists.push(list)
         }
@@ -53,7 +59,8 @@ function frameLists(items, updates) {
         if (updates || list.panel !== 'center') {
             list.tabs.sort((a, b) => (list.panel === 'center'
                 ? (a.tabGroupOrder ?? a.order ?? 0) - (b.tabGroupOrder ?? b.order ?? 0)
-                : (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0)) || a.id.localeCompare(b.id))
+                : Number(getPinScope(a) === 'global') - Number(getPinScope(b) === 'global') ||
+                    (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0)) || a.id.localeCompare(b.id))
         }
     }
     return lists
@@ -81,9 +88,8 @@ export function getFrameMoveIds({ docs, frames }, updates, groups) {
         return entry?.frame && entry.wrapper?.isConnected && entry.frame.parentNode === entry.wrapper
     }
     if (relevant.some(update => docs[update.id].pinned || update.pinned)) {
-        const spaces = new Set(relevant.flatMap(update => [docs[update.id].spaceId, update.spaceId ?? docs[update.id].spaceId]))
         for (const id in frames) {
-            if (mounted(id) && docs[id]?.pinned && spaces.has(docs[id].spaceId)) {
+            if (mounted(id) && docs[id]?.pinned) {
                 items.set(id, docs[id])
             }
         }
@@ -96,17 +102,44 @@ export function getFrameMoveIds({ docs, frames }, updates, groups) {
     const after = frameLists(items, byId)
     const beforeById = new Map(before.flatMap(list => list.tabs.map(tab => [tab.id, list])))
     const afterById = new Map(after.flatMap(list => list.tabs.map(tab => [tab.id, list])))
-    for (const [lists, counterparts] of [[before, afterById], [after, beforeById]]) {
-        for (const list of lists) {
-            const other = counterparts.get(list.tabs[0].id)
-            if (other && list.spaceId === other.spaceId && list.panel === other.panel &&
-                (list.panel === 'center' || list.groupKey === other.groupKey) &&
-                list.tabs.length === other.tabs.length && list.tabs.every((tab, index) => tab.id === other.tabs[index].id)) {
+    const pairs = new Map(before.map(list => [list, new Map()]))
+    for (const list of before) {
+        for (const tab of list.tabs) {
+            const other = afterById.get(tab.id)
+            if (!other) {
                 continue
             }
-            for (const tab of list.tabs) {
-                if (mounted(tab.id)) {
-                    moved.add(tab.id)
+            const destinations = pairs.get(list)
+            if (!destinations.has(other)) {
+                destinations.set(other, { before: [], after: [] })
+            }
+            destinations.get(other).before.push(tab.id)
+        }
+    }
+    for (const list of after) {
+        for (const tab of list.tabs) {
+            pairs.get(beforeById.get(tab.id))?.get(list)?.after.push(tab.id)
+        }
+    }
+    for (const [list, destinations] of pairs) {
+        for (const [other, ids] of destinations) {
+            let start = 0
+            let end = ids.before.length
+            const sameMembers = end === list.tabs.length && end === other.tabs.length
+            if (list.spaceId === other.spaceId && list.panel === other.panel &&
+                (list.groupKey === other.groupKey || sameMembers)) {
+                while (start < end && ids.before[start] === ids.after[start]) {
+                    start++
+                }
+                while (end > start && ids.before[end - 1] === ids.after[end - 1]) {
+                    end--
+                }
+            }
+            // Svelte can move either neighbor in this range, regardless of whose rank changed.
+            for (let index = start; index < end; index++) {
+                const id = ids.before[index]
+                if (mounted(id)) {
+                    moved.add(id)
                 }
             }
         }
@@ -121,8 +154,8 @@ export function registerFrameWrapper(data, tabId, wrapper, anchor, beforeAttach)
     function attach() {
         const tab = data.docs[tabId]
         const frame = frameData.frame
-        if (!owns() || !tab || tab.archive || tab._deleted || tab.spaceId !== spaceId ||
-            frameData.wrapper !== wrapper || !frame || !wrapper.isConnected || anchor.parentNode !== wrapper) {
+        if (!owns() || !isLiveFrameTab(tab) || tab.spaceId !== spaceId ||
+            frameData.wrapper !== wrapper || !frame || releasedFrames.has(frame) || !wrapper.isConnected || anchor.parentNode !== wrapper) {
             return false
         }
         if (frame.parentNode !== wrapper) {

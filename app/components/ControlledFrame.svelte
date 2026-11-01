@@ -12,7 +12,7 @@
     import ipc from '../inject/ipc.js?raw'
     import { connectFrameIPC } from '../lib/frame-ipc.js'
     import { getFrameShortcutScript } from '../lib/shortcuts.js'
-    import { registerFrameWrapper } from '../lib/frame-lifecycle.js'
+    import { isLiveFrameTab, registerFrameWrapper, releasedFrames } from '../lib/frame-lifecycle.js'
     import { frameScreenshots } from '../lib/frame-screenshot.js'
     import contextMenu from '../inject/context-menu.js?raw'
     import zoomControl from '../inject/zoom-control.js?raw'
@@ -828,6 +828,7 @@
 
 // Content script for window focus/blur handling
 function setupContentScripts(frame) {        
+        const currentTabId = tab?.id || tabId
         // First try a simple test script to verify content script injection works
         const systemInjections = [
             {
@@ -1133,10 +1134,12 @@ document.addEventListener('input', function(event) {
             frame.src = untrack(() => tab.url)
         } else {
             frame.addContentScripts([...systemInjections, ...userInjections]).then((res) => {
-                if (frame.src === 'about:blank') return
+                if (releasedFrames.has(frame) || data.frames[currentTabId]?.frame !== frame) return
+                const currentTab = data.docs[currentTabId]
+                if (!isLiveFrameTab(currentTab)) return
                 console.log('####### 💉 [INJECT] Successful script injection | tabId:', tab?.id || tabId, '| res:', res)
 
-                frame.src = untrack(() => tab.url)
+                frame.src = currentTab.url
             
                 // Now add the focus/blur script
                 // return frame.addContentScripts([contentScript])
@@ -2020,7 +2023,22 @@ document.addEventListener('input', function(event) {
             return
         }
 
-        untrack(() => mountControlledFrame(currentTab, isInternalPage, wrapper, frameAnchor))
+        let cancelled = false
+        const spaceId = currentTab.spaceId
+        tick().then(() => {
+            if (cancelled || !wrapper.isConnected || frameAnchor.parentNode !== wrapper) {
+                return
+            }
+            untrack(() => {
+                const latestTab = data.docs[currentTab.id]
+                if (!isLiveFrameTab(latestTab) || latestTab.spaceId !== spaceId ||
+                    latestTab.url !== currentTabUrl || tabId !== currentTab.id) {
+                    return
+                }
+                mountControlledFrame(latestTab, isInternalPage, wrapper, frameAnchor)
+            })
+        })
+        return () => { cancelled = true }
     })
 
     function mountControlledFrame(currentTab, isInternalPage, wrapper, frameAnchor) {
@@ -2144,6 +2162,7 @@ document.addEventListener('input', function(event) {
     }
 
     function releaseControlledFrame(frame) {
+        releasedFrames.add(frame)
         frameScreenshots.cancel(frame)
         frame.ipcPort?.close()
         frame.ipcPort = null
