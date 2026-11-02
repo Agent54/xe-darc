@@ -155,6 +155,47 @@
     // Tab group expansion state
     let allGroupsExpanded = $state(false)
     let tabGroupExpansion = $state({})
+    let tabGroupExpansionLoaded = $state(false)
+
+    async function loadTabGroupExpansion() {
+        // The SharedWorker assigns the persistent virtual window ID asynchronously.
+        await window.darcWindowIdPromise
+        if (!window.darcWindowId) return
+        try {
+            const saved = JSON.parse(localStorage.getItem(`tabGroupExpansion:${window.darcWindowId}`))
+            if (saved && typeof saved === 'object') {
+                allGroupsExpanded = saved.allGroupsExpanded === true
+                if (saved.tabGroupExpansion && typeof saved.tabGroupExpansion === 'object' && !Array.isArray(saved.tabGroupExpansion)) {
+                    tabGroupExpansion = Object.fromEntries(Object.entries(saved.tabGroupExpansion).filter(([, expanded]) => typeof expanded === 'boolean'))
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to load tab group expansion:', error)
+        } finally {
+            tabGroupExpansionLoaded = true
+        }
+    }
+
+    onMount(() => { loadTabGroupExpansion() })
+
+    $effect(() => {
+        if (!tabGroupExpansionLoaded || !window.darcWindowId) return
+        try {
+            localStorage.setItem(`tabGroupExpansion:${window.darcWindowId}`, JSON.stringify({ allGroupsExpanded, tabGroupExpansion }))
+        } catch (error) {
+            console.warn('Failed to save tab group expansion:', error)
+        }
+    })
+
+    function handleTabGroupToggle(id, expanded) {
+        tabGroupExpansion[id] = !expanded
+    }
+
+    function handleAllTabGroupsToggle() {
+        allGroupsExpanded = !allGroupsExpanded
+        tabGroupExpansion = {}
+    }
+
     let groupResize = $state(null)
     const groupPreview = createTabGroupPreview()
     onMount(() => () => groupPreview.destroy())
@@ -187,10 +228,6 @@
                data.spaceMeta.closedTabs.some(tab => tabMatchesSearch(tab));
     });
     
-    function handleTabGroupToggle(id, expanded) {
-        tabGroupExpansion[id] = !expanded
-    }
-
     onMount(() => onGroupExpand(({ spaceId, tabGroupId }) => {
         handleTabGroupToggle(`${spaceId}:group:${tabGroupId}`, false)
     }))
@@ -1991,7 +2028,7 @@
                                                 aria-label={allGroupsExpanded ? 'Collapse all tab groups' : 'Expand all tab groups'}
                                                 aria-expanded={allGroupsExpanded}
                                                 title={allGroupsExpanded ? 'Collapse all tab groups' : 'Expand all tab groups'}
-                                                onclick={(e) => { e.stopPropagation(); allGroupsExpanded = !allGroupsExpanded; tabGroupExpansion = {}; }}
+                                                onclick={(e) => { e.stopPropagation(); handleAllTabGroupsToggle() }}
                                                 ondblclick={(e) => e.stopPropagation()}>
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                                 {#if allGroupsExpanded}
