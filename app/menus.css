@@ -8,9 +8,9 @@
     --menu-color: #fff;
     --menu-muted-color: rgb(255 255 255 / 50%);
     --menu-focus-color: #a3a3a3;
-    --menu-hover-background: rgb(255 255 255 / 6%);
-    --menu-active-background: rgb(59 130 246 / 10%);
-    --menu-active-hover-background: rgb(59 130 246 / 12%);
+    --menu-hover-background: #0c0c0c;
+    --menu-active-background: #060d19;
+    --menu-active-hover-background: #081222;
     --menu-active-color: rgb(59 130 246 / 90%);
     --menu-font: 500 13px/1 -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
 }
