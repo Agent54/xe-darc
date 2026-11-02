@@ -48,6 +48,15 @@ function moveFromSpaceMenu(data, tab, isGroup = false) {
         `${contextMenuSource.slice(spaceMoveHandler.start, spaceMoveHandler.end)}; return moveToSpace`)(data, { tab }, isGroup, tab.spaceId, () => {})(otherSpace)
 }
 const workerSource = Deno.readTextFileSync(new URL('../public/test-shared-worker.js', import.meta.url))
+const appsSource = Deno.readTextFileSync(new URL('../app/components/Apps.svelte', import.meta.url))
+const addAppHandler = parse(appsSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'addApp')
+function appInstaller(data, refresh = async () => []) {
+    return new Function('data', 'refresh', `
+        const exampleApps = [], composeError = ''
+        ${appsSource.slice(addAppHandler.start, addAppHandler.end)}
+        return { addApp, exampleApps }
+    `)(data, refresh)
+}
 
 function localStorageFor(storage) {
     return {
@@ -2044,6 +2053,52 @@ Deno.test('global pins persist across spaces and return to ordinary tabs when dr
     assert.equal(data.docs.source.pinScope, null)
     assert.equal(data.docs.source.spaceId, otherSpace)
     assert.equal((await db.get('source')).pinned, null)
+})
+
+Deno.test('installing URL and repository apps honors app pins and persists their launch URL and identity', async () => {
+    for (const type of ['url', 'repo']) {
+        for (const pinToAppPins of [true, false]) {
+            const { data, refresh, db } = session({ tabs: [tab('normal')], history: ['normal'], runtime: 'client' })
+            await refresh()
+            const url = type === 'url' ? 'https://hello.example/' : 'https://web_hello--p8080.app.localhost'
+            const installer = appInstaller(data, async () => [
+                { configFiles: '/stacks/other/compose.yaml', endpoints: [{ url: 'https://wrong.example/' }] },
+                { configFiles: '/stacks/examples/hello/compose.yaml', endpoints: [] },
+                { configFiles: '/stacks/examples/hello/compose.yaml', endpoints: [{ url }] }
+            ])
+            const app = { name: 'Hello Docker', iconUrl: 'https://hello.example/icon.png', pinToAppPins,
+                url: type === 'url' ? url : '', pathType: 'compose', path: './compose.yaml' }
+            await installer.addApp({ type, app, checkout: type === 'repo' ? { path: 'examples/hello' } : undefined })
+            assert.equal(data.spaceMeta.globalPins.length, Number(pinToAppPins))
+            assert.equal(data.spaceMeta.activeTabId, 'normal', 'installing a pin must keep the current tab selected')
+            assert.equal(installer.exampleApps.length, type === 'url' ? 1 : 0)
+            if (pinToAppPins) {
+                const [pin] = data.spaceMeta.globalPins
+                const saved = await db.get(pin.id)
+                assert.equal(saved.url, url)
+                assert.equal(saved.pinned, 'left')
+                assert.equal(saved.pinScope, 'global')
+                assert.equal(saved.titleOverride, app.name)
+                assert.equal(saved.faviconOverride, app.iconUrl)
+                await refresh()
+                assert.deepEqual(Array.from(data.spaceMeta.globalPins, tab => tab.id), [pin.id])
+                assert.deepEqual(Array.from(data.getSidepins(otherSpace), tab => tab.id), [pin.id], 'app pins are available in other spaces')
+            }
+        }
+    }
+})
+
+Deno.test('repository installation waits for discovery and never pins a different checkout or an empty URL', async () => {
+    const { data, refresh } = session({ tabs: [tab('normal')], history: ['normal'], runtime: 'client' })
+    await refresh()
+    let resolveRefresh
+    const installer = appInstaller(data, () => new Promise(resolve => { resolveRefresh = resolve }))
+    const installing = installer.addApp({ type: 'repo', app: { pinToAppPins: true, pathType: 'compose', path: 'compose.yaml' }, checkout: { path: 'hello' } })
+    assert.equal(data.spaceMeta.globalPins.length, 0)
+    resolveRefresh([{ configFiles: '/stacks/not-hello/compose.yaml', endpoints: [{ url: 'https://wrong.example/' }] }])
+    await assert.rejects(installing, /no launch URL is available to pin/)
+    assert.equal(data.spaceMeta.globalPins.length, 0)
+    assert.equal(Object.values(data.docs).filter(doc => doc.type === 'tab').length, 1)
 })
 
 Deno.test('sidebar pin order persists independently and new tabs always enter the normal section', async () => {

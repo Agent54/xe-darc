@@ -131,16 +131,16 @@
             ...settings,
             dataPartitions: [...appFormData.dataPartitions]
         }
-        if (activeTab !== 'repo') {
-            onAdd({ type: activeTab, app })
-            handleClose()
-            return
-        }
-
         submissionState = 'submitting'
         const controller = new AbortController()
         checkoutController = controller
         try {
+            if (activeTab !== 'repo') {
+                await onAdd({ type: activeTab, app })
+                controller.signal.throwIfAborted()
+                handleClose()
+                return
+            }
             const needsManualCompose = app.pathType === 'dockerfile' || app.pathType === 'static'
             const checkout = await checkoutRepository({
                 url: app.githubUrl,
@@ -150,7 +150,8 @@
                 signal: controller.signal
             })
             controller.signal.throwIfAborted()
-            onAdd({ type: 'repo', app, checkout })
+            await onAdd({ type: 'repo', app, checkout })
+            controller.signal.throwIfAborted()
             if (needsManualCompose) {
                 composeWarning = {
                     type: app.pathType === 'static' ? 'Static HTML' : 'Dockerfile',
@@ -162,7 +163,7 @@
             }
         } catch (error) {
             if (error?.name !== 'AbortError') {
-                submitError = error?.message || 'Repository checkout failed'
+                submitError = error?.message || 'App could not be added'
             }
         } finally {
             if (checkoutController === controller) {
@@ -616,7 +617,7 @@
                     onmousedown={submitApp}
                     disabled={submissionState === 'submitting' || activeTab === 'catalog' || activeTab === 'url' && !appFormData.url || activeTab === 'repo' && !appFormData.githubUrl}
                 >
-                    {submissionState === 'submitting' ? 'Cloning…' : 'Add App'}
+                    {submissionState === 'submitting' ? activeTab === 'repo' ? 'Cloning…' : 'Adding…' : 'Add App'}
                 </button>
             </div>
             {/if}

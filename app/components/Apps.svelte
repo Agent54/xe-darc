@@ -276,6 +276,7 @@
                 saveMetadata()
                 hasComposeSnapshot = true
                 composeState = 'ready'
+                return composeApps
             }
         } catch (error) {
             if (loadController === controller && !controller.signal.aborted) {
@@ -402,9 +403,43 @@
         }
     }
 
-    function addApp({ type, app, checkout }) {
+    async function addApp({ type, app, checkout }) {
+        const spaceId = data.spaceMeta.activeSpace
+        let url = app.url
         if (type === 'repo' && checkout) {
-            refresh()
+            const installedApps = await refresh()
+            if (!app.pinToAppPins || app.pathType === 'dockerfile' || app.pathType === 'static') {
+                return
+            }
+            const repositoryPath = checkout.path.replaceAll('\\', '/').replace(/\/+$/, '')
+            const composePath = app.pathType === 'compose' ? app.path?.trim().replace(/^\.\//, '').replace(/^\/+/, '') : ''
+            const targetPath = composePath ? `${repositoryPath}/${composePath}` : `${repositoryPath}/`
+            const installedApp = installedApps?.find(candidate => candidate.endpoints?.length &&
+                candidate.configFiles.split(',').some(file => {
+                    const path = file.trim().replaceAll('\\', '/')
+                    return composePath
+                        ? path === targetPath || path.endsWith(`/${targetPath}`)
+                        : path.startsWith(targetPath) || path.includes(`/${targetPath}`)
+                }))
+            url = installedApp?.endpoints[0]?.url
+            if (!url) {
+                throw new Error(composeError || 'Repository added, but no launch URL is available to pin. Check its Compose file and published ports.')
+            }
+        }
+        if (app.pinToAppPins && url) {
+            const tab = await data.newTab(spaceId, {
+                url,
+                title: app.name || url,
+                pinned: 'left',
+                pinScope: 'global',
+                shouldFocus: false
+            })
+            await data.updateTabOverrides(tab.id, {
+                titleOverride: app.name,
+                faviconOverride: app.iconUrl
+            })
+        }
+        if (type === 'repo' && checkout) {
             return
         }
         exampleApps.push({
