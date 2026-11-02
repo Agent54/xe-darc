@@ -261,6 +261,32 @@ try {
     await page.mouse.up({ button: 'right' })
     assert.deepEqual(await page.evaluate(() => window.actions.at(-1)), ['move', 'single', { targetSpaceId: 'destination', scope: 'tab', placement: 'start', preservePins: true }])
 
+    for (const activeTabId of ['single', 'unrelated']) {
+        await page.evaluate(activeTabId => {
+            window.data.frames.single.frame = null
+            window.data.spaceMeta.activeTabId = activeTabId
+            window.showMenu()
+        }, activeTabId)
+        const labels = await page.$$eval('.context-menu [role="menuitem"]', items => items.map(item => item.textContent.trim()))
+        assert.ok(!labels.includes('Hibernate'), 'hibernated tabs replace Hibernate with a wake action')
+        assert.equal(labels[labels.indexOf('Hibernate others') - 1], 'Wake Up Tab', 'wake action occupies the Hibernate position')
+        const wake = await page.waitForSelector('.context-menu [role="menuitem"] ::-p-text(Wake Up Tab)')
+        if (activeTabId === 'single') {
+            await wake.evaluate(element => element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2 })))
+        } else {
+            await wake.evaluate(element => element.closest('[role="menuitem"]').focus())
+            await page.keyboard.press('Enter')
+        }
+        await page.waitForSelector('.context-menu', { hidden: true })
+        assert.deepEqual(await page.evaluate(() => window.actions.at(-1)), ['wake', 'single'])
+        assert.equal(await page.evaluate(() => !!window.data.frames.single.frame), true)
+        await page.evaluate(() => window.showMenu())
+        const awakeLabels = await page.$$eval('.context-menu [role="menuitem"]', items => items.map(item => item.textContent.trim()))
+        assert.ok(awakeLabels.includes('Hibernate'), 'awake tabs retain Hibernate')
+        assert.ok(!awakeLabels.includes('Wake Up Tab'), 'awake tabs hide the wake action')
+        await page.click('.context-menu-scrim')
+    }
+
     const selectGroupItem = async label => {
         await page.evaluate(() => window.showMenu(true, 'tabgroup'))
         const item = await page.waitForSelector(`.context-menu [role="menuitem"] ::-p-text(${label})`)
