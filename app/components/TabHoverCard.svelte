@@ -6,54 +6,103 @@
     import data from '../data.svelte.js'
     
     let { 
-        tab, 
+        tab: previewTab,
         onMouseLeave, 
         isClosedTab = false, 
+        showPreview = true,
         showHistoryImmediately = false,
+        historyDelay = 1500,
+        showHistory = $bindable(false),
         instantMode = false,
+        stacked = false,
+        historyBeside = false,
+        active = undefined,
         showDevTools = false,
+        onActivate = null,
         onGoBack = null,
         onGoForward = null,
         onReload = null,
         onCloseTab = null,
         onDevTools = null,
+        onSettings = null,
         onUrlBarExpandedChange = null,
         onHistoryVisibilityChange = null,
         availableHeight = null
     } = $props()
+
+    const tab = $derived(data.docs[previewTab.id] || previewTab)
+    const headerFocused = $derived(!isClosedTab && (active ?? tab.id === data.spaceMeta.activeTabId))
     
     const HEADER_HEIGHT = 100
     const SCREENSHOT_HEIGHT = 180
     const HISTORY_TITLE_HEIGHT = 30
     const MIN_HISTORY_HEIGHT = 100
+    const title = $derived(tab.titleOverride || tab.title || 'Untitled')
+    const activationLabel = $derived(`${isClosedTab ? 'Restore' : 'Open'} ${title}`)
+    let urlBar = $state(null)
+
+    export function focusLocation() {
+        return urlBar?.focusLocation()
+    }
+
+    function activateTab() {
+        if (isClosedTab) return data.restoreClosedTab(tab.id)
+        if (onActivate) return onActivate(tab)
+        if (tab.spaceId && data.spaceMeta.activeSpace !== tab.spaceId) data.activateSpace(tab.spaceId)
+        data.activate(tab.id)
+    }
     
     let historyMaxHeight = $derived(() => {
         const maxFromVh = window.innerHeight * 0.5
         if (!availableHeight) return `${maxFromVh}px`
-        const contentHeight = HEADER_HEIGHT + (tab?.screenshot ? SCREENSHOT_HEIGHT : 0) + HISTORY_TITLE_HEIGHT
+        const contentHeight = HEADER_HEIGHT + (showPreview ? SCREENSHOT_HEIGHT : 0) + HISTORY_TITLE_HEIGHT
         const remaining = availableHeight - contentHeight
         const height = Math.min(Math.max(remaining, MIN_HISTORY_HEIGHT), maxFromVh)
         return `${height}px`
     })
     
     async function openTabHistory() {
-        const historyTab = await data.newTab(data.spaceMeta.activeSpace, {
+        const historyTab = await data.newTab(tab.spaceId || data.spaceMeta.activeSpace, {
             url: `about:tabhistory#${tab.id}`,
-            title: `History - ${tab.title || 'Untitled'}`,
-            pinned: 'right'
+            title: `History - ${tab.titleOverride || tab.title || 'Untitled'}`,
+            pinned: 'right',
+            groupTabId: tab.id
         })
         if (historyTab) {
+            data.activateSpace(historyTab.spaceId)
             data.activate(historyTab.id)
         }
     }
     
     let hovercardHovered = $state(false)
-    let showHistory = $state(false)
     let showDelayedElements = $state(false)
     let historyShowTimer = null
     let delayedElementsTimer = null
     let hoveredHistoryEntry = $state(null)
     let hoveredEntryIndex = $state(null)
+    const screenshotTab = $derived(hoveredHistoryEntry?.screenshot ? hoveredHistoryEntry : tab)
+    const metadataEntries = $derived.by(() => {
+        const spaceId = tab.spaceId || previewTab.spaceId
+        const entries = [
+            { label: 'State', value: isClosedTab ? 'Closed' : data.spaceMeta.activeTabId === tab.id ? 'Active' : data.isTabHibernated(tab.id) ? 'Sleeping' : 'Open' },
+            { label: 'Opened', timestamp: tab.created },
+            { label: 'Last active', timestamp: data.getTabLastActiveAt?.(tab.id, spaceId) }
+        ]
+        if (isClosedTab) {
+            entries.push({ label: 'Closed', timestamp: tab.closedAt || previewTab.closedAt || tab.modified || previewTab.modified })
+        }
+        if (data.spaces[spaceId]?.name) {
+            entries.push({ label: 'Space', value: data.spaces[spaceId].name })
+        }
+        return entries
+    })
+
+    $effect(() => {
+        if (!showHistory) {
+            hoveredHistoryEntry = null
+            hoveredEntryIndex = null
+        }
+    })
     
     // Check if an entry is in the direct lineage (predecessor) of the hovered entry
     function isInLineage(entryIndex) {
@@ -146,11 +195,11 @@
         if (minutes < 60) return `${minutes}m ago`
         if (hours < 24) return `${hours}h ago`
         if (days < 7) return `${days}d ago`
-        return new Date(timestamp).toLocaleDateString()
+        return new Date(timestamp).toLocaleDateString('de-DE')
     }
     
     function formatAbsoluteTime(timestamp) {
-        return new Date(timestamp).toLocaleString()
+        return new Date(timestamp).toLocaleString('de-DE', { hour12: false })
     }
     
     // Hardcoded debug history entries (history entries not yet implemented)
@@ -269,7 +318,11 @@
     // Show history after delay when hovering the hovercard
     $effect(() => {
         if (hovercardHovered && !showHistory && !showHistoryImmediately) {
-            const delay = 1500
+            if (historyDelay === 0) {
+                showHistory = true
+                return
+            }
+            const delay = historyDelay
             historyShowTimer = setTimeout(() => {
                 showHistory = true
             }, delay)
@@ -310,7 +363,8 @@
     })
 </script>
 
-<div class="hovercard-content"
+<div class="hovercard-content" class:stacked class:active={headerFocused}
+     class:history-beside={historyBeside && showHistory && historyEntries.length > 0}
      role="tooltip"
      onmouseenter={() => hovercardHovered = true}
      onmouseleave={() => { hovercardHovered = false; onMouseLeave?.() }}>
@@ -320,7 +374,7 @@
             <div class="hovercard-text">
                 <div class="hovercard-title-wrapper" use:initScrollFade>
                     <div class="fade-left"></div>
-                    <div class="hovercard-title" onscroll={handleScrollFade}>{data.docs[tab.id]?.title || tab.title || 'Untitled'}</div>
+                    <button type="button" class="hovercard-title" aria-label={activationLabel} onclick={activateTab} onscroll={handleScrollFade}>{title}</button>
                     <div class="fade-right"></div>
                 </div>
             </div>
@@ -336,7 +390,9 @@
         </div>
         
         <UrlBar 
-            url={data.docs[tab.id]?.url || tab.url}
+            bind:this={urlBar}
+            escapeOverflow={stacked}
+            url={tab.url}
             tabId={tab.id}
             {isClosedTab}
             {showDevTools}
@@ -345,37 +401,40 @@
             {onReload}
             {onCloseTab}
             {onDevTools}
+            {onSettings}
             showSettingsButton={true}
             variant="hovercard"
             onExpandedChange={handleUrlBarExpandedChange}
             enableHoverExpand={showDelayedElements}
         />
     </div>
-    {#if hoveredHistoryEntry?.screenshot}
-        <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
-            {#key hoveredHistoryEntry.id}
-                <AttachmentImage src={hoveredHistoryEntry.screenshot} digest={hoveredHistoryEntry._attachments?.screenshot?.digest} alt="Page preview" />
-            {/key}
+    {#if showPreview && screenshotTab.screenshot}
+        <button type="button" class="hovercard-preview hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0} aria-label={activationLabel} onclick={activateTab}>
+            <AttachmentImage src={screenshotTab.screenshot} digest={screenshotTab._attachments?.screenshot?.digest} alt="Page preview" />
             {#if showDelayedElements}
-                <button class="expand-button" aria-label="Expand screenshot">
+                <span class="expand-button" aria-hidden="true">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                     </svg>
-                </button>
+                </span>
             {/if}
-        </div>
-    {:else if tab.screenshot}
-        <div class="hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0}>
-            {#key tab.id}
-                <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Page preview" />
-            {/key}
-            {#if showDelayedElements}
-                <button class="expand-button" aria-label="Expand screenshot">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                    </svg>
-                </button>
-            {/if}
+        </button>
+    {:else if showPreview}
+        <div class="hovercard-preview hovercard-metadata" class:has-history={showHistory && historyEntries.length > 0} role="region" aria-label="Tab details">
+            <dl>
+                {#each metadataEntries as entry (entry.label)}
+                    <div class="metadata-row">
+                        <dt>{entry.label}</dt>
+                        <dd>
+                            {#if Number.isFinite(entry.timestamp) && entry.timestamp > 0}
+                                <time datetime={new Date(entry.timestamp).toISOString()} title={formatAbsoluteTime(entry.timestamp)}>{formatRelativeTime(entry.timestamp)}</time>
+                            {:else}
+                                {entry.value || 'Not recorded'}
+                            {/if}
+                        </dd>
+                    </div>
+                {/each}
+            </dl>
         </div>
     {/if}
     {#if showHistory && historyEntries.length > 0}
@@ -394,7 +453,7 @@
                     Clear all
                 </button>
             </div>
-            <div class="history-list" style="max-height: {historyMaxHeight()};">
+            <div class="history-list" style:max-height={historyBeside ? 'none' : historyMaxHeight()}>
                 <div class="history-connector-line"></div>
                 {#each historyEntries as historyTab, index}
                 <div class="history-item"
@@ -427,7 +486,7 @@
                             <div class="history-title-scroll-wrapper" use:initScrollFade>
                                 <div class="fade-left"></div>
                                 <div class="history-title" onscroll={handleScrollFade}>
-                                    {historyTab.title || 'Untitled'}
+                                    {historyTab.titleOverride || historyTab.title || 'Untitled'}
                                     {#if historyTab.source}
                                         <span class="history-source">({historyTab.source.label})</span>
                                     {/if}
@@ -471,16 +530,18 @@
 <style>
     /* Ensure these styles are scoped to this component */
     .hovercard-content {
+        box-sizing: border-box;
+        --hovercard-title-fade-color: rgba(0, 0, 0, 0.95);
         background: rgba(0, 0, 0, 0.95);
         backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 12px;
         /* overflow-x: hidden; */
         /* overflow-x: hidden;
         overflow-y: visible; */
         box-shadow: 
-            0 20px 40px rgba(0, 0, 0, 0.4),
-            0 8px 16px rgba(0, 0, 0, 0.2);
+            0 20px 40px rgba(0, 0, 0, 0.55),
+            0 8px 16px rgba(0, 0, 0, 0.3);
         width: 320px;
         max-width: 90vw;
         margin-top: 8px;
@@ -491,10 +552,54 @@
         max-height: 100%;
     }
 
+    .hovercard-content.stacked {
+        width: 320px;
+        max-width: 100%;
+        margin: 0;
+        flex-shrink: 0;
+        max-height: none;
+        box-shadow: none;
+    }
+
+    .hovercard-content.history-beside {
+        display: grid;
+        grid-template-columns: 318px minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        width: 640px;
+    }
+
+    .history-beside .hovercard-info {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .hovercard-content.history-beside.active .hovercard-info {
+        border-top-right-radius: 0;
+    }
+
+    .history-beside .hovercard-preview.has-history {
+        grid-column: 1;
+        grid-row: 2;
+        border-bottom-left-radius: 11px;
+        border-bottom-right-radius: 0;
+    }
+
+    .history-beside .history-section {
+        grid-column: 2;
+        grid-row: 1 / 3;
+        contain: size;
+        border-top: none;
+        border-left: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .history-beside .history-list {
+        min-height: 0;
+    }
+
     .hovercard-info {
         padding: 16px;
         font-family: 'Inter', sans-serif;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
         overflow: visible;
         position: relative;
         z-index: 5;
@@ -503,6 +608,19 @@
 
     .hovercard-info:last-child {
         border-bottom: none;
+    }
+
+    .hovercard-content.active {
+        --hovercard-title-fade-color: var(--hovercard-active-header-background, #101010);
+    }
+
+    .hovercard-content.active .hovercard-info {
+        background: var(--hovercard-active-header-background, #101010);
+        border-radius: 11px 11px 0 0;
+    }
+
+    .hovercard-content.active .hovercard-info:last-child {
+        border-radius: 11px;
     }
 
     .hovercard-header {
@@ -525,6 +643,14 @@
     }
     
     .hovercard-title {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: none;
+        background: transparent;
+        text-align: left;
+        font-family: inherit;
+        cursor: pointer;
         font-size: 14px;
         font-weight: 600;
         color: rgba(255, 255, 255, 0.9);
@@ -551,15 +677,20 @@
     
     .hovercard-title-wrapper .fade-left {
         left: 0;
-        background: linear-gradient(to left, transparent, rgba(0, 0, 0, 0.95));
+        background: linear-gradient(to left, transparent, var(--hovercard-title-fade-color));
     }
     
     .hovercard-title-wrapper .fade-right {
         right: 0;
-        background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.95));
+        background: linear-gradient(to right, transparent, var(--hovercard-title-fade-color));
     }
 
-    .hovercard-screenshot {
+    .hovercard-preview {
+        box-sizing: border-box;
+        display: block;
+        padding: 0;
+        border: none;
+        background: #1a1a1a;
         width: 100%;
         height: 180px;
         overflow: hidden;
@@ -570,9 +701,65 @@
         flex-shrink: 0;
     }
     
-    .hovercard-screenshot.has-history {
+    .hovercard-preview.has-history {
         border-bottom-left-radius: 0;
         border-bottom-right-radius: 0;
+    }
+
+    .hovercard-screenshot {
+        cursor: pointer;
+    }
+
+    .hovercard-screenshot :global(img) {
+        filter: brightness(0.5);
+        transition: filter 150ms ease;
+    }
+
+    .hovercard-screenshot:hover :global(img) {
+        filter: brightness(1);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .hovercard-screenshot :global(img) {
+            transition: none;
+        }
+    }
+
+    .hovercard-metadata {
+        display: flex;
+        align-items: center;
+        padding: 16px;
+        font-family: 'Inter', sans-serif;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .hovercard-metadata dl {
+        width: 100%;
+        margin: 0;
+        display: grid;
+        gap: 8px;
+    }
+
+    .metadata-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .metadata-row dt {
+        flex-shrink: 0;
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .metadata-row dd {
+        min-width: 0;
+        margin: 0;
+        color: rgba(255, 255, 255, 0.85);
+        text-align: right;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     
     .expand-button {

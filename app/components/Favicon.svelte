@@ -3,26 +3,40 @@
     import data from '../data.svelte.js'
     
     let { tab, security = null, showButton = true, size = 'normal' } = $props()
+    let failedFaviconSrc = $state(null)
+
+    function getFaviconSrc(favicon) {
+        if (!favicon?.startsWith?.('http')) return favicon
+
+        try {
+            const faviconUrl = new URL(favicon)
+            if (faviconUrl.hostname.endsWith('.gstatic.com') && faviconUrl.pathname === '/faviconV2') {
+                faviconUrl.searchParams.set('drop_404_icon', 'true')
+                return faviconUrl.toString()
+            }
+        } catch {}
+
+        return favicon
+    }
     
     // Use reactive doc data for url/favicon, falling back to prop
-    const reactiveTab = $derived({
-        ...tab,
-        url: data.docs[tab?.id]?.url ?? tab?.url,
-        favicon: data.docs[tab?.id]?.favicon ?? tab?.favicon,
-        title: data.docs[tab?.id]?.title ?? tab?.title
-    })
+    const reactiveUrl = $derived(data.docs[tab?.id]?.url ?? tab?.url)
+    const currentTab = $derived(data.docs[tab?.id] || tab)
+    const reactiveFavicon = $derived(currentTab?.faviconOverride || currentTab?.favicon)
+    const reactiveTitle = $derived(currentTab?.titleOverride || currentTab?.title)
+    const loading = $derived(data.frames[tab?.id]?.loading ?? false)
     
     // Derive security status if not provided
-    const securityStatus = $derived(() => {
+    const securityStatus = $derived.by(() => {
         if (security !== null) return security
         
-        if (!reactiveTab?.url) return null
+        if (!reactiveUrl) return null
         
         // Skip security checks for about: URLs - they don't have origins
-        if (reactiveTab.url.startsWith('about:')) return null
+        if (reactiveUrl.startsWith('about:')) return null
         
         try {
-            const origin = new URL(reactiveTab.url).origin
+            const origin = new URL(reactiveUrl).origin
             const originData = data.origins[origin]
             
             return {
@@ -30,7 +44,7 @@
                          originData?.hasSecurityWarning || 
                          originData?.mixedContent || 
                          originData?.securityState === 'mixed' || 
-                         (originData?.securityState === 'insecure' && reactiveTab.url?.startsWith('https:')),
+                         (originData?.securityState === 'insecure' && reactiveUrl.startsWith('https:')),
                 originData
             }
         } catch (error) {
@@ -39,32 +53,36 @@
     })
     
     const faviconContent = $derived.by(() => {
-        const url = reactiveTab?.url
-        const favicon = reactiveTab?.favicon
+        const url = reactiveUrl
+        const favicon = reactiveFavicon
         
         // New tab icon - check URL FIRST before anything else
         // This ensures about: pages always show correct icon regardless of any other state
-        if (url?.startsWith?.('about:newtab') || url?.startsWith?.('about:blank')) {
+        if (!currentTab?.emojiOverride && !currentTab?.faviconOverride && (url?.startsWith?.('about:newtab') || url?.startsWith?.('about:blank'))) {
             return { type: 'newTab' }
         }
         
         // Security indicator takes precedence for non-about: URLs
-        if (securityStatus()?.hasError) {
+        if (securityStatus?.hasError) {
             return { type: 'security', component: SecurityIndicator }
+        }
+
+        if (currentTab?.emojiOverride) {
+            return { type: 'emoji', emoji: currentTab.emojiOverride }
         }
 
         // Custom favicon - check if it's SVG markup or URL
         // But skip if favicon URL doesn't match current URL's domain (stale favicon)
         if (favicon) {
             // Skip stale favicons from different domains
-            if (favicon.startsWith('http') && url) {
+            if (!currentTab?.faviconOverride && favicon.startsWith('http') && url) {
                 try {
                     const faviconUrlParam = new URL(favicon).searchParams.get('url')
                     if (faviconUrlParam) {
                         const faviconDomain = new URL(faviconUrlParam).hostname
                         const currentDomain = new URL(url).hostname
                         if (faviconDomain !== currentDomain) {
-                            return { type: 'globe' }
+                            return { type: 'fallback' }
                         }
                     }
                 } catch {}
@@ -73,15 +91,21 @@
             if (favicon.startsWith('<svg') || favicon.includes('viewBox')) {
                 return { type: 'svg', markup: favicon }
             } else if (favicon.startsWith('http') || favicon.startsWith('data:')) {
-                return { type: 'image', src: favicon }
+                const src = getFaviconSrc(favicon)
+                return src === failedFaviconSrc
+                    ? { type: 'fallback' }
+                    : { type: 'image', src }
             } else {
                 return { type: 'svg', markup: favicon }
             }
         }
         
-        // Default globe icon
-        return { type: 'globe' }
+        return { type: 'fallback' }
     })
+
+    function handleFaviconError(src) {
+        failedFaviconSrc = src
+    }
 </script>
 
 {#snippet newTabIcon()}
@@ -93,47 +117,103 @@
     </svg>
 {/snippet}
 
-{#snippet globeIcon()}
-    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" class="w-4 h-4">
-        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+{#snippet fallbackIcon()}
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" class="fallback-favicon w-4 h-4">
+        <circle cx="12" cy="12" r="8.25" />
+        <path d="M3.75 12h16.5M12 3.75c2.15 2.25 3.25 5 3.25 8.25S14.15 18 12 20.25C9.85 18 8.75 15.25 8.75 12S9.85 6 12 3.75Z" />
     </svg>
+{/snippet}
+
+{#snippet loadingIndicator()}
+    {#if loading}
+        <svg class="favicon-loading-spinner" viewBox="0 0 16 16" role="img" aria-label="Loading page">
+            <path d="M8 2 A6 6 0 0 1 14 8" fill="none" stroke="rgba(255, 255, 255, 0.8)" stroke-width="2" stroke-linecap="round" />
+        </svg>
+    {/if}
+{/snippet}
+
+{#snippet audioIndicator()}
+    {#if currentTab?.muted || currentTab?.audioPlaying}
+        <svg class="favicon-audio-indicator" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label={currentTab.muted ? 'Tab muted' : 'Playing audio'}>
+            <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+            {#if currentTab.muted}
+                <path d="m16 9 5 6m0-6-5 6" />
+            {:else}
+                <path d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13" />
+            {/if}
+        </svg>
+    {/if}
 {/snippet}
 
 {#if showButton}
     <span 
         class="favicon-display" 
         class:small={size === 'small'}
-        title={reactiveTab?.title || reactiveTab?.url || ''}
+        title={reactiveTitle || reactiveUrl || ''}
         aria-label="Tab favicon and security status">
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
+        {:else if faviconContent.type === 'emoji'}
+            <span class="favicon-emoji">{faviconContent.emoji}</span>
         {:else if faviconContent.type === 'image'}
-            <img src={faviconContent.src} alt="favicon" class="favicon" draggable="false" />
+            <img src={faviconContent.src} alt="" class="favicon" draggable="false" onerror={() => handleFaviconError(faviconContent.src)} />
         {:else if faviconContent.type === 'svg'}
             {@html faviconContent.markup}
         {:else if faviconContent.type === 'newTab'}
             {@render newTabIcon()}
         {:else}
-            {@render globeIcon()}
+            {@render fallbackIcon()}
         {/if}
+        {@render loadingIndicator()}
+        {@render audioIndicator()}
     </span>
 {:else}
     <span class="favicon-wrapper" class:small={size === 'small'}>
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
+        {:else if faviconContent.type === 'emoji'}
+            <span class="favicon-emoji">{faviconContent.emoji}</span>
         {:else if faviconContent.type === 'image'}
-            <img src={faviconContent.src} alt="favicon" class="favicon" draggable="false" />
+            <img src={faviconContent.src} alt="" class="favicon" draggable="false" onerror={() => handleFaviconError(faviconContent.src)} />
         {:else if faviconContent.type === 'svg'}
             {@html faviconContent.markup}
         {:else if faviconContent.type === 'newTab'}
             {@render newTabIcon()}
         {:else}
-            {@render globeIcon()}
+            {@render fallbackIcon()}
         {/if}
+        {@render loadingIndicator()}
+        {@render audioIndicator()}
     </span>
 {/if}
 
 <style>
+    .favicon-display,
+    .favicon-wrapper {
+        position: relative;
+    }
+
+    .favicon-emoji {
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    .small .favicon-emoji {
+        font-size: 12px;
+    }
+
+    .favicon-loading-spinner {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        animation: favicon-spin 1s linear infinite;
+        pointer-events: none;
+    }
+
+    @keyframes favicon-spin {
+        to { transform: rotate(360deg); }
+    }
+
     .favicon-display {
         display: flex;
         align-items: center;
@@ -188,6 +268,20 @@
         max-height: 16px;
         color: white;
         flex-shrink: 0;
+    }
+
+    .favicon-display .favicon-audio-indicator,
+    .favicon-wrapper .favicon-audio-indicator {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 10px;
+        height: 10px;
+        padding: 1px;
+        box-sizing: border-box;
+        border-radius: 2px;
+        background: #181818;
+        pointer-events: none;
     }
     
     /* Sidebar favicon opacity states - only target favicons inside sidebar elements */

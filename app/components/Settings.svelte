@@ -7,6 +7,7 @@
     // Settings state
     let defaultSearchEngine = $state('google')
     let defaultNewTabUrl = $state('about:newtab')
+    let newTabPosition = $state('right')
     let selectedAiProvider = $state('writer')
     let customSearchUrl = $state('')
     let customNewTabUrl = $state('')
@@ -68,6 +69,11 @@
     const newTabOptions = [
         { id: 'about:newtab', name: 'Default New Tab', description: 'Built-in new tab page with search' },
         { id: 'custom', name: 'Custom URL', description: 'Specify your own page' }
+    ]
+
+    const newTabPositions = [
+        { id: 'right', name: 'New tabs to right', description: 'Open new tabs at the right end of the current tab group' },
+        { id: 'next', name: 'Next to current tab', description: 'Open new tabs immediately after the selected tab' }
     ]
 
     const aiProviders = [
@@ -418,6 +424,11 @@
         if (option === 'custom') {
             localStorage.setItem('customNewTabUrl', customNewTabUrl)
         }
+    }
+
+    function handleNewTabPositionChange(position) {
+        newTabPosition = position
+        localStorage.setItem('newTabPosition', position)
     }
 
     function handleAiProviderChange(providerId) {
@@ -783,6 +794,7 @@
                 settings: {
                     defaultSearchEngine,
                     defaultNewTabUrl,
+                    newTabPosition,
                     selectedAiProvider,
                     customSearchUrl,
                     customNewTabUrl
@@ -864,6 +876,7 @@ To import this data back into DARC, use the import function in Settings.
     function resetToDefaults() {
         defaultSearchEngine = 'google'
         defaultNewTabUrl = 'about:newtab'
+        newTabPosition = 'right'
         selectedAiProvider = 'writer'
         customSearchUrl = ''
         customNewTabUrl = ''
@@ -878,6 +891,7 @@ To import this data back into DARC, use the import function in Settings.
         
         localStorage.removeItem('defaultSearchEngine')
         localStorage.removeItem('defaultNewTabUrl')
+        localStorage.removeItem('newTabPosition')
         localStorage.removeItem('selectedAiProvider')
         localStorage.removeItem('customSearchUrl')
         localStorage.removeItem('customNewTabUrl')
@@ -897,6 +911,7 @@ To import this data back into DARC, use the import function in Settings.
     async function loadSettings() {
         const savedSearchEngine = localStorage.getItem('defaultSearchEngine')
         const savedNewTabUrl = localStorage.getItem('defaultNewTabUrl')
+        newTabPosition = localStorage.getItem('newTabPosition') === 'next' ? 'next' : 'right'
         const savedAiProvider = localStorage.getItem('selectedAiProvider')
         const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
         const savedCustomNewTabUrl = localStorage.getItem('customNewTabUrl')
@@ -1072,6 +1087,34 @@ To import this data back into DARC, use the import function in Settings.
                         {#if defaultNewTabUrl === option.id}
                             <div class="selected-indicator">
                                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                            </div>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+        </div>
+
+        <div class="setting-section new-tab-position-settings">
+            <h3 class="section-title">New Tab Position</h3>
+            <div class="setting-cards">
+                {#each newTabPositions as option}
+                    <div class="setting-card {newTabPosition === option.id ? 'selected' : ''}"
+                         role="button"
+                         aria-pressed={newTabPosition === option.id}
+                         tabindex="0"
+                         onmousedown={(event) => { if (event.button === 0) { handleNewTabPositionChange(option.id) } }}
+                         onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleNewTabPositionChange(option.id) } }}>
+                        <div class="setting-header">
+                            <div class="setting-info">
+                                <h4 class="setting-name">{option.name}</h4>
+                                <p class="setting-description">{option.description}</p>
+                            </div>
+                        </div>
+                        {#if newTabPosition === option.id}
+                            <div class="selected-indicator">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                                 </svg>
                             </div>

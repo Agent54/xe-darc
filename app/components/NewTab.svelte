@@ -2,6 +2,7 @@
     import { Canvas } from '@threlte/core'
     import Scene from './InteractiveLineScene.svelte'
     import data from '../data.svelte.js'
+    import { detectUrl } from '../lib/utils.js'
     // import { sandbox } from './sandbox.js'
     
     let { tab, isActive = false } = $props()
@@ -313,18 +314,6 @@
     }
 
     function handleKeyDown(event) {
-        // Handle Cmd+W / Ctrl+W for tab closing - let it bubble up to the global handler
-        if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
-            // Don't prevent default here, let the global handler in App.svelte handle it
-            return
-        }
-
-        // Handle Cmd+T / Ctrl+T for new tab - let it bubble up to the global handler  
-        if ((event.metaKey || event.ctrlKey) && event.key === 't') {
-            // Don't prevent default here, let the global handler in App.svelte handle it
-            return
-        }
-
         const filteredCompletions = completions.filter(c => c.trim().length > 0)
         if (filteredCompletions.length === 0) {
             return
@@ -375,6 +364,16 @@
     }
 
     // Handle clicks outside input/dropdown to clear completions
+    function dismissCompletions() {
+        clearTimeout(completionTimeout)
+        completionTimeout = null
+        currentAbortController?.abort()
+        currentAbortController = null
+        isGeneratingCompletions = false
+        completions = []
+        selectedCompletionIndex = -1
+    }
+
     function handleClickOutside(event) {
         const inputContainer = event.target.closest('.input-wrapper')
         const dropdown = event.target.closest('.completions-dropdown')
@@ -402,10 +401,10 @@
             return
         }
         
-        try {
-            let url = new URL(inputValue)
-            data.navigate(tab.id, url.href)
-        } catch {
+        const url = detectUrl(inputValue)
+        if (url) {
+            data.navigate(tab.id, url)
+        } else {
             // Not a valid URL, check for Kagi prefix or use default search engine
             if (inputValue.toLowerCase().startsWith('k ')) {
                 // Use Kagi search, remove the "k " prefix
@@ -592,6 +591,8 @@
         }
     })
 </script>
+
+<svelte:window ondarc-dismiss-overlays={dismissCompletions} />
 
 <div class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
     <div class="content-container relative pt-[15vh] w-full">
