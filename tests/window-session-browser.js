@@ -75,9 +75,12 @@ try {
     browser = await startBrowser()
     const first = await openAppWindow(origin, 'first', 'popup,left=20,top=30,width=550,height=400')
     const firstId = await ready(first)
+    await first.evaluate(id => localStorage.setItem(`tabSidebarVisible:${id}`, 'true'), firstId)
     const second = await openAppWindow(`${origin}/#new`, 'second', 'popup,left=180,top=100,width=600,height=450')
     const secondId = await ready(second)
     assert.notEqual(secondId, firstId)
+    assert.equal(await second.evaluate(id => localStorage.getItem(`tabSidebarVisible:${id}`), secondId), 'true')
+    await second.evaluate(id => localStorage.setItem(`tabSidebarVisible:${id}`, 'false'), secondId)
 
     await first.evaluate(id => localStorage.setItem(`tabActiveHistory:${id}:darc:space_default`, JSON.stringify([{ id: 'second-tab', activatedAt: 100 }])), firstId)
     await second.evaluate(id => localStorage.setItem(`tabActiveHistory:${id}:darc:space_default`, JSON.stringify([{ id: 'third-tab', activatedAt: 200 }])), secondId)
@@ -111,6 +114,8 @@ try {
     }
     const histories = await reopened.evaluate(ids => ids.map(id => JSON.parse(localStorage.getItem(`tabActiveHistory:${id}:darc:space_default`))[0].id), [firstId, secondId])
     assert.deepEqual(histories, ['second-tab', 'third-tab'])
+    const sidebarStates = await reopened.evaluate(ids => ids.map(id => localStorage.getItem(`tabSidebarVisible:${id}`)), [firstId, secondId])
+    assert.deepEqual(sidebarStates, ['true', 'false'])
 
     const id = await ready(reopened)
     await reopened.reload()

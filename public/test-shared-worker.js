@@ -264,6 +264,7 @@ async function handleConnect(port, payload = {}) {
   }
   const resolution = resolveConnectWindow({ ...payload, clientId })
   const windowId = resolution.windowId
+  const inheritWindowId = resolution.reused ? null : activeWindowId
 
   pendingRestore.delete(windowId)
   cleanupClientMappings(windowId)
@@ -289,6 +290,7 @@ async function handleConnect(port, payload = {}) {
     payload: {
       clientId,
       windowId,
+      inheritWindowId,
       reused: resolution.reused,
       resolutionReason: resolution.reason,
       bounds: resolution.bounds,

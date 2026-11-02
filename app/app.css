@@ -2351,7 +2351,7 @@ header.window-controls-overlay + .content-area-scrim {
     opacity: 0;
     visibility: hidden;
     pointer-events: auto;
-    transition: opacity 0.25s ease 0.3s, visibility 0.25s ease 0.3s;
+    transition: opacity 0.25s ease 0.2s, visibility 0.25s ease 0.2s;
 }
 
 .hover-menu.menu-force-close,

@@ -243,7 +243,7 @@ function syncWindowIdToUrl(currentWindowId) {
   history.replaceState(history.state, '', nextUrl)
 }
 
-function setWindowIdFromWorker(nextWindowId) {
+function setWindowIdFromWorker(nextWindowId, inheritWindowId) {
   const parsedWindowId = parseWindowId(nextWindowId)
   if (!parsedWindowId) {
     failWindowIdBootstrap('SharedWorker returned an empty darc window id')
@@ -258,6 +258,15 @@ function setWindowIdFromWorker(nextWindowId) {
 
   if (typeof window.resolveDarcWindowId !== 'function') {
     failWindowIdBootstrap('resolveDarcWindowId is missing during SharedWorker bootstrap')
+  }
+
+  if (inheritWindowId) {
+    try {
+      const visible = localStorage.getItem(`tabSidebarVisible:${inheritWindowId}`) ?? 'false'
+      localStorage.setItem(`tabSidebarVisible:${windowId}`, visible)
+    } catch (error) {
+      console.warn('Failed to inherit tab sidebar visibility', error)
+    }
   }
 
   window.resolveDarcWindowId(windowId)
@@ -422,7 +431,7 @@ port.onmessage = function(e) {
     connectAckReceived = true
     clearTimeout(connectAckTimeout)
 
-    setWindowIdFromWorker(message.payload?.windowId)
+    setWindowIdFromWorker(message.payload?.windowId, message.payload?.inheritWindowId)
     if (isAppWindow && message.payload?.bounds) {
       try {
         restoreWindowBounds(window, message.payload.bounds, windowScreens)
