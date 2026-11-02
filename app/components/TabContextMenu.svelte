@@ -351,7 +351,7 @@
                 <form class="group-name-form" onsubmit={saveGroupName}>
                     <label for="tab-group-name">{isGroup ? 'Group name' : 'Tab title'}</label>
                     <div class="group-name-fields">
-                        <input bind:this={groupNameInput} id="tab-group-name" name="groupName" value={customName || ''} placeholder={isGroup ? 'Use tab titles' : 'Use page title'} autocomplete="off" />
+                        <input bind:this={groupNameInput} id="tab-group-name" name="groupName" value={customName || (isGroup ? '' : (data.docs[menu.tab?.id]?.title || menu.tab?.title || ''))} placeholder={isGroup ? 'Use tab titles' : 'Use page title'} autocomplete="off" />
                         <button type="submit">Save</button>
                     </div>
                 </form>
