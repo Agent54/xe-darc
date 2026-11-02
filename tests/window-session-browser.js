@@ -122,8 +122,16 @@ try {
     assert.equal(await ready(reopened), id)
     assert.equal((await browser.pages()).filter(page => page.url().startsWith(origin)).length, 2)
     assert.equal(before.windows.length, 2)
+    await reopened.evaluate(ids => {
+        for (const id of ids) {
+            localStorage.setItem(`tabSidebarVisible:${id}`, 'false')
+        }
+    }, [firstId, secondId])
+    const third = await openAppWindow(`${origin}/?sidebarHidden=1#new`, 'third', 'popup')
+    const thirdId = await ready(third)
+    assert.equal(await third.evaluate(id => localStorage.getItem(`tabSidebarVisible:${id}`), thirdId), 'false')
     assert.deepEqual(errors, [])
-    console.log('Real Chromium restart: two original window IDs, exact window positions and sizes, automatic reopening, separate histories, IndexedDB persistence and reload verified')
+    console.log('Real Chromium restart: two original window IDs, exact window positions and sizes, automatic reopening, separate histories, tab sidebar inheritance and restoration, IndexedDB persistence and reload verified')
 } finally {
     await browser?.close()
     await server.shutdown()
