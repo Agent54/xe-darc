@@ -9,6 +9,7 @@
         tab: previewTab,
         onMouseLeave, 
         isClosedTab = false, 
+        showPreview = true,
         showHistoryImmediately = false,
         historyDelay = 1500,
         showHistory = $bindable(false),
@@ -54,7 +55,7 @@
     let historyMaxHeight = $derived(() => {
         const maxFromVh = window.innerHeight * 0.5
         if (!availableHeight) return `${maxFromVh}px`
-        const contentHeight = HEADER_HEIGHT + SCREENSHOT_HEIGHT + HISTORY_TITLE_HEIGHT
+        const contentHeight = HEADER_HEIGHT + (showPreview ? SCREENSHOT_HEIGHT : 0) + HISTORY_TITLE_HEIGHT
         const remaining = availableHeight - contentHeight
         const height = Math.min(Math.max(remaining, MIN_HISTORY_HEIGHT), maxFromVh)
         return `${height}px`
@@ -407,7 +408,7 @@
             enableHoverExpand={showDelayedElements}
         />
     </div>
-    {#if screenshotTab.screenshot}
+    {#if showPreview && screenshotTab.screenshot}
         <button type="button" class="hovercard-preview hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0} aria-label={activationLabel} onclick={activateTab}>
             <AttachmentImage src={screenshotTab.screenshot} digest={screenshotTab._attachments?.screenshot?.digest} alt="Page preview" />
             {#if showDelayedElements}
@@ -418,7 +419,7 @@
                 </span>
             {/if}
         </button>
-    {:else}
+    {:else if showPreview}
         <div class="hovercard-preview hovercard-metadata" class:has-history={showHistory && historyEntries.length > 0} role="region" aria-label="Tab details">
             <dl>
                 {#each metadataEntries as entry (entry.label)}

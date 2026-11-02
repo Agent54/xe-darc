@@ -3,7 +3,7 @@ import { parse } from 'svelte/compiler'
 import { getFrameShortcutScript } from '../app/lib/shortcuts.js'
 
 const source = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
-const functions = ['closeHovercard', 'dismissHovercards', 'handleHovercardPointerDown', 'navigateTabHistory', 'handleFrameMouseDown', 'handleFrameClick']
+const functions = ['closeHovercard', 'dismissHovercards', 'handleHovercardPointerDown', 'navigateTabHistory', 'handleTabMouseEnter', 'handleFrameMouseDown', 'handleFrameClick']
 const handlers = parse(source).instance.content.body
     .filter(node => node.type === 'FunctionDeclaration' && functions.includes(node.id.name))
     .map(node => source.slice(node.start, node.end)).join('\n')
@@ -29,9 +29,13 @@ function navigationHarness(tabId = 'tab', zenMode = false) {
     let api
     const window = new EventTarget()
     window.innerWidth = 1200
+    window.innerHeight = 800
     const data = { docs: { [tabId]: tab }, frames: { [tabId]: { frame: { back() { actions.push('back') }, forward() { actions.push('forward') } } } } }
     api = new Function('data', 'window', 'CustomEvent', 'setTimeout', 'clearTimeout', 'focusModeEnabled', `
         let hoveredTab = null, navigationHovercardTabId = null, navigationHovercardTimeout = null
+        let hovercardPreviewVisible = true
+        let instantHovercardsMode = false, instantModeResetTimer = null, closeButtonHoveredDelayed = false
+        let hovercardRecentlyActive = false, hovercardResetTimer = null
         let hoverTimeout = null, navButtonHoverTimeout = null, navButtonHovered = false
         let hovercardUrlBarExpanded = false, isTrashItemHover = false, hovercardShowTime = null
         let hovercardPosition = { x: 170, y: 40 }
@@ -45,7 +49,9 @@ function navigationHarness(tabId = 'tab', zenMode = false) {
         window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
         return {
             navigateTabHistory, closeHovercard, dismissHovercards, handleHovercardPointerDown, handleFrameMouseDown,
+            hoverTab() { handleTabMouseEnter(Object.values(data.docs)[0], { target: { closest: () => ({ getBoundingClientRect: () => ({ left: 100, bottom: 40, width: 100 }) }) } }) },
             get visible() { return hoveredTab?.id || null },
+            get previewVisible() { return hovercardPreviewVisible },
             get held() { return navigationHovercardTabId },
             expandUrlBar() { hovercardUrlBarExpanded = true }
         }
@@ -132,6 +138,39 @@ Deno.test('zen mode navigates back and forward without revealing a hovercard', (
         assert.equal(h.timers.size, 0)
     }
     assert.deepEqual(h.actions, ['back', 'forward'])
+})
+
+Deno.test('navigation hides the preview until the tab is hovered again', () => {
+    for (const direction of ['back', 'forward']) {
+        const h = navigationHarness()
+        h.api.hoverTab()
+        h.advance(800)
+        assert.equal(h.api.previewVisible, true)
+        h.api.navigateTabHistory('tab', direction)
+        assert.equal(h.api.visible, 'tab')
+        assert.equal(h.api.previewVisible, false)
+        h.advance(400)
+        h.api.hoverTab()
+        h.advance(0)
+        assert.equal(h.api.previewVisible, true)
+        assert.equal(h.api.held, null)
+        h.advance(800)
+        assert.equal(h.api.visible, 'tab', 'the navigation timer must not dismiss a freshly hovered card')
+        h.api.navigateTabHistory('tab', direction)
+        assert.equal(h.api.previewVisible, false, 'each navigation hides the preview again')
+    }
+})
+
+Deno.test('navigation timeout does not restore the preview while the URL bar keeps the card open', () => {
+    const h = navigationHarness()
+    h.api.navigateTabHistory('tab', 'back')
+    h.api.expandUrlBar()
+    h.advance(800)
+    assert.equal(h.api.visible, 'tab')
+    assert.equal(h.api.previewVisible, false)
+    h.api.hoverTab()
+    h.advance(800)
+    assert.equal(h.api.previewVisible, true)
 })
 
 Deno.test('repeated history navigation restarts the reveal duration', () => {

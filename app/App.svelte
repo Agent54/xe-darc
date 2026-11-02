@@ -100,6 +100,7 @@
     let tabs = $derived(((data.spaceMeta.activeSpace && data.spaces[data.spaceMeta.activeSpace]?.tabs?.filter(tab => tab.type !== 'shape' && tab._rev && !closed[tab._rev])) || []))
     let visibilityTimers = new Map()
     let hoveredTab = $state(null)
+    let hovercardPreviewVisible = $state(true)
     let hoverTimeout = null
     let hovercardPosition = $state({ x: 0, y: 0 })
     let isTrashItemHover = $state(false)
@@ -186,6 +187,7 @@
         navButtonHoverTimeout = null
         hoveredTab = null
         navButtonHovered = false
+        hovercardPreviewVisible = true
         hovercardUrlBarExpanded = false
         isTrashItemHover = false
         hovercardShowTime = null
@@ -1264,6 +1266,7 @@
             hovercardUrlBarExpanded = false
             isTrashItemHover = false
             hoveredTab = tab
+            hovercardPreviewVisible = false
             hovercardShowTime = Date.now()
             navigationHovercardTabId = tabId
             navigationHovercardTimeout = setTimeout(() => {
@@ -1567,7 +1570,7 @@
             clearTimeout(hoverTimeout)
         }
         
-        const delay = instantHovercardsMode ? 0 : 800
+        const delay = instantHovercardsMode || navigationHovercardTabId === tab.id ? 0 : 800
         
         hoverTimeout = setTimeout(() => {
             instantHovercardsMode = true
@@ -1610,6 +1613,10 @@
             }
             
             isTrashItemHover = false
+            if (navigationHovercardTimeout) clearTimeout(navigationHovercardTimeout)
+            navigationHovercardTimeout = null
+            navigationHovercardTabId = null
+            hovercardPreviewVisible = true
             hoveredTab = tab
             hovercardShowTime = Date.now()
             // if (!tab.screenshot) {
@@ -4198,6 +4205,7 @@
        
             <TabHoverCard tab={hoveredTab}
                           bind:this={hovercardComponent}
+                          showPreview={hovercardPreviewVisible}
                           onActivate={activateTab}
                           isClosedTab={false} 
                           showHistoryImmediately={closeButtonHoveredDelayed || navigationHovercardTabId === hoveredTab.id}
@@ -4265,7 +4273,7 @@
                            onHistoryVisibilityChange={(visible) => {
                                if (visible) {
                                    const historyHeight = 200
-                                   const neededBottom = hovercardPosition.y + (hoveredTab?.screenshot ? 180 + 80 : 80) + historyHeight
+                                   const neededBottom = hovercardPosition.y + (hovercardPreviewVisible && hoveredTab?.screenshot ? 180 + 80 : 80) + historyHeight
                                    if (neededBottom > window.innerHeight - 20) {
                                        const adjustment = neededBottom - (window.innerHeight - 20)
                                        hovercardPosition = { ...hovercardPosition, y: Math.max(20, hovercardPosition.y - adjustment) }
