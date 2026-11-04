@@ -6,6 +6,7 @@
     import NetworkErrorPage from './NetworkErrorPage.svelte'
     import NewTab from './NewTab.svelte'
     import TabHistory from './TabHistory.svelte'
+    import LightboxHeader from './LightboxHeader.svelte'
     import { origin } from '../lib/utils.js'
     import { generateDiff, throttle } from '../lib/utils.js'
     import select from '../inject/select-patch.js?raw'
@@ -58,7 +59,7 @@
     let isCommandKeyDown = $state(false)
 
     // OAuth popup state
-    let oauthPopup = $state(null) // { url, width, height, parentTab, event }
+    let oauthPopup = $state(null) // { url, width, height, expanded, parentTab, event, frame }
 
     // Track recently blocked off-origin URLs to prevent duplicate tab creation
     // Both onBeforeRequest and handleLoadStart may fire for the same navigation
@@ -744,6 +745,7 @@
         popupFrame.onconsolemessage = (event) => handleOAuthPopupEvent('consolemessage', popupFrame, event)
         popupFrame.onloadstart = (event) => handleOAuthPopupEvent('loadstart', popupFrame, event)
         popupFrame.onloadstop = (event) => handleOAuthPopupEvent('loadstop', popupFrame, event)
+        popupFrame.onloadcommit = (event) => handleOAuthPopupEvent('loadcommit', popupFrame, event)
         popupFrame.onloadabort = (event) => handleOAuthPopupEvent('loadabort', popupFrame, event)
         popupFrame.onexit = (event) => handleOAuthPopupEvent('exit', popupFrame, event)
         popupFrame.onclose = (event) => handleOAuthPopupEvent('close', popupFrame, event)
@@ -762,6 +764,7 @@
             url: e.targetUrl,
             width: e.initialWidth || 500,
             height: e.initialHeight || 600,
+            expanded: false,
             parentTab,
             event: e,
             frame: popupFrame
@@ -2240,12 +2243,16 @@ document.addEventListener('input', function(event) {
     }
 
     function handleOAuthPopupEvent(eventType, popupFrame, event) {
-        if (!oauthPopup) return
+        if (oauthPopup?.frame !== popupFrame) return
 
         const { parentTab } = oauthPopup
         const parentFrame = data.frames[parentTab.id]?.frame
         
         switch (eventType) {
+            case 'loadcommit':
+                if (event.isTopLevel && event.url) oauthPopup.url = event.url
+                break
+
             case 'consolemessage':
                 const message = event.message
                 
@@ -2416,10 +2423,26 @@ document.addEventListener('input', function(event) {
 
         <div 
             class="oauth-popup-frame-container"
+            class:expanded={oauthPopup.expanded}
             style="width: {oauthPopup.width}px; height: {oauthPopup.height}px;"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sign in"
+            tabindex="-1"
             transition:fade={{duration: 300, delay: 100}}
-            use:appendPopupFrame={oauthPopup.frame}
-        ></div>
+        >
+            <LightboxHeader
+                tab={{
+                    url: oauthPopup.url,
+                    favicon: oauthPopup.url.startsWith('http')
+                        ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(oauthPopup.url)}&size=64`
+                        : null
+                }}
+                onNavigate={(url) => { oauthPopup.frame.src = url }}
+                onExpandLightbox={oauthPopup.expanded ? null : () => { oauthPopup.expanded = true }}
+            />
+            <div class="oauth-popup-content" use:appendPopupFrame={oauthPopup.frame}></div>
+        </div>
     {/if}
 
     <div
@@ -2603,18 +2626,33 @@ loading="eager"
         z-index: 10000;
         border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 12px;
-        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        max-width: calc(100vw - 32px);
+        max-height: calc(100vh - 32px);
         box-shadow: 
             0 25px 50px rgba(0, 0, 0, 0.6),
             0 0 0 1px rgba(255, 255, 255, 0.1);
         background: #0a0a0a;
     }
 
-    .oauth-popup-frame-container :global(.oauth-popup-frame) {
+    .oauth-popup-frame-container.expanded {
+        width: calc(100vw - 80px) !important;
+        height: calc(100vh - 80px) !important;
+    }
+
+    .oauth-popup-content {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        border-radius: 0 0 12px 12px;
+    }
+
+    .oauth-popup-content :global(.oauth-popup-frame) {
         width: 100%;
         height: 100%;
         display: block;
         border: none;
-        border-radius: 12px;
+        border-radius: 0 0 12px 12px;
     }
 </style>

@@ -8,6 +8,8 @@
         showControls = true,
         onMoveToTab = null,
         onExpandFull = null,
+        onExpandLightbox = null,
+        onNavigate = null,
         onCollapsePreview = null,
         onSettings = null,
         onClose = null,
@@ -22,11 +24,27 @@
     <div class="lightbox-info">
         <Favicon {tab} showButton={false} />
         <div class="lightbox-urlbar">
-            <UrlBar url={tab.url} tabId={tab.id} variant="hovercard" showCloseButton={false} showSettingsButton={false} />
+            <UrlBar url={tab.url} tabId={tab.id} {onNavigate} variant="hovercard" showCloseButton={false} showSettingsButton={false} />
         </div>
     </div>
     {#if showControls}
         <div class="lightbox-controls">
+            {#if onExpandLightbox}
+                <Tooltip text="Switch to full lightbox" position="bottom">
+                    <button
+                        class="lightbox-btn"
+                        aria-label="Switch to full lightbox"
+                        onclick={onExpandLightbox}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15,3 21,3 21,9"></polyline>
+                            <polyline points="9,21 3,21 3,15"></polyline>
+                            <line x1="21" y1="3" x2="14" y2="10"></line>
+                            <line x1="3" y1="21" x2="10" y2="14"></line>
+                        </svg>
+                    </button>
+                </Tooltip>
+            {/if}
             {#if onMoveToTab}
                 <Tooltip text="Open in new tab" position="bottom">
                     <button

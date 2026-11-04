@@ -20,6 +20,7 @@
         onDevTools = null,
         onSettings = null,
         onExpandedChange = null,
+        onNavigate = null,
         variant = 'default',
         enableHoverExpand = true,
         escapeOverflow = false
@@ -111,14 +112,14 @@
     }
     
     function handleUrlSubmit() {
-        if (!urlInputValue.trim() || !tabId) {
+        if (!urlInputValue.trim() || (!tabId && !onNavigate)) {
             setExpanded(false)
             return
         }
         
         try {
             let parsedUrl = new URL(urlInputValue)
-            data.navigate(tabId, parsedUrl.href)
+            navigate(parsedUrl.href)
         } catch {
             const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
             let searchUrl
@@ -132,7 +133,7 @@
                     if (customUrl) {
                         try {
                             searchUrl = new URL(customUrl + encodeURIComponent(urlInputValue))
-                            data.navigate(tabId, searchUrl.href)
+                            navigate(searchUrl.href)
                             setExpanded(false)
                             return
                         } catch {
@@ -148,10 +149,15 @@
             }
             
             searchUrl.searchParams.set('q', urlInputValue)
-            data.navigate(tabId, searchUrl.href)
+            navigate(searchUrl.href)
         }
         
         setExpanded(false)
+    }
+
+    function navigate(url) {
+        if (onNavigate) onNavigate(url)
+        else data.navigate(tabId, url)
     }
     
     async function handleCopyUrlClick(e) {
