@@ -20,10 +20,10 @@ await withSidebarFixture('sidebar-scroll', async ({ page }) => {
     for (const height of [600, 360]) {
         await page.setViewport({ width: 800, height })
         await page.evaluate(() => window.flushSync(() => { window.data.ui.showUrl = true }))
-        await page.$eval('.space-content', space => { space.scrollTop = 0 })
+        await page.$eval('.space-tabs-sections', space => { space.scrollTop = 0 })
         assert.equal(await buttonVisible(), true, `New Tab must stay visible with the URL bar and crowded pins at ${height}px height`)
         await page.evaluate(() => window.flushSync(() => { window.data.ui.showUrl = false }))
-        await page.$eval('.space-content', space => { space.scrollTop = 0 })
+        await page.$eval('.space-tabs-sections', space => { space.scrollTop = 0 })
         assert.equal(await buttonVisible(), true, `New Tab must stay fully visible with crowded pins at ${height}px height`)
         for (const selector of ['[data-pin-scope="global"]', '[data-pin-scope="space"]']) {
             assert.equal(await page.$eval(selector, grid => grid.scrollHeight > grid.clientHeight), true, 'crowded app pins must scroll within a limited height')
@@ -37,16 +37,21 @@ await withSidebarFixture('sidebar-scroll', async ({ page }) => {
         }
     }
     await page.setViewport({ width: 800, height: 600 })
-    await page.$eval('.space-content', space => { space.scrollTop = 0 })
-    assert.equal(await page.$eval('.new-tab-row', row => {
-        const rect = row.getBoundingClientRect()
-        const space = row.closest('.space-content').getBoundingClientRect()
-        return Math.abs(rect.top + rect.height / 2 - space.top - space.height / 2) < 12
-    }), true, 'crowded app pins should limit New Tab near the center rather than the bottom')
-    await page.hover('.new-tab-button')
+    await page.$eval('.space-tabs-sections', space => { space.scrollTop = 0 })
+    const headerGeometry = () => page.$$eval('.space-title-container, .space-sticky-tabs > [data-pin-scope="space"], .new-tab-row', elements => elements.map(el => {
+        const rect = el.getBoundingClientRect()
+        return { top: rect.top, bottom: rect.bottom }
+    }))
+    const fixedHeader = await headerGeometry()
+    const scrollPoint = await page.$eval('.space-tabs-sections', el => {
+        const r = el.getBoundingClientRect()
+        return { x: r.left + 40, y: r.top + r.height / 2 }
+    })
+    await page.mouse.move(scrollPoint.x, scrollPoint.y)
     await page.mouse.wheel({ deltaY: 500 })
-    await page.waitForFunction(() => document.querySelector('.space-content').scrollTop > 0)
-    assert.equal(await page.$eval('.new-tab-row', row => Math.abs(row.getBoundingClientRect().top - row.closest('.space-content').getBoundingClientRect().top) <= 1), true, 'New Tab must stick at the top when scrolling down')
+    await page.waitForFunction(() => document.querySelector('.space-tabs-sections').scrollTop > 0)
+    assert.deepEqual(await headerGeometry(), fixedHeader, 'scrolling the lower section leaves the complete header fixed')
+    assert.equal(await page.$eval('.space-content', el => el.scrollTop), 0)
     await page.$eval('.tab-group-toggle', button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
     await page.evaluate(() => window.flushSync(() => {
         window.data.spaces.space.activeTabsOrder = ['group-tail-5', 'outside']
@@ -66,25 +71,18 @@ await withSidebarFixture('sidebar-scroll', async ({ page }) => {
         return row.bottom <= space.bottom + 1 && row.top >= document.querySelector('.new-tab-row').getBoundingClientRect().bottom
     })
     assert.equal(await buttonVisible(), true, 'revealing the active tab must keep New Tab visible')
-    const previousScroll = await page.$eval('.space-content', space => space.scrollTop)
+    const previousScroll = await page.$eval('.space-tabs-sections', space => space.scrollTop)
     await page.click('.new-tab-button')
     await page.waitForSelector('.tabs-list > [data-tab-id="new-normal"]')
     await new Promise(resolve => setTimeout(resolve, 100))
-    assert.equal(await page.$eval('.space-content', space => space.scrollTop), previousScroll, 'creating a tab must preserve scroll when New Tab is already visible')
+    assert.equal(await page.$eval('.space-tabs-sections', space => space.scrollTop), previousScroll, 'creating a tab must preserve scroll when New Tab is already visible')
     assert.equal(await buttonVisible(), true)
-    await page.$eval('.space-content', space => {
-        space.querySelector('.new-tab-row').style.position = 'relative'
-        space.scrollTop = space.scrollHeight
-    })
-    assert.equal(await buttonVisible(), false)
+    await page.$eval('.space-tabs-sections', el => { el.scrollTop = el.scrollHeight })
+    const beforeCreate = await page.$eval('.space-tabs-sections', el => el.scrollTop)
     await page.$eval('.tabs-list-bottom-spacer', spacer => spacer.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })))
-    await page.waitForFunction(() => {
-        const row = document.querySelector('.new-tab-row').getBoundingClientRect()
-        const space = document.querySelector('.space-content').getBoundingClientRect()
-        return Math.abs(row.top + row.height / 2 - space.top - space.height / 2) < 12
-    })
-    assert.equal(await buttonVisible(), true, 'an out-of-view New Tab area should be recovered at the center')
-    await page.$eval('.new-tab-row', row => row.style.removeProperty('position'))
+    await page.waitForSelector('.tabs-list > [data-tab-id="new-normal-2"]')
+    assert.equal(await page.$eval('.space-tabs-sections', el => el.scrollTop), beforeCreate)
+    assert.equal(await buttonVisible(), true, 'New Tab stays visible even at the bottom of the list')
     await page.screenshot({ path: `${root}.cache/sidebar-new-tab-scroll.png` })
-    console.log('Chromium: centered New Tab limit, no scrolling while visible, recovery only when out of view, crowded pins and short windows pass')
+    console.log('Chromium: fixed header, independent tab scrolling, crowded pins, short windows and new-tab scroll preservation pass')
 })

@@ -1919,6 +1919,42 @@ header.focus-mode:hover  .focus-mode-icon > svg {
     width: calc(100% - var(--space-taken, 0px) + 9px);
 }
 
+.sidepin-frame {
+    position: relative;
+}
+
+.sidepin-hide-button {
+    position: absolute;
+    top: -7px;
+    right: -5px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid rgb(255 255 255 / 18%);
+    border-radius: 50%;
+    background: #242424;
+    color: #bcbcbc;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+}
+
+.sidepin-hide-button:hover,
+.sidepin-hide-button:active {
+    background: #383838;
+    color: #fff;
+}
+
+.sidepin-hide-button:focus-visible {
+    outline: 2px solid #bcbcbc;
+    outline-offset: 2px;
+    color: #fff;
+}
+
 .pinned-frames-left {
     position: fixed;
     top: 50px; /* Start below tab bar, aligned with main frames */

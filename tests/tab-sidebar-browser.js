@@ -40,7 +40,7 @@ const modules = {
         const tabs = [tab('saved', -1, { sidebarPinned: true }),
             tab('left-app', -2, { pinned: 'left', pinScope: 'space' }),
             tab('right-app', -3, { pinned: 'right', pinScope: 'space' }),
-            ...Array.from({ length: 35 }, (_, i) => tab('tab-' + i, i))]
+            ...Array.from({ length: 35 }, (_, i) => tab('tab-' + i, -i))]
         const data = $state({
             docs: {}, frames: {}, origins: {}, ui: { tabActivityMode: false },
             spaceMeta: { spaceOrder: ['work', 'personal'], activeSpace: 'work', activeTabId: 'tab-0', globalPins: [tab('global-app', 0, { pinned: 'left', pinScope: 'global' })], closedTabs: [] },
@@ -110,10 +110,11 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 
 const profile = `${root}.cache/tab-sidebar-browser-${crypto.randomUUID()}`
 let browser
+let page
 const errors = []
 try {
     browser = await puppeteer.launch({ headless: true, userDataDir: profile })
-    const page = await browser.newPage()
+    page = await browser.newPage()
     page.setDefaultTimeout(5000)
     page.on('pageerror', error => errors.push(error.message))
     await page.setViewport({ width: 1100, height: 800 })
@@ -285,8 +286,13 @@ try {
         await page.$eval(scroll, el => { el.scrollTop = el.scrollHeight })
         assert.deepEqual(await headerGeometry(), headerBeforeScroll, 'all header elements stay in place at the bottom in both tall and short windows')
         for (const deltaY of [1800, -10000, -1800]) {
-            await page.hover(`${space} .tabs-list`)
+            const point = await page.$eval(scroll, el => {
+                const r = el.getBoundingClientRect()
+                return { x: r.left + 40, y: r.top + r.height / 2 }
+            })
+            await page.mouse.move(point.x, point.y)
             await page.mouse.wheel({ deltaY })
+            await new Promise(resolve => setTimeout(resolve, 100))
         }
         assert.equal(await page.$eval(space, el => el.scrollTop), 0, 'the fixed-header container never owns vertical scroll, including overscroll')
         assert.deepEqual(await headerGeometry(), headerBeforeScroll, 'overscrolling the tab list leaves the entire header in place')
@@ -298,6 +304,16 @@ try {
     }
     assert.deepEqual(errors, [])
     console.log('Tab sidebar: empty fixed drops, both sections, sticky scrolling, activation, transfers and pin overflow pass')
+} catch (error) {
+    if (page) {
+        console.error(await page.evaluate(() => ['.space-content', '.space-sticky-tabs', '.space-tabs-sections', '.tabs-list-container', '.tabs-list'].map(selector => {
+            const el = document.querySelector(selector)
+            const r = el.getBoundingClientRect()
+            return { selector, top: r.top, height: r.height, scrollHeight: el.scrollHeight, scrollTop: el.scrollTop, overflow: getComputedStyle(el).overflow }
+        })))
+        await page.screenshot({ path: `${root}.cache/tab-sidebar-failure.png` })
+    }
+    throw error
 } finally {
     await browser?.close()
     await new Promise(resolve => server.close(resolve))

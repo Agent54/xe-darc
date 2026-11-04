@@ -91,7 +91,7 @@ await withSidebarFixture('sidebar-pins', async ({ page }) => {
     await page.click('.new-tab-button')
     await page.waitForSelector('.tabs-list > [data-tab-id="new-normal"]')
     assert.equal(await page.$('.sidebar-pinned-tabs [data-tab-id="new-normal"]'), null)
-    await page.$eval('.space-content', space => { space.scrollTop = 0 })
+    await page.$eval('.space-tabs-sections', space => { space.scrollTop = 0 })
     await page.screenshot({ path: `${root}.cache/sidebar-pinned-tabs.png` })
     await page.$eval('.sidebar-pinned-tabs [data-tab-id="outside"]', el => el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 100 })))
     await (await page.waitForSelector('button ::-p-text(Unpin from Sidebar)')).click()

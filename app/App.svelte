@@ -3273,6 +3273,19 @@
     </svg>
 {/snippet} -->
 
+{#snippet hideSidepinButton(tab)}
+    <button
+        type="button"
+        class="sidepin-hide-button"
+        title="Hide sidepin"
+        aria-label="Hide sidepin"
+        onclick={() => togglePinHidden(tab.id)}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M10 4 6 8l4 4M4 4v8" transform={tab.pinned === 'right' ? 'translate(16 0) scale(-1 1)' : undefined} stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+    </button>
+{/snippet}
+
 {#snippet rightPinnedTabItem(rightPinned, i)}
     {@const tab = data.docs[rightPinned.id]}
     {#if tab.type !== 'divider'}
@@ -4558,7 +4571,7 @@
             {@const tab = data.docs[leftPinned.id]}
             {#key userModsHash}
                 {#if tab.type !== 'divider'}
-                    <div>
+                    <div class="sidepin-frame">
                         {#key origin(tab.url)}
                             <div class="url-display visible">
                                 <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
@@ -4566,6 +4579,7 @@
                         {/key}
                         
                         <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={() => handleFrameBlur(tab.id)} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        {@render hideSidepinButton(tab)}
                     </div>
                 {/if}
             {/key}
@@ -4599,7 +4613,7 @@
             {@const tab = data.docs[rigthPinned.id]}
             {#key userModsHash}
                 {#if  tab.type !== 'divider'}
-                    <div>
+                    <div class="sidepin-frame">
                         {#key origin(tab.url)}
                             <div class="url-display visible">
                                 <UrlRenderer url={getDisplayUrl(tab.url)} variant="default" />
@@ -4607,6 +4621,7 @@
                         {/key}
                         
                         <Frame {observer} tabId={tab.id} {controlledFrameSupported} {requestedResources} {headerPartOfMain} {isScrolling}  onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={() => handleFrameBlur(tab.id)} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        {@render hideSidepinButton(tab)}
                     </div>
                 {/if}
             {/key}

@@ -25,7 +25,7 @@ await withSidebarFixture('sidebar-groups', async ({ page }) => {
         const outerScrollTop = await page.evaluate(scrollTop => {
             window.flushSync(() => { window.data.spaces.space.activeTabsOrder = ['outside', scrollTop ? 'group-missing' : 'group-tail-5'] })
             document.querySelector('.tab-group-content').scrollTop = scrollTop
-            return document.querySelector('.space-content').scrollTop
+            return document.querySelector('.space-tabs-sections').scrollTop
         }, scrollTop)
         await page.hover('.tab-group-main')
         await page.waitForFunction(() => {
@@ -33,7 +33,7 @@ await withSidebarFixture('sidebar-groups', async ({ page }) => {
             const target = document.querySelector('.group-activation-target').getBoundingClientRect()
             return target.top >= content.top && target.bottom <= content.bottom
         })
-        assert.equal(await page.$eval('.space-content', list => list.scrollTop), outerScrollTop, 'revealing the remembered tab must only scroll inside its group')
+        assert.equal(await page.$eval('.space-tabs-sections', list => list.scrollTop), outerScrollTop, 'revealing the remembered tab must only scroll inside its group')
     }
     await page.mouse.move(600, 500)
     const borderPoint = await page.evaluate(() => {
@@ -169,26 +169,26 @@ await withSidebarFixture('sidebar-groups', async ({ page }) => {
         }
     }))
     await page.evaluate(() => {
-        document.querySelector('.space-content').scrollTop = 0
+        document.querySelector('.space-tabs-sections').scrollTop = 0
         document.querySelector('[data-tab-group-id="group"] .tab-group-content').scrollTop = 0
     })
     await page.hover(`${groupContent} > :first-child`)
     await page.mouse.wheel({ deltaY: 80 })
     await page.waitForFunction(selector => document.querySelector(selector).scrollTop > 0, {}, groupContent)
-    assert.equal(await page.$eval('.space-content', list => list.scrollTop), 0, 'overflowing groups scroll internally')
+    assert.equal(await page.$eval('.space-tabs-sections', list => list.scrollTop), 0, 'overflowing groups scroll internally')
     await page.$eval(groupContent, content => { content.scrollTop = content.scrollHeight })
     await page.mouse.wheel({ deltaY: 80 })
     await new Promise(resolve => setTimeout(resolve, 200))
-    assert.equal(await page.$eval('.space-content', list => list.scrollTop), 0, 'overflowing groups contain scrolling at their boundary')
+    assert.equal(await page.$eval('.space-tabs-sections', list => list.scrollTop), 0, 'overflowing groups contain scrolling at their boundary')
 
     const shortGroup = '[data-tab-group-id="resize"] .tab-group-content'
     await page.hover(`${shortGroup} > [data-tab-id="resize-0"]`)
     await page.mouse.wheel({ deltaY: 80 })
-    await page.waitForFunction(() => document.querySelector('.space-content').scrollTop > 0)
+    await page.waitForFunction(() => document.querySelector('.space-tabs-sections').scrollTop > 0)
     assert.equal(await page.$eval(shortGroup, content => content.scrollTop), 0, 'groups without overflow pass scrolling to the parent list')
     await page.hover(`${shortGroup} > [data-tab-id="resize-0"]`)
     await page.mouse.wheel({ deltaY: -80 })
-    await page.waitForFunction(() => document.querySelector('.space-content').scrollTop === 0)
+    await page.waitForFunction(() => document.querySelector('.space-tabs-sections').scrollTop === 0)
     await page.evaluate(() => window.flushSync(() => {
         window.data.spaces.space.tabs = window.data.spaces.space.tabs.filter(tab => tab.tabGroupId !== 'resize' && !tab.id.startsWith('scroll-'))
     }))
