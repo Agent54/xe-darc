@@ -69,7 +69,7 @@
         background: transparent;
         color: rgb(255 255 255 / 60%);
         cursor: pointer;
-        transition: background 150ms ease, color 150ms ease;
+        transition: background 90ms ease, color 90ms ease;
     }
 
     svg { width: 14px; height: 14px; }

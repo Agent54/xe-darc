@@ -54,7 +54,7 @@ function startAutoScroll() {
         }
 
         // Scroll the group before its containing sidebar, then continue outward at its edges.
-        const sidebarLists = [...document.querySelectorAll('.tab-group-content'), ...document.querySelectorAll('[data-pin-scope]'), ...document.querySelectorAll('.space-content'), ...document.querySelectorAll('.tabs-list')]
+        const sidebarLists = [...document.querySelectorAll('.tab-group-content'), ...document.querySelectorAll('[data-pin-scope]'), ...document.querySelectorAll('.space-tabs-sections')]
         for (const list of sidebarLists) {
             if (!isVisibleSidebarTarget(list, mx, my)) continue
             const sticky = list.querySelector('.space-sticky-tabs')
@@ -410,6 +410,11 @@ function isVisibleSidebarTarget(list, mx, my) {
     if (!space) return true
     const bounds = space.getBoundingClientRect()
     if (mx < bounds.left || mx > bounds.right || my < bounds.top || my > bounds.bottom) return false
+    const sections = list.closest('.space-tabs-sections')
+    if (sections) {
+        const bounds = sections.getBoundingClientRect()
+        return mx >= bounds.left && mx <= bounds.right && my >= bounds.top && my <= bounds.bottom
+    }
     const sticky = space.querySelector('.space-sticky-tabs')
     return !sticky || list.dataset.pinScope === 'space' || !!list.closest('.space-sticky-tabs') || my >= sticky.getBoundingClientRect().bottom
 }

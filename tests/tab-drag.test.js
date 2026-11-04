@@ -29,7 +29,7 @@ function dragHarness ({ topbar = null, lists = [], pinLists = [] } = {}) {
     const document = {
         body: { classList: { add() {}, remove() {} } },
         querySelector: selector => selector === '.tab-list.tabs' ? topbar : null,
-        querySelectorAll: selector => selector === '[data-pin-scope]' ? pinLists : selector === '.tabs-list' ? lists : selector === '.tab-group-content' ? lists.flatMap(list => list.querySelectorAll(selector)) : []
+        querySelectorAll: selector => selector === '[data-pin-scope]' ? pinLists : selector === '.tabs-list' || selector === '.space-tabs-sections' ? lists : selector === '.tab-group-content' ? lists.flatMap(list => list.querySelectorAll(selector)) : []
     }
     const api = vm.runInNewContext(source, {
         document,

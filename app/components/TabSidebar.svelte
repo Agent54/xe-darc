@@ -749,26 +749,10 @@
     function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
         if (!spaceId || tabSearchQuery || data.getSidebarItems(spaceId).at(-1)?.type === 'divider') return
 
-        ensureNewTabVisible(spaceId)
-
         data.addDivider(spaceId)
     }
 
     let lastCreatedSidebarTabId = null
-
-    function ensureNewTabVisible(spaceId) {
-        const space = tabListRef?.querySelector(`[data-space-id="${spaceId}"]`)
-        const newTab = space?.querySelector('.new-tab-row')
-        if (!space || !newTab) {
-            return
-        }
-        const bounds = space.getBoundingClientRect()
-        const row = newTab.getBoundingClientRect()
-        if (row.top >= bounds.top && row.bottom <= bounds.bottom) {
-            return
-        }
-        space.scrollTop += row.top + row.height / 2 - bounds.top - bounds.height / 2
-    }
 
     async function createSidebarTab(spaceId, options) {
         const tab = await data.newTab(spaceId, options)
@@ -779,7 +763,6 @@
         data.activateSpace(spaceId)
         data.activate(tab.id)
         await tick()
-        ensureNewTabVisible(spaceId)
         return tab
     }
 
@@ -1103,7 +1086,7 @@
         if (event.target !== event.currentTarget) {
             return
         }
-        const tabsList = event.target
+        const tabsList = event.currentTarget
         const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
         if (spaceId) {
             tabsListScrolled[spaceId] = tabsList.scrollTop > 0
@@ -1185,30 +1168,18 @@
                 activeTabElement = document.querySelector(`.sidebar [data-tab-group-id="${data.docs[tabId]?.tabGroupId}"]`)
             }
             if (activeTabElement) {
-                const tabsList = activeTabElement.closest('.space-content')
+                const innerList = activeTabElement.closest('.tab-group-content, .sidebar-pinned-tabs')
+                if (innerList) {
+                    const bounds = innerList.getBoundingClientRect()
+                    const row = activeTabElement.getBoundingClientRect()
+                    if (row.top < bounds.top) innerList.scrollTop += row.top - bounds.top
+                    else if (row.bottom > bounds.bottom) innerList.scrollTop += row.bottom - bounds.bottom
+                }
+                const tabsList = activeTabElement.closest('.space-tabs-sections')
                 if (tabsList) {
-                    console.log('%c[TAB-DEBUG] TabSidebar scrolling active tab into view: ' + data.spaceMeta.activeTabId, 'color: #d946ef; font-weight: bold; font-size: 13px')
-                    // Scroll the tab into view within its tabs list
-                    const innerList = activeTabElement.closest('.tab-group-content, .sidebar-pinned-tabs')
-                    if (innerList) {
-                        const innerBounds = innerList.getBoundingClientRect()
-                        const innerRow = activeTabElement.getBoundingClientRect()
-                        if (innerRow.top < innerBounds.top) {
-                            innerList.scrollTop += innerRow.top - innerBounds.top
-                        } else if (innerRow.bottom > innerBounds.bottom) {
-                            innerList.scrollTop += innerRow.bottom - innerBounds.bottom
-                        }
-                    }
-
-                    // FIXME: not smooth? activeTabElement.scrollIntoView({
-                    //                         behavior: 'smooth',
-                    //                         block: 'nearest'
-                    //                     })
-
                     const bounds = tabsList.getBoundingClientRect()
                     const row = activeTabElement.getBoundingClientRect()
-                    if (activeTabElement.closest('.space-sticky-tabs')) return
-                    const top = Math.max(bounds.top, tabsList.querySelector('.space-sticky-tabs')?.getBoundingClientRect().bottom || bounds.top)
+                    const top = bounds.top
                     if (row.top < top) {
                         tabsList.scrollTop += row.top - top
                     } else if (row.bottom > bounds.bottom) {
@@ -1224,7 +1195,7 @@
     $effect(() => {
         data.spaceMeta.spaceOrder // dependency on spaces
         setTimeout(() => {
-            const tabsLists = document.querySelectorAll('.space-content')
+            const tabsLists = document.querySelectorAll('.space-tabs-sections')
             tabsLists.forEach(tabsList => {
                 const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
                 if (spaceId) {
@@ -1977,7 +1948,6 @@
                                 <div class="space-content"
                                      class:multi-space={multiSpaceMode}
                                      data-space-id={spaceId}
-                                     onscroll={handleTabsListScroll}
                                      style={multiSpaceMode ? `width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; min-width: ${spaceWidth || customTabSidebarWidth || baseWidth}px; flex-shrink: 0;` : ''}
                                      onmouseenter={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = spaceId }}
                                      onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
@@ -2214,7 +2184,7 @@
                                             {/if}
                                         {/if}
                                     {/snippet}
-                                <div class="space-tabs-sections">
+                                <div class="space-tabs-sections" onscroll={handleTabsListScroll}>
                                     {#if sidebarPins.length}
                                     <div class="sidebar-pinned-tabs" data-pin-scope="sidebar" data-pin-layout="rows"
                                          role="list" aria-label="Pinned tabs">
@@ -3319,10 +3289,7 @@
         flex-direction: column;
         gap: 8px;
         height: 100%;
-        overflow-y: auto;
-        overflow-anchor: none;
-        overscroll-behavior-y: contain;
-        scrollbar-width: thin;
+        overflow: clip;
         padding-top: 0;
         padding-right: 8px;
         position: relative;
@@ -3526,8 +3493,15 @@
     .space-tabs-sections {
         display: flex;
         flex-direction: column;
-        flex: 1 0 auto;
-        min-height: calc(100% - 44px);
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overflow-anchor: none;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+        position: relative;
+        isolation: isolate;
     }
 
     .sidebar-pinned-tabs {
@@ -3540,6 +3514,8 @@
         overflow-y: auto;
         overscroll-behavior-y: contain;
         scrollbar-width: thin;
+        position: relative;
+        isolation: isolate;
     }
 
     .fixed-pin-drop-anchor {
@@ -3552,8 +3528,8 @@
     }
 
     .space-sticky-tabs {
-        position: sticky;
-        top: 0;
+        position: relative;
+        isolation: isolate;
         z-index: 12;
         flex-shrink: 0;
         max-height: calc(100% - 44px);
@@ -3682,7 +3658,7 @@
         padding-top: 0;
     }
     
-    .tab-content-container.horizontal-scrolling .space-content {
+    .tab-content-container.horizontal-scrolling .space-tabs-sections {
         overflow-y: hidden;
     }
     
@@ -3755,6 +3731,11 @@
     .tab-item-container.active {
         background: var(--tab-active-background);
         border: 1px solid var(--tab-active-border);
+    }
+
+    .tabs-list > .tab-item-container.active,
+    .sidebar-pinned-tabs > .tab-item-container.active,
+    .tab-group-content > .tab-item-container.active {
         position: sticky;
         top: 0;
         bottom: 0;

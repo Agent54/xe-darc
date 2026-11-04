@@ -120,6 +120,7 @@ try {
     await page.goto(`http://127.0.0.1:${server.address().port}`)
     await page.waitForSelector('.tabs-list [data-tab-id="tab-0"]')
     const space = '.space-content[data-space-id="work"]'
+    const scroll = `${space} .space-tabs-sections`
     const headerGeometry = () => page.evaluate(selector => [
         '.sidebar-header', '.spaces-container',
         selector + ' .space-title-container',
@@ -143,12 +144,12 @@ try {
     })
     await page.mouse.move(tabBounds.x, tabBounds.y)
     await page.mouse.wheel({ deltaY: 120 })
-    await page.waitForFunction(selector => document.querySelector(selector).scrollTop > 0, {}, space)
+    await page.waitForFunction(selector => document.querySelector(selector).scrollTop > 0, {}, scroll)
     assert.deepEqual(await headerGeometry(), originalHeader, 'wheel scrolling keeps the title, app pins, sidepins and upper sidebar fixed')
     assert.equal(await page.$eval(title, el => el.classList.contains('titles-visible')), false,
         'scrolling tabs down does not reveal space titles')
     await page.mouse.wheel({ deltaY: -120 })
-    await page.waitForFunction(selector => document.querySelector(selector).scrollTop === 0, {}, space)
+    await page.waitForFunction(selector => document.querySelector(selector).scrollTop === 0, {}, scroll)
     assert.equal(await page.$eval(title, el => el.classList.contains('titles-visible')), false,
         'scrolling tabs up does not reveal space titles')
     await page.mouse.move(900, 700)
@@ -176,7 +177,7 @@ try {
     const scrolling = `${space} [data-pin-scope="sidebar"]`
     const row = id => `${space} [data-tab-id="${id}"] .tab-item-main`
     const geometry = () => page.$eval(space, el => ({
-        scrollTop: el.scrollTop, scrollHeight: el.scrollHeight,
+        scrollTop: el.querySelector('.space-tabs-sections').scrollTop, scrollHeight: el.querySelector('.space-tabs-sections').scrollHeight,
         rows: ['.new-tab-row', '.pinned-tabs-divider', '.tabs-list'].map(selector => {
             const r = el.querySelector(selector).getBoundingClientRect()
             return { top: r.top, height: r.height }
@@ -218,8 +219,8 @@ try {
     assert.equal(await page.$eval(`${space} .tabs-list`, el => !!el.querySelector('[data-tab-id="tab-0"]')), false)
 
     const pinnedHeader = await headerGeometry()
-    await page.$eval(space, el => { el.scrollTop = 700 })
-    await page.waitForFunction(selector => document.querySelector(selector).scrollTop >= 700, {}, space)
+    await page.$eval(scroll, el => { el.scrollTop = 700 })
+    await page.waitForFunction(selector => document.querySelector(selector).scrollTop >= 700, {}, scroll)
     assert.deepEqual(await headerGeometry(), pinnedHeader, 'the whole header stays fixed above the fixed pinned tabs')
     const layout = await page.$eval(space, el => {
         const bounds = el.getBoundingClientRect()
@@ -230,12 +231,12 @@ try {
             newTabVisible: newTab.bottom <= bounds.bottom, savedScrolled: saved.bottom < bounds.top }
     })
     assert.deepEqual(layout, { visible: true, newTabVisible: true, savedScrolled: true })
-    const before = await page.$eval(space, el => el.scrollTop)
+    const before = await page.$eval(scroll, el => el.scrollTop)
     await page.evaluate(() => window.activate('tab-0'))
     await page.waitForFunction(() => document.querySelector('.fixed-sidebar-pins .active'))
     // Let the sidebar's delayed active-tab reveal run.
     await new Promise(resolve => setTimeout(resolve, 100))
-    assert.equal(await page.$eval(space, el => el.scrollTop), before, 'activating a fixed pin preserves normal-list scroll')
+    assert.equal(await page.$eval(scroll, el => el.scrollTop), before, 'activating a fixed pin preserves normal-list scroll')
 
     await page.evaluate(() => window.activate('tab-14'))
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -244,7 +245,16 @@ try {
         return el.getBoundingClientRect().top >= header.bottom - 1
     }), true, 'activating an ordinary tab reveals it below the entire sticky header')
 
-    await page.$eval(space, el => { el.scrollTop = 0 })
+    for (const bottom of [true, false]) {
+        await page.$eval(scroll, (el, bottom) => { el.scrollTop = bottom ? el.scrollHeight : 0 }, bottom)
+        assert.equal(await page.$eval(`${space} [data-tab-id="tab-14"]`, el => {
+            const viewport = el.closest('.space-tabs-sections').getBoundingClientRect()
+            const row = el.getBoundingClientRect()
+            return row.top >= viewport.top - 1 && row.bottom <= viewport.bottom + 1
+        }), true, 'the active normal tab stays visible at both scroll edges within the lower tab viewport')
+    }
+
+    await page.$eval(scroll, el => { el.scrollTop = 0 })
     await drag('tab-0', scrolling)
     await page.waitForSelector(`${scrolling} [data-tab-id="tab-0"]`)
     assert.equal(await page.$eval(fixed, el => el.getBoundingClientRect().height), 0, 'empty fixed section takes no layout space')
@@ -257,14 +267,29 @@ try {
     for (let i = 1; i < 12; i++) await page.evaluate(id => window.pin(id, true), `tab-${i}`)
     assert.equal(await page.$eval(fixed, el => el.scrollHeight > el.clientHeight), true, 'many fixed pins scroll independently')
     await page.$eval(fixed, el => { el.scrollTop = el.scrollHeight })
-    assert.equal(await page.$eval(space, el => el.scrollTop), 0)
+    assert.equal(await page.$eval(scroll, el => el.scrollTop), 0)
+    await page.evaluate(() => window.activate('saved'))
+    await new Promise(resolve => setTimeout(resolve, 100))
+    await page.$eval(fixed, el => { el.scrollTop = el.scrollHeight })
+    assert.equal(await page.$eval(`${fixed} [data-tab-id="saved"]`, el => {
+        const row = el.getBoundingClientRect()
+        const pins = el.closest('.sidebar-pinned-tabs').getBoundingClientRect()
+        const apps = el.closest('.space-content').querySelector('[data-pin-scope="space"]').getBoundingClientRect()
+        return row.top >= pins.top - 1 && row.bottom <= pins.bottom + 1 && row.top >= apps.bottom
+    }), true, 'an active fixed pin sticks inside its own scroller below the app pins')
     await page.screenshot({ path: `${root}.cache/tab-sidebar-fixed-pins.png` })
     for (const height of [800, 450]) {
         await page.setViewport({ width: 1100, height })
-        await page.$eval(space, el => { el.scrollTop = 0 })
+        await page.$eval(scroll, el => { el.scrollTop = 0 })
         const headerBeforeScroll = await headerGeometry()
-        await page.$eval(space, el => { el.scrollTop = el.scrollHeight })
+        await page.$eval(scroll, el => { el.scrollTop = el.scrollHeight })
         assert.deepEqual(await headerGeometry(), headerBeforeScroll, 'all header elements stay in place at the bottom in both tall and short windows')
+        for (const deltaY of [1800, -10000, -1800]) {
+            await page.hover(`${space} .tabs-list`)
+            await page.mouse.wheel({ deltaY })
+        }
+        assert.equal(await page.$eval(space, el => el.scrollTop), 0, 'the fixed-header container never owns vertical scroll, including overscroll')
+        assert.deepEqual(await headerGeometry(), headerBeforeScroll, 'overscrolling the tab list leaves the entire header in place')
         assert.equal(await page.$eval(space, el => {
             const bounds = el.getBoundingClientRect()
             const header = el.querySelector('.space-sticky-tabs').getBoundingClientRect()
