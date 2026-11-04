@@ -2,6 +2,8 @@
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
   import GridTabStack from './GridTabStack.svelte'
+  import TabHoverCard from './TabHoverCard.svelte'
+  import { getTabActivationHistory } from '../lib/tab-activation-history.js'
   import data from '../data.svelte.js'
   import { colors as spaceColors } from '../lib/utils.js'
   import { onMount } from 'svelte'
@@ -15,16 +17,20 @@
     rightSidebarWidth = 0,
     tabSidebarWidth = 0,
     spaceTaken = 0,
-    onSpaceSwitch = () => {}
+    onSpaceSwitch = () => {},
+    historySwitch = null
   } = $props()
 
-  let activeView = $state(localStorage.getItem('gridActiveView') || 'tabs')
+  let savedActiveView = $state(localStorage.getItem('gridActiveView') || 'tabs')
+  let activeView = $derived(historySwitch ? 'history' : savedActiveView)
+  let windowWidth = $state(window.innerWidth)
+  let historyContainer = $state(null)
   let spaceScope = $state('current')
   let spacesContainer = $state(null)
   let gridWindowId = $state(window.darcWindowId || '')
   let gridInstanceId = $state(window.darcInstanceId || '')
   function setActiveView(view) {
-    activeView = view
+    savedActiveView = view
     localStorage.setItem('gridActiveView', view)
   }
 
@@ -171,6 +177,23 @@
   let spaceOrder = $derived(data.spaceMeta.spaceOrder || [])
   let activeSpaceId = $derived(data.spaceMeta.activeSpace)
   let activeTabId = $derived(data.spaceMeta.activeTabId)
+  let activationHistory = $derived.by(() => {
+    if (historySwitch) return historySwitch.entries
+    if (spaceScope === 'current') return getTabActivationHistory(data)
+    return spaceOrder.flatMap(id => getTabActivationHistory(data, id))
+      .sort((a, b) => b.activatedAt - a.activatedAt)
+  })
+
+  $effect(() => {
+    const container = historyContainer
+    const index = historySwitch?.index
+    const width = windowWidth
+    if (!container || index == null) return
+    const frame = requestAnimationFrame(() => {
+      container.querySelector(`[data-history-index="${index}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+    })
+    return () => cancelAnimationFrame(frame)
+  })
   
   // Pre-compute spaces data with filtered tabs to avoid reactive lookups in template
   let spacesData = $derived.by(() => {
@@ -297,6 +320,7 @@
       target.closest('.grid-scope-toggle') ||
       target.closest('.grid-collapse-btn') ||
       target.closest('.grid-empty-view') ||
+      target.closest('.activation-history') ||
       target.closest('.grid-context-menu') ||
       target.closest('.grid-menu-scrim') ||
       target.closest('.grid-color-picker-dropdown') ||
@@ -312,7 +336,7 @@
   }
 </script>
 
-<svelte:window ondarc-dismiss-overlays={dismissOverlays} />
+<svelte:window ondarc-dismiss-overlays={dismissOverlays} bind:innerWidth={windowWidth} />
 
 <div 
   class="grid-view"
@@ -326,20 +350,20 @@
 >
   <div class="grid-top-bar">
     <div class="grid-view-tabs" role="tablist">
-      <button class="grid-view-tab" class:active={activeView === 'tabs'} onmousedown={() => setActiveView('tabs')} role="tab">
+      <button class="grid-view-tab" class:active={activeView === 'tabs'} aria-selected={activeView === 'tabs'} onclick={() => setActiveView('tabs')} role="tab" disabled={!!historySwitch}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="grid-tab-icon"><path d="M2 4.5A2.5 2.5 0 0 1 4.5 2h3.879a2.5 2.5 0 0 1 1.767.732l.732.732A1.5 1.5 0 0 0 11.94 4H15.5A2.5 2.5 0 0 1 18 6.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 2 14.5v-10Z"/></svg>
         Tabs
       </button>
-      <button class="grid-view-tab" class:active={activeView === 'history'} onmousedown={() => setActiveView('history')} role="tab">
+      <button class="grid-view-tab" class:active={activeView === 'history'} aria-selected={activeView === 'history'} onclick={() => setActiveView('history')} role="tab">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="grid-tab-icon"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd"/></svg>
         History
       </button>
-      <button class="grid-view-tab" class:active={activeView === 'resources'} onmousedown={() => setActiveView('resources')} role="tab">
+      <button class="grid-view-tab" class:active={activeView === 'resources'} aria-selected={activeView === 'resources'} onclick={() => setActiveView('resources')} role="tab" disabled={!!historySwitch}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="grid-tab-icon"><path d="M10 1a6 6 0 0 0-3.815 10.631C7.237 12.5 8 13.443 8 14.456v.644a.75.75 0 0 0 .75.75h2.5a.75.75 0 0 0 .75-.75v-.644c0-1.013.762-1.957 1.815-2.825A6 6 0 0 0 10 1ZM8.863 17.414a.75.75 0 0 0-.226 1.483 9.066 9.066 0 0 0 2.726 0 .75.75 0 0 0-.226-1.483 7.563 7.563 0 0 1-2.274 0Z"/></svg>
         Resources
       </button>
     </div>
-    <button class="grid-scope-toggle" class:active={spaceScope === 'all'} onclick={toggleSpaceScope} aria-pressed={spaceScope === 'all'}>
+    <button class="grid-scope-toggle" class:active={spaceScope === 'all'} onclick={toggleSpaceScope} aria-pressed={spaceScope === 'all'} disabled={!!historySwitch}>
       <span class="grid-scope-track"><span class="grid-scope-thumb"></span></span>
       <span class="grid-scope-label">All Spaces</span>
     </button>
@@ -604,12 +628,30 @@
       </div>
     </div>
   {:else if activeView === 'history'}
-    <div class="grid-empty-view">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="grid-empty-icon">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-      </svg>
-      <div class="grid-empty-title">History</div>
-      <div class="grid-empty-subtitle">Browsing history will appear here</div>
+    <div class="activation-history" bind:this={historyContainer}>
+      <div class="activation-history-list">
+        <div class="activation-history-heading">
+          <h1>Activation history</h1>
+          <p>{historySwitch ? 'Ctrl+Tab for older visits · Release Ctrl to return' : 'Your recent tab visits, newest first'}</p>
+        </div>
+        {#each activationHistory as entry, index (`${entry.spaceId}:${entry.index}`)}
+          {@const selected = historySwitch ? index === historySwitch.index : entry.id === activeTabId && index === 0}
+          <div class="activation-history-entry" class:selected data-history-index={index} aria-current={selected ? 'true' : undefined}>
+            <div class="activation-history-meta">
+              <span>{data.spaces[entry.spaceId]?.name || 'Space'}</span>
+              {#if entry.activatedAt > 0}
+                <time datetime={new Date(entry.activatedAt).toISOString()}>{new Date(entry.activatedAt).toLocaleString()}</time>
+              {/if}
+            </div>
+            <TabHoverCard tab={entry.tab} stacked={true} active={selected}
+              showHistoryImmediately={true} historyBeside={windowWidth >= 680}
+              onActivate={(tab) => handleFrameClick(tab, index, entry.spaceId)}
+              onCloseTab={() => onTabClose(entry.tab)} />
+          </div>
+        {:else}
+          <p class="activation-history-empty">Tab visits will appear here as you switch tabs.</p>
+        {/each}
+      </div>
     </div>
   {:else if activeView === 'resources'}
     <div class="grid-empty-view">
@@ -623,6 +665,65 @@
 </div>
 
 <style>
+  .activation-history {
+    height: 100%;
+    overflow-y: auto;
+    padding: 80px 20px 40px;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scroll-padding: 80px 0 24px;
+  }
+
+  .activation-history-list {
+    width: min(640px, 100%);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .activation-history-heading h1 {
+    margin: 0 0 6px;
+    font-size: 18px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .activation-history-heading p, .activation-history-empty {
+    margin: 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .activation-history-entry {
+    border-radius: 12px;
+    scroll-margin: 12px;
+  }
+
+  .activation-history-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 4px 8px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+  }
+
+  .activation-history .activation-history-entry :global(.hovercard-content) {
+    width: 100%;
+  }
+
+  .activation-history-entry.selected :global(.hovercard-content) {
+    border-color: rgba(255, 255, 255, 0.55);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+  }
+
+  .grid-view-tab:disabled, .grid-scope-toggle:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .grid-view {
     position: fixed;
     top: 0;

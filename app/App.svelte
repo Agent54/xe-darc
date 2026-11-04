@@ -33,6 +33,7 @@
     import { resolveSidepinVisibility } from './lib/sidepin-visibility.js'
     import { shortcuts, shortcutActionIds, createShortcutMatcher, createShortcutHandler, isMacPlatform as detectMacPlatform } from './lib/shortcuts.js'
     import { createShortcutActions } from './lib/shortcut-actions.js'
+    import { createTabHistorySwitcher } from './lib/tab-activation-history.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag, onDrop } from './lib/tab-drag.svelte.js'
     const iwaVersion = __IWA_VERSION__
@@ -913,10 +914,17 @@
         }
     }
 
-    const runShortcut = createShortcutActions(data, {
+    let tabHistorySwitch = $state(null)
+    const tabHistorySwitcher = createTabHistorySwitcher(data, state => {
+        if (state?.visible && !tabHistorySwitch?.visible) dismissViewOverlays()
+        tabHistorySwitch = state
+    })
+    const shortcutActions = createShortcutActions(data, {
         openNewTab,
         openNewTabGroup: () => openNewTab(true),
         showShortcuts: (visible) => { shortcutOverlayVisible = visible },
+        previousActiveTab: () => tabHistorySwitcher.previous(),
+        finishTabSwitch: () => tabHistorySwitcher.finish(),
         openLocation: openTabLocation,
         closeTab,
         dismissHovercards: () => window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards')),
@@ -928,7 +936,25 @@
         escape: handleShortcutEscape,
         showOverview: () => selectViewMode('tile', { fromZoomOrKey: true })
     })
+    function runShortcut(id, event, sourceTabId) {
+        if (id === 'escape' && tabHistorySwitch) {
+            tabHistorySwitcher.finish()
+            return true
+        }
+        if (id !== 'previous-active-tab' && id !== 'finish-tab-switch' && id !== 'hide-shortcuts') tabHistorySwitcher.finish()
+        return shortcutActions(id, event, sourceTabId)
+    }
     const handleKeyDown = createShortcutHandler(createShortcutMatcher(shortcuts, detectMacPlatform()), runShortcut)
+
+    function handleShortcutKeyUp(event) {
+        handleKeyDown.keyup(event)
+        if (event.key === 'Control' || !event.ctrlKey) tabHistorySwitcher.finish()
+    }
+
+    function closeGridView(options) {
+        if (tabHistorySwitch) tabHistorySwitcher.finish()
+        else toggleViewMode(options)
+    }
 
     function handleShortcutEscape(event) {
         if (shortcutOverviewVisible) {
@@ -1528,6 +1554,7 @@
     $effect(() => {
         return () => {
             handleKeyDown.reset()
+            tabHistorySwitcher.finish()
             stopHovercardPositionCheck()
             if (_observer) {
                 _observer.disconnect()
@@ -3298,7 +3325,7 @@
 <svelte:window
     onpointerdowncapture={handleHovercardPointerDown}
     onkeydowncapture={handleKeyDown}
-    onkeyupcapture={handleKeyDown.keyup}
+    onkeyupcapture={handleShortcutKeyUp}
     onclick={hideContextMenu}
     oncontextmenu={handleGlobalContextMenu}
     onmousemove={handleGlobalMouseMove}
@@ -3306,7 +3333,7 @@
     onmouseup={handleGlobalMouseUp}
     onresize={handleResize}
     onfocus={updateWindowFocusState}
-    onblur={() => { handleKeyDown.reset(); updateWindowFocusState() }}
+    onblur={() => { handleKeyDown.reset(); if (!document.hasFocus()) tabHistorySwitcher.finish(); updateWindowFocusState() }}
     onvisibilitychange={() => { 
         // console.log('visibilitychange', document.visibilityState) 
     }}
@@ -4439,7 +4466,7 @@
 </div> -->
 
 <div
-    class:overlay-open={data.ui.viewMode === 'tile'}
+    class:overlay-open={data.ui.viewMode === 'tile' || tabHistorySwitch?.visible}
     class:leaflet-mode={data.ui.viewMode === 'leaflet'}
     class="controlled-frame-container browser-frame"
     class:window-controls-overlay={headerPartOfMain}
@@ -4455,14 +4482,15 @@
     bind:this={scrollContainer}
     style="box-sizing: border-box; --space-taken: {spaceTaken}px; --left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --left-pinned-count: {visibleLeftPinnedTabs.length}; --right-pinned-count: {visibleRightPinnedTabs.length}; --sidebar-width: {rightSidebarWidth}px; --sidebar-count: {openSidebars.size}; --tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;">
 
-    {#if data.ui.viewMode === 'tile'}
+    {#if data.ui.viewMode === 'tile' || tabHistorySwitch?.visible}
         <GridView 
+            historySwitch={tabHistorySwitch?.visible ? tabHistorySwitch : null}
             {controlledFrameSupported} 
             onFrameFocus={handleFrameFocus} 
             onFrameBlur={handleFrameBlur} 
             {getEnabledUserMods} 
             onTabActivate={activateTab} 
-            onViewModeChange={toggleViewMode} 
+            onViewModeChange={closeGridView} 
             onTabClose={closeTab} 
             leftPinnedWidth={leftPinnedWidth} 
             rightPinnedWidth={rightPinnedWidth} 

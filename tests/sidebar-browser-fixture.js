@@ -101,7 +101,8 @@ const modules = {
     'fixture-env': 'export const BROWSER = true, DEV = false, BUILD = false'
 }
 
-export async function withSidebarFixture(name, test) {
+export async function withSidebarFixture(name, test, extraEntry = '') {
+    const fixtureModules = { ...modules, entry: modules.entry + compileModule(extraEntry, { generate: 'client' }).js.code }
     const bundle = await rollup({
         input: 'entry',
         onwarn(warning) {
@@ -112,7 +113,7 @@ export async function withSidebarFixture(name, test) {
         plugins: [{
             name: 'sidebar-fixture',
             resolveId(source, importer) {
-                if (source in modules) {
+                if (source in fixtureModules) {
                     return source
                 }
                 if (source === 'esm-env') {
@@ -133,8 +134,8 @@ export async function withSidebarFixture(name, test) {
                 return createRequire(importer?.startsWith('/') ? importer : import.meta.url).resolve(source)
             },
             load(id) {
-                if (id in modules) {
-                    return modules[id]
+                if (id in fixtureModules) {
+                    return fixtureModules[id]
                 }
                 const source = Deno.readTextFileSync(id)
                 if (id.endsWith('.svelte')) {

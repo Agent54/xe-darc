@@ -54,8 +54,10 @@ export function createShortcutActions(data, ui) {
             case 'open-location': if (tab) ui.openLocation(tab); break
             case 'previous-active-tab':
                 ui.dismissHovercards()
-                data.previous()
+                if (ui.previousActiveTab) ui.previousActiveTab()
+                else data.previous()
                 break
+            case 'finish-tab-switch': ui.finishTabSwitch?.(); break
             case 'previous-tab':
             case 'next-tab': {
                 const tabs = ui.getTabs()

@@ -23,7 +23,7 @@ export const shortcuts = [
 
 export const shortcutActionIds = new Set([
     ...shortcuts.flatMap(binding => [binding.id, binding.holdId].filter(Boolean)),
-    'show-shortcuts', 'hide-shortcuts'
+    'show-shortcuts', 'hide-shortcuts', 'finish-tab-switch'
 ])
 
 export function getShortcutHelp(isMac) {
@@ -163,6 +163,10 @@ export function getFrameShortcutScript(tabId) {
         });
         window.addEventListener('keydown', handle, { capture: true, passive: false });
         window.addEventListener('keyup', handle.keyup, true);
+        // Release may arrive in a newly focused frame that did not receive Tab.
+        window.addEventListener('keyup', event => {
+            if (event.key === 'Control') console.log('iwa:shortcut:' + JSON.stringify({ id: 'finish-tab-switch', tabId: ${JSON.stringify(tabId)} }));
+        }, true);
         window.addEventListener('blur', handle.reset);
     })();`
 }
