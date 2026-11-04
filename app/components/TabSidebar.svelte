@@ -2145,6 +2145,22 @@
                                             </div>
                                         </span>
                                     </div>
+                                    {#if !tabSearchQuery && data.getSidebarItems(spaceId).at(-1)?.type !== 'divider'}
+                                        <div class="add-spacer-insertion">
+                                            <Tooltip text="Add spacer" position="top" delay={300}>
+                                                <button class="add-spacer-preview"
+                                                        onmousedown={(e) => {
+                                                            e.stopPropagation()
+                                                            startCreationDrag('divider', e.currentTarget, spaceId, e)
+                                                        }}
+                                                        onclick={() => { if (!didDragOccurred()) { addTabsListSpacer(spaceId) } }}
+                                                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
+                                                        aria-label="Add spacer">
+                                                    <span class="add-spacer-preview-line"></span>
+                                                </button>
+                                            </Tooltip>
+                                        </div>
+                                    {/if}
                                 </div>
                                 
                                 </div>
@@ -2210,22 +2226,6 @@
                                     <div class="pinned-tabs-divider" role="separator" aria-label="Pinned and normal tabs"
                                          data-pin-scope={sidebarPins.length ? undefined : 'sidebar'} data-pin-layout="rows" data-pin-hit-padding="8"></div>
                                     <div class="tabs-list-container">
-                                    {#if !tabSearchQuery && data.getSidebarItems(spaceId).at(-1)?.type !== 'divider' && !tabsListScrolled[spaceId]}
-                                        <div class="add-spacer-insertion">
-                                            <Tooltip text="Add spacer" position="top" delay={300}>
-                                                <button class="add-spacer-preview"
-                                                        onmousedown={(e) => {
-                                                            e.stopPropagation()
-                                                            startCreationDrag('divider', e.currentTarget, spaceId, e)
-                                                        }}
-                                                        onclick={() => { if (!didDragOccurred()) { addTabsListSpacer(spaceId) } }}
-                                                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
-                                                        aria-label="Add spacer">
-                                                    <span class="add-spacer-preview-line"></span>
-                                                </button>
-                                            </Tooltip>
-                                        </div>
-                                    {/if}
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list">
                                     {#each getActivitySidebarItems(data.getSidebarItems(spaceId).filter(item => item.type !== 'divider' || !tabSearchQuery), data.docs, data.ui.tabActivityMode, tabMatchesSearch) as item, i (item.id)}
@@ -3586,12 +3586,9 @@
     }
 
     .add-spacer-insertion {
-        position: absolute;
-        top: -8px;
-        left: 0;
-        right: 8px;
+        width: 100%;
         height: 16px;
-        z-index: 11;
+        flex-shrink: 0;
     }
 
     .add-spacer-insertion :global(.tooltip-container) {
@@ -4057,6 +4054,7 @@
         flex-shrink: 0;
         background: black;
         display: flex;
+        flex-direction: column;
         align-items: center;
     }
     
