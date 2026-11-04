@@ -4307,9 +4307,13 @@
         flex: 1;
         max-height: var(--tab-group-max-height, 206px);
         overflow-y: auto;
-        overscroll-behavior-y: contain;
         scrollbar-width: thin;
         scrollbar-color: #ffffff33 transparent;
+    }
+
+    .tab-group-scroll:global([data-scroll-top='true']) > .tab-group-content,
+    .tab-group-scroll:global([data-scroll-bottom='true']) > .tab-group-content {
+        overscroll-behavior-y: contain;
     }
 
     .tab-group-content .tab-item-container:not(.active):hover {

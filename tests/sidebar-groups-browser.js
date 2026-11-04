@@ -160,8 +160,37 @@ await withSidebarFixture('sidebar-groups', async ({ page }) => {
     await page.focus(resizeHandle)
     await page.keyboard.press('Home')
     await page.$eval(resizeHandle, button => button.blur())
+    await page.mouse.move(600, 500)
     await page.evaluate(() => window.flushSync(() => {
-        window.data.spaces.space.tabs = window.data.spaces.space.tabs.filter(tab => tab.tabGroupId !== 'resize')
+        for (let index = 0; index < 30; index++) {
+            const tab = { ...window.data.docs.outside, id: `scroll-${index}`, order: -30 - index }
+            window.data.docs[tab.id] = tab
+            window.data.spaces.space.tabs.push(tab)
+        }
     }))
-    console.log('Chromium: group activation previews, menus and shared mouse/keyboard resize limits pass')
+    await page.evaluate(() => {
+        document.querySelector('.space-content').scrollTop = 0
+        document.querySelector('[data-tab-group-id="group"] .tab-group-content').scrollTop = 0
+    })
+    await page.hover(`${groupContent} > :first-child`)
+    await page.mouse.wheel({ deltaY: 80 })
+    await page.waitForFunction(selector => document.querySelector(selector).scrollTop > 0, {}, groupContent)
+    assert.equal(await page.$eval('.space-content', list => list.scrollTop), 0, 'overflowing groups scroll internally')
+    await page.$eval(groupContent, content => { content.scrollTop = content.scrollHeight })
+    await page.mouse.wheel({ deltaY: 80 })
+    await new Promise(resolve => setTimeout(resolve, 200))
+    assert.equal(await page.$eval('.space-content', list => list.scrollTop), 0, 'overflowing groups contain scrolling at their boundary')
+
+    const shortGroup = '[data-tab-group-id="resize"] .tab-group-content'
+    await page.hover(`${shortGroup} > [data-tab-id="resize-0"]`)
+    await page.mouse.wheel({ deltaY: 80 })
+    await page.waitForFunction(() => document.querySelector('.space-content').scrollTop > 0)
+    assert.equal(await page.$eval(shortGroup, content => content.scrollTop), 0, 'groups without overflow pass scrolling to the parent list')
+    await page.hover(`${shortGroup} > [data-tab-id="resize-0"]`)
+    await page.mouse.wheel({ deltaY: -80 })
+    await page.waitForFunction(() => document.querySelector('.space-content').scrollTop === 0)
+    await page.evaluate(() => window.flushSync(() => {
+        window.data.spaces.space.tabs = window.data.spaces.space.tabs.filter(tab => tab.tabGroupId !== 'resize' && !tab.id.startsWith('scroll-'))
+    }))
+    console.log('Chromium: group activation previews, menus, resizing and nested scrolling pass')
 })
