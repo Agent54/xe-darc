@@ -8,6 +8,7 @@ import * as documentSort from '../app/lib/document-sort.js'
 import * as frameLifecycle from '../app/lib/frame-lifecycle.js'
 import * as svelteServer from 'svelte/internal/server'
 import * as svelteClient from 'svelte/internal/client'
+import { createTabHistorySwitcher } from '../app/lib/tab-activation-history.js'
 
 function compileStore(generate) {
     return compileModule(
@@ -723,6 +724,25 @@ Deno.test('each activation has transient scroll intent, including repeated selec
     assert.equal(data.ui.tabActivation.tabId, 'one')
     assert.equal(data.ui.tabActivation.source, 'navigation')
     assert.equal(writes.length, 0)
+})
+
+Deno.test('held Ctrl+Tab follows older activation entries while fresh quick switches retain previous-tab behavior', async () => {
+    const { data, refresh } = session({ tabs: [tab('one'), tab('two'), tab('three')], history: ['one', 'two', 'three', 'two'] })
+    await refresh()
+    let state
+    const switcher = createTabHistorySwitcher(data, value => { state = value }, { schedule: () => 1, cancel() {} })
+    switcher.previous()
+    assert.equal(data.spaceMeta.activeTabId, 'two')
+    const entries = state.entries
+    switcher.previous()
+    assert.equal(data.spaceMeta.activeTabId, 'three')
+    switcher.previous()
+    assert.equal(data.spaceMeta.activeTabId, 'two')
+    assert.equal(state.entries, entries)
+    switcher.finish()
+    switcher.previous()
+    assert.equal(data.spaceMeta.activeTabId, 'three')
+    switcher.finish()
 })
 
 Deno.test('quitting the app and launching its base URL restores the same window, space and active tab', async () => {

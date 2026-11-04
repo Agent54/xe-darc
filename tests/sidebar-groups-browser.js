@@ -5,7 +5,7 @@ await withSidebarFixture('sidebar-groups', async ({ page }) => {
     await page.$eval('.tab-group-toggle', button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
     for (const headerPart of ['.tab-group-main', '.tab-group-count', '.tab-group-toggle']) {
         await page.hover(headerPart)
-        await page.waitForFunction(() => getComputedStyle(document.querySelector('.group-activation-target')).backgroundColor === 'rgb(36, 36, 36)')
+        await page.waitForFunction(() => getComputedStyle(document.querySelector('.group-activation-target')).backgroundColor === 'rgb(24, 24, 24)')
         assert.equal(await page.$eval('.group-activation-target', row => row.dataset.tabId), 'group-two')
         assert.equal(await page.$eval('.tab-group-content > [data-tab-id="group-missing"]', row => getComputedStyle(row).backgroundColor), 'rgba(0, 0, 0, 0)')
     }
@@ -13,12 +13,12 @@ await withSidebarFixture('sidebar-groups', async ({ page }) => {
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.group-activation-target')).backgroundColor === 'rgba(0, 0, 0, 0)')
     await page.hover('.tab-group-main')
     await page.evaluate(() => window.flushSync(() => { window.data.spaces.space.activeTabsOrder = ['outside', 'group-missing'] }))
-    await page.waitForFunction(() => document.querySelector('.group-activation-target').dataset.tabId === 'group-missing' && getComputedStyle(document.querySelector('.group-activation-target')).backgroundColor === 'rgb(36, 36, 36)')
+    await page.waitForFunction(() => document.querySelector('.group-activation-target').dataset.tabId === 'group-missing' && getComputedStyle(document.querySelector('.group-activation-target')).backgroundColor === 'rgb(24, 24, 24)')
     assert.equal(await page.$eval('.tab-group-content > [data-tab-id="group-two"]', row => getComputedStyle(row).backgroundColor), 'rgba(0, 0, 0, 0)')
     await page.mouse.move(600, 500)
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.group-activation-target')).backgroundColor === 'rgba(0, 0, 0, 0)')
     await page.focus('.tab-group-toggle')
-    await page.waitForFunction(() => getComputedStyle(document.querySelector('.group-activation-target')).backgroundColor === 'rgb(36, 36, 36)')
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.group-activation-target')).backgroundColor === 'rgb(24, 24, 24)')
     await page.$eval('.tab-group-toggle', button => button.blur())
     for (const scrollTop of [0, 9999]) {
         await page.mouse.move(600, 500)
@@ -63,7 +63,7 @@ await withSidebarFixture('sidebar-groups', async ({ page }) => {
             frameBackground: getComputedStyle(wrapper).backgroundColor
         }
     }, borderPoint)
-    assert.deepEqual(borderPreview, { onBorder: true, visible: true, background: 'rgb(36, 36, 36)', transition: '0s', frameBackground: 'rgb(16, 16, 16)' }, 'border entry must reveal and highlight the remembered tab immediately with the subdued frame')
+    assert.deepEqual(borderPreview, { onBorder: true, visible: true, background: 'rgb(24, 24, 24)', transition: '0s', frameBackground: 'rgb(16, 16, 16)' }, 'border entry must reveal and highlight the remembered tab immediately with the subdued frame')
     await page.hover('.tab-group-content > [data-tab-id="group-tail-4"]')
     assert.equal(await page.$eval('.group-activation-target', row => getComputedStyle(row).backgroundColor), 'rgba(0, 0, 0, 0)', 'browsing individual rows must clear the header activation preview immediately')
     await page.$eval('.tab-group', header => header.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 100 })))

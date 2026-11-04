@@ -30,6 +30,10 @@ await withSidebarFixture('grid-history', async ({ page }) => {
     await page.screenshot({ path: '.cache/grid-history-wide.png' })
     await page.setViewport({ width: 420, height: 800 })
     await page.waitForFunction(() => !document.querySelector('.activation-history-entry .hovercard-content').classList.contains('history-beside'))
+    await page.waitForFunction(() => {
+        const rect = document.querySelector('.activation-history-entry.selected').getBoundingClientRect()
+        return rect.top >= 0 && rect.bottom <= innerHeight
+    })
     assert.equal(await page.$eval('.activation-history', node => node.scrollWidth <= node.clientWidth), true)
     await page.screenshot({ path: '.cache/grid-history-narrow.png' })
     const selected = await page.evaluate(() => window.data.spaceMeta.activeTabId)

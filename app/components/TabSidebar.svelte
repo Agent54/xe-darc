@@ -4314,10 +4314,6 @@
         overscroll-behavior-y: contain;
     }
 
-    .tab-group-content .tab-item-container:not(.active):hover {
-        background-color: var(--tab-group-tab-hover-background);
-    }
-
     .tab-group-wrapper.expanded:not(.active) .tab-item-container.group-activation-target,
     .tab-group-wrapper.expanded:not(.active):hover:not(:has(> .tab-group-scroll:hover)) .tab-item-container,
     .tab-group-wrapper.expanded:not(.active):has(> .tab-group :focus-visible) .tab-item-container {
@@ -4326,7 +4322,7 @@
 
     .tab-group-wrapper.expanded:not(.active):hover:not(:has(> .tab-group-scroll:hover)) .tab-item-container.group-activation-target,
     .tab-group-wrapper.expanded:not(.active):has(> .tab-group :focus-visible) .tab-item-container.group-activation-target {
-        background-color: var(--tab-group-tab-hover-background);
+        background-color: var(--tab-hover-background);
         border-color: var(--tab-hover-border);
     }
 
