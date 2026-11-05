@@ -391,10 +391,12 @@ function handleMouseMove(e) {
         const zoneWidth = areaWidth * 0.2
         if (mx <= areaLeft + zoneWidth && pending?.pinnedSide !== 'left') {
             state.sidepinZone = 'left'
+            state.dropTarget = { type: 'sidepin', side: 'left' }
             Object.assign(state.indicator, { visible: true, x: areaLeft + 8, y: (areaTop + window.innerHeight) / 2, width: 2, height: window.innerHeight - areaTop - 16 })
             return
         } else if (mx >= areaRight - zoneWidth && pending?.pinnedSide !== 'right') {
             state.sidepinZone = 'right'
+            state.dropTarget = { type: 'sidepin', side: 'right' }
             Object.assign(state.indicator, { visible: true, x: areaRight - 8, y: (areaTop + window.innerHeight) / 2, width: 2, height: window.innerHeight - areaTop - 16 })
             return
         }
@@ -489,6 +491,7 @@ function findGroupDropTarget(mx, my) {
     const scope = state.dragType === 'group' ? 'group' : 'tab'
     const topbar = document.querySelector('.tab-list.tabs')
     if (topbar && contains(topbar, 4)) {
+        if (topbar.dataset.singlePin === 'true') return { noop: true }
         if ([...topbar.querySelectorAll(':scope > .pinned-tab-container')].some(element => contains(element, 4))) {
             return null
         }

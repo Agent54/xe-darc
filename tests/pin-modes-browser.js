@@ -23,7 +23,32 @@ await withSidebarFixture('pin-modes', async ({ page }) => {
     assert.deepEqual(await page.$$eval('.fixed-sidebar-pins .tab-group-content [data-tab-id]', tabs => tabs.map(tab => tab.dataset.tabId)), memberIds, 'pinned group members keep manual order in activity mode')
     await page.click('.fixed-sidebar-pins .tab-group-toggle')
 
-    await page.click('.pinned-tab[data-tab-id="pin-one"]')
+    const group = await page.$eval('.fixed-sidebar-pins .tab-group-main', element => {
+        const rect = element.getBoundingClientRect()
+        return { x: rect.left + 40, y: rect.top + rect.height / 2 }
+    })
+    const originalNewTabTop = await page.$eval('.new-tab-row', element => element.getBoundingClientRect().top)
+    await page.mouse.move(group.x, group.y)
+    await page.mouse.down()
+    const divider = await page.$eval('.pinned-tabs-divider', element => {
+        const rect = element.getBoundingClientRect()
+        return { x: rect.left + 40, y: rect.top }
+    })
+    await page.mouse.move(divider.x, divider.y, { steps: 5 })
+    await page.waitForFunction(() => window.tabDrag.dropTarget?.pinScope === 'sidebar')
+    assert.equal(await page.evaluate(() => window.tabDrag.dropTarget.scope), 'group')
+    assert.equal(await page.evaluate(() => window.tabDrag.indicator.height), 2)
+    assert.equal(await page.$eval('.new-tab-row', element => element.getBoundingClientRect().top), originalNewTabTop, 'dragging keeps neighboring geometry fixed')
+    await page.mouse.up()
+    assert.equal(await page.evaluate(() => window.pinDrops.at(-1).scope), 'group')
+    await page.evaluate(() => window.flushSync(() => {
+        for (const tab of window.data.spaces.space.tabs.filter(tab => tab.tabGroupId)) tab.sidebarPinned = true
+    }))
+    assert.ok(await page.$('.space-tabs-sections .sidebar-pinned-tabs .tab-group-wrapper'), 'moving the group to scrolling pins retains its header')
+    assert.equal(await page.$('.fixed-sidebar-pins'), null)
+
+    await page.focus('.pinned-tab[data-tab-id="pin-one"]')
+    await page.keyboard.press('Enter')
     await page.waitForSelector('.pin-menu')
     assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), 'outside')
     assert.equal(await page.$eval('.pin-menu', panel => {
@@ -56,6 +81,18 @@ await withSidebarFixture('pin-modes', async ({ page }) => {
     await page.click('.pinned-tab[data-tab-id="pin-one"]')
     await page.waitForSelector('.pin-menu')
     assert.equal(await page.$eval('.pin-menu', element => element.getBoundingClientRect().width), savedWidth)
+    await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', { detail: { tabId: 'pin-one' } }))
+        window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', { detail: { tabId: 'outside' } }))
+    })
+    assert.ok(await page.$('.pin-menu'), 'a press in one guest and release in another does not count as an outside click')
+    await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent('darc-controlled-frame-mousedown', { detail: { tabId: 'outside' } }))
+        window.dispatchEvent(new CustomEvent('darc-controlled-frame-mouseup', { detail: { tabId: 'outside' } }))
+    })
+    await page.waitForSelector('.pin-menu', { hidden: true })
+    await page.click('.pinned-tab[data-tab-id="pin-one"]')
+    await page.waitForSelector('.pin-menu')
     await page.click('.pinned-tab[data-tab-id="pin-two"]')
     assert.equal(await page.$eval('.pin-menu', element => element.getBoundingClientRect().width), 480, 'menu widths belong to individual pins')
     await page.keyboard.press('Escape')

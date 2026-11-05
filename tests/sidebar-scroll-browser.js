@@ -90,6 +90,7 @@ await withSidebarFixture('sidebar-scroll', async ({ page }) => {
             await page.type('.tab-search-input', tabId)
             await page.click(`.tab-item-container[data-tab-id="${tabId}"] .tab-item-main`)
             await page.waitForFunction(tabId => window.data.spaceMeta.activeTabId === tabId, {}, tabId)
+            await new Promise(resolve => setTimeout(resolve, 100))
             if (clearMethod === 'button') {
                 await page.click('.tab-search-clear')
             } else {
@@ -115,6 +116,24 @@ await withSidebarFixture('sidebar-scroll', async ({ page }) => {
             }
         }
     }
+    await page.evaluate(() => window.flushSync(() => {
+        const data = window.data
+        const tab = { ...data.docs.outside, id: 'other-space-tab', title: 'other-space-tab', spaceId: 'other' }
+        data.docs[tab.id] = tab
+        data.spaces.other = { name: 'Other', pinnedTabs: [], activeTabsOrder: [tab.id], tabs: [tab] }
+        data.spaceMeta.spaceOrder.push('other')
+    }))
+    await page.click('.search-toggle-tab')
+    await page.type('.tab-search-input', 'other-space-tab')
+    await page.click('[data-tab-id="other-space-tab"] .tab-item-main')
+    await page.waitForFunction(() => window.data.spaceMeta.activeTabId === 'other-space-tab')
+    await new Promise(resolve => setTimeout(resolve, 100))
+    await page.click('.tab-search-clear')
+    await page.waitForFunction(() => {
+        const row = document.querySelector('[data-tab-id="other-space-tab"]').getBoundingClientRect()
+        const bounds = document.querySelector('.tab-content-container').getBoundingClientRect()
+        return row.left >= bounds.left - 1 && row.right <= bounds.right + 1 && row.top >= bounds.top - 1 && row.bottom <= bounds.bottom + 1
+    })
     await page.screenshot({ path: `${root}.cache/sidebar-new-tab-scroll.png` })
     console.log('Chromium: fixed header, independent tab scrolling, crowded pins, short windows, new-tab scroll preservation and active-tab reveal after clearing search pass')
 })

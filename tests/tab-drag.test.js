@@ -33,7 +33,7 @@ function dragHarness ({ topbar = null, lists = [], pinLists = [] } = {}) {
     }
     const api = vm.runInNewContext(source, {
         document,
-        window: { innerWidth: 1400, addEventListener(name, handler) { listeners.set(name, handler) }, removeEventListener(name) { listeners.delete(name) }, dispatchEvent() {} },
+        window: { innerWidth: 1400, innerHeight: 800, addEventListener(name, handler) { listeners.set(name, handler) }, removeEventListener(name) { listeners.delete(name) }, dispatchEvent() {} },
         requestAnimationFrame: callback => { animationFrame = callback; return 1 }, cancelAnimationFrame() {},
         setTimeout(callback, delay) { const id = nextTimerId++; timers.set(id, { callback, at: now + delay }); return id },
         clearTimeout(id) { timers.delete(id) }, CustomEvent: function () {}
@@ -71,6 +71,20 @@ function pinList (scope, children = []) {
     list.selectors[':scope > [data-tab-id]'] = children
     return list
 }
+
+Deno.test('webpage sidepin targets use white lines and do not reorder header pins', () => {
+    for (const [side, x] of [['left', 10], ['right', 1390]]) {
+        const harness = dragHarness()
+        harness.start('source', element('source', 400, 20, 100, 36))
+        harness.move(x, 300)
+        assert.equal(harness.tabDrag.indicator.width, 2)
+        assert.ok(harness.tabDrag.indicator.height > 100)
+        harness.release()
+        assert.equal(harness.drops[0].type, 'sidepin')
+        assert.equal(harness.drops[0].side, side)
+        assert.equal(harness.drops[0].beforeTabId, undefined)
+    }
+})
 
 Deno.test('creation drags place new tabs and spacers between neighbors without moving an existing item', () => {
     for (const type of ['tab', 'divider']) {
@@ -209,7 +223,7 @@ Deno.test('empty pin sections use existing edges without placeholder elements', 
         assert.equal(harness.drops[0].pinScope, scope)
         harness.start('source', element('source', 300, 200, 250, 36))
         harness.move(120, 155)
-        assert.equal(harness.tabDrag.dropTarget, null)
+        assert.equal(harness.tabDrag.dropTarget?.pinScope, undefined, 'empty sidebar pin targets do not extend beyond their edge hit area')
         harness.cancelDrag()
     }
 })

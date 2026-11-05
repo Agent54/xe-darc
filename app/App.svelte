@@ -111,7 +111,6 @@
     let menuPinAnchor = $state.raw(null)
     $effect(() => {
         data.spaceMeta.activeSpace
-        data.spaceMeta.activeTabId
         menuPin = null
     })
     let contextMenuOpenTime = 0
@@ -1450,6 +1449,11 @@
             })
         } else if (event.type === 'reorder') {
             const tab = data.docs[event.tabId]
+            const targetGroup = event.targetGroupTabId ? data.getTabGroup(event.targetGroupTabId, event.targetSpaceId || data.spaceMeta.activeSpace) : null
+            const targetPin = targetGroup?.tabs[0]?.sidebarPinned
+            if (targetPin && targetGroup.tabs.every(member => member.sidebarPinned === targetPin)) {
+                return data.pinSidebarTab({ ...event, fixed: targetPin === 'fixed' })
+            }
             if (tab?.sidebarPinned) await data.pinSidebarTab({ tabId: tab.id, pinned: false, scope: event.scope })
             if (tab?.pinned && event.scope !== 'group') {
                 if (isPinHidden(tab.id)) {
@@ -3455,7 +3459,7 @@
      
         <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: calc(var(--header-tabs-left) + {leftPinnedTabsWidth}px); width: calc(100% - var(--header-tabs-left) - {(devModeEnabled ? 346 : 316) + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
-        <ul class="tab-list tabs" data-group-tab-id={currentGroupTabId} data-space-id={data.spaceMeta.activeSpace} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
+        <ul class="tab-list tabs" data-group-tab-id={currentGroupTabId} data-single-pin={data.docs[currentGroupTabId]?.pinned === 'normal'} data-space-id={data.spaceMeta.activeSpace} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
                 {@const tab = data.docs[unpinned.id]}
                 {#if tab.type === 'divider'}

@@ -2492,38 +2492,3 @@ header:hover .hover-menu {
 }
 
 /* Sidepin drop zone overlay */
-.sidepin-drop-overlay {
-    position: fixed;
-    top: 50px;
-    bottom: 8px;
-    width: 20%;
-    z-index: 99998;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.35);
-    border: 2px dashed rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    backdrop-filter: blur(8px);
-    transform: translateZ(0);
-}
-
-.sidepin-drop-overlay.left {
-    left: calc(var(--left-inset, 0px) + 8px);
-}
-
-.sidepin-drop-overlay.right {
-    right: calc(var(--right-inset, 0px) + 8px);
-}
-
-.sidepin-drop-zone {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    color: rgba(255, 255, 255, 0.45);
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-}

@@ -1394,7 +1394,9 @@ function getLastActiveNonPinnedTabId(spaceId) {
 }
 
 function getCurrentGroupTabId(spaceId = spaceMeta.activeSpace) {
-    if (docs[spaceMeta.activeTabId]?.pinned === 'normal') return spaceMeta.activeTabId
+    const active = docs[spaceMeta.activeTabId]
+    if (spaceId === spaceMeta.activeSpace && active?.pinned === 'normal' &&
+        (getPinScope(active) === 'global' || active.spaceId === spaceId)) return active.id
     const items = spaces[spaceId]?.tabs || []
     const groups = getTabGroups(items)
     const members = new Set(groups.flatMap(group => group.tabs.map(tab => tab.id)))
@@ -1490,7 +1492,8 @@ const data = {
     getTabLastActiveAt,
     getTabGroups: (spaceId = spaceMeta.activeSpace) => getTabGroups(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId), docs),
     getSidebarItems: (spaceId = spaceMeta.activeSpace) => getSidebarItems(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId), docs),
-    getTabGroup: (tabId = spaceMeta.activeTabId, spaceId = spaceMeta.activeSpace) => docs[tabId]?.pinned === 'normal'
+    getTabGroup: (tabId = spaceMeta.activeTabId, spaceId = spaceMeta.activeSpace) => docs[tabId]?.pinned === 'normal' &&
+        (getPinScope(docs[tabId]) === 'global' || docs[tabId].spaceId === spaceId)
         ? { id: `pin:${tabId}`, tabGroupId: null, tabs: [docs[tabId]] }
         : getTabGroup(spaces[spaceId]?.tabs, tabId, getTabGroupHistory(spaceId), docs),
     updateTabGroup: (tabGroupId, properties, spaceId = spaceMeta.activeSpace) => {
@@ -1770,20 +1773,25 @@ const data = {
         putDocument(updated)
     },
 
-    pinSidebarTab({ tabId, pinned = true, fixed = false, beforeTabId, afterTabId, targetSpaceId, scope = 'tab', targetGroupTabId }) {
+    pinSidebarTab({ tabId, pinned = true, fixed = false, beforeTabId, afterTabId, targetSpaceId, scope = 'tab', targetGroupTabId, targetZone = 'sidebar' }) {
         const tab = docs[tabId]
         if (tab?.type !== 'tab' || tab.archive || tab.preview || tab.lightbox) {
             return Promise.resolve()
         }
-        const group = getTabGroup(spaces[tab.spaceId]?.tabs, tabId)
+        const group = getTabGroup(spaces[tab.spaceId]?.tabs, tabId, [], docs)
         const movingTabs = scope === 'group' && group ? group.tabs : [tab]
-        if (!pinned) return Promise.all(movingTabs.map(member => queueDocumentUpdate(member.id, { sidebarPinned: null, sidebarPinOrder: null })))
+        if (!pinned) {
+            const updates = movingTabs.map(member => ({ id: member.id, sidebarPinned: null, sidebarPinOrder: null,
+                ...(scope !== 'group' && group?.tabGroupId ? { tabGroupId: null, tabGroupOrder: null } : {}) }))
+            parkMovingFrames(updates, [group])
+            return Promise.all(updates.map(({ id, ...update }) => queueDocumentUpdate(id, update)))
+        }
         if (targetSpaceId && targetSpaceId !== tab.spaceId) {
             if (!spaces[targetSpaceId]) {
                 return Promise.resolve()
             }
             const moving = data.moveTab(tabId, { targetSpaceId, scope })
-            const pinning = data.pinSidebarTab({ tabId, fixed, beforeTabId, afterTabId, scope, targetGroupTabId })
+            const pinning = data.pinSidebarTab({ tabId, fixed, beforeTabId, afterTabId, scope, targetGroupTabId, targetZone })
             return Promise.all([moving, pinning])
         }
         const pins = getSidebarPinnedTabs(spaces[tab.spaceId]?.tabs, fixed)
@@ -1793,8 +1801,8 @@ const data = {
             ? orderBetween(docs[beforeTabId], docs[afterTabId], 'sidebarPinOrder')
             : previousOrder ?? Math.max(0, ...pins.map(pin => pin.sidebarPinOrder ?? pin.order ?? 0)) + 1
         const membership = targetGroupTabId ? planTabMove(spaces[tab.spaceId].tabs, spaces[tab.spaceId].tabs, tabId,
-            { targetSpaceId: tab.spaceId, targetGroupTabId, scope, sidebar: true, preservePins: true, beforeTabId, afterTabId }, () => crypto.randomUUID()) : []
-        const target = targetGroupTabId ? getTabGroup(spaces[tab.spaceId].tabs, targetGroupTabId) : null
+            { targetSpaceId: tab.spaceId, targetGroupTabId, scope, sidebar: targetZone === 'sidebar', preservePins: true, beforeTabId, afterTabId }, () => crypto.randomUUID()) : []
+        const target = targetGroupTabId ? getTabGroup(spaces[tab.spaceId].tabs, targetGroupTabId, [], docs) : null
         const rank = target?.tabs[0]?.sidebarPinOrder ?? sidebarPinOrder
         const updates = movingTabs.map(member => ({ id: member.id,
             sidebarPinned, sidebarPinOrder: rank, pinned: null, pinScope: null, pinOrder: null,
@@ -1805,7 +1813,11 @@ const data = {
             else updates.push(update)
         }
         parkMovingFrames(updates, [group, target])
-        return Promise.all(updates.map(({ id, ...update }) => queueDocumentUpdate(id, update)))
+        const saves = updates.map(({ id, ...update }) => queueDocumentUpdate(id, update))
+        if (membership.length && scope === 'group' && group?.tabGroupId && target?.tabGroupId && group.tabGroupId !== target.tabGroupId) {
+            saves.push(data.updateTabGroup(target.tabGroupId, { name: [target.name, group.name].filter(Boolean).join(' + ') || null }, tab.spaceId))
+        }
+        return Promise.all(saves)
     },
 
     pin({ tabId, pinned, scope, groupTabId, beforeTabId, afterTabId, targetSpaceId }) {
@@ -2507,6 +2519,8 @@ const data = {
     closeTab,
 
     moveTab: (tabId, { beforeTabId, afterTabId, targetSpaceId, targetGroupTabId, scope = 'tab', activityMode = false, placement = null, preservePins = false }) => {
+        // Full Normal pins own one-page virtual groups; they cannot acquire members.
+        if (docs[targetGroupTabId]?.pinned === 'normal') return Promise.resolve()
         const tabDoc = docs[tabId]
         if (!tabDoc) return
         // Only sidebar drops opt into activity ordering; title-bar drops keep traditional member order.

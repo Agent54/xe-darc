@@ -192,9 +192,14 @@
         tabGroupExpansion[id] = !expanded
     }
 
-    function handleAllTabGroupsToggle() {
+    async function handleAllTabGroupsToggle() {
+        const anchor = captureActiveTabScrollAnchor()
         allGroupsExpanded = !allGroupsExpanded
         tabGroupExpansion = {}
+        if (anchor) {
+            await tick()
+            restoreActiveTabScrollAnchor(anchor)
+        }
     }
 
     let groupResize = $state(null)
@@ -895,7 +900,7 @@
     }
 
     function finishPinClick(event, tab, spaceId) {
-        if ((event.detail === 0 || event.button === 0) && !didDragOccurred()) {
+        if (event.detail === 0 || (event.button === 0 && !didDragOccurred())) {
             if (tab.pinned === 'menu') onOpenPinMenu(tab.id, event.currentTarget)
             else activateTab(tab.id, spaceId)
         }
@@ -1127,6 +1132,54 @@
         }, 150) // Small delay after scroll stops
     }
     
+    function getActiveTabScrollRow() {
+        const tab = tabListRef?.querySelector('.space-tabs-sections .tab-item-container.active')
+        return tab && !tab.closest('[hidden]') ? tab : tabListRef?.querySelector('.space-tabs-sections .tab-group.active')
+    }
+
+    function captureActiveTabScrollAnchor() {
+        let row = getActiveTabScrollRow()
+        const tabsList = row?.closest('.space-tabs-sections')
+        if (!tabsList) return null
+        const innerList = row.closest('.tab-group-content, .sidebar-pinned-tabs')
+        if (innerList) {
+            const bounds = innerList.getBoundingClientRect()
+            const rect = row.getBoundingClientRect()
+            // A clipped group member is represented by its visible group header.
+            if (rect.bottom <= bounds.top || rect.top >= bounds.bottom) {
+                row = row.closest('.tab-group-wrapper')?.querySelector('.tab-group')
+                if (!row) return null
+            }
+        }
+        const bounds = tabsList.getBoundingClientRect()
+        const rect = row.getBoundingClientRect()
+        if (!bounds.height || rect.bottom <= bounds.top || rect.top >= bounds.bottom) return null
+        return { tabsList, tabId: data.spaceMeta.activeTabId, relativeTop: (rect.top - bounds.top) / bounds.height }
+    }
+
+    function restoreActiveTabScrollAnchor({ tabsList, tabId, relativeTop }) {
+        if (!tabsList.isConnected || data.spaceMeta.activeTabId !== tabId) return
+        const row = getActiveTabScrollRow()
+        if (row?.closest('.space-tabs-sections') !== tabsList) return
+        // Measure the natural row position rather than its sticky viewport position.
+        const previousPosition = row.style.position
+        row.style.position = 'relative'
+        // Expanding can mount the active member outside its group's inner viewport.
+        const innerList = row.closest('.tab-group-content, .sidebar-pinned-tabs')
+        if (innerList) {
+            const bounds = innerList.getBoundingClientRect()
+            const rect = row.getBoundingClientRect()
+            if (rect.top < bounds.top) innerList.scrollTop += rect.top - bounds.top
+            else if (rect.bottom > bounds.bottom) innerList.scrollTop += rect.bottom - bounds.bottom
+        }
+        const bounds = tabsList.getBoundingClientRect()
+        const targetTop = bounds.top + relativeTop * bounds.height
+        tabsList.scrollTop += row.getBoundingClientRect().top - targetTop
+        row.style.position = previousPosition
+        // Sticky positioning can apply an inset at the inner list's padded edge.
+        tabsList.scrollTop += row.getBoundingClientRect().top - targetTop
+    }
+
     // onMount(() => {
     //     scrollToCurrentSpace('instant')
     //     previousSpaceIndex = data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace)
@@ -1153,16 +1206,19 @@
         }
     })
 
-    // Watch for active tab changes and scroll to it in sidebar
+    // Reveal the active tab when it changes or search is cleared
     $effect(() => {
         const tabId = data.spaceMeta.activeTabId
-        if (!tabId || tabId === lastCreatedSidebarTabId) {
+        if (!tabId || tabSearchQuery || tabId === lastCreatedSidebarTabId) {
             return
         }
         lastCreatedSidebarTabId = null
         
         // Find the active tab element in the sidebar
         const timeout = setTimeout(() => {
+            if (!multiSpaceMode) {
+                scrollToCurrentSpace('instant')
+            }
             let activeTabElement = document.querySelector(`.sidebar .tab-item-container[data-tab-id="${tabId}"]`)
             if (!activeTabElement || activeTabElement.closest('.tab-group-scroll[hidden]')) {
                 activeTabElement = document.querySelector(`.sidebar [data-tab-group-id="${data.docs[tabId]?.tabGroupId}"]`)
@@ -3513,8 +3569,7 @@
         gap: 8px;
         flex-shrink: 0;
         min-height: 36px;
-        max-height: 40vh;
-        overflow-y: auto;
+        overflow: visible;
         overscroll-behavior-y: contain;
         scrollbar-width: thin;
         position: relative;
@@ -3545,6 +3600,7 @@
     .fixed-sidebar-pins {
         max-height: min(30vh, 240px);
         flex-shrink: 1;
+        overflow-y: auto;
     }
 
     .pinned-tabs-divider {

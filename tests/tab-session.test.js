@@ -2123,7 +2123,7 @@ Deno.test('repository installation waits for discovery and never pins a differen
 })
 
 Deno.test('full pins default to Normal and open alone without joining or replacing the previous group', async () => {
-    const { data, refresh, db, storage } = session({ tabs: [tab('one'), tab('two', defaultSpace, { tabGroupId: 'research' }), tab('three', defaultSpace, { tabGroupId: 'research' })], history: ['two'], runtime: 'client' })
+    const { data, refresh, db, storage } = session({ tabs: [tab('one'), tab('two', defaultSpace, { tabGroupId: 'research', tabGroupOrder: 0 }), tab('three', defaultSpace, { tabGroupId: 'research', tabGroupOrder: 1 })], history: ['two'], runtime: 'client' })
     await refresh()
     await data.pin({ tabId: 'one', scope: 'global' })
     assert.equal(data.docs.one.pinned, 'normal')
@@ -2132,6 +2132,8 @@ Deno.test('full pins default to Normal and open alone without joining or replaci
     assert.equal(data.getCurrentGroupTabId(), 'one')
     assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['one'])
     assert.equal(data.getSidepins().some(tab => tab.id === 'one'), false)
+    await data.moveTab('two', { targetGroupTabId: 'one' })
+    assert.equal(data.docs.two.tabGroupId, 'research', 'a Normal pin stays isolated when another tab targets its header')
     await data.setPinMenuWidth('one', 612)
     const restarted = session({ tabs: await Promise.all(['one', 'two', 'three'].map(id => db.get(id))), storage, runtime: 'client' })
     await restarted.refresh()
@@ -2171,6 +2173,19 @@ Deno.test('joining a fixed sidebar group pins the incoming member and moving it 
     assert.equal(data.docs.outside.tabGroupId, null)
     assert.equal(data.docs.one.sidebarPinned, 'fixed')
     assert.equal(data.docs.two.tabGroupId, 'research')
+    await data.pinSidebarTab({ tabId: 'two', pinned: false })
+    assert.equal(data.docs.two.tabGroupId, null, 'unpinning one member detaches it instead of splitting a group across sections')
+    assert.equal(data.docs.one.sidebarPinned, 'fixed')
+})
+
+Deno.test('title-bar member drops preserve pinned group location and traditional member order', async () => {
+    const { data, refresh, db } = session({ tabs: ['one', 'two', 'three'].map((id, index) => tab(id, defaultSpace, { tabGroupId: 'research', tabGroupOrder: index })), history: ['one'], runtime: 'client' })
+    await refresh()
+    await data.pinSidebarTab({ tabId: 'one', scope: 'group', fixed: true })
+    data.ui.tabActivityMode = true
+    await handleDrop(data)({ type: 'reorder', tabId: 'three', targetGroupTabId: 'one', afterTabId: 'one', targetSpaceId: defaultSpace, targetZone: 'topbar' })
+    assert.deepEqual(Array.from(data.getTabGroup('one').tabs, tab => tab.id), ['three', 'one', 'two'])
+    for (const id of ['one', 'two', 'three']) assert.equal((await db.get(id)).sidebarPinned, 'fixed')
 })
 
 Deno.test('sidebar pin order persists independently and new tabs always enter the normal section', async () => {

@@ -136,7 +136,9 @@
     }
 
     function setPinScope(scope) {
-        data.pin({ tabId: menu.tab.id, pinned: menu.tab.pinned, scope })
+        data.pin({ tabId: menu.tab.id, pinned: menu.tab.pinned, scope,
+            ...(scope !== 'global' ? { targetSpaceId: data.spaceMeta.activeSpace } : {}),
+            ...(scope === 'group' ? { groupTabId: data.getLastActiveNonPinnedTabId() } : {}) })
         onHide()
     }
     
@@ -500,9 +502,9 @@
                         onmouseup={() => setPin(scope, 'normal')}
                         onclick={(e) => { if (e.detail === 0) setPin(scope, 'normal') }}>{label}</button>
             {/each}
-        {:else if data.getPinScope(menu.tab) !== 'group'}
+        {:else}
             <div class="pin-scope-label">Pin display</div>
-            {#each [['normal', 'Normal'], ['menu', 'Menu'], ['left', 'Left sidepin'], ['right', 'Right sidepin']] as [mode, label]}
+            {#each (data.getPinScope(menu.tab) === 'group' ? [['left', 'Left sidepin'], ['right', 'Right sidepin']] : [['normal', 'Normal'], ['menu', 'Menu'], ['left', 'Left sidepin'], ['right', 'Right sidepin']]) as [mode, label]}
                 <button class="context-menu-item menu-action" type="button" role="menuitemradio" aria-checked={menu.tab.pinned === mode || (mode === 'left' && menu.tab.pinned === true)}
                         onmouseup={() => setPin(data.getPinScope(menu.tab), mode)}
                         onclick={(e) => { if (e.detail === 0) setPin(data.getPinScope(menu.tab), mode) }}>{label}</button>
@@ -542,7 +544,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
                         </svg>
                     </span>
-                    <span>Pin Left</span>
+                    <span>Left sidepin in {defaultPinScope === 'group' ? 'Tab Group' : 'Space'}</span>
                 </div>
                 <div class="context-menu-item context-menu-item-right menu-action"
                      role="menuitem"
@@ -554,7 +556,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
                         </svg>
                     </span>
-                    <span>Pin Right</span>
+                    <span>Right sidepin in {defaultPinScope === 'group' ? 'Tab Group' : 'Space'}</span>
                 </div>
             </div>
         {/if}

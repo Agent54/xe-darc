@@ -17,7 +17,7 @@ const source = compileModule(`
     }
 `, { generate: 'client', filename: 'tab-group-expansion.svelte.js' }).js.code
     .replace(/^import .*$/gm, '').replace(/^export /gm, '')
-const create = new Function('$', 'onMount', 'console', `${source}\nreturn create`)(svelteClient, () => {}, { warn() {} })
+const create = new Function('$', 'onMount', 'console', 'captureActiveTabScrollAnchor', `${source}\nreturn create`)(svelteClient, () => {}, { warn() {} }, () => null)
 
 function session(storage, id) {
     const identity = Promise.withResolvers()

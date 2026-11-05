@@ -63,7 +63,7 @@ const modules = {
                 <PinMenu tabId={menuPin} {anchor} onClose={() => { menuPin = null }}>
                     <div class="pin-menu-test-content" style="height:100%;display:flex;flex-direction:column">
                         <div class="pin-menu-test-title" style="height:32px;color:white">Pinned webpage</div>
-                        <iframe title="Pinned webpage" srcdoc="<body>Menu webpage</body>" style="width:100%;flex:1;border:0"></iframe>
+                        <iframe title="Pinned webpage" srcdoc="<body style='background:white;color:black'>Menu webpage</body>" style="width:100%;flex:1;border:0"></iframe>
                     </div>
                 </PinMenu>
             {/key}

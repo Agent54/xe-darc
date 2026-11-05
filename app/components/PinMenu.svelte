@@ -17,10 +17,18 @@
 
     onMount(() => {
         let pressed = null
-        function down(event) { pressed = event.target }
+        let pressedFrame = null
+        function down(event) { pressed = event.target; pressedFrame = null }
         function up(event) {
             if (pressed === event.target && !panel?.contains(event.target) && !anchor?.contains(event.target)) onClose()
             pressed = null
+            pressedFrame = null
+        }
+        function frameDown(event) { pressedFrame = event.detail.tabId }
+        function frameUp(event) {
+            if (pressedFrame === event.detail.tabId && event.detail.tabId !== tabId) onClose()
+            pressed = null
+            pressedFrame = null
         }
         function key(event) { if (event.key === 'Escape') onClose() }
         function resize() { viewport = { width: window.innerWidth, height: window.innerHeight } }
@@ -28,11 +36,17 @@
         window.addEventListener('mouseup', up, true)
         window.addEventListener('keydown', key)
         window.addEventListener('resize', resize)
+        window.addEventListener('darc-controlled-frame-mousedown', frameDown)
+        window.addEventListener('darc-controlled-frame-mouseup', frameUp)
+        window.addEventListener('darc-dismiss-overlays', onClose)
         return () => {
             window.removeEventListener('mousedown', down, true)
             window.removeEventListener('mouseup', up, true)
             window.removeEventListener('keydown', key)
             window.removeEventListener('resize', resize)
+            window.removeEventListener('darc-controlled-frame-mousedown', frameDown)
+            window.removeEventListener('darc-controlled-frame-mouseup', frameUp)
+            window.removeEventListener('darc-dismiss-overlays', onClose)
         }
     })
 
