@@ -83,6 +83,38 @@ await withSidebarFixture('sidebar-scroll', async ({ page }) => {
     await page.waitForSelector('.tabs-list > [data-tab-id="new-normal-2"]')
     assert.equal(await page.$eval('.space-tabs-sections', el => el.scrollTop), beforeCreate)
     assert.equal(await buttonVisible(), true, 'New Tab stays visible even at the bottom of the list')
+    for (const tabId of ['normal-59', 'group-tail-5']) {
+        for (const clearMethod of ['button', 'Escape', 'Backspace']) {
+            await page.evaluate(() => window.flushSync(() => { window.data.activate('outside') }))
+            await page.click('.search-toggle-tab')
+            await page.type('.tab-search-input', tabId)
+            await page.click(`.tab-item-container[data-tab-id="${tabId}"] .tab-item-main`)
+            await page.waitForFunction(tabId => window.data.spaceMeta.activeTabId === tabId, {}, tabId)
+            if (clearMethod === 'button') {
+                await page.click('.tab-search-clear')
+            } else {
+                await page.focus('.tab-search-input')
+                if (clearMethod === 'Backspace') {
+                    await page.$eval('.tab-search-input', input => input.select())
+                }
+                await page.keyboard.press(clearMethod)
+            }
+            await page.waitForFunction(tabId => {
+                const tab = document.querySelector(`.tab-item-container[data-tab-id="${tabId}"]`)
+                const row = tab?.getBoundingClientRect()
+                const lists = [tab?.closest('.space-tabs-sections'), tab?.closest('.tab-group-content')].filter(Boolean)
+                return !document.querySelector('.tab-content-container.searching') && row && lists.every(list => {
+                    const bounds = list.getBoundingClientRect()
+                    return row.top >= bounds.top - 1 && row.bottom <= bounds.bottom + 1
+                })
+            }, {}, tabId)
+            assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), tabId, `${clearMethod} must reveal the selected tab without changing activation`)
+            assert.equal(await buttonVisible(), true, 'clearing search preserves the sticky New Tab button')
+            if (clearMethod === 'Backspace') {
+                await page.keyboard.press('Escape')
+            }
+        }
+    }
     await page.screenshot({ path: `${root}.cache/sidebar-new-tab-scroll.png` })
-    console.log('Chromium: fixed header, independent tab scrolling, crowded pins, short windows and new-tab scroll preservation pass')
+    console.log('Chromium: fixed header, independent tab scrolling, crowded pins, short windows, new-tab scroll preservation and active-tab reveal after clearing search pass')
 })

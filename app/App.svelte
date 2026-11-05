@@ -17,6 +17,7 @@
     import TabGroupPreview from './components/TabGroupPreview.svelte'
     import TabHoverCard from './components/TabHoverCard.svelte'
     import TabContextMenu from './components/TabContextMenu.svelte'
+    import PinMenu from './components/PinMenu.svelte'
     import AppearanceContextMenu from './components/AppearanceContextMenu.svelte'
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
@@ -106,6 +107,13 @@
     let hovercardPosition = $state({ x: 0, y: 0 })
     let isTrashItemHover = $state(false)
     let contextMenu = $state({ visible: false, x: 0, y: 0, tab: null, index: null })
+    let menuPin = $state(null)
+    let menuPinAnchor = $state.raw(null)
+    $effect(() => {
+        data.spaceMeta.activeSpace
+        data.spaceMeta.activeTabId
+        menuPin = null
+    })
     let contextMenuOpenTime = 0
     let hovercardCheckInterval = null
     let isDragEnabled = $state(true)
@@ -1399,7 +1407,7 @@
                 if (event.pinScope === 'sidebar' || event.pinScope === 'sidebar-fixed') {
                     await data.pinSidebarTab({ ...event, tabId: item.id, fixed: event.pinScope === 'sidebar-fixed' })
                 } else {
-                    await data.pin({ tabId: item.id, pinned: 'left', scope: event.pinScope, targetSpaceId: spaceId, beforeTabId: event.beforeTabId, afterTabId: event.afterTabId })
+                    await data.pin({ tabId: item.id, pinned: 'normal', scope: event.pinScope, targetSpaceId: spaceId, beforeTabId: event.beforeTabId, afterTabId: event.afterTabId })
                 }
             } else {
                 await data.moveTab(item.id, {
@@ -1424,7 +1432,7 @@
                 return
             }
             data.pin({
-                tabId: tab.id, pinned: tab.pinned || 'left', scope: event.pinScope,
+                tabId: tab.id, pinned: data.getPinScope(tab) === event.pinScope ? tab.pinned || 'normal' : 'normal', scope: event.pinScope,
                 targetSpaceId: event.targetSpaceId,
                 beforeTabId: event.beforeTabId, afterTabId: event.afterTabId
             })
@@ -1435,13 +1443,14 @@
 
             data.pin({
                 tabId: tab.id, pinned: side,
-                scope: data.getPinScope(tab) === 'global' ? 'group' : undefined,
+                scope: tab.pinned ? data.getPinScope(tab) : 'group',
                 groupTabId: data.getCurrentGroupTabId(),
-                targetSpaceId: data.spaceMeta.activeSpace,
+                targetSpaceId: tab.pinned && data.getPinScope(tab) === 'global' ? undefined : data.spaceMeta.activeSpace,
                 beforeTabId: event.beforeTabId, afterTabId: event.afterTabId
             })
         } else if (event.type === 'reorder') {
             const tab = data.docs[event.tabId]
+            if (tab?.sidebarPinned) await data.pinSidebarTab({ tabId: tab.id, pinned: false, scope: event.scope })
             if (tab?.pinned && event.scope !== 'group') {
                 if (isPinHidden(tab.id)) {
                     delete invisiblePins[tab.id]
@@ -3183,9 +3192,9 @@
 
     let currentGroupTabId = $derived(data.getCurrentGroupTabId())
     let currentTabGroup = $derived(data.getTabGroup(currentGroupTabId))
-    let unpinnedTabs = $derived((currentTabGroup?.tabs || []).filter(tab => !tab.pinned && !closed[tab._rev]))
+    let unpinnedTabs = $derived((currentTabGroup?.tabs || []).filter(tab => (!tab.pinned || tab.pinned === 'normal') && !closed[tab._rev]))
     let unpinnedTabCount = $derived(unpinnedTabs.filter(tab => tab.type === 'tab').length)
-    let spaceSidepins = $derived([...tabs.filter(tab => tab.type === 'tab' && tab.pinned && data.getPinScope(tab) !== 'global' && !tab.archive && !tab.preview && !tab.lightbox), ...data.spaceMeta.globalPins])
+    let spaceSidepins = $derived([...tabs.filter(tab => tab.type === 'tab' && (tab.pinned === true || tab.pinned === 'left' || tab.pinned === 'right') && data.getPinScope(tab) !== 'global' && !tab.archive && !tab.preview && !tab.lightbox), ...data.spaceMeta.globalPins.filter(tab => tab.pinned === true || tab.pinned === 'left' || tab.pinned === 'right')])
     let scopedPins = $derived(data.getSidepins().filter(tab => !closed[tab._rev]))
     let leftPinnedTabs = $derived(scopedPins.filter(tab => tab.pinned === true || tab.pinned === 'left'))
     let rightPinnedTabs = $derived(scopedPins.filter(tab => tab.pinned === 'right'))
@@ -4381,6 +4390,7 @@
 {/if}
 
 <TabSidebar {isDragEnabled} onShowApps={toggleAppsOverlay} 
+           onOpenPinMenu={(tabId, anchor) => { window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards')); menuPinAnchor = anchor; menuPin = menuPin === tabId ? null : tabId }}
            onSettings={switchToSettings}
            onHeaderContextMenu={(event) => openAppearanceMenu(event, 'tab-sidebar')}
            headerMenuOpen={appearanceMenu?.area === 'tab-sidebar'}
@@ -4552,7 +4562,15 @@
 
 </div>
 
-<CertificateMonitor 
+{#if menuPin && data.docs[menuPin]?.pinned === 'menu' && !data.docs[menuPin]?.archive}
+    {#key menuPin}
+        <PinMenu tabId={menuPin} anchor={menuPinAnchor} onClose={() => { menuPin = null }}>
+            <Frame tabId={menuPin} style="width:100%;height:100%;margin:0" {controlledFrameSupported} {headerPartOfMain} userMods={getEnabledUserMods(data.docs[menuPin])} {statusLightsEnabled} />
+        </PinMenu>
+    {/key}
+{/if}
+
+<CertificateMonitor
     bind:certificateMonitorForTab={certificateMonitorForTab} 
 />
 
@@ -4918,25 +4936,6 @@
             </svg>
         </div>
     {/if}
-{/if}
-
-{#if tabDrag.active && tabDrag.sidepinZone && !tabDrag.indicator.visible}
-    {@const leftInset = tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}
-    {@const rightInset = rightSidebarWidth}
-    <div class="sidepin-drop-overlay {tabDrag.sidepinZone}" style="--left-inset: {leftInset}px; --right-inset: {rightInset}px;">
-        <div class="sidepin-drop-zone">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                {#if tabDrag.sidepinZone === 'left'}
-                    <rect x="3" y="3" width="7" height="18" rx="2" />
-                    <rect x="14" y="3" width="7" height="18" rx="2" opacity="0.3" />
-                {:else}
-                    <rect x="3" y="3" width="7" height="18" rx="2" opacity="0.3" />
-                    <rect x="14" y="3" width="7" height="18" rx="2" />
-                {/if}
-            </svg>
-            <span>Pin {tabDrag.sidepinZone}</span>
-        </div>
-    </div>
 {/if}
 
 <style>

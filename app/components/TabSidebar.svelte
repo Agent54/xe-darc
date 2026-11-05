@@ -22,6 +22,7 @@
         onReload = null,
         onCloseTab = null,
         onRevealPinnedTab = () => {},
+        onOpenPinMenu = () => {},
         onSettings = null,
         onHeaderContextMenu = () => {},
         headerMenuOpen = false,
@@ -36,7 +37,7 @@
     import TabGroupPreview from './TabGroupPreview.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
     import { observeScrollEdges } from '../lib/scroll-edges.js'
-    import { getSidebarPinnedTabs } from '../lib/tab-groups.js'
+    import { getSidebarPinnedItems } from '../lib/tab-groups.js'
     import { getActivitySidebarItems, getActivityGroupTabs } from '../lib/tab-activity.js'
     import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
     import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
@@ -868,6 +869,7 @@
         
         data.activateSpace(spaceId)
         const tab = data.docs[tabId]
+        if (tab?.pinned === 'menu') return
         if (tab?.pinned) {
             onRevealPinnedTab(tabId)
         }
@@ -890,14 +892,12 @@
         event.stopPropagation()
         const wasActive = tab.id === data.spaceMeta.activeTabId
         startTabDrag(tab.id, event.currentTarget, 'sidebar', tab.spaceId, event, wasActive, tab.pinned)
-        if (!wasActive && !multiSpaceMode) {
-            setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150))
-        }
     }
 
     function finishPinClick(event, tab, spaceId) {
-        if (event.button === 0 && !didDragOccurred() && (multiSpaceMode || tabDrag.wasAlreadyActive)) {
-            activateTab(tab.id, spaceId)
+        if ((event.detail === 0 || event.button === 0) && !didDragOccurred()) {
+            if (tab.pinned === 'menu') onOpenPinMenu(tab.id, event.currentTarget)
+            else activateTab(tab.id, spaceId)
         }
     }
 
@@ -1936,8 +1936,8 @@
                     <div class="tab-content-track" class:multi-space={multiSpaceMode}>
                         {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
                             {@const spacePins = data.getSpacePins(spaceId)}
-                            {@const sidebarPins = getSidebarPinnedTabs(data.spaces[spaceId]?.tabs)}
-                            {@const fixedSidebarPins = getSidebarPinnedTabs(data.spaces[spaceId]?.tabs, true)}
+                            {@const sidebarPins = getSidebarPinnedItems(data.spaces[spaceId]?.tabs, false, data.spaces[spaceId]?.activeTabsOrder?.map(entry => typeof entry === 'string' ? entry : entry.id), data.docs)}
+                            {@const fixedSidebarPins = getSidebarPinnedItems(data.spaces[spaceId]?.tabs, true, data.spaces[spaceId]?.activeTabsOrder?.map(entry => typeof entry === 'string' ? entry : entry.id), data.docs)}
                             {#if spaceHasMatchingTabs(spaceId)}
                                 {#if multiSpaceMode && index > 0}
                                     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -2059,7 +2059,7 @@
                                     <div class="sidebar-pinned-tabs fixed-sidebar-pins" data-pin-scope="sidebar-fixed" data-pin-layout="rows"
                                          role="list" aria-label="Always visible pinned tabs">
                                         {#each fixedSidebarPins as tab, i (tab.id)}
-                                            {@render sidebarTab(tab, i)}
+                                            {@render sidebarItem(tab, i, true)}
                                         {/each}
                                     </div>
                                 {/if}
@@ -2184,21 +2184,7 @@
                                             {/if}
                                         {/if}
                                     {/snippet}
-                                <div class="space-tabs-sections" onscroll={handleTabsListScroll}>
-                                    {#if sidebarPins.length}
-                                    <div class="sidebar-pinned-tabs" data-pin-scope="sidebar" data-pin-layout="rows"
-                                         role="list" aria-label="Pinned tabs">
-                                        {#each sidebarPins as tab, i (tab.id)}
-                                            {@render sidebarTab(tab, i)}
-                                        {/each}
-                                    </div>
-                                    {/if}
-                                    <div class="pinned-tabs-divider" role="separator" aria-label="Pinned and normal tabs"
-                                         data-pin-scope={sidebarPins.length ? undefined : 'sidebar'} data-pin-layout="rows" data-pin-hit-padding="8"></div>
-                                    <div class="tabs-list-container">
-                                    <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
-                                    <div class="tabs-list">
-                                    {#each getActivitySidebarItems(data.getSidebarItems(spaceId).filter(item => item.type !== 'divider' || !tabSearchQuery), data.docs, data.ui.tabActivityMode, tabMatchesSearch) as item, i (item.id)}
+                                    {#snippet sidebarItem(item, i, pinnedSection = false)}
                                         {#if item.type === 'divider'}
                                             {@render sidebarTab(item, i)}
                                         {:else if item.tabs.some(tabMatchesSearch)}
@@ -2209,7 +2195,7 @@
                                                 {@const expanded = tabGroupExpansion[expansionId] ?? allGroupsExpanded}
                                                 {@const active = item.tabs.some(tab => tab.id === data.spaceMeta.activeTabId)}
                                                 {@const activationTab = data.getGroupActiveTab(item, spaceId)}
-                                                {@const sidebarGroupTabs = getActivityGroupTabs(item.tabs, data.docs, data.ui.tabActivityMode)}
+                                                {@const sidebarGroupTabs = getActivityGroupTabs(item.tabs, data.docs, !pinnedSection && data.ui.tabActivityMode)}
                                                 {@const recentEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                                                 {@const spaceActive = spaceId !== data.spaceMeta.activeSpace && item.tabs.some(tab => tab.id === (typeof recentEntry === 'string' ? recentEntry : recentEntry?.id))}
                                                 <div class="tab-group-wrapper" class:expanded class:active class:custom-group-height={tabGroupMaxHeight > defaultTabGroupMaxHeight} class:group-resizing={groupResize?.groupId === expansionId} style:--tab-group-max-height="{tabGroupMaxHeight}px" class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
@@ -2250,6 +2236,23 @@
                                                 </div>
                                             {/if}
                                         {/if}
+                                    {/snippet}
+                                <div class="space-tabs-sections" onscroll={handleTabsListScroll}>
+                                    {#if sidebarPins.length}
+                                    <div class="sidebar-pinned-tabs" data-pin-scope="sidebar" data-pin-layout="rows"
+                                         role="list" aria-label="Scrolling sidebar pins">
+                                        {#each sidebarPins as item, i (item.id)}
+                                            {@render sidebarItem(item, i, true)}
+                                        {/each}
+                                    </div>
+                                    {/if}
+                                    <div class="pinned-tabs-divider" role="separator" aria-label="Pinned and normal tabs"
+                                         data-pin-scope={sidebarPins.length ? undefined : 'sidebar'} data-pin-layout="rows" data-pin-hit-padding="8"></div>
+                                    <div class="tabs-list-container">
+                                    <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
+                                    <div class="tabs-list">
+                                    {#each getActivitySidebarItems(data.getSidebarItems(spaceId).filter(item => item.type !== 'divider' || !tabSearchQuery), data.docs, data.ui.tabActivityMode, tabMatchesSearch) as item, i (item.id)}
+                                        {@render sidebarItem(item, i)}
                                     {/each}
 
                                     {#if !tabSearchQuery}

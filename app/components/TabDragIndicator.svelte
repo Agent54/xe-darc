@@ -3,15 +3,14 @@
 
     const pinLabel = $derived(tabDrag.dropTarget?.type === 'pin' ? {
         'sidebar-fixed': 'Pin above New Tab',
-        sidebar: 'Pin above divider',
+        sidebar: 'Pin in scrolling sidebar',
         space: 'Pin to space',
         global: 'Pin globally'
-    }[tabDrag.dropTarget.pinScope] : null)
+    }[tabDrag.dropTarget.pinScope] : tabDrag.sidepinZone ? `Pin ${tabDrag.sidepinZone}` : null)
 </script>
 
 {#if tabDrag.indicator.visible}
     <div class="tab-drag-indicator"
-         class:joining-group={tabDrag.dropTarget?.targetGroupTabId && tabDrag.indicator.height > 2 && tabDrag.indicator.width > 2}
          style:left="{tabDrag.indicator.x}px" style:top="{tabDrag.indicator.y}px"
          style:width="{tabDrag.indicator.width}px" style:height="{tabDrag.indicator.height}px">
         {#if pinLabel}
@@ -28,12 +27,6 @@
         z-index: 99999;
         pointer-events: none;
         transform: translate(-50%, -50%);
-    }
-
-    .joining-group {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.65);
-        border-radius: 10px;
     }
 
     .pin-label {

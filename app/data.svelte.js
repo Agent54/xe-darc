@@ -7,7 +7,7 @@ import { tick } from 'svelte'
 import { getFrameMoveIds } from './lib/frame-lifecycle.js'
 import { getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
 import { withDocumentSort } from './lib/document-sort.js'
-import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
+import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getSpacePins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
@@ -906,7 +906,7 @@ const refresh = throttle(async function (spaceId) {
             const lastEntry = getSpaceActiveHistoryEntries(spaceMeta.activeSpace)[0]
             const lastTab = docs[getTabIdFromActiveHistoryEntry(lastEntry)]
             const lastGroupPin = lastTab?.pinned && getPinScope(lastTab) === 'group' && getTabGroup(spaces[spaceMeta.activeSpace].tabs, lastTab.id) ? lastTab.id : null
-            const lastActiveTabId = getLastActiveNonPinnedTabId(spaceMeta.activeSpace) || lastGroupPin
+            const lastActiveTabId = lastTab?.pinned === 'normal' && !lastTab.archive ? lastTab.id : getLastActiveNonPinnedTabId(spaceMeta.activeSpace) || lastGroupPin
             if (lastActiveTabId) {
                 spaceMeta.activeTabId = lastActiveTabId
                 markTabActive(spaceMeta.activeSpace, lastActiveTabId)
@@ -1394,6 +1394,7 @@ function getLastActiveNonPinnedTabId(spaceId) {
 }
 
 function getCurrentGroupTabId(spaceId = spaceMeta.activeSpace) {
+    if (docs[spaceMeta.activeTabId]?.pinned === 'normal') return spaceMeta.activeTabId
     const items = spaces[spaceId]?.tabs || []
     const groups = getTabGroups(items)
     const members = new Set(groups.flatMap(group => group.tabs.map(tab => tab.id)))
@@ -1484,12 +1485,14 @@ const data = {
     getLastActiveNonPinnedTabId,
     getCurrentGroupTabId,
     getPinScope,
-    getSidepins: (spaceId = spaceMeta.activeSpace, groupTabId = getCurrentGroupTabId(spaceId)) => [...getSidepins(spaces[spaceId]?.tabs, groupTabId), ...spaceMeta.globalPins],
-    getSpacePins: (spaceId = spaceMeta.activeSpace) => getSidepins(spaces[spaceId]?.tabs, null),
+    getSidepins: (spaceId = spaceMeta.activeSpace, groupTabId = getCurrentGroupTabId(spaceId)) => [...getSidepins(spaces[spaceId]?.tabs, groupTabId), ...spaceMeta.globalPins.filter(tab => tab.pinned === true || tab.pinned === 'left' || tab.pinned === 'right')],
+    getSpacePins: (spaceId = spaceMeta.activeSpace) => getSpacePins(spaces[spaceId]?.tabs),
     getTabLastActiveAt,
     getTabGroups: (spaceId = spaceMeta.activeSpace) => getTabGroups(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId), docs),
     getSidebarItems: (spaceId = spaceMeta.activeSpace) => getSidebarItems(spaces[spaceId]?.tabs, getTabGroupHistory(spaceId), docs),
-    getTabGroup: (tabId = spaceMeta.activeTabId, spaceId = spaceMeta.activeSpace) => getTabGroup(spaces[spaceId]?.tabs, tabId, getTabGroupHistory(spaceId), docs),
+    getTabGroup: (tabId = spaceMeta.activeTabId, spaceId = spaceMeta.activeSpace) => docs[tabId]?.pinned === 'normal'
+        ? { id: `pin:${tabId}`, tabGroupId: null, tabs: [docs[tabId]] }
+        : getTabGroup(spaces[spaceId]?.tabs, tabId, getTabGroupHistory(spaceId), docs),
     updateTabGroup: (tabGroupId, properties, spaceId = spaceMeta.activeSpace) => {
         const _id = tabGroupMetadataId(tabGroupId)
         if (!tabGroupId || !spaces[spaceId]) return Promise.resolve()
@@ -1510,6 +1513,8 @@ const data = {
             .map(key => [key, typeof properties[key] === 'string' ? properties[key].trim() || null : null]))
         return queueDocumentUpdate(tabId, update)
     },
+    setPinMenuWidth: (tabId, width) => Number.isFinite(width) && width >= 240
+        ? queueDocumentUpdate(tabId, { pinMenuWidth: width }) : Promise.resolve(),
     getGroupActiveTab: (group, spaceId = spaceMeta.activeSpace) => {
         const history = spaces[spaceId]?.activeTabsOrder || []
         for (const entry of history) {
@@ -1765,20 +1770,20 @@ const data = {
         putDocument(updated)
     },
 
-    pinSidebarTab({ tabId, pinned = true, fixed = false, beforeTabId, afterTabId, targetSpaceId }) {
+    pinSidebarTab({ tabId, pinned = true, fixed = false, beforeTabId, afterTabId, targetSpaceId, scope = 'tab', targetGroupTabId }) {
         const tab = docs[tabId]
         if (tab?.type !== 'tab' || tab.archive || tab.preview || tab.lightbox) {
             return Promise.resolve()
         }
-        if (!pinned) {
-            return queueDocumentUpdate(tabId, { sidebarPinned: null, sidebarPinOrder: null })
-        }
+        const group = getTabGroup(spaces[tab.spaceId]?.tabs, tabId)
+        const movingTabs = scope === 'group' && group ? group.tabs : [tab]
+        if (!pinned) return Promise.all(movingTabs.map(member => queueDocumentUpdate(member.id, { sidebarPinned: null, sidebarPinOrder: null })))
         if (targetSpaceId && targetSpaceId !== tab.spaceId) {
             if (!spaces[targetSpaceId]) {
                 return Promise.resolve()
             }
-            const moving = data.moveTab(tabId, { targetSpaceId })
-            const pinning = data.pinSidebarTab({ tabId, fixed, beforeTabId, afterTabId })
+            const moving = data.moveTab(tabId, { targetSpaceId, scope })
+            const pinning = data.pinSidebarTab({ tabId, fixed, beforeTabId, afterTabId, scope, targetGroupTabId })
             return Promise.all([moving, pinning])
         }
         const pins = getSidebarPinnedTabs(spaces[tab.spaceId]?.tabs, fixed)
@@ -1787,21 +1792,34 @@ const data = {
         const sidebarPinOrder = beforeTabId || afterTabId
             ? orderBetween(docs[beforeTabId], docs[afterTabId], 'sidebarPinOrder')
             : previousOrder ?? Math.max(0, ...pins.map(pin => pin.sidebarPinOrder ?? pin.order ?? 0)) + 1
-        const update = { sidebarPinned, sidebarPinOrder, pinned: null, pinScope: null, pinOrder: null }
-        parkMovingFrames([{ id: tabId, ...update }])
-        return queueDocumentUpdate(tabId, update)
+        const membership = targetGroupTabId ? planTabMove(spaces[tab.spaceId].tabs, spaces[tab.spaceId].tabs, tabId,
+            { targetSpaceId: tab.spaceId, targetGroupTabId, scope, sidebar: true, preservePins: true, beforeTabId, afterTabId }, () => crypto.randomUUID()) : []
+        const target = targetGroupTabId ? getTabGroup(spaces[tab.spaceId].tabs, targetGroupTabId) : null
+        const rank = target?.tabs[0]?.sidebarPinOrder ?? sidebarPinOrder
+        const updates = movingTabs.map(member => ({ id: member.id,
+            sidebarPinned, sidebarPinOrder: rank, pinned: null, pinScope: null, pinOrder: null,
+            ...(!targetGroupTabId && scope !== 'group' ? { tabGroupId: null, tabGroupOrder: null } : {}) }))
+        for (const update of membership) {
+            const existing = updates.find(member => member.id === update.id)
+            if (existing) Object.assign(existing, update)
+            else updates.push(update)
+        }
+        parkMovingFrames(updates, [group, target])
+        return Promise.all(updates.map(({ id, ...update }) => queueDocumentUpdate(id, update)))
     },
 
     pin({ tabId, pinned, scope, groupTabId, beforeTabId, afterTabId, targetSpaceId }) {
         const tab = docs[tabId]
         if (tab?.type !== 'tab') return Promise.resolve()
-        if (!pinned) {
+        if (pinned === null || pinned === false) {
             const update = { pinned: null, pinScope: null, pinOrder: null }
             parkMovingFrames([{ id: tabId, ...update }])
             return queueDocumentUpdate(tabId, update)
         }
 
         const pinScope = scope || (tab.pinned ? getPinScope(tab) : 'group')
+        pinned ||= pinScope === 'group' ? 'left' : 'normal'
+        if (pinScope === 'group' && !['left', 'right', true].includes(pinned)) pinned = 'left'
         if (targetSpaceId && targetSpaceId !== tab.spaceId) {
             if (!spaces[targetSpaceId]) return Promise.resolve()
             const moving = data.moveTab(tabId, { targetSpaceId, targetGroupTabId: groupTabId })
@@ -1810,7 +1828,7 @@ const data = {
         }
         const items = spaces[tab.spaceId]?.tabs || []
         const sourceGroup = getTabGroup(items, tabId)
-        const needsCenterTab = !tab.pinned && sourceGroup?.tabs.every(member => member.id === tabId || member.pinned)
+        const needsCenterTab = pinned !== 'normal' && !tab.pinned && sourceGroup?.tabs.every(member => member.id === tabId || member.pinned)
         // Create the center tab before removing its anchor from group membership (space/global pins).
         const centerCreation = needsCenterTab ? data.newTab(tab.spaceId, {
             groupTabId: tabId,
@@ -1835,7 +1853,7 @@ const data = {
         parkMovingFrames(updates, [group])
         const saves = [centerCreation, ...updates.map(({ id, ...update }) => queueDocumentUpdate(id, update))]
 
-        if (spaceMeta.activeSpace === tab.spaceId && spaceMeta.activeTabId === tabId) {
+        if (pinned !== 'normal' && spaceMeta.activeSpace === tab.spaceId && spaceMeta.activeTabId === tabId) {
             const candidates = (pinScope === 'group' ? getTabGroup(items, tabId)?.tabs || [] : items)
                 .filter(member => member.type === 'tab' && !member.pinned && !member.archive && !member.preview && !member.lightbox)
             const replacement = data.getGroupActiveTab({ tabs: candidates }, tab.spaceId)
@@ -1940,6 +1958,9 @@ const data = {
             order: group ? group.order : isGroupMember && firstItem ? (firstItem.order ?? Date.now()) + 1 : Date.now(),
             tabGroupId,
             tabGroupOrder,
+            ...(group?.tabGroupId && group.tabs.every(member => member.sidebarPinned && member.sidebarPinned === group.tabs[0].sidebarPinned) ? {
+                sidebarPinned: group.tabs[0].sidebarPinned, sidebarPinOrder: group.tabs[0].sidebarPinOrder
+            } : {}),
             ...(canvasPosition ? { canvas: { [spaceId]: canvasPosition } } : {}),
             opener,
             preview: !!preview,

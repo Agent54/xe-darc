@@ -9,6 +9,15 @@ export function getPinScope (tab) {
     return tab.pinScope || (tab.tabGroupId ? 'group' : 'space')
 }
 
+export function isSidepin (tab) {
+    return tab?.pinned === true || tab?.pinned === 'left' || tab?.pinned === 'right'
+}
+
+export function getSpacePins (items = []) {
+    return items.filter(tab => tab.type === 'tab' && tab.pinned && getPinScope(tab) === 'space' && !tab.archive && !tab.preview && !tab.lightbox && !tab._deleted)
+        .sort((a, b) => (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
+}
+
 export function nextPinOrder (items = []) {
     return Math.max(0, ...items.filter(tab => tab.pinned).map(tab => tab.pinOrder ?? tab.order ?? 0)) + 1
 }
@@ -16,7 +25,7 @@ export function nextPinOrder (items = []) {
 export function getSidepins (items = [], groupTabId) {
     const anchor = items.find(tab => tab.id === groupTabId && isOpenTab(tab))
     const groupKey = anchor ? tabGroupKey(anchor) : null
-    return items.filter(tab => tab.type === 'tab' && tab.pinned && !tab.archive && !tab.preview && !tab.lightbox &&
+    return items.filter(tab => tab.type === 'tab' && isSidepin(tab) && !tab.archive && !tab.preview && !tab.lightbox &&
         (getPinScope(tab) === 'space' || (getPinScope(tab) === 'group' && groupKey && tabGroupKey(tab) === groupKey)))
         .sort((a, b) => Number(getPinScope(a) === 'group') - Number(getPinScope(b) === 'group') ||
             (a.pinOrder ?? a.order ?? 0) - (b.pinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
@@ -31,6 +40,12 @@ export function getSidebarPinnedTabs (items = [], fixed = false) {
     // Existing boolean pins scroll above the divider; 'fixed' pins stay above New Tab.
     return items.filter(tab => isOpenTab(tab) && !tab.pinned && tab.sidebarPinned && !tab._deleted && (tab.sidebarPinned === 'fixed') === fixed)
         .sort((a, b) => (a.sidebarPinOrder ?? a.order ?? 0) - (b.sidebarPinOrder ?? b.order ?? 0) || a.id.localeCompare(b.id))
+}
+
+export function getSidebarPinnedItems (items = [], fixed = false, activeTabIds = [], docs = {}) {
+    return getTabGroups(getSidebarPinnedTabs(items, fixed), activeTabIds, docs)
+        .sort((a, b) => Math.min(...a.tabs.map(tab => tab.sidebarPinOrder ?? tab.order ?? 0)) -
+            Math.min(...b.tabs.map(tab => tab.sidebarPinOrder ?? tab.order ?? 0)))
 }
 
 export function tabGroupKey (tab) {

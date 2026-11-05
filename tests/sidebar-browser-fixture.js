@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url)
 const modules = {
     entry: `
         import { mount, flushSync } from 'svelte'
-        import Sidebar from './app/components/TabSidebar.svelte'
+        import Sidebar from 'sidebar-menu-fixture'
         import TabHoverCard from './app/components/TabHoverCard.svelte'
         import LinkPreviewFavicon from './app/components/LinkPreviewFavicon.svelte'
         import { tabDrag, onDrop } from './app/lib/tab-drag.svelte.js'
@@ -48,6 +48,27 @@ const modules = {
             get customTabSidebarWidth() { return data.ui.sidebarWidth }
         } })
     `,
+    'sidebar-menu-fixture': compile(`
+        <script>
+            import Sidebar from './app/components/TabSidebar.svelte'
+            import PinMenu from './app/components/PinMenu.svelte'
+            import data from 'fixture-data'
+            let props = $props()
+            let menuPin = $state(null)
+            let anchor = $state.raw(null)
+        </script>
+        <Sidebar {...props} onOpenPinMenu={(id, element) => { anchor = element; menuPin = menuPin === id ? null : id }} />
+        {#if menuPin}
+            {#key menuPin}
+                <PinMenu tabId={menuPin} {anchor} onClose={() => { menuPin = null }}>
+                    <div class="pin-menu-test-content" style="height:100%;display:flex;flex-direction:column">
+                        <div class="pin-menu-test-title" style="height:32px;color:white">Pinned webpage</div>
+                        <iframe title="Pinned webpage" srcdoc="<body>Menu webpage</body>" style="width:100%;flex:1;border:0"></iframe>
+                    </div>
+                </PinMenu>
+            {/key}
+        {/if}
+    `, { generate: 'client', filename: 'sidebar-menu-fixture.svelte' }).js.code,
     'fixture-data': compileModule(`
         import { getSidebarItems, getTabGroup } from './app/lib/tab-groups.js'
         const tab = (id, favicon, extra = {}) => ({ id, title: id, url: 'https://example.com', type: 'tab', spaceId: 'space', created: Date.now() - 3600000, favicon: location.origin + favicon, ...extra })
@@ -75,6 +96,7 @@ const modules = {
         data.updateTabOverrides = async (tabId, update) => Object.assign(data.docs[tabId], update)
         data.getSpacePins = spaceId => data.spaces[spaceId].pinnedTabs
         data.pinSidebarTab = options => data.menuActions.push({ action: 'sidebar-pin', ...options })
+        data.setPinMenuWidth = (id, width) => { data.docs[id].pinMenuWidth = width }
         data.toggleTabActivityMode = () => { data.ui.tabActivityMode = !data.ui.tabActivityMode }
         data.bumpTabActivity = tabId => {
             data.docs[tabId].lastActivityAt = Math.max(Date.now(), ...data.spaces.space.tabs.flatMap(tab => [tab.lastActivityAt ?? tab.order ?? 0, tab.tabGroupOrder ?? tab.order ?? 0])) + 1

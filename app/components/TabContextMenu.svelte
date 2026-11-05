@@ -113,7 +113,19 @@
     }
 
     function toggleSidebarPin(tab) {
-        data.pinSidebarTab({ tabId: tab.id, pinned: !tab.sidebarPinned })
+        const anchor = isGroup ? tab.tabs[0] : tab
+        data.pinSidebarTab({ tabId: anchor.id, pinned: !anchor.sidebarPinned, ...(isGroup ? { scope: 'group' } : {}) })
+        onHide()
+    }
+
+    function setSidebarPin(fixed) {
+        const anchor = targetTabs[0]
+        if (anchor) data.pinSidebarTab({ tabId: anchor.id, fixed, ...(isGroup ? { scope: 'group' } : {}) })
+        onHide()
+    }
+
+    function setPin(scope, mode) {
+        data.pin({ tabId: menu.tab.id, scope, pinned: mode })
         onHide()
     }
 
@@ -458,6 +470,16 @@
                 <span>Remove spacer</span>
             </div>
         {:else if groupMenuView === 'menu'}
+        {#each [[false, 'Pin in scrolling sidebar'], [true, 'Pin above New Tab']] as [fixed, label]}
+            <button class="context-menu-item menu-action" type="button" role="menuitem"
+                    onmouseup={() => setSidebarPin(fixed)}
+                    onclick={(e) => { if (e.detail === 0) setSidebarPin(fixed) }}>{label}</button>
+        {/each}
+        {#if targetTabs.some(tab => tab.sidebarPinned)}
+            <button class="context-menu-item menu-action" type="button" role="menuitem"
+                    onmouseup={() => toggleSidebarPin(menu.tab)}
+                    onclick={(e) => { if (e.detail === 0) toggleSidebarPin(menu.tab) }}>Unpin from Sidebar</button>
+        {/if}
         {#if !isGroup}
         <div class="context-menu-item menu-action"
              role="menuitem"
@@ -472,16 +494,20 @@
             <span>Certificate Info</span>
         </div>
         
-        <button class="context-menu-item menu-action" type="button" role="menuitem"
-                onmouseup={() => toggleSidebarPin(menu.tab)}
-                onclick={(e) => { if (e.detail === 0) toggleSidebarPin(menu.tab) }}>
-            <span class="context-menu-icon" aria-hidden="true">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
-                </svg>
-            </span>
-            <span>{menu.tab.sidebarPinned ? 'Unpin from Sidebar' : 'Pin in Sidebar'}</span>
-        </button>
+        {#if !menu.tab.pinned}
+            {#each [['space', 'Pin to Space'], ['global', 'Pin Globally']] as [scope, label]}
+                <button class="context-menu-item menu-action" type="button" role="menuitem"
+                        onmouseup={() => setPin(scope, 'normal')}
+                        onclick={(e) => { if (e.detail === 0) setPin(scope, 'normal') }}>{label}</button>
+            {/each}
+        {:else if data.getPinScope(menu.tab) !== 'group'}
+            <div class="pin-scope-label">Pin display</div>
+            {#each [['normal', 'Normal'], ['menu', 'Menu'], ['left', 'Left sidepin'], ['right', 'Right sidepin']] as [mode, label]}
+                <button class="context-menu-item menu-action" type="button" role="menuitemradio" aria-checked={menu.tab.pinned === mode || (mode === 'left' && menu.tab.pinned === true)}
+                        onmouseup={() => setPin(data.getPinScope(menu.tab), mode)}
+                        onclick={(e) => { if (e.detail === 0) setPin(data.getPinScope(menu.tab), mode) }}>{label}</button>
+            {/each}
+        {/if}
         {#if menu.tab.pinned}
             <div class="context-menu-item menu-action"
                  role="menuitem"
@@ -496,7 +522,7 @@
                 <span>Unpin Tab</span>
             </div>
             <div class="pin-scope-label">Pin scope</div>
-            {#each [['group', 'Tab group'], ['space', 'Space']] as [scope, label]}
+            {#each [['group', 'Tab group'], ['space', 'Space'], ['global', 'Global']] as [scope, label]}
                 <button class="context-menu-item menu-action" type="button" role="menuitemradio" aria-checked={data.getPinScope(menu.tab) === scope}
                         onmouseup={() => setPinScope(scope)}
                         onclick={(e) => { if (e.detail === 0) setPinScope(scope) }}>

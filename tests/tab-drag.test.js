@@ -327,7 +327,7 @@ Deno.test('joining a sidebar tab or group waits 600ms without resetting for poin
             harness.move(125, 119)
             assert.equal(harness.tabDrag.indicator.height, 2)
             harness.advance(1)
-            assert.equal(harness.tabDrag.indicator.height, 36)
+            assert.equal(harness.tabDrag.indicator.height, 2, 'joining retains a white line without outlining or resizing the target')
             harness.release()
             assert.equal(harness.drops[0].targetGroupTabId, target.id)
             assert.equal(harness.drops[0].scope, type)
@@ -481,7 +481,7 @@ function collapsedGroup(id = 'group') {
     return wrapper
 }
 
-Deno.test('a collapsed group expands one second after entering merge mode despite pointer movement', () => {
+Deno.test('a collapsed group stays collapsed during a prolonged join hover so targets do not shift', () => {
     for (const zone of ['topbar', 'sidebar']) {
         const harness = dragHarness({ lists: [sidebar([collapsedGroup()])] })
         harness.start('source', element('source', 300, 0, 100, 40), zone)
@@ -498,10 +498,10 @@ Deno.test('a collapsed group expands one second after entering merge mode despit
         harness.advance(599)
         assert.equal(harness.expansions.length, 0)
         harness.advance(1)
-        assert.deepEqual(harness.expansions, [{ spaceId: 'target-space', tabGroupId: 'group' }])
+        assert.deepEqual(harness.expansions, [])
         assert.equal(harness.drops.length, 0)
         harness.advance(1000)
-        assert.equal(harness.expansions.length, 1)
+        assert.equal(harness.expansions.length, 0)
         harness.cancelDrag()
     }
 })
@@ -525,7 +525,7 @@ Deno.test('leaving a group resets the expansion delay and ending a drag cancels 
     }
 })
 
-Deno.test('leaving merge mode resets the expansion delay within the same group', () => {
+Deno.test('reentering merge mode never expands or relayouts the group', () => {
     const harness = dragHarness({ lists: [sidebar([collapsedGroup()])] })
     harness.start('source', element('source', 300, 0, 100, 40), 'topbar')
     harness.move(120, 102)
@@ -543,7 +543,7 @@ Deno.test('leaving merge mode resets the expansion delay within the same group',
     harness.advance(999)
     assert.equal(harness.expansions.length, 0)
     harness.advance(1)
-    assert.equal(harness.expansions.length, 1)
+    assert.equal(harness.expansions.length, 0)
     harness.cancelDrag()
 })
 

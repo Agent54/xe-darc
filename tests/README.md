@@ -1,6 +1,6 @@
 # Sidebar browser tests
 
-Run a suite with `deno run -A tests/<suite>.js`. Each suite starts its own local
+Run a suite with `deno run --allow-env --allow-read --allow-sys --allow-write=./,/tmp --allow-ffi --allow-net --allow-run tests/<suite>.js`. Each suite starts its own local
 fixture server and headless Chromium session.
 
 The former `favicon-browser.js` scenarios now have independent entry points:
@@ -13,6 +13,7 @@ The former `favicon-browser.js` scenarios now have independent entry points:
 | `close-button-history-browser.js` | Close-button history delays, cancellation and retention | `--close-button-history-only` |
 | `sidebar-layout-browser.js` | Header layout, window drag regions and control reachability | |
 | `sidebar-pins-browser.js` | Pin dragging, transfers, sidebar sections and unpinning | `--pins-only` |
+| `pin-modes-browser.js` | Pinned groups, manual pin order, Normal activation and Menu sizing/dismissal | |
 | `sidebar-scroll-browser.js` | Sticky New Tab, crowded pins and active-tab scrolling | `--sidebar-scroll-only` |
 | `tab-overrides-browser.js` | Custom titles, emoji, image icons and resets | `--tab-overrides-only` |
 | `sidebar-hovercards-browser.js` | Hovercard gaps, responsive history, screenshots and metadata | |

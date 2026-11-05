@@ -231,7 +231,7 @@ function handleMouseMove(e) {
     state.deleteZone = false
     state.dropTarget = null
 
-    const pinTarget = state.dragType === 'tab' ? findPinDropTarget(mx, my) : null
+    const pinTarget = state.dragType !== 'divider' ? findPinDropTarget(mx, my) : null
     if (pinTarget) {
         updateJoinHover(null)
         updateGroupHover(null)
@@ -253,7 +253,8 @@ function handleMouseMove(e) {
     if (state.dragType !== 'divider') {
         const target = findGroupDropTarget(mx, my)
         updateJoinHover(target?.join)
-        updateGroupHover(state.dragType === 'tab' && joinReady ? target?.hoverGroup : null)
+        // Keep the list geometry fixed throughout a drag, including collapsed groups.
+        updateGroupHover(null)
         if (target) {
             state.sidepinZone = null
             state.dropTarget = target.join && joinReady ? target.joinDrop : target.drop
@@ -263,7 +264,7 @@ function handleMouseMove(e) {
             }
             if (target.join && joinReady) {
                 const rect = target.join.getBoundingClientRect()
-                Object.assign(state.indicator, { visible: true, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width, height: rect.height })
+                Object.assign(state.indicator, { visible: true, x: rect.left + rect.width / 2 + 8, y: rect.bottom - 2, width: rect.width - 16, height: 2 })
             } else if (target.hit) {
                 showIndicator(target.tabs, target.hit.index, target.hit.after, target.axis)
             } else {
@@ -365,6 +366,13 @@ function handleMouseMove(e) {
     }
 
     // Check for sidepin drop zones (left/right 20% of window, excluding tab sidebar and right sidebar)
+    // A sticky sidebar header can obscure all list targets without becoming a webpage drop zone.
+    if ([...document.querySelectorAll('.tabs-list')].some(list => {
+        const sticky = list.closest('.space-content')?.querySelector('.space-sticky-tabs')
+        if (!sticky) return false
+        const rect = sticky.getBoundingClientRect()
+        return mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom
+    })) { hideIndicator(); state.sidepinZone = null; return }
     // Disable sidepin when sidebar is in multi-space (full width) mode
     if (document.querySelector('.sidebar-box.multi-space-mode')) { hideIndicator(); state.sidepinZone = null; return }
     const tabSidebar = document.querySelector('.sidebar-box.visible')
@@ -383,11 +391,11 @@ function handleMouseMove(e) {
         const zoneWidth = areaWidth * 0.2
         if (mx <= areaLeft + zoneWidth && pending?.pinnedSide !== 'left') {
             state.sidepinZone = 'left'
-            hideIndicator()
+            Object.assign(state.indicator, { visible: true, x: areaLeft + 8, y: (areaTop + window.innerHeight) / 2, width: 2, height: window.innerHeight - areaTop - 16 })
             return
         } else if (mx >= areaRight - zoneWidth && pending?.pinnedSide !== 'right') {
             state.sidepinZone = 'right'
-            hideIndicator()
+            Object.assign(state.indicator, { visible: true, x: areaRight - 8, y: (areaTop + window.innerHeight) / 2, width: 2, height: window.innerHeight - areaTop - 16 })
             return
         }
     }
@@ -421,6 +429,8 @@ function isVisibleSidebarTarget(list, mx, my) {
 
 function findPinDropTarget(mx, my) {
     for (const list of document.querySelectorAll('[data-pin-scope]')) {
+        if (state.dragType === 'group' && !['sidebar', 'sidebar-fixed'].includes(list.dataset.pinScope)) continue
+        if (list.dataset.pinLayout === 'rows' && (list.querySelector(':scope > .tab-group-wrapper') || list.querySelector(':scope > .tab-item-container'))) continue
         if (!isVisibleSidebarTarget(list, mx, my)) continue
         const rect = list.getBoundingClientRect()
         const padding = Number(list.dataset.pinHitPadding) || 0
@@ -443,7 +453,7 @@ function findPinDropTarget(mx, my) {
         }
         const tabs = [...list.querySelectorAll(':scope > [data-tab-id]')]
         const axis = list.dataset.pinLayout === 'rows' ? 'y' : 'x'
-        const drop = { type: 'pin', pinScope: list.dataset.pinScope, targetSpaceId: list.closest('.space-content')?.dataset.spaceId }
+        const drop = { type: 'pin', pinScope: list.dataset.pinScope, ...(state.dragType === 'group' ? { scope: 'group' } : {}), targetSpaceId: list.closest('.space-content')?.dataset.spaceId }
         if (!tabs.length) {
             const apps = appsButton?.getBoundingClientRect()
             const emptyRect = apps
@@ -493,16 +503,17 @@ function findGroupDropTarget(mx, my) {
             targetSpaceId: topbar.dataset.spaceId, targetGroupTabId: topbar.dataset.groupTabId, targetZone: 'topbar', scope
         } }
     }
-    for (const list of document.querySelectorAll('.tabs-list')) {
+    for (const list of [...document.querySelectorAll('.tabs-list'), ...document.querySelectorAll('.sidebar-pinned-tabs')]) {
         const scrollParent = list.closest('.tab-content-container')
         if (!isVisibleSidebarTarget(list, mx, my) || !contains(list) || (scrollParent && !contains(scrollParent))) continue
         const targetSpaceId = list.closest('.space-content')?.dataset.spaceId
+        const pinDrop = list.dataset.pinScope ? { type: 'pin', pinScope: list.dataset.pinScope } : {}
         for (const content of list.querySelectorAll('.tab-group-content')) {
             if (!contains(content)) continue
             const tabs = content.querySelectorAll(':scope > .tab-item-container')
             const hit = findClosestTab(tabs, my, 'y')
             const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, targetSpaceId) : {}
-            return { tabs, hit, list: content, axis: 'y', drop: { ...neighbors, targetSpaceId, targetGroupTabId: content.dataset.groupTabId, targetZone: 'sidebar', scope } }
+            return { tabs, hit, list: content, axis: 'y', drop: { ...neighbors, ...pinDrop, targetSpaceId, targetGroupTabId: content.dataset.groupTabId, targetZone: 'sidebar', scope } }
         }
         const tabs = list.querySelectorAll(SIDEBAR_ITEMS)
         const hit = findClosestTab(tabs, my, 'y')
@@ -524,8 +535,8 @@ function findGroupDropTarget(mx, my) {
         }
         const neighbors = hit ? buildDropInfo(tabs, hit, state.tabId, targetSpaceId) : {}
         return { tabs, hit, list, axis: 'y', hoverGroup, join,
-            joinDrop: join ? { targetSpaceId, targetGroupTabId: getTabId(hit.el), targetZone: 'sidebar', scope } : null,
-            drop: { ...neighbors, targetSpaceId, targetGroupTabId: null, targetZone: 'sidebar', scope } }
+            joinDrop: join ? { ...pinDrop, targetSpaceId, targetGroupTabId: getTabId(hit.el), targetZone: 'sidebar', scope } : null,
+            drop: { ...neighbors, ...pinDrop, targetSpaceId, targetGroupTabId: null, targetZone: 'sidebar', scope } }
     }
     return null
 }

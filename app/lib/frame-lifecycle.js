@@ -37,8 +37,8 @@ function frameLists(items, updates) {
         }
         const update = updates?.get(item.id)
         const tab = update ? framePlacement(item, update) : item
-        const panel = tab.pinned ? tab.pinned === 'right' ? 'right' : 'left' : 'center'
-        const groupKey = tab.pinned ? null : tabGroupKey(tab)
+        const panel = tab.pinned === 'normal' ? 'center' : tab.pinned === 'menu' ? 'menu' : tab.pinned ? tab.pinned === 'right' ? 'right' : 'left' : 'center'
+        const groupKey = tab.pinned === 'normal' || tab.pinned === 'menu' ? `pin:${tab.id}` : tab.pinned ? null : tabGroupKey(tab)
         const spaceId = tab.pinned ? null : tab.spaceId
         if (!spaces.has(spaceId)) {
             spaces.set(spaceId, new Map())

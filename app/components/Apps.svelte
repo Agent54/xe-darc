@@ -430,7 +430,7 @@
             const tab = await data.newTab(spaceId, {
                 url,
                 title: app.name || url,
-                pinned: 'left',
+                pinned: 'normal',
                 pinScope: 'global',
                 shouldFocus: false
             })
