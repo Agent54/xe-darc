@@ -70,6 +70,14 @@ resolves only the selected native request. For controllers that cannot be
 deferred, it arms one retry in that same frame and page for up to 60 seconds.
 Ignore dismisses the selected request without remembering a decision.
 
+Unanswered requests appear as cards at the top right of the current window.
+They use the same card component and actions as the Resources sidebar and
+remain until answered, ignored, or expired by the request handler. Clicking
+the card opens Resources; clicking an action resolves only that request.
+The close button appears on hover or keyboard focus and performs Ignore.
+While Resources is open, its cards replace the toasts; closing it shows any
+requests that are still unanswered, including requests already marked seen.
+
 The implemented descriptors are `open-tab`, `navigate-off-origin`,
 `geolocation`, `pointerLock`, `download`, `filesystem`, `fullscreen`, `hid`,
 `clipboardReadWrite`, `clipboardSanitizedWrite`, and `media` with a `camera`

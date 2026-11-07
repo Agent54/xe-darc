@@ -343,6 +343,7 @@
     }
 
     .resource-name {
+        overflow-wrap: anywhere;
         font-size: 13px;
         font-weight: 500;
         margin: 0 0 2px 0;
@@ -484,6 +485,8 @@
     }
 
     .requester-name {
+        min-width: 0;
+        overflow-wrap: anywhere;
         font-size: 10px;
         color: rgba(255, 255, 255, 0.6);
         font-weight: 500;

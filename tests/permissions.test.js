@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createPermissionStore, handleFramePermission, permissionDescriptor, permissionDocumentId, permissionScope } from '../app/lib/permissions.js'
+import { createPermissionStore, handleFramePermission, permissionDescriptor, permissionDocumentId, permissionScope, getPendingPermissionRequests } from '../app/lib/permissions.js'
 
 function harness(records = new Map(), instanceId = 'installation') {
     const permissions = {}, rules = {}, state = { status: 'loading', error: null }
@@ -42,6 +42,19 @@ function native(h, { type = 'geolocation', tabId = 'one', nested = false, url = 
     handleFramePermission(h.data, tabId, event, h.contexts.get(tabId))
     return actions
 }
+
+Deno.test('pending permission notifications include previously seen requests and isolate the current window', () => {
+    const request = (requestId, status, windowId, created, unseen = true) => ({ requestId, status, windowId, created, unseen })
+    const first = request('first', 'requested', 'current', 1, false)
+    const later = request('later', 'requested', 'current', 3)
+    const permissions = {
+        camera: { origins: { site: { requests: [later, request('allowed', 'granted', 'current', 0)] } } },
+        geolocation: { origins: { site: { requests: [first, request('ignored', 'ignored', 'current', 2), request('other', 'requested', 'other', 0)] } } }
+    }
+    assert.deepEqual(getPendingPermissionRequests(permissions, 'current'), [first, later])
+    first.status = 'denied'
+    assert.deepEqual(getPendingPermissionRequests(permissions, 'current'), [later])
+})
 
 Deno.test('permanent grants and denials survive a new store; resets remove the saved rule', async () => {
     const h = harness()

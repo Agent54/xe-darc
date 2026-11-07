@@ -276,9 +276,11 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
             }
             const descriptor = permissionDescriptor(type)
             const key = scope && descriptor ? permissionDocumentId(scope, descriptor) : 'unsupported'
-            const origins = permissions[registryType].origins ??= {}
-            const entry = origins[key] ??= { requests: [] }
-            const previous = !input.settle && entry.requests.find(item => item.status === 'requested' && item.tabId === tabId && item.url === input.url)
+            permissions[registryType].origins ??= {}
+            const origins = permissions[registryType].origins
+            origins[key] ??= { requests: [] }
+            const entry = origins[key]
+            const previous = !input.settle && entry.requests.find(item => item.type === type && item.status === 'requested' && item.tabId === tabId && item.url === input.url)
             if (previous) {
                 requestId = previous.requestId
                 requestIds.push(requestId)
