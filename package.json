@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:agent": "pnpm exec wrangler dev --port 8787",
+    "dev:cdp": "pnpm exec wrangler dev --port 8787",
     "lint": "svelte-check --threshold error && (prettier -c . || true)",
     "build": "vite build",
     "build:swbn": "vite build && node ./build-swbn.js",
@@ -17,20 +17,16 @@
   },
   "packageManager": "pnpm@10.13.1",
   "dependencies": {
-    "@ai-sdk/anthropic": "2.0.8",
-    "@ai-sdk/ui-utils": "1.2.11",
+    "@agentclientprotocol/sdk": "2.4.0",
     "@ark/json-schema": "0.0.9",
     "@cloudflare/vite-plugin": "1.7.4",
-    "@elevenlabs/client": "^0.5.0",
     "@excalidraw/excalidraw": "0.18.0",
+    "@modelcontextprotocol/server": "2.4.0",
     "@sveltejs/vite-plugin-svelte": "5.1.0",
     "@tailwindcss/vite": "4.1.10",
     "@threlte/core": "8.0.4",
     "@threlte/extras": "9.2.1",
     "@xyflow/svelte": "^1.5.0",
-    "ai": "5.0.26",
-    "arktype": "2.2.5",
-    "comlink": "^4.4.2",
     "events": "3.3.0",
     "pouchdb-adapter-indexeddb": "^9.0.0",
     "pouchdb-browser": "9.0.0",
@@ -49,6 +45,7 @@
     "vite": "6.4.1",
     "vite-plugin-html-inject": "1.1.2",
     "wbn-sign": "0.2.1",
-    "wrangler": "4.32.0"
+    "wrangler": "4.32.0",
+    "zod": "^4.0.0"
   }
 }

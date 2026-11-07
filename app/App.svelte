@@ -13,7 +13,6 @@
     import UserMods from './components/UserMods.svelte'
     import Activity from './components/Activity.svelte'
     import AgentSidebar from './components/AgentSidebar.svelte'
-    import Agent from './components/Agent.svelte'
     import Excalidraw from './components/Excalidraw.svelte'
     import GridView from './components/GridView.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
@@ -377,7 +376,6 @@
     // Disable horizontal scrolling during layout transitions to prevent glitches
     let isLayoutChanging = $derived(isWindowResizing || isResizingAnySidebar || isTogglingPins || isChangingTabs || isSwitchingSidebars)
 
-    let agentEnabled = $state(false)
 
     let userMods = $state([])
     
@@ -496,9 +494,6 @@
 
             const savedNewTabUrl = localStorage.getItem('defaultNewTabUrl')
             if (savedNewTabUrl) data.settings.defaultNewTabUrl = savedNewTabUrl
-
-            const savedAiProvider = localStorage.getItem('selectedAiProvider')
-            if (savedAiProvider) data.settings.selectedAiProvider = savedAiProvider
 
             const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
             if (savedCustomSearchUrl) data.settings.customSearchUrl = savedCustomSearchUrl
@@ -2244,10 +2239,6 @@
     const switchToActivity = () => switchToSidebar('activity')
     const switchToAIAgent = () => switchToSidebar('aiAgent')
     const switchToDevTools = () => switchToSidebar('devTools')
-
-    function activateVoiceAgent() {
-        agentEnabled = !agentEnabled
-    }
 
     function updateSidebarState() {
         // Clear any pending state update
@@ -4581,10 +4572,6 @@
     bind:certificateMonitorForTab={certificateMonitorForTab} 
 />
 
-{#if agentEnabled}
-    <Agent></Agent>
-{/if}
-
 
 {#if sidebarStateLoaded && visibleLeftPinnedTabs.length > 0}
     <div class="pinned-frames-left" class:window-controls-overlay={headerPartOfMain} 
@@ -4657,23 +4644,6 @@
 <!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->
 <div class="sidebar-right" role="region" >
     <div class="sidebar-buttons">
-        <button class="sidebar-button" 
-                class:active={agentEnabled}
-                title="Voice Agent" 
-                aria-label="Voice Agent" 
-                onmousedown={activateVoiceAgent}>
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 1.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3ZM19.5 10.5a7.5 7.5 0 0 1-15 0M12 18.75a7.5 7.5 0 0 0 7.5-7.5M12 18.75V22.5" />
-            </svg>
-            {#if agentEnabled}
-                <div class="microphone-indicator">
-                    <svg class="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 1.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3ZM19.5 10.5a7.5 7.5 0 0 1-15 0M12 18.75a7.5 7.5 0 0 0 7.5-7.5M12 18.75V22.5" />
-                    </svg>
-                </div>
-            {/if}
-        </button>
-
         <button class="sidebar-button" 
                 class:active={openSidebars.has('aiAgent')}
                 title="Agent" 
@@ -4755,13 +4725,6 @@
          tabindex="-1"
          oncontextmenu={(event) => openAppearanceMenu(event, 'status-lights')}>
         {#if statusLightsEnabled}
-            <!-- TODO: unify {#if agentEnabled}
-                <div class="microphone-indicator">
-                    <svg class="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 1.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3ZM19.5 10.5a7.5 7.5 0 0 1-15 0M12 18.75a7.5 7.5 0 0 0 7.5-7.5M12 18.75V22.5" />
-                    </svg>
-                </div>
-            {/if} -->
             <div class="led-target" role="img" aria-label={networkAccessTooltip} title={networkAccessTooltip}>
                 <div class="led-dot network-access" class:active={networkAccessActive}></div>
             </div>
@@ -4868,8 +4831,7 @@
                          {switchToDevTools}
                          {devModeEnabled}
                          viewMode={data.ui.viewMode}
-                         currentTab={data.docs[data.spaceMeta.activeTabId]}
-                         bind:conv={agentEnabled} />
+                         currentTab={data.docs[data.spaceMeta.activeTabId]} />
             </div>
         {/if}
         

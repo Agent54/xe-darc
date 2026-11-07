@@ -5,6 +5,7 @@ import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
 import { getFrameMoveIds } from './lib/frame-lifecycle.js'
+import { pageContentScript } from './lib/page-content.js'
 import { scheduleBackgroundTabMetadata } from './lib/background-tab-metadata.js'
 import { getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
 import { withDocumentSort } from './lib/document-sort.js'
@@ -1665,14 +1666,14 @@ const data = {
         return restoring
     },
 
-    readPage: async (tabId, { textOnly = false } = {}) => {
+    readPage: async (tabId, options = {}) => {
         const frame = frames[tabId]
 
         if (!frame?.frame) {
-            return 'Error: frame not active'
+            throw new Error('The requested tab has no active frame')
         }
 
-        const result = await frame.frame.executeScript({code: textOnly ? 'document.body.innerText' : 'document.body.innerHTML'})
+        const result = await frame.frame.executeScript({ code: pageContentScript(options) })
 
         return result[0]
     },

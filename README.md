@@ -2,6 +2,8 @@
 
 See [Tab pin behavior](./PINNING.md) for pin locations, display modes, sidebar groups, and drag-and-drop rules.
 
+See [Agent connection](./ACP.md) for ACP HTTP configuration, browser tools, and compatibility requirements.
+
 
 [Get the lastest mac installer from github releases here](https://github.com/Agent54/xe-darc-launcher/releases/download/latest/Darc.Launcher.dmg)
 
