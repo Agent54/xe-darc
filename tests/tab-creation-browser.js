@@ -86,7 +86,10 @@ await withSidebarFixture('tab-creation', async ({ page, errors }) => {
         const renders = []
         const observer = new MutationObserver(() => renders.push(read()))
         observer.observe(document.querySelector('.tabs-list'), { childList: true, subtree: true, attributes: true })
-        window.flushSync(() => document.querySelector('.new-tab-button').click())
+        const button = document.querySelector('.new-tab-button')
+        button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+        button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }))
+        window.flushSync(() => button.click())
         const immediate = read()
         await new Promise(requestAnimationFrame)
         await new Promise(requestAnimationFrame)

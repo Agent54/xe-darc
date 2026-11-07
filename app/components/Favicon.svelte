@@ -1,4 +1,5 @@
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
     import SecurityIndicator from './SecurityIndicator.svelte'
     import data from '../data.svelte.js'
     
@@ -23,7 +24,7 @@
     const reactiveUrl = $derived(data.docs[tab?.id]?.url ?? tab?.url)
     const currentTab = $derived(data.docs[tab?.id] || tab)
     const reactiveFavicon = $derived(currentTab?.faviconOverride || currentTab?.favicon)
-    const reactiveTitle = $derived(currentTab?.titleOverride || currentTab?.title)
+    const reactiveTitle = $derived(getTabTitle(currentTab))
     const loading = $derived(data.frames[tab?.id]?.loading ?? false)
     
     // Derive security status if not provided

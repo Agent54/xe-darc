@@ -1,4 +1,5 @@
 <script>
+  import { getTabTitle } from '../lib/tab-title.js'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
   import GridTabStack from './GridTabStack.svelte'
@@ -292,7 +293,7 @@
       const zoomDirection = event.deltaY < 0 ? 'in' : 'out'
       
       if (zoomDirection === 'in') {
-        console.log(`🔍 [GRID-VIEW] Zoom in detected on tab ${tab.title || 'Untitled'} - activating tab`)
+        console.log(`🔍 [GRID-VIEW] Zoom in detected on tab ${getTabTitle(tab)} - activating tab`)
         // Activate the tab and switch to default view
         if (tab.id !== data.spaceMeta.activeTabId) {
           onTabActivate(tab, index)
@@ -491,24 +492,24 @@
                     <div class="tab-header">
                       <div class="tab-info clickable"
                            onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                           tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}">
+                           tabindex="0" role="button" aria-label="Activate {getTabTitle(tab)}">
                         <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
                         <div class="tab-favicon"><Favicon url={tab.url} /></div>
-                        <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                        <div class="header-tab-title">{getTabTitle(tab)}</div>
                       </div>
                     </div>
                     <div 
                       class="frame-screenshot clickable" 
                       onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
                       onwheel={(e) => handleFrameWheel(e, tab, index)}
-                      tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}"
+                      tabindex="0" role="button" aria-label="Activate {getTabTitle(tab)}"
                     >
                       {#if tab.screenshot}
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
                       {:else}
                         <div class="no-screenshot">
                           <div class="favicon-container"><Favicon url={tab.url} /></div>
-                          <div class="tab-title">{tab.title || 'Untitled'}</div>
+                          <div class="tab-title">{getTabTitle(tab)}</div>
                         </div>
                       {/if}
                     </div>
@@ -539,16 +540,16 @@
                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
                            tabindex="0"
                            role="button"
-                           aria-label="Activate {tab.title || 'Untitled'}">
+                           aria-label="Activate {getTabTitle(tab)}">
                         <div class="tab-favicon">
                           <Favicon url={tab.url} />
                         </div>
-                        <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                        <div class="header-tab-title">{getTabTitle(tab)}</div>
                       </div>
                       <button 
                         class="close-button"
                         onmousedown={(e) => handleCloseTab(e, tab, index, spaceId)}
-                        aria-label="Close {tab.title || 'Untitled'}"
+                        aria-label="Close {getTabTitle(tab)}"
                         type="button"
                       >×</button>
                     </div>
@@ -560,7 +561,7 @@
                       onwheel={(e) => handleFrameWheel(e, tab, index)}
                       tabindex="0"
                       role="button"
-                      aria-label="Activate {tab.title || 'Untitled'}"
+                      aria-label="Activate {getTabTitle(tab)}"
                     >
                       {#if tab.screenshot}
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
@@ -569,7 +570,7 @@
                           <div class="favicon-container">
                             <Favicon url={tab.url} />
                           </div>
-                          <div class="tab-title">{tab.title || 'Untitled'}</div>
+                          <div class="tab-title">{getTabTitle(tab)}</div>
                         </div>
                       {/if}
                     </div>
@@ -585,24 +586,24 @@
                     <div class="tab-header">
                       <div class="tab-info clickable"
                            onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                           tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}">
+                           tabindex="0" role="button" aria-label="Activate {getTabTitle(tab)}">
                         <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
                         <div class="tab-favicon"><Favicon url={tab.url} /></div>
-                        <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                        <div class="header-tab-title">{getTabTitle(tab)}</div>
                       </div>
                     </div>
                     <div 
                       class="frame-screenshot clickable" 
                       onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
                       onwheel={(e) => handleFrameWheel(e, tab, index)}
-                      tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}"
+                      tabindex="0" role="button" aria-label="Activate {getTabTitle(tab)}"
                     >
                       {#if tab.screenshot}
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
                       {:else}
                         <div class="no-screenshot">
                           <div class="favicon-container"><Favicon url={tab.url} /></div>
-                          <div class="tab-title">{tab.title || 'Untitled'}</div>
+                          <div class="tab-title">{getTabTitle(tab)}</div>
                         </div>
                       {/if}
                     </div>

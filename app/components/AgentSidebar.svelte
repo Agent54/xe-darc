@@ -1,4 +1,5 @@
 <script>
+	import { getTabTitle } from '../lib/tab-title.js'
 	import { onMount, tick } from 'svelte'
 	import RightSidebar from './RightSidebar.svelte'
 	import data from '../data.svelte.js'
@@ -837,7 +838,7 @@
 
 	// Get available targets with actual names in brackets
 	let availableTargets = $derived.by(() => {
-		const currentTabTitle = currentTab ? currentTab.title || currentTab.url || 'Untitled Tab' : 'No active tab'
+		const currentTabTitle = currentTab ? getTabTitle(currentTab) : 'No active tab'
 		const currentSpaceName = data.spaceMeta.activeSpace
 			? data.spaces[data.spaceMeta.activeSpace]?.name || 'Unnamed Space'
 			: 'No active space'
@@ -886,7 +887,7 @@
 			context.currentTab = {
 				id: currentTab.id,
 				url: currentTab.url,
-				title: currentTab.title || 'Untitled Tab',
+				title: getTabTitle(currentTab),
 				favicon: currentTab.favicon
 			}
 		} else if (selectedTarget === 'current-space' && data.spaceMeta.activeSpace) {
@@ -897,7 +898,7 @@
 				tabs: activeSpace?.tabs?.filter(tab => tab.type === 'tab').map(tab => ({
 					id: tab.id,
 					url: tab.url,
-					title: tab.title || 'Untitled Tab'
+					title: getTabTitle(tab)
 				})) || []
 			}
 		} else if (selectedTarget === 'all-spaces') {
@@ -908,7 +909,7 @@
 				tabs: space.tabs?.filter(tab => tab.type === 'tab').map(tab => ({
 					id: tab.id,
 					url: tab.url,
-					title: tab.title || 'Untitled Tab'
+					title: getTabTitle(tab)
 				})) || []
 			}))
 			context.currentSpaceId = data.spaceMeta.activeSpace
@@ -1805,7 +1806,7 @@
 				type: 'context',
 				action: 'read-tab',
 				status: 'accessed',
-				title: currentTab ? currentTab.title || 'Untitled Tab' : 'Test Tab',
+				title: currentTab ? getTabTitle(currentTab) : 'Test Tab',
 				url: currentTab ? currentTab.url : 'https://example.com',
 				favicon: currentTab ? currentTab.favicon : null
 			},
@@ -1835,7 +1836,7 @@
 				action: 'execute-js',
 				status: 'accessed',
 				title: 'JavaScript Execution',
-				details: currentTab ? currentTab.title || 'Current Tab' : 'No target tab'
+				details: currentTab ? getTabTitle(currentTab) : 'No target tab'
 			},
 			{
 				type: 'tool',

@@ -3,6 +3,7 @@ import { compile, compileModule } from 'svelte/compiler'
 import * as server from 'svelte/internal/server'
 import { render } from 'svelte/server'
 import { getTabGroups, tabGroupMetadataId } from '../app/lib/tab-groups.js'
+import { getTabTitle } from '../app/lib/tab-title.js'
 
 const data = { docs: {}, frames: {}, origins: {} }
 
@@ -11,7 +12,7 @@ function component(name, dependencies = {}) {
     const compiled = compile(source, { generate: 'server', filename: `${name}.svelte` }).js.code
         .replace(/^import .*$/gm, '')
         .replace('export default function', 'function')
-    return new Function('$', 'data', ...Object.keys(dependencies), `${compiled}\nreturn ${name}`)(server, data, ...Object.values(dependencies))
+    return new Function('$', 'data', 'getTabTitle', ...Object.keys(dependencies), `${compiled}\nreturn ${name}`)(server, data, getTabTitle, ...Object.values(dependencies))
 }
 
 const SecurityIndicator = component('SecurityIndicator', { origin: url => new URL(url).origin })

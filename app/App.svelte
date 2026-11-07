@@ -1,4 +1,5 @@
 <script>
+    import { getTabTitle } from './lib/tab-title.js'
     // import { flip } from 'svelte/animate'
  
     import Frame from './components/Frame.svelte'
@@ -3315,7 +3316,7 @@
             class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
             role="tab"
             tabindex="0"
-            title={tab.titleOverride || tab.title || tab.url}
+            title={getTabTitle(tab)}
             onmousedown={(e) => { if (e.button === 0) { startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, tab.id === data.spaceMeta.activeTabId, 'right') } }}
             onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
@@ -3422,7 +3423,7 @@
                         class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
-                        title={tab.titleOverride || tab.title || tab.url}
+                        title={getTabTitle(tab)}
                         onmousedown={(e) => { if (e.button === 0) { startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, tab.id === data.spaceMeta.activeTabId, 'left') } }}
                         onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
@@ -3491,7 +3492,7 @@
                             <div class="favicon-wrapper">    
                                 <Favicon {tab} />
                             </div>
-                            <span class="tab-title">{tab.titleOverride || tab.title || tab.url}</span>
+                            <span class="tab-title">{getTabTitle(tab)}</span>
                             <button class="close-btn" 
                                     aria-label="Close tab"
                                     onmousedown={() => closeTab(tab, event, true)} 
@@ -3769,7 +3770,7 @@
                              onmouseenter={(e) => handleTrashItemMouseEnter(closedTab, e)}
                              onmouseleave={handleTrashItemMouseLeave}>
                             <img src={closedTab.favicon} alt="" class="favicon" />
-                            <span>{closedTab.titleOverride || closedTab.title || closedTab.url}</span>
+                            <span>{getTabTitle(closedTab)}</span>
                         </div>
                     {/each}
                 </div>
@@ -4922,7 +4923,7 @@
             <div class="favicon-wrapper">
                 <Favicon tab={dragTab} />
             </div>
-            <span class="tab-drag-preview-title">{dragTab.titleOverride || dragTab.title || dragTab.url || 'Untitled'}</span>
+            <span class="tab-drag-preview-title">{getTabTitle(dragTab)}</span>
         {/if}
     </div>
 {/if}

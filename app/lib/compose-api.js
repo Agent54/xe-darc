@@ -1,6 +1,18 @@
 const composeAPIOrigins = ['https://compose-ui.localhost', 'https://compose-ui.localhost:5194']
 let composeConnection = null
 
+async function withConnectionTimeout(request, signal) {
+    const controller = new AbortController()
+    const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+    const timeout = setTimeout(() => controller.abort(new DOMException('Launcher connection timed out', 'TimeoutError')), 600)
+    try {
+        requestSignal.throwIfAborted()
+        return await request(requestSignal)
+    } finally {
+        clearTimeout(timeout)
+    }
+}
+
 async function checkComposeOrigin(origin, signal) {
     const response = await fetch(`${origin}/v1.24/app-ports`, { signal })
     if (!response.ok) throw new Error(`Compose API returned ${response.status} at ${origin}`)
@@ -13,6 +25,10 @@ async function checkComposeOrigin(origin, signal) {
 
 async function getComposeConnection(signal) {
     if (composeConnection) return composeConnection
+    return withConnectionTimeout(discoverComposeConnection, signal)
+}
+
+async function discoverComposeConnection(signal) {
     let lastError
     for (const origin of composeAPIOrigins) {
         try {
@@ -41,30 +57,38 @@ async function getComposeConnection(signal) {
     throw new Error(`Xe Launcher Compose API is unavailable over HTTPS: ${lastError?.message || 'connection failed'}`)
 }
 
-export async function getComposeAPIOrigin() {
-    return (await getComposeConnection()).origin
+export async function getComposeAPIOrigin({ signal } = {}) {
+    return (await getComposeConnection(signal)).origin
 }
 
 export async function getComposeAppPorts({ signal } = {}) {
-    if (composeConnection) {
-        try {
-            composeConnection = await checkComposeOrigin(composeConnection.origin, signal)
-        } catch (error) {
-            if (signal?.aborted) throw error
-            composeConnection = null
+    return withConnectionTimeout(async requestSignal => {
+        if (composeConnection) {
+            try {
+                composeConnection = await checkComposeOrigin(composeConnection.origin, requestSignal)
+            } catch (error) {
+                composeConnection = null
+                if (requestSignal.aborted) throw error
+            }
         }
-    }
-    return (await getComposeConnection(signal)).ports
+        return (await getComposeConnection(requestSignal)).ports
+    }, signal)
 }
 
-async function composeFetch(path, options = {}) {
-    const { origin } = await getComposeConnection(options.signal)
-    try {
-        return await fetch(`${origin}${path}`, options)
-    } catch (error) {
-        if (!options.signal?.aborted) composeConnection = null
-        throw error
+export async function composeFetch(path, options = {}) {
+    const request = async signal => {
+        const { origin } = await getComposeConnection(signal)
+        try {
+            return await fetch(`${origin}${path}`, { ...options, signal })
+        } catch (error) {
+            if (!options.signal?.aborted) composeConnection = null
+            throw error
+        }
     }
+    // Loading local lists should be quick; builds and other mutations can take longer.
+    return ['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase())
+        ? withConnectionTimeout(request, options.signal)
+        : request(options.signal)
 }
 
 async function composeRequest(path, options = {}) {

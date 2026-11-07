@@ -1,4 +1,5 @@
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
     import { onMount, untrack } from 'svelte'
     import data from '../data.svelte.js'
     import { getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
@@ -58,7 +59,7 @@
     }
 </script>
 
-<div class="pin-menu menu-surface" class:resizing bind:this={panel} role="dialog" aria-label={data.docs[tabId]?.title || 'Pinned webpage'}
+<div class="pin-menu menu-surface" class:resizing bind:this={panel} role="dialog" aria-label={getTabTitle(data.docs[tabId])}
      style:left="{position.x}px" style:top="{position.y}px" style:width="{panelWidth}px" style:height="{height}px">
     {@render children()}
     <button class="pin-menu-resize" type="button" aria-label="Resize pinned webpage" title="Drag to resize"

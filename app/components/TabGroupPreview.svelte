@@ -1,4 +1,5 @@
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
     import Favicon from './Favicon.svelte'
     import { getFaviconWindow, getDefaultGroupTabIndex } from '../lib/tab-group-preview.svelte.js'
 
@@ -9,7 +10,7 @@
     const selectedTab = $derived(scrubbing ? group.tabs[Math.min(preview.state.tabIndex, group.tabs.length - 1)] : null)
     const faviconSlots = $derived(group.metadata?.emoji || group.metadata?.favicon ? 2 : 3)
     const window = $derived(getFaviconWindow(group.tabs.length, progress, faviconSlots))
-    const title = $derived(selectedTab ? selectedTab.titleOverride || selectedTab.title || selectedTab.url || 'New tab' : group.title)
+    const title = $derived(selectedTab ? getTabTitle(selectedTab) : group.title)
 
     function scrub (event) {
         if (disabled || !preview) return

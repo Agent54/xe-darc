@@ -10,6 +10,7 @@ import { scheduleBackgroundTabMetadata } from '../app/lib/background-tab-metadat
 import * as svelteServer from 'svelte/internal/server'
 import * as svelteClient from 'svelte/internal/client'
 import { createTabHistorySwitcher } from '../app/lib/tab-activation-history.js'
+import { getTabTitle } from '../app/lib/tab-title.js'
 
 function compileStore(generate) {
     return compileModule(
@@ -949,6 +950,24 @@ Deno.test('group additions append members without moving the group and space add
     assert.equal(standalone.tabGroupId, null)
     assert.equal(writes.every(write => write.type === 'tab'), true)
     assert.equal(writes.some(write => write._id === 'anchor' && write.tabGroupId === first.tabGroupId), true)
+})
+
+Deno.test('internal new tabs have a title without a page frame, including explicit about URLs', async () => {
+    for (const options of [{}, { url: 'about:newtab' }, { url: 'about:blank' }, { url: 'about:newtab', title: ' ' }]) {
+        const { data, refresh } = session({ tabs: [tab('anchor')], runtime: 'client' })
+        await refresh()
+        const created = await data.newTab(defaultSpace, { ...options, groupTabId: 'anchor', shouldFocus: true })
+        assert.equal(created.title, 'New Tab')
+        assert.equal(getTabTitle(data.docs[created.id]), 'New Tab')
+        assert.equal(data.getTabGroup(created.id).title, 'New Tab')
+        assert.equal(data.frames[created.id]?.frame, undefined)
+        await refresh()
+        assert.equal(getTabTitle(data.docs[created.id]), 'New Tab')
+        await data.navigate(created.id, 'https://example.com/')
+        assert.equal(getTabTitle(data.docs[created.id]), 'https://example.com/')
+        await data.navigate(created.id, 'about:newtab')
+        assert.equal(getTabTitle(data.docs[created.id]), 'New Tab')
+    }
 })
 
 Deno.test('adding from a pinned pane retains the previously active group', async () => {

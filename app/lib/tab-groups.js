@@ -1,3 +1,4 @@
+import { getTabTitle } from './tab-title.js'
 import { activityBetween, getActivityGroupTabs, getSidebarActivityTimestamp } from './tab-activity.js'
 
 export function isOpenTab (tab) {
@@ -85,7 +86,7 @@ export function getTabGroups (items = [], activeTabIds = [], docs = {}) {
         const metadata = group.tabGroupId ? docs[tabGroupMetadataId(group.tabGroupId)] : null
         group.metadata = metadata && !metadata.archive && !metadata._deleted ? metadata : null
         group.name = group.metadata?.name?.trim() || null
-        group.title = group.name || titleTab.titleOverride || titleTab.title || titleTab.url || 'New tab'
+        group.title = group.name || getTabTitle(titleTab)
         return group
     }).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
 }

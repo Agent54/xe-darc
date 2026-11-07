@@ -832,7 +832,9 @@ const refresh = throttle(async function (spaceId) {
             console.warn('doc not found', refreshDoc)
             continue
         }
-        if (doc._deleted) continue
+        if (doc._deleted) {
+            continue
+        }
 
         if (doc.type === 'space') {
             const { activeTabsOrder: _ignoredActiveHistory, ...spaceDoc } = doc
@@ -1136,7 +1138,9 @@ function activateSpace(spaceId, { ensureTab = true } = {}) {
     
     spaceMeta.activeSpace = spaceId
     persistActiveSpaceForWindow(spaceId)
-    if (ensureTab) ensureSpaceHasTab(spaceId, { shouldFocus: true })
+    if (ensureTab) {
+        ensureSpaceHasTab(spaceId, { shouldFocus: true })
+    }
     
     return true
 }
@@ -1986,7 +1990,7 @@ const data = {
             spaceId,
             favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64` : undefined,
             url: url || 'about:newtab',
-            title: url ? title : 'New Tab',
+            title: !url || url.startsWith('about:newtab') || url.startsWith('about:blank') ? title?.trim() || 'New Tab' : title,
             order: group ? group.order : isGroupMember && firstItem ? (firstItem.order ?? Date.now()) + 1 : Date.now(),
             tabGroupId,
             tabGroupOrder,
@@ -2013,7 +2017,9 @@ const data = {
         
         docs[tab._id] = tab
         syncTabPreview(docs[tab._id])
-        for (const localTabIds of tabRefreshes) localTabIds.add(tab.id)
+        for (const localTabIds of tabRefreshes) {
+            localTabIds.add(tab.id)
+        }
         const creation = putDocument(tab).then(result => {
             applyDocumentUpdate(tab.id, { _rev: result.rev })
         }).finally(() => tabCreationTasks.delete(tab.id))

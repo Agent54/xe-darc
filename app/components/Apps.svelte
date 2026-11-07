@@ -280,7 +280,7 @@
             }
         } catch (error) {
             if (loadController === controller && !controller.signal.aborted) {
-                composeError = error?.message || 'Compose apps could not be loaded'
+                composeError = 'Docker services can’t connect to XE Launcher. Start or restart XE Launcher, then try again.'
                 composeState = 'error'
             }
         } finally {
@@ -665,8 +665,8 @@
     {#if composeState === 'loading'}
         <div class="mb-8 rounded-xl border border-white/8 bg-black/15 px-4 py-5 text-sm text-white/50" aria-live="polite">Reading Compose projects…</div>
     {:else if composeError}
-        <div class="mb-8 flex items-center justify-between gap-4 rounded-xl border border-orange-300/15 bg-orange-300/5 px-4 py-3">
-            <p class="text-sm text-orange-100/70">{composeError}</p>
+        <div class="mb-8 flex items-center justify-between gap-4 rounded-xl border border-white/8 bg-black/15 px-4 py-3" role="status">
+            <p class="text-sm text-white/50">{composeError}</p>
             <button type="button" class="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/75 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 cursor-pointer" onmousedown={refresh}>Try again</button>
         </div>
     {:else if composeApps.length === 0}

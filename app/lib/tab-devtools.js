@@ -1,3 +1,4 @@
+import { getTabTitle } from './tab-title.js'
 import { cdpFetch } from './cdp.js'
 
 export async function openTabDevTools (data, tabId) {
@@ -61,7 +62,7 @@ export async function openTabDevTools (data, tabId) {
 
             await data.newTab(activeTab.spaceId || data.spaceMeta.activeSpace, {
                 url: localDevToolsUrl,
-                title: `DevTools - ${activeTab.title || 'Untitled'}`,
+                title: `DevTools - ${getTabTitle(activeTab)}`,
                 shouldFocus: true,
                 pinned: 'right',
                 groupTabId: tabId

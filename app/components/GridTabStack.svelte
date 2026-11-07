@@ -1,4 +1,5 @@
 <script>
+  import { getTabTitle } from '../lib/tab-title.js'
   import { onDestroy, tick } from 'svelte'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
@@ -20,7 +21,7 @@
   const defaultIndex = $derived(getDefaultGroupTabIndex(group.tabs, [activeTabId, spaceActiveTabId, defaultTabId]))
   const selectedIndex = $derived(Math.min(scrubbing ? preview.state.tabIndex : keyboardIndex ?? defaultIndex, group.tabs.length - 1))
   const selectedTab = $derived(group.tabs[selectedIndex])
-  const stackTitle = $derived((!scrubbing && keyboardIndex === null ? group.name : null) || selectedTab.titleOverride || selectedTab.title || 'Untitled')
+  const stackTitle = $derived((!scrubbing && keyboardIndex === null ? group.name : null) || getTabTitle(selectedTab))
   const faviconSlots = $derived(group.metadata?.emoji || group.metadata?.favicon ? 2 : 3)
   const faviconProgress = $derived(scrubbing ? preview.state.progress : selectedIndex / Math.max(1, group.tabs.length - 1))
   const faviconWindow = $derived(getFaviconWindow(group.tabs.length, faviconProgress, faviconSlots))
@@ -145,7 +146,7 @@
   {:else}
     <span class="empty-preview">
       <span class="empty-favicon"><Favicon {tab} showButton={false} /></span>
-      <span class="empty-title">{tab.titleOverride || tab.title || tab.url || 'Untitled'}</span>
+      <span class="empty-title">{getTabTitle(tab)}</span>
     </span>
   {/if}
 {/snippet}
@@ -154,15 +155,15 @@
   {#each group.tabs as tab, index (tab.id)}
     <div class="dialog-card" class:active={tab.id === activeTabId} class:space-active-tab={tab.id === spaceActiveTabId} data-tab-id={tab.id} use:observePreview>
       <div class="card-header">
-        <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} aria-label="Activate {tab.titleOverride || tab.title || 'Untitled'}">
+        <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} aria-label="Activate {getTabTitle(tab)}">
           <span class="tab-favicon">{#if visiblePreviews.has(tab.id)}<Favicon {tab} showButton={false} />{/if}</span>
-          <span class="title-text">{tab.titleOverride || tab.title || 'Untitled'}</span>
+          <span class="title-text">{getTabTitle(tab)}</span>
         </button>
-        <button class="icon-button close-tab" onmousedown={(event) => { if (event.button === 0) onClose(event, tab, index) }} onclick={(event) => { if (event.detail === 0) onClose(event, tab, index) }} aria-label="Close {tab.titleOverride || tab.title || 'Untitled'}">
+        <button class="icon-button close-tab" onmousedown={(event) => { if (event.button === 0) onClose(event, tab, index) }} onclick={(event) => { if (event.detail === 0) onClose(event, tab, index) }} aria-label="Close {getTabTitle(tab)}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
         </button>
       </div>
-      <button class="card-preview" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} onwheel={(event) => onWheel(event, tab, index)} aria-label="Activate {tab.titleOverride || tab.title || 'Untitled'}">
+      <button class="card-preview" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} onwheel={(event) => onWheel(event, tab, index)} aria-label="Activate {getTabTitle(tab)}">
         {#if visiblePreviews.has(tab.id)}{@render thumbnail(tab, false)}{/if}
       </button>
     </div>
@@ -192,7 +193,7 @@
   <div class="stack-layer stack-middle" aria-hidden="true"></div>
   <div class="stack-front" class:active={selectedTab.id === activeTabId} class:space-active-tab={selectedTab.id === spaceActiveTabId}>
     <div class="stack-header">
-      <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}. Use left and right arrows to browse tabs.">
+      <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} aria-label="Activate {getTabTitle(selectedTab)}. Use left and right arrows to browse tabs.">
         {@render groupIcon()}
         <span class="group-favicons" class:scrolled={group.tabs.length > faviconWindow.visible && faviconProgress > 0} class:at-end={group.tabs.length <= faviconWindow.visible || faviconProgress === 1} aria-hidden="true" style:width="{faviconWindow.visible * 18}px">
           <span class="group-favicon-track" style:transform="translateX({-faviconWindow.offset * 18}px)">
@@ -208,7 +209,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6m0-6-7 7M10 20H4v-6m0 6 7-7" /></svg>
       </button>
     </div>
-    <button class="stack-preview" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} onwheel={(event) => onWheel(event, selectedTab, selectedIndex)} aria-label="Activate {selectedTab.titleOverride || selectedTab.title || 'Untitled'}">
+    <button class="stack-preview" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} onwheel={(event) => onWheel(event, selectedTab, selectedIndex)} aria-label="Activate {getTabTitle(selectedTab)}">
       {#key selectedTab.id}
         <span class="preview-image">{@render thumbnail(selectedTab)}</span>
       {/key}

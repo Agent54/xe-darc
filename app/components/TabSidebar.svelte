@@ -5,6 +5,7 @@
 </script>
 
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
     import { openTabDevTools } from '../lib/tab-devtools.js'
     import { closeButtonHistory } from '../lib/close-button-history.js'
     // Tab sidebar component with Firefox-like hover behavior
@@ -212,7 +213,7 @@
     function tabMatchesSearch(tab) {
         if (!tabSearchQuery) return true;
         const query = tabSearchQuery.toLowerCase();
-        const title = (data.docs[tab.id]?.titleOverride || tab.titleOverride || data.docs[tab.id]?.title || tab.title || '').toLowerCase();
+        const title = getTabTitle(data.docs[tab.id] || tab).toLowerCase();
         const url = (data.docs[tab.id]?.url || tab.url || '').toLowerCase();
         return title.includes(query) || url.includes(query);
     }
@@ -761,7 +762,9 @@
     let lastCreatedSidebarTabId = null
 
     async function createSidebarTab(spaceId, options) {
-        if (!data.activateSpace(spaceId, { ensureTab: false })) return null
+        if (!data.activateSpace(spaceId, { ensureTab: false })) {
+            return null
+        }
         const creation = data.newTab(spaceId, { ...options, shouldFocus: true })
         lastCreatedSidebarTabId = data.spaceMeta.activeTabId
         const tab = await creation
@@ -1884,7 +1887,7 @@
                             <button class="pinned-tab" data-tab-id={tab.id} class:hibernated={data.isTabHibernated(tab.id)}
                                     class:active={tab.id === data.spaceMeta.activeTabId}
                                     class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
-                                    title={tab.titleOverride || tab.title || tab.url} aria-label={tab.titleOverride || tab.title || tab.url}
+                                    title={getTabTitle(data.docs[tab.id] || tab)} aria-label={getTabTitle(data.docs[tab.id] || tab)}
                                     onmousedown={(e) => startPinDrag(e, tab, data.spaceMeta.activeSpace)}
                                     onclick={(e) => finishPinClick(e, tab, data.spaceMeta.activeSpace)}
                                     oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}
@@ -2097,7 +2100,7 @@
                                     <div class="pinned-tabs-grid" data-pin-scope="space">
                                         {#each spacePins as tab (tab.id)}
                                             {#if tabMatchesSearch(tab)}
-                                                <button class="app-tab" data-tab-id={tab.id} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} title={tab.titleOverride || tab.title || tab.url} aria-label={tab.titleOverride || tab.title || tab.url}
+                                                <button class="app-tab" data-tab-id={tab.id} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} title={getTabTitle(data.docs[tab.id] || tab)} aria-label={getTabTitle(data.docs[tab.id] || tab)}
                                                         onmousedown={(e) => startPinDrag(e, tab, spaceId)}
                                                         onclick={(e) => finishPinClick(e, tab, spaceId)}
                                                         oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}>
@@ -2223,7 +2226,7 @@
                                                     <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive && !multiSpaceMode) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
                                                         onclick={(e) => { if (e.button === 0 && !didDragOccurred()) { if (multiSpaceMode) { activateTab(tab.id, spaceId) } else if (tabDrag.wasAlreadyActive) { activateTab(tab.id, spaceId) } } }}>
                                                         <Favicon {tab} showButton={false} />
-                                                        <span class="tab-title">{data.docs[tab.id]?.titleOverride || tab.titleOverride || data.docs[tab.id]?.title || tab.title}</span>
+                                                        <span class="tab-title">{getTabTitle(data.docs[tab.id] || tab)}</span>
                                                     </button>
                                                     
                                                     <button class="tab-close" aria-label="Close tab"
@@ -2359,7 +2362,7 @@
                                         onmouseleave={handleTabMouseLeave}>
                                     <Favicon {tab} showButton={false} />
                                     <div class="tab-text">
-                                        <span class="tab-title">{data.docs[tab.id]?.titleOverride || tab.titleOverride || data.docs[tab.id]?.title || tab.title}</span>
+                                        <span class="tab-title">{getTabTitle(data.docs[tab.id] || tab)}</span>
                                         <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
                                     </div>
                                     <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}

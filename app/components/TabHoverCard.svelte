@@ -1,4 +1,5 @@
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
     import UrlRenderer from './UrlRenderer.svelte'
     import AttachmentImage from './AttachmentImage.svelte'
     import Favicon from './Favicon.svelte'
@@ -37,7 +38,7 @@
     const SCREENSHOT_HEIGHT = 180
     const HISTORY_TITLE_HEIGHT = 30
     const MIN_HISTORY_HEIGHT = 100
-    const title = $derived(tab.titleOverride || tab.title || 'Untitled')
+    const title = $derived(getTabTitle(tab))
     const activationLabel = $derived(`${isClosedTab ? 'Restore' : 'Open'} ${title}`)
     let urlBar = $state(null)
 
@@ -64,7 +65,7 @@
     async function openTabHistory() {
         const historyTab = await data.newTab(tab.spaceId || data.spaceMeta.activeSpace, {
             url: `about:tabhistory#${tab.id}`,
-            title: `History - ${tab.titleOverride || tab.title || 'Untitled'}`,
+            title: `History - ${getTabTitle(tab)}`,
             pinned: 'right',
             groupTabId: tab.id
         })
@@ -486,7 +487,7 @@
                             <div class="history-title-scroll-wrapper" use:initScrollFade>
                                 <div class="fade-left"></div>
                                 <div class="history-title" onscroll={handleScrollFade}>
-                                    {historyTab.titleOverride || historyTab.title || 'Untitled'}
+                                    {getTabTitle(historyTab)}
                                     {#if historyTab.source}
                                         <span class="history-source">({historyTab.source.label})</span>
                                     {/if}

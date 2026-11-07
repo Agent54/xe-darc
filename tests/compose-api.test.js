@@ -130,11 +130,12 @@ Deno.test('canceling an overview refresh does not retry deleted-file requests', 
     const controller = new AbortController()
     let psRequests = 0
     await withCompose((url, options) => {
-        assert.equal(options.signal, controller.signal)
+        assert.equal(options.signal.aborted, controller.signal.aborted)
         if (url.pathname === '/v1.24/ls') return Response.json([{ Name: 'demo', ConfigFiles: deletedPath }])
         if (url.pathname.startsWith('/v1.24/config/')) return Response.json({ services: {} })
         psRequests++
         controller.abort()
+        assert.equal(options.signal.aborted, true)
         return Response.json({ message: missingFile }, { status: 500 })
     }, async () => {
         await assert.rejects(listComposeProjects({ signal: controller.signal }), /no such file or directory/)

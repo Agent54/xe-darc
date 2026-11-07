@@ -2,6 +2,7 @@
     import UrlBar from './UrlBar.svelte'
     import Tooltip from './Tooltip.svelte'
     import Favicon from './Favicon.svelte'
+    import { getTabTitle } from '../lib/tab-title.js'
 
     let {
         tab,
@@ -17,9 +18,7 @@
 </script>
 
 <div class="lightbox-header-wrapper">
-    {#if tab.titleOverride || tab.title}
-        <div class="lightbox-title">{tab.titleOverride || tab.title}</div>
-    {/if}
+    <div class="lightbox-title">{getTabTitle(tab)}</div>
     <div class="lightbox-header">
     <div class="lightbox-info">
         <Favicon {tab} showButton={false} />

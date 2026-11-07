@@ -1,4 +1,5 @@
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
     import { fade, scale } from 'svelte/transition'
     import { onMount, tick } from 'svelte'
 
@@ -643,7 +644,7 @@
                             </div>
                         {:else}
                             <div class="hibernated-lightbox-body hibernated-lightbox-empty">
-                                <div class="hibernated-text">{lbTab.title || lbTab.url}</div>
+                                <div class="hibernated-text">{getTabTitle(lbTab)}</div>
                             </div>
                         {/if}
                     </div>
