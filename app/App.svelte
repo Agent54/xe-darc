@@ -5305,8 +5305,9 @@
         min-height: 56px;
         box-sizing: border-box;
         -webkit-app-region: no-drag;
-        right: 23px;
+        right: 22px;
         bottom: 13px;
+        transition: right 80ms ease;
     }
 
     .sidebar-right:hover .led-indicator-array { 
