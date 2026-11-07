@@ -40,8 +40,8 @@ function navigationHarness({ direct = true, legacy = false, command = false } = 
         isPermissionGranted: () => false,
         getCurrentGroupTabId: () => 'current-group-tab',
         newTab: (space, options) => opened.push(options),
-        updateTab: (id, update) => Object.assign(data.docs[id], update)
-        ,isInternalPage: url => url?.startsWith('about:')
+        updateTab: (id, update) => Object.assign(data.docs[id], update),
+        isInternalPage: url => url?.startsWith('about:')
     }
     const noop = () => {}
     const api = new Function('data', 'tab', 'origin', 'window', 'console', 'setTimeout', `

@@ -2551,7 +2551,7 @@
         height: 20px;
         margin: 2px 4px 0 auto;
         padding: 0;
-        border: 1px solid transparent;
+        border: 0;
         border-radius: 4px;
         background: rgba(255, 255, 255, 0.05);
         color: rgba(255, 255, 255, 0.6);
@@ -2559,24 +2559,17 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 0.1s ease;
-        backdrop-filter: blur(4px);
+        transition: background-color 150ms ease, color 150ms ease;
     }
 
     .activity-toggle:hover {
-        background: rgba(255, 255, 255, 0.12);
-        color: rgba(255, 255, 255, 0.9);
-        border-color: rgba(255, 255, 255, 0.1);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        transform: scale(1.05);
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.84);
     }
 
-    .activity-toggle:active { transform: scale(0.95); }
-
     .activity-toggle.active {
-        background: rgba(255, 255, 255, 0.15);
-        color: rgba(255, 255, 255, 0.9);
-        border-color: rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.84);
     }
 
     .activity-toggle:focus-visible { outline: 1px solid #a3a3a3; outline-offset: 2px; }

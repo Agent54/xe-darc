@@ -1137,6 +1137,45 @@ Deno.test('fresh web tabs stay pending until frame creation and hibernation stil
     assert.equal(data.frames[background.id].loading, false)
 })
 
+Deno.test('only previously loaded or explicitly hibernated tabs sleep, including after session restore', async () => {
+    const { data, refresh, storage, db } = session({ tabs: [tab('unopened'), tab('loaded', defaultSpace, { lastLoadedAt: 123 })], runtime: 'client' })
+    await refresh()
+    assert.equal(data.isTabHibernated('unopened'), false)
+    assert.equal(data.isTabHibernated('loaded'), true)
+    await data.updateTab('unopened', { title: 'Fetched title', screenshot: 'https://example.com/og.png' })
+    assert.equal(data.isTabHibernated('unopened'), false, 'HTML metadata does not count as a live page load')
+    data.activate('unopened')
+    assert.equal(data.isTabHibernated('unopened'), false)
+    data.frames.unopened = { frame: { remove() {} } }
+    await data.updateTab('unopened', { lastLoadedAt: 456 })
+    assert.equal(data.isTabHibernated('unopened'), false)
+    data.hibernate('unopened')
+    assert.equal(data.isTabHibernated('unopened'), true)
+    data.unhibernate('unopened')
+    assert.equal(data.isTabHibernated('unopened'), false)
+
+    const restored = session({ tabs: [await db.get('unopened')], storage, runtime: 'client' })
+    await restored.refresh()
+    assert.equal(restored.data.isTabHibernated('unopened'), true)
+    assert.equal(restored.data.docs.unopened.lastLoadedAt, 456)
+})
+
+Deno.test('background tab creation schedules metadata without starting a live frame', async () => {
+    const scheduled = []
+    const { data, refresh } = session({ tabs: [tab('anchor')], runtime: 'client', frameEnvironment: {
+        scheduleBackgroundTabMetadata: (data, id) => scheduled.push(id)
+    } })
+    await refresh()
+    const background = await data.newTab(defaultSpace, { url: 'https://background.example/' })
+    assert.deepEqual(scheduled, [background.id])
+    assert.equal(data.frames[background.id].pendingLoad, false)
+    assert.equal(data.isTabHibernated(background.id), false)
+    await data.newTab(defaultSpace, { url: 'https://foreground.example/', shouldFocus: true })
+    await data.newTab(defaultSpace, { url: 'https://preview.example/', preview: true })
+    await data.newTab(defaultSpace, { url: 'https://lightbox.example/', lightbox: true })
+    assert.deepEqual(scheduled, [background.id])
+})
+
 Deno.test('metadata from an older page cannot overwrite a newer navigation or replacement frame', async () => {
     const source = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
         .match(/    async function updateTabMeta\(tab\) \{[\s\S]*?(?=\/\/ Content script)/)[0]
