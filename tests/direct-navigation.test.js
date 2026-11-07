@@ -152,6 +152,14 @@ Deno.test('explicit command-click still opens a background tab with a remembered
     assert.deepEqual(h.navigated, [])
 })
 
+Deno.test('same-tab popups respect an explicit denial of off-origin navigation', () => {
+    const h = navigationHarness({ policy: 'same-tab' })
+    h.data.permissionDecision = type => type === 'open-tab' ? 'same-tab' : 'deny'
+    h.newWindow({ targetUrl: 'https://destination.example/' })
+    assert.deepEqual(h.navigated, [])
+    assert.equal(h.opened.length, 0)
+})
+
 for (const legacy of [false, true]) {
     const api = legacy ? 'legacy' : 'current'
 

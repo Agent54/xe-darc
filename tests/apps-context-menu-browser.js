@@ -8,6 +8,10 @@ import puppeteer from 'puppeteer'
 const root = new URL('../', import.meta.url).pathname
 const require = createRequire(import.meta.url)
 const appSource = Deno.readTextFileSync(`${root}app/App.svelte`)
+const appsSource = Deno.readTextFileSync(`${root}app/components/Apps.svelte`)
+const { compile: compileCss } = await import(createRequire(import.meta.resolve('@tailwindcss/vite')).resolve('@tailwindcss/node'))
+const tailwind = await compileCss('@import "tailwindcss";', { base: root, onDependency() {} })
+const styles = tailwind.build(appsSource.split(/[\s"'`<>{}=]+/))
 const keyHandler = parse(appSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'handleShortcutEscape')
 const modules = {
     entry: `
@@ -18,6 +22,7 @@ const modules = {
         window.opened = []
         window.overlayClosed = false
         const tabDrag = { active: false }
+        const gestureOverviewVisible = false, newTabMenuVisible = false
         let shortcutOverviewVisible = false
         const helpMenu = null
         const showAppsOverlay = true
@@ -41,7 +46,7 @@ const modules = {
             if (path.includes('/config/')) return Response.json({ services: { web: { ports: [{ target: 80, published: 8080 }] }, worker: {} } })
             return Response.json(containers)
         }
-        window.apps = mount(Apps, { target: document.body })
+        window.apps = mount(Apps, { target: document.querySelector('.apps-fixture') })
     `,
     'fixture-data': `export default {
         docs: {}, spaceMeta: { activeSpace: 'space' },
@@ -98,12 +103,10 @@ const server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, req
     if (new URL(request.url).pathname === '/fixture.js') {
         return new Response(output[0].code, { headers: { 'content-type': 'text/javascript' } })
     }
-    return new Response(`<!doctype html><style>${Deno.readTextFileSync(`${root}app/menus.css`)}</style><style>
-        body { background: #111; color: white; font-family: system-ui; margin: 70px 20px; }
-        .app-card { display: inline-block; vertical-align: top; width: 210px; padding: 10px; margin: 10px; border: 1px solid #444; border-radius: 10px; }
-        .app-card-actions { display: flex; gap: 4px; }
-        .app-port-links { display: flex; flex-direction: column; }
-    </style><script type="module" src="/fixture.js"></script>`, { headers: { 'content-type': 'text/html' } })
+    return new Response(`<!doctype html><style>${styles}</style><style>${Deno.readTextFileSync(`${root}app/menus.css`)}</style><style>
+        body { background: #111; color: white; font-family: system-ui; margin: 0; }
+        .apps-fixture { container-type: inline-size; position: relative; width: min(900px, calc(100vw - 32px)); height: calc(100vh - 120px); margin: 80px auto 40px; background: #000; border: 1px solid #ffffff1a; border-radius: 16px; }
+    </style><main class="apps-fixture"></main><script type="module" src="/fixture.js"></script>`, { headers: { 'content-type': 'text/html' } })
 })
 
 let browser
@@ -135,6 +138,37 @@ try {
         await page.waitForFunction(() => !document.querySelector('.apps-view-menu'))
         assert.equal(await page.$eval(`[data-view-trigger="${kind}"]`, button => button.getAttribute('aria-expanded')), 'false')
     }
+
+    for (const width of [1100, 430, 320]) {
+        await page.setViewport({ width, height: 760 })
+        for (const kind of ['sort', 'group']) {
+            await page.click(`[data-view-trigger="${kind}"]`)
+            const bounds = await page.evaluate(kind => {
+                const trigger = document.querySelector(`[data-view-trigger="${kind}"]`).getBoundingClientRect()
+                const menu = document.querySelector(`#apps-${kind}-menu`).getBoundingClientRect()
+                const heading = document.querySelector('.apps-header h2').getBoundingClientRect()
+                const close = document.querySelector('.apps-close').getBoundingClientRect()
+                return { trigger: trigger.toJSON(), menu: menu.toJSON(), heading: heading.toJSON(), close: close.toJSON() }
+            }, kind)
+            const edge = width <= 600 && kind === 'sort' ? 'left' : 'right'
+            assert.ok(Math.abs(bounds.menu[edge] - bounds.trigger[edge]) < 1, `${kind} anchors to its own trigger at ${width}px`)
+            assert.equal(bounds.menu.top - bounds.trigger.bottom, 6)
+            assert.ok(bounds.menu.left >= 0 && bounds.menu.right <= width && bounds.menu.bottom <= 760, JSON.stringify(bounds))
+            assert.ok(bounds.heading.right < bounds.trigger.left, 'The title and view controls do not overlap')
+            assert.equal(bounds.trigger.top, bounds.close.top, 'Header controls share a baseline')
+            await page.screenshot({ path: `${root}.cache/apps-${kind}-${width}.png` })
+            await page.keyboard.press('Escape')
+            assert.equal(await page.evaluate(() => document.activeElement.dataset.viewTrigger), kind)
+            assert.equal(await page.evaluate(() => window.overlayClosed), false, 'Escape dismisses the menu before the Apps view')
+        }
+    }
+    await page.setViewport({ width: 1100, height: 760 })
+    await page.focus('[data-view-trigger="sort"]')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('End')
+    await page.keyboard.press('Enter')
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('appsView')).sort), 'running')
+    assert.equal(await page.$('.apps-view-menu'), null)
 
     await openServiceMenu()
     assert.deepEqual(await labels(), ['Start', 'Stop', 'Restart', 'Pause', 'Start watching', 'Remove'])

@@ -1,7 +1,6 @@
 <script>
     import { onMount } from 'svelte'
     import { loadAppCatalog } from '../lib/app-catalog.js'
-    import { checkoutRepository } from '../lib/compose-api.js'
 
     let { show = false, installedApps = [], onAdd = () => {}, onClose = () => {} } = $props()
     
@@ -17,6 +16,7 @@
         url: '',
         // Repo tab specific
         catalogId: '',
+        category: '',
         githubUrl: '',
         branch: 'main',
         githubToken: '',
@@ -30,8 +30,7 @@
     let installedSection = $state('closed')
     let submissionState = $state('idle')
     let submitError = $state('')
-    let composeWarning = $state(null)
-    let checkoutController = null
+    let submissionController = null
     let catalogApps = $state([])
     let catalogState = $state('loading')
     let catalogError = $state('')
@@ -41,7 +40,7 @@
         loadCatalog()
         return () => {
             catalogController?.abort()
-            checkoutController?.abort()
+            submissionController?.abort()
         }
     })
 
@@ -89,6 +88,7 @@
     function selectCatalogApp(app) {
         Object.assign(appFormData, {
             catalogId: app.id || '',
+            category: app.category || '',
             name: app.name || '',
             iconUrl: app.iconUrl || '',
             url: '',
@@ -126,68 +126,40 @@
         }
         submitError = ''
 
-        const { githubToken, ...settings } = appFormData
         const app = {
-            ...settings,
+            ...appFormData,
             dataPartitions: [...appFormData.dataPartitions]
         }
         submissionState = 'submitting'
         const controller = new AbortController()
-        checkoutController = controller
+        submissionController = controller
         try {
-            if (activeTab !== 'repo') {
-                await onAdd({ type: activeTab, app })
-                controller.signal.throwIfAborted()
-                handleClose()
-                return
-            }
-            const needsManualCompose = app.pathType === 'dockerfile' || app.pathType === 'static'
-            const checkout = await checkoutRepository({
-                url: app.githubUrl,
-                path: app.checkoutPath,
-                branch: app.branch,
-                token: githubToken,
-                signal: controller.signal
-            })
+            await onAdd({ type: activeTab, app })
             controller.signal.throwIfAborted()
-            await onAdd({ type: 'repo', app, checkout })
-            controller.signal.throwIfAborted()
-            if (needsManualCompose) {
-                composeWarning = {
-                    type: app.pathType === 'static' ? 'Static HTML' : 'Dockerfile',
-                    path: `${checkout.path.replace(/\/+$/, '')}/docker-compose.yaml`,
-                    pathKind: checkout.path.startsWith('/') ? 'absolute' : 'relative'
-                }
-            } else {
-                handleClose()
-            }
+            handleClose()
         } catch (error) {
             if (error?.name !== 'AbortError') {
                 submitError = error?.message || 'App could not be added'
             }
         } finally {
-            if (checkoutController === controller) {
-                checkoutController = null
+            if (submissionController === controller) {
+                submissionController = null
                 submissionState = 'idle'
             }
         }
     }
 
-    function focusWarning(node) {
-        node.focus()
-    }
-
     function handleClose() {
         catalogController?.abort()
         catalogController = null
-        checkoutController?.abort()
-        checkoutController = null
+        submissionController?.abort()
+        submissionController = null
         submissionState = 'idle'
         submitError = ''
-        composeWarning = null
         // Reset form
         Object.assign(appFormData, {
             catalogId: '',
+            category: '',
             name: '',
             iconUrl: '',
             pinToAppPins: false,
@@ -279,7 +251,7 @@
         onmousedown={() => !installed && selectCatalogApp(app)}
         onkeydown={(event) => !installed && selectCatalogAppWithKeyboard(event, app)}
         disabled={installed}
-        aria-label={installed ? `${app.name} is already installed` : `Configure ${app.name}`}
+        aria-label={installed ? `${app.name} is already added` : `Configure ${app.name}`}
     >
         <span class="flex h-full flex-col items-center gap-3">
             <img src={app.iconUrl} alt="" class="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
@@ -292,7 +264,7 @@
         </span>
 
         <span class="absolute right-2 top-2 rounded border px-2 py-1 text-xs {installed ? 'border-white/15 bg-white/8 text-white/55' : app.type === 'docker' ? 'border-blue-500/50 bg-blue-500/20 text-blue-300' : 'border-green-500/50 bg-green-500/20 text-green-300'}">
-            {installed ? 'Installed' : app.type === 'docker' ? 'Docker' : 'URL'}
+            {installed ? 'Added' : app.type === 'docker' ? 'Docker' : 'URL'}
         </span>
     </button>
 {/snippet}
@@ -303,21 +275,20 @@
         style="padding-top: 15vh;"
         onmousedown={handleBackdropClick}
         onkeydown={(event) => {
-            if (composeWarning && event.key === 'Escape') {
+            if (event.key === 'Escape') {
                 event.preventDefault()
                 handleClose()
             }
         }}
-        role={composeWarning ? 'alertdialog' : 'dialog'}
+        role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        aria-describedby={composeWarning ? 'compose-warning-description' : undefined}
         tabindex="-1"
     >
-        <div class="bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl w-full shadow-2xl flex flex-col {composeWarning ? 'max-w-xl' : 'max-w-4xl h-[70vh]'}" onmousedown={handleModalClick} role="presentation">
+        <div class="bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl w-full shadow-2xl flex flex-col max-w-4xl h-[70vh]" onmousedown={handleModalClick} role="presentation">
             <!-- Header -->
             <div class="flex items-center justify-between p-6 border-b border-white/10 flex-shrink-0">
-                <h2 id="modal-title" class="text-xl font-semibold text-white/90">{composeWarning ? 'Docker Compose file required' : 'Add New App'}</h2>
+                <h2 id="modal-title" class="text-xl font-semibold text-white/90">Add New App</h2>
                 <button 
                     class="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white/90"
                     onmousedown={handleClose}
@@ -329,33 +300,6 @@
                 </button>
             </div>
 
-            {#if composeWarning}
-                <div class="manual-compose-warning space-y-4 p-6">
-                    <p id="compose-warning-description" class="text-sm leading-relaxed text-white/80">
-                        The repository has been cloned. Until full support for {composeWarning.type} apps is added, you must manually add a Docker Compose file at the location below before the app can run.
-                    </p>
-                    <p class="text-xs text-white/60">
-                        {composeWarning.pathKind === 'absolute' ? 'Full path:' : 'Path inside your stacks folder:'}
-                    </p>
-                    <code class="block select-text break-all rounded-lg border border-white/15 bg-white/5 p-3 text-sm text-white/90">{composeWarning.path}</code>
-                </div>
-                <div class="flex justify-end border-t border-white/10 p-6">
-                    <button
-                        use:focusWarning
-                        type="button"
-                        class="cursor-pointer rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                        onmousedown={handleClose}
-                        onkeydown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault()
-                                handleClose()
-                            }
-                        }}
-                    >
-                        Got it
-                    </button>
-                </div>
-            {:else}
             <!-- Tabs -->
             <div class="flex gap-2 p-4 pb-4 flex-shrink-0">
                 <button 
@@ -405,7 +349,7 @@
                         {:else if catalogApps.length === 0}
                             <p class="text-sm text-white/50" role="status">No apps are available in the catalog yet.</p>
                         {:else if availableCatalogApps.length === 0}
-                            <p class="text-sm text-white/50" role="status">All catalog apps are already installed.</p>
+                            <p class="text-sm text-white/50" role="status">All catalog apps are already added.</p>
                         {/if}
 
                         {#if catalogState === 'ready'}
@@ -439,7 +383,7 @@
                                     <svg class="h-4 w-4 transition-transform {installedSection === 'open' ? 'rotate-0' : '-rotate-90'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                         <path d="M12 16.5l-6-6h12l-6 6z"/>
                                     </svg>
-                                    <span class="text-sm font-medium">Already installed</span>
+                                    <span class="text-sm font-medium">Already added</span>
                                     <span class="text-xs text-white/40">({installedCatalogApps.length})</span>
                                     <span class="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent"></span>
                                 </button>
@@ -617,10 +561,9 @@
                     onmousedown={submitApp}
                     disabled={submissionState === 'submitting' || activeTab === 'catalog' || activeTab === 'url' && !appFormData.url || activeTab === 'repo' && !appFormData.githubUrl}
                 >
-                    {submissionState === 'submitting' ? activeTab === 'repo' ? 'Cloning…' : 'Adding…' : 'Add App'}
+                    {submissionState === 'submitting' ? 'Adding…' : 'Add App'}
                 </button>
             </div>
-            {/if}
         </div>
     </div>
 {/if}

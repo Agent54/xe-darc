@@ -709,6 +709,10 @@
         }
         if (decision === 'same-tab' && !hasModifierKey) {
             e.window?.discard?.()
+            if (e.targetUrl && origin(e.targetUrl) !== currentOrigin &&
+                data.permissionDecision('navigate-off-origin', tab.id, currentOrigin) === 'deny') {
+                return
+            }
             data.navigate(tab.id, e.targetUrl || 'about:blank')
             return
         }

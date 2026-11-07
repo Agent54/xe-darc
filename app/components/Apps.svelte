@@ -3,13 +3,14 @@
     import AddAppModal from './AddAppModal.svelte'
     import AppContextMenu from './AppContextMenu.svelte'
     import data from '../data.svelte.js'
-    import { getComposeAppPorts, listComposeProjects, runComposeAction } from '../lib/compose-api.js'
+    import { checkoutRepository, getComposeAppPorts, listComposeProjects, runComposeAction } from '../lib/compose-api.js'
     import { composeContainer } from '../lib/compose-actions.js'
     import { appViewOptions, appTypeLabel, appTimestamp, appMatchesURL, appRuntime, arrangeApps } from '../lib/app-view.js'
+    import { appSections, repositoryApps } from '../lib/app-records.js'
 
     let { onClose = () => {} } = $props()
 
-    const collapsedSections = $state({ 'category:Examples': true })
+    const collapsedSections = $state({ 'computer:category:Examples': true })
     let sortBy = $state('none')
     let groupBy = $state('category')
     let viewMenu = $state(null)
@@ -22,6 +23,7 @@
     let contextMenu = $state(null)
     let dockerAction = $state(null)
     let dockerMessage = $state('')
+    const openingApps = $state({})
     let hasComposeSnapshot = false
     let loadController = null
 
@@ -36,9 +38,10 @@
         { id: 'example-blender', name: 'Blender', iconUrl: '/embed-icons/felt.png', type: 'static', partition: { name: 'Creative', color: '#fb7185' } }
     ])
 
+    const sections = $derived(appSections(data.docs, [...composeApps, ...exampleApps], appMetadata))
     const apps = $derived.by(() => {
         const tabs = Object.values(data.docs).filter(doc => doc.type === 'tab' && !doc._deleted)
-        return [...composeApps, ...exampleApps].map(app => {
+        return [...sections.saved, ...sections.computer].map(app => {
             const metadata = appMetadata[app.id] || {}
             const clients = tabs.filter(tab => appMatchesURL(app, tab.url)).map(tab => ({
                 closed: Boolean(tab.closed || tab.archive),
@@ -53,7 +56,10 @@
             }
         })
     })
-    const appGroups = $derived(arrangeApps(apps, { sort: sortBy, group: groupBy }))
+    const appLists = $derived([
+        { key: 'saved', label: 'Your apps', groups: arrangeApps(apps.filter(app => app._id), { sort: sortBy, group: groupBy }) },
+        { key: 'computer', label: 'Apps from this computer', groups: arrangeApps(apps.filter(app => !app._id), { sort: sortBy, group: groupBy }) }
+    ])
 
     onMount(() => {
         try {
@@ -290,14 +296,20 @@
         }
     }
 
-    async function openURL(event, url, title, appId) {
+    async function openURL(event, url, title, appId, settings = {}) {
         if (event?.type === 'mousedown' && event.button !== 0) {
             return
         }
         event?.preventDefault()
         event?.stopPropagation()
         if (!url) return
-        await data.newTab(data.spaceMeta.activeSpace, { url, title, shouldFocus: true })
+        const tab = await data.newTab(data.spaceMeta.activeSpace, {
+            url, title, shouldFocus: true,
+            ...(settings.pinToAppPins ? { pinned: 'normal', pinScope: 'global' } : {})
+        })
+        if (settings.pinToAppPins) {
+            await data.updateTabOverrides(tab.id, { titleOverride: settings.name, faviconOverride: settings.iconUrl })
+        }
         if (appId) {
             appMetadata[appId] = { ...appMetadata[appId], lastUsed: Date.now() }
             saveMetadata()
@@ -305,13 +317,57 @@
         onClose()
     }
 
-    function openApp(event, app) {
-        openURL(event, app.endpoints?.[0]?.url || app.url, app.name, app.id)
+    async function openApp(event, app, url) {
+        if (event?.type === 'mousedown' && event.button !== 0) {
+            return
+        }
+        event?.preventDefault()
+        event?.stopPropagation()
+        if (openingApps[app.id]) {
+            return
+        }
+        openingApps[app.id] = 'opening'
+        try {
+            if (app.appType === 'repo') {
+                const localApps = await refresh()
+                if (!localApps) {
+                    throw new Error(composeError || 'Compose projects could not be loaded.')
+                }
+                let services = repositoryApps(app, localApps, appMetadata[app.id]?.repositoryPath)
+                if (!services.length && !appMetadata[app.id]?.repositoryPath) {
+                    openingApps[app.id] = 'installing'
+                    dockerMessage = `Installing ${app.name}…`
+                    const checkout = await checkoutRepository({
+                        url: app.githubUrl,
+                        path: app.checkoutPath,
+                        branch: app.branch,
+                        token: app.githubToken
+                    })
+                    appMetadata[app.id] = { ...appMetadata[app.id], repositoryPath: checkout.path, installedAt: Date.now() }
+                    saveMetadata()
+                    services = repositoryApps(app, await refresh() || [], checkout.path)
+                }
+                url ||= services.flatMap(service => service.endpoints || [])[0]?.url || app.url
+                if (!url) {
+                    const path = appMetadata[app.id]?.repositoryPath
+                    dockerMessage = path && ['dockerfile', 'static'].includes(app.pathType)
+                        ? `Add a Docker Compose file at ${path.replace(/\/+$/, '')}/docker-compose.yaml before ${app.name} can run.`
+                        : `${app.name} has no launch URL yet. Check its Compose file and published ports, then open it again.`
+                    return
+                }
+                dockerMessage = ''
+            }
+            await openURL(event, url || app.endpoints?.[0]?.url || app.url, app.name, app.id, app)
+        } catch (error) {
+            dockerMessage = error?.message || 'App could not be opened'
+        } finally {
+            delete openingApps[app.id]
+        }
     }
 
-    function handleOpenKey(event, app, url = app.endpoints?.[0]?.url || app.url) {
+    function handleOpenKey(event, app, url) {
         if (event.key === 'Enter' || event.key === ' ') {
-            openURL(event, url, app.name, app.id)
+            openApp(event, app, url)
         }
     }
 
@@ -363,7 +419,12 @@
         dockerAction = { appId: app.id, action }
         dockerMessage = `Running Docker action for ${container?.name || app.name}…`
         try {
-            await runComposeAction(action, app, container)
+            const targets = app.composeApps?.length ? app.composeApps : [app]
+            for (const target of targets) {
+                if (!container || target.containers.some(candidate => candidate.id === container.id)) {
+                    await runComposeAction(action, target, container)
+                }
+            }
             dockerMessage = `Docker action completed for ${container?.name || app.name}.`
         } catch (error) {
             dockerMessage = error?.message || 'Docker action failed'
@@ -403,54 +464,8 @@
         }
     }
 
-    async function addApp({ type, app, checkout }) {
-        const spaceId = data.spaceMeta.activeSpace
-        let url = app.url
-        if (type === 'repo' && checkout) {
-            const installedApps = await refresh()
-            if (!app.pinToAppPins || app.pathType === 'dockerfile' || app.pathType === 'static') {
-                return
-            }
-            const repositoryPath = checkout.path.replaceAll('\\', '/').replace(/\/+$/, '')
-            const composePath = app.pathType === 'compose' ? app.path?.trim().replace(/^\.\//, '').replace(/^\/+/, '') : ''
-            const targetPath = composePath ? `${repositoryPath}/${composePath}` : `${repositoryPath}/`
-            const installedApp = installedApps?.find(candidate => candidate.endpoints?.length &&
-                candidate.configFiles.split(',').some(file => {
-                    const path = file.trim().replaceAll('\\', '/')
-                    return composePath
-                        ? path === targetPath || path.endsWith(`/${targetPath}`)
-                        : path.startsWith(targetPath) || path.includes(`/${targetPath}`)
-                }))
-            url = installedApp?.endpoints[0]?.url
-            if (!url) {
-                throw new Error(composeError || 'Repository added, but no launch URL is available to pin. Check its Compose file and published ports.')
-            }
-        }
-        if (app.pinToAppPins && url) {
-            const tab = await data.newTab(spaceId, {
-                url,
-                title: app.name || url,
-                pinned: 'normal',
-                pinScope: 'global',
-                shouldFocus: false
-            })
-            await data.updateTabOverrides(tab.id, {
-                titleOverride: app.name,
-                faviconOverride: app.iconUrl
-            })
-        }
-        if (type === 'repo' && checkout) {
-            return
-        }
-        exampleApps.push({
-            id: crypto.randomUUID(),
-            name: app.name || app.url || 'App',
-            iconUrl: app.iconUrl || null,
-            type: 'weblink',
-            url: app.url,
-            category: app.category,
-            installedAt: Date.now()
-        })
+    async function addApp(payload) {
+        await data.newApp(payload)
     }
 </script>
 
@@ -475,7 +490,7 @@
 
 {#snippet AppCard(app)}
     {@const defaultURL = app.endpoints?.[0]?.url || app.url}
-    <article class="app-card relative w-52 min-h-44 rounded-xl border border-white/8 bg-black/20 hover:bg-white/8 hover:border-white/14 transition-colors px-3 pt-3 pb-2" oncontextmenu={(event) => openDockerMenu(event, app)} aria-busy={dockerAction?.appId === app.id}>
+    <article class="app-card relative w-52 min-h-44 rounded-xl border border-white/8 bg-black/20 hover:bg-white/8 hover:border-white/14 transition-colors px-3 pt-3 pb-2" oncontextmenu={(event) => openDockerMenu(event, app)} aria-busy={dockerAction?.appId === app.id || Boolean(openingApps[app.id])}>
         {#if app.runtimeLabel}
             <button
                 type="button"
@@ -500,7 +515,7 @@
                         class="max-w-full shrink-0 truncate rounded-md border border-emerald-300/20 bg-black/90 px-1.5 py-1 text-[9px] leading-none text-emerald-100/80 hover:border-emerald-300/45 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300/70 cursor-pointer"
                         title={`Open ${endpoint.container} on ${endpoint.port}`}
                         aria-label={`Open ${endpoint.container} on port ${endpoint.port}`}
-                        onmousedown={(event) => openURL(event, endpoint.url, app.name, app.id)}
+                        onmousedown={(event) => openApp(event, app, endpoint.url)}
                         onkeydown={(event) => handleOpenKey(event, app, endpoint.url)}
                         oncontextmenu={(event) => openDockerMenu(event, app, app.containers.find(container => container.name === endpoint.container) || null)}
                     >
@@ -515,8 +530,8 @@
             class="mx-auto flex w-full flex-col items-center justify-center gap-1 px-1 pb-7 pt-8 text-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 cursor-pointer disabled:cursor-default"
             onmousedown={(event) => openApp(event, app)}
             onkeydown={(event) => handleOpenKey(event, app)}
-            aria-label={defaultURL ? `Open ${app.name}` : `${app.name} has no published ports`}
-            disabled={!defaultURL}
+            aria-label={defaultURL || app.appType === 'repo' ? `Open ${app.name}` : `${app.name} has no published ports`}
+            disabled={Boolean(openingApps[app.id]) || (!defaultURL && app.appType !== 'repo')}
         >
             {#if app.iconUrl}
                 <img src={app.iconUrl} alt="" class="w-16 h-16 rounded-lg object-cover" />
@@ -671,31 +686,43 @@
 
 <div class="w-full h-full px-6 pt-6 pb-4 select-none overflow-y-auto relative apps-content" style="transform: translateZ(0); will-change: scroll-position;">
     <p class="docker-action-status mb-3 text-sm text-white/70 empty:hidden" role="status">{dockerMessage}</p>
-    {#if composeState === 'loading'}
-        <div class="mb-8 rounded-xl border border-white/8 bg-black/15 px-4 py-5 text-sm text-white/50" aria-live="polite">Reading Compose projects…</div>
-    {:else if composeError}
-        <div class="mb-8 flex items-center justify-between gap-4 rounded-xl border border-white/8 bg-black/15 px-4 py-3" role="status">
-            <p class="text-sm text-white/50">{composeError}</p>
-            <button type="button" class="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/75 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 cursor-pointer" onmousedown={refresh}>Try again</button>
-        </div>
-    {:else if composeApps.length === 0}
-        <div class="mb-8 rounded-xl border border-dashed border-white/12 bg-black/10 px-4 py-5">
-            <p class="text-sm font-medium text-white/70">No Compose services found</p>
-            <p class="mt-1 text-xs text-white/40">Add a repository with a Compose file to make its services appear here.</p>
-        </div>
-    {/if}
+    {#each appLists as list (list.key)}
+        <section class="app-list mb-8" aria-label={list.label}>
+            {@render SectionHeader(list.label, list.groups.reduce((count, group) => count + group.apps.length, 0), list.key)}
+            {#if !collapsedSections[list.key]}
+                {#if list.key === 'computer'}
+                    {#if composeState === 'loading'}
+                        <div class="mb-8 rounded-xl border border-white/8 bg-black/15 px-4 py-5 text-sm text-white/50" aria-live="polite">Reading Compose projects…</div>
+                    {:else if composeError}
+                        <div class="mb-8 flex items-center justify-between gap-4 rounded-xl border border-white/8 bg-black/15 px-4 py-3" role="status">
+                            <p class="text-sm text-white/50">{composeError}</p>
+                            <button type="button" class="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/75 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 cursor-pointer" onmousedown={refresh}>Try again</button>
+                        </div>
+                    {:else if composeApps.length === 0}
+                        <div class="mb-8 rounded-xl border border-dashed border-white/12 bg-black/10 px-4 py-5">
+                            <p class="text-sm font-medium text-white/70">No Compose services found</p>
+                            <p class="mt-1 text-xs text-white/40">Repository apps are installed when you first open them.</p>
+                        </div>
+                    {/if}
+                {:else if sections.saved.length === 0}
+                    <p class="mb-4 text-sm text-white/50">Add an app to save its configuration here.</p>
+                {/if}
 
-    {#each appGroups as group (group.key)}
-        <section class="mb-6" aria-label={group.label || 'All apps'}>
-            {#if group.label}
-                {@render SectionHeader(group.label, group.apps.length, group.key)}
-            {/if}
-            {#if !group.label || !collapsedSections[group.key]}
-                <div class="flex flex-wrap gap-3">
-                    {#each group.apps as app (app.id)}
-                        {@render AppCard(app)}
-                    {/each}
-                </div>
+                {#each list.groups as group (group.key)}
+                    {@const sectionKey = `${list.key}:${group.key}`}
+                    <section class="mb-6" aria-label={group.label || 'All apps'}>
+                        {#if group.label}
+                            {@render SectionHeader(group.label, group.apps.length, sectionKey)}
+                        {/if}
+                        {#if !group.label || !collapsedSections[sectionKey]}
+                            <div class="flex flex-wrap gap-3">
+                                {#each group.apps as app (app.id)}
+                                    {@render AppCard(app)}
+                                {/each}
+                            </div>
+                        {/if}
+                    </section>
+                {/each}
             {/if}
         </section>
     {/each}
@@ -711,7 +738,7 @@
 {#if showAddAppModal}
     <AddAppModal
         show={showAddAppModal}
-        installedApps={[...composeApps, ...exampleApps]}
+        installedApps={sections.saved}
         onAdd={addApp}
         onClose={() => showAddAppModal = false}
     />
@@ -835,8 +862,6 @@
         .apps-header h2 {
             margin-left: 0;
             font-size: 1.25rem;
-        }
-        .apps-header h2 {
             gap: 4px;
         }
         .apps-view-trigger {

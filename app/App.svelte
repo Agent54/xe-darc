@@ -4,6 +4,7 @@
  
     import Frame from './components/Frame.svelte'
     import Resources from './components/ResourcesPanel.svelte'
+    import PermissionToasts from './components/PermissionToasts.svelte'
     import Settings from './components/Settings.svelte'
     import { openTabDevTools } from './lib/tab-devtools.js'
     import { closeButtonHistory } from './lib/close-button-history.js'
@@ -364,8 +365,6 @@
 
     let userMods = $state([])
     
-    let resourcesSidebarAutoOpened = $state(false)
-    const observedPermissionRequests = new Set()
     
     // let isEditingUrl = $state(false)
     // let editingUrlValue = $state('')
@@ -1008,7 +1007,7 @@
             return true
         }
         if (showAppsOverlay) {
-            if (event.target?.closest?.('.app-context-menu')) return false
+            if (event.target?.closest?.('.app-context-menu, .apps-view-menu, .apps-view-trigger[aria-expanded="true"]')) return false
             closeAppsOverlay()
             return true
         }
@@ -2219,9 +2218,6 @@
             persistOpenSidebars()
             updateSidebarState()
             
-            if (targetSidebar === 'resources') {
-                resourcesSidebarAutoOpened = false
-            }
         }
     }
 
@@ -2278,9 +2274,6 @@
         persistOpenSidebars()
         updateSidebarState()
         
-        if (sidebarName === 'resources') {
-            resourcesSidebarAutoOpened = false
-        }
     }
     
     function togglePinnedFrames(tabId) {
@@ -3050,37 +3043,6 @@
     // Initialize drag and drop listeners
     setupGlobalDragDropListeners()
 
-
-    $effect(() => {
-        // Check for unseen permission requests with matching window ID
-        const unseenResourcesForThisWindow = []
-        Object.values(data.permissions).forEach(permission => {
-            Object.values(permission.origins || {}).forEach(origin => {
-                const requests = origin.requests || []
-                requests.forEach(request => {
-                    if (request.unseen && 
-                        request.windowId === window.darcWindowId && 
-                        request.status === 'requested') {
-                        const requestKey = request.requestId || request
-                        if (!observedPermissionRequests.has(requestKey)) {
-                            observedPermissionRequests.add(requestKey)
-                            unseenResourcesForThisWindow.push(request)
-                        }
-                    }
-                })
-            })
-        })
-        
-        if (unseenResourcesForThisWindow.length > 0 && !openSidebars.has('resources')) {
-            console.log('Opening resources sidebar for unseen requests:', unseenResourcesForThisWindow)
-            untrack(() => {
-                openSidebars.add('resources')
-                openSidebars = new Set(openSidebars)
-                persistOpenSidebars()
-                resourcesSidebarAutoOpened = true
-            })
-        }
-    })
 
     let block = true
     function handleShellNavigation (event) {
@@ -4808,6 +4770,8 @@
 
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
+<PermissionToasts visible={!openSidebars.has('resources')} {headerPartOfMain} onOpenResources={switchToResources} />
+
 {#if openSidebars.size > 0}
     <div class="sidebar-container" 
          class:window-controls-overlay={headerPartOfMain}
@@ -4833,8 +4797,7 @@
                     {switchToActivity}
                     switchToAgent={switchToAIAgent}
                     {switchToDevTools}
-                    {devModeEnabled}
-                    autoOpened={resourcesSidebarAutoOpened} />
+                    {devModeEnabled} />
             </div>
         {/if}
         

@@ -1530,6 +1530,26 @@ const data = {
 
     ui,
 
+    newApp: async ({ type, app }) => {
+        const now = Date.now()
+        const doc = {
+            ...app,
+            dataPartitions: [...(app.dataPartitions || [])],
+            _id: `darc:app_${crypto.randomUUID()}`,
+            type: 'app',
+            appType: type,
+            name: app.name || app.url || app.githubUrl || 'App',
+            spaceId: spaceMeta.activeSpace,
+            archive: '',
+            created: now,
+            modified: now,
+            order: now
+        }
+        const result = await putDocument(doc)
+        docs[doc._id] = { ...doc, _rev: result.rev }
+        return docs[doc._id]
+    },
+
     toggleTabActivityMode: () => {
         ui.tabActivityMode = !ui.tabActivityMode
         localStorage.setItem('tabActivityMode', String(ui.tabActivityMode))
