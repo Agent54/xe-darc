@@ -594,23 +594,23 @@
     </article>
 {/snippet}
 
-<div class="apps-header absolute top-[-50px] left-1/2 transform -translate-x-1/2 flex items-center justify-between z-10" style="width: 100%;">
-    <h2 class="text-white/90 text-2xl font-semibold ml-2 mt-[-10px]">
+<div class="apps-header">
+    <h2>
         Apps
-        <button class="p-2 text-white/70 ml-4 relative t-[2px] hover:text-white/90 hover:bg-white/10 rounded-lg transition-colors z-20 cursor-pointer" onmousedown={() => showAddAppModal = true} aria-label="Add App" title="Add App">
+        <button class="apps-header-action" onmousedown={() => showAddAppModal = true} aria-label="Add App" title="Add App">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path d="M12 4.5a.75.75 0 0 1 .75.75v6h6a.75.75 0 0 1 0 1.5h-6v6a.75.75 0 0 1-1.5 0v-6h-6a.75.75 0 0 1 0-1.5h6v-6A.75.75 0 0 1 12 4.5Z"/></svg>
         </button>
     </h2>
 
-    <div class="apps-view-controls relative flex items-center gap-2" bind:this={viewControls} role="group" aria-label="App view options">
+    <div class="apps-view-controls" bind:this={viewControls} role="group" aria-label="App view options">
         {#each ['sort', 'group'] as kind}
             {@const selected = kind === 'sort' ? sortBy : groupBy}
             {@const label = kind === 'sort' ? 'Sort' : 'Group'}
             {@const noneLabel = kind === 'sort' ? 'Unsorted' : 'Ungrouped'}
-            <div>
+            <div class="apps-view-control">
                 <button
                     type="button"
-                    class="apps-view-trigger flex items-center gap-2 rounded-lg border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/70 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 cursor-pointer"
+                    class="apps-view-trigger"
                     data-view-trigger={kind}
                     aria-label={`${label} apps: ${appViewOptions.find(option => option.value === selected)?.label || noneLabel}`}
                     aria-haspopup="menu"
@@ -625,11 +625,20 @@
                         }
                     }}
                 >
-                    <span>{label}<span class="apps-view-value text-white/40"> · {appViewOptions.find(option => option.value === selected)?.label || noneLabel}</span></span>
-                    <svg class="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+                    <svg class="apps-view-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        {#if kind === 'sort'}
+                            <path d="M3 3v10m-2-2 2 2 2-2M7 4h7M7 8h5M7 12h3" />
+                        {:else}
+                            <rect x="2" y="2" width="4" height="4" rx="1" /><rect x="10" y="2" width="4" height="4" rx="1" /><rect x="2" y="10" width="4" height="4" rx="1" /><rect x="10" y="10" width="4" height="4" rx="1" />
+                        {/if}
+                    </svg>
+                    <span>{label}</span>
+                    <span class="apps-view-value">{appViewOptions.find(option => option.value === selected)?.label || noneLabel}</span>
+                    <svg class="apps-view-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
                 </button>
                 {#if viewMenu === kind}
-                    <div id={`apps-${kind}-menu`} role="menu" aria-label={`${label} apps`} tabindex="-1" onkeydown={(event) => { handleViewKey(event); handleMenuNavigation(event) }} class="apps-view-menu absolute right-0 top-full z-30 mt-2 w-48 menu-surface">
+                    <div id={`apps-${kind}-menu`} role="menu" aria-label={`${label} apps`} tabindex="-1" onkeydown={(event) => { handleViewKey(event); handleMenuNavigation(event) }} class="apps-view-menu menu-surface">
+                        <div class="menu-caption">{label} by</div>
                         {#each [{ value: 'none', label: noneLabel }, ...appViewOptions] as option}
                             <button
                                 type="button"
@@ -644,17 +653,17 @@
                                     }
                                 }}
                             >
-                                {option.label}
-                                {#if selected === option.value}
-                                    <svg class="h-4 w-4 text-emerald-300" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 8 3 3 7-7" /></svg>
-                                {/if}
+                                <span>{option.label}</span>
+                                <svg class="apps-view-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                    {#if selected === option.value}<path d="m3 8 3 3 7-7" />{/if}
+                                </svg>
                             </button>
                         {/each}
                     </div>
                 {/if}
             </div>
         {/each}
-        <button type="button" class="p-2 text-white/70 hover:text-white/90 opacity-50 hover:opacity-100 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 cursor-pointer" onmousedown={onClose} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClose() } }} aria-label="Close Apps" title="Close Apps">
+        <button type="button" class="apps-header-action apps-close" onmousedown={onClose} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClose() } }} aria-label="Close Apps" title="Close Apps">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path d="M6.225 4.811a1 1 0 0 0-1.414 1.414L10.586 12 4.81 17.775a1 1 0 1 0 1.414 1.414L12 13.414l5.775 5.775a1 1 0 0 0 1.414-1.414L13.414 12l5.775-5.775a1 1 0 0 0-1.414-1.414L12 10.586 6.225 4.81Z"/></svg>
         </button>
     </div>
@@ -709,22 +718,146 @@
 {/if}
 
 <style>
+    .apps-header {
+        position: absolute;
+        top: -50px;
+        left: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        height: 36px;
+    }
+
+    .apps-header h2 {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 0 8px;
+        color: rgb(255 255 255 / 90%);
+        font-size: 24px;
+        font-weight: 600;
+        line-height: 1;
+    }
+
+    .apps-header-action,
+    .apps-view-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 34px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        color: rgb(255 255 255 / 65%);
+        cursor: pointer;
+        -webkit-app-region: no-drag;
+    }
+
+    .apps-header-action {
+        flex-shrink: 0;
+        width: 34px;
+        padding: 6px;
+    }
+
+    .apps-header-action:hover,
+    .apps-view-trigger:hover,
+    .apps-view-trigger[aria-expanded='true'] {
+        background: rgb(255 255 255 / 8%);
+        color: white;
+    }
+
+    .apps-view-trigger[aria-expanded='true'] {
+        border-color: var(--menu-border);
+    }
+
+    .apps-header-action:focus-visible,
+    .apps-view-trigger:focus-visible {
+        outline: 1px solid var(--menu-focus-color);
+        outline-offset: 2px;
+    }
+
+    .apps-view-controls {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .apps-view-control {
+        position: relative;
+    }
+
+    .apps-view-trigger {
+        gap: 8px;
+        padding: 0 10px;
+        font: var(--menu-font);
+        white-space: nowrap;
+    }
+
+    .apps-view-value {
+        color: var(--menu-muted-color);
+    }
+
+    .apps-view-icon,
+    .apps-view-check {
+        flex-shrink: 0;
+        width: 14px;
+        height: 14px;
+    }
+
+    .apps-view-chevron {
+        width: 12px;
+        height: 12px;
+        color: var(--menu-muted-color);
+    }
+
+    .apps-view-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 30;
+        width: 200px;
+        max-width: calc(100vw - 32px);
+    }
+
+    .apps-view-menu .menu-action {
+        min-height: 32px;
+    }
+
+    .apps-close {
+        margin-left: 4px;
+        color: var(--menu-muted-color);
+    }
+
     @container (max-width: 600px) {
         .apps-header h2 {
             margin-left: 0;
             font-size: 1.25rem;
         }
-        .apps-header h2 button {
-            margin-left: 4px;
+        .apps-header h2 {
+            gap: 4px;
         }
         .apps-view-trigger {
-            padding: 6px 8px;
+            gap: 6px;
+            padding: 0 8px;
         }
         .apps-view-controls {
             gap: 4px;
         }
         .apps-view-value {
             display: none;
+        }
+        .apps-view-icon {
+            display: none;
+        }
+        .apps-view-menu {
+            width: 184px;
+        }
+        .apps-view-control:first-child .apps-view-menu {
+            right: auto;
+            left: 0;
         }
         .apps-content {
             padding: 16px;
