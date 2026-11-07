@@ -1,6 +1,12 @@
 const nativeTypes = new Set(['geolocation', 'pointerLock', 'download', 'filesystem', 'fullscreen', 'hid', 'clipboardReadWrite', 'clipboardSanitizedWrite'])
 const navigationTypes = new Set(['open-tab', 'navigate-off-origin'])
 
+export function getPendingPermissionRequests(permissions, windowId) {
+    return Object.values(permissions).flatMap(permission => Object.values(permission.origins || {}).flatMap(origin => origin.requests || []))
+        .filter(request => request.status === 'requested' && request.windowId === windowId)
+        .sort((a, b) => (a.created || 0) - (b.created || 0) || a.requestId.localeCompare(b.requestId))
+}
+
 function validDecision(permission, decision) {
     return ['allow', 'deny'].includes(decision) || (navigationTypes.has(permission?.name) && decision === 'same-tab')
 }
