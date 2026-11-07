@@ -9,6 +9,7 @@ The former `favicon-browser.js` scenarios now have independent entry points:
 | --- | --- | --- |
 | `favicon-browser.js` | Favicon identity, fallback, loading/audio overlays, link favicons and activity sorting | `--audio-only`, `--activity-only` still supported |
 | `tab-creation-browser.js` | Creation drags, cancellation, clicks, keyboard creation and hover suppression | `--creation-only` |
+| `new-tab-menu-browser.js` | Clipboard previews, URL/search navigation, menu refresh, keyboard selection and container tabs | |
 | `closed-tabs-preview-browser.js` | Automatic closed-tab previews, expiry and hidden sidebars | `--closed-tabs-preview-only` |
 | `close-button-history-browser.js` | Close-button history delays, cancellation and retention | `--close-button-history-only` |
 | `sidebar-layout-browser.js` | Header layout, window drag regions and control reachability | |

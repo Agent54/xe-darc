@@ -147,7 +147,7 @@ await withSidebarFixture('sidebar-hovercards', async ({ page }) => {
     await hovercardLeft('.tab-group-main', true)
     await page.waitForFunction(() => [...document.querySelectorAll('.group-hovercards .attachment-image')].length === 2 && [...document.querySelectorAll('.group-hovercards .attachment-image')].every(image => image.naturalWidth > 0))
     assert.deepEqual(await page.$$eval('.group-hovercards .hovercard-preview', previews => [...new Set(previews.map(preview => `${preview.clientWidth}x${preview.clientHeight}`))]), ['318x180'], 'metadata panels must occupy the same preview area as screenshots')
-    assert.equal(await page.$$eval('.group-hovercards .hovercard-metadata', panels => panels.every(metadata => metadata.textContent.trim() === 'ContainerDefault')), true, 'tabs without extra context show only their container, without repetitive state or missing timestamps')
+    assert.equal(await page.$$eval('.group-hovercards .hovercard-metadata', panels => panels.every(metadata => metadata.textContent.replace(/\s/g, '') === 'ContainerDefault')), true, 'tabs without extra context show only their container, without repetitive state or missing timestamps')
     assert.equal(await page.$eval('.group-hovercards .hovercard-metadata', metadata => getComputedStyle(metadata).backgroundColor), 'rgb(8, 8, 8)', 'the missing-preview surface stays close to the dark card background')
     const groupGeometry = await page.evaluate(() => window.previewGeometry())
     const firstGroupCard = '.group-hovercards .hovercard-content:nth-child(1)'
@@ -213,7 +213,7 @@ await withSidebarFixture('sidebar-hovercards', async ({ page }) => {
         window.mountMetadataHovercard()
     })
     await page.waitForSelector('#metadata-hovercard-fixture .history-section')
-    assert.deepEqual(await page.$eval('#metadata-hovercard-fixture .hovercard-metadata', metadata => [...metadata.querySelectorAll('.metadata-row')].map(row => [row.querySelector('dt').textContent.trim(), row.querySelector('dd').textContent.trim()])), [
+    assert.deepEqual(await page.$eval('#metadata-hovercard-fixture .hovercard-metadata', metadata => [...metadata.querySelectorAll('.metadata-row')].map(row => [row.querySelector('dt').textContent.replace(/\s+/g, ' ').trim(), row.querySelector('dd').textContent.trim()])), [
         ['Container', 'ephemeral:2'], ['Opened from', 'outside'], ['Opened tabs 1', 'A related page with a long title that should truncate within the preview']
     ], 'the fallback uses recorded container and opener relationships, excluding closed children')
     await page.setViewport({ width: 375, height: 800 })

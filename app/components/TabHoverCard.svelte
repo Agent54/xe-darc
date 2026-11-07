@@ -751,6 +751,7 @@
 
     .hovercard-metadata dl {
         width: 100%;
+        min-width: 0;
         margin: 0;
         display: grid;
         gap: 12px;
@@ -758,6 +759,7 @@
 
     .metadata-row {
         display: flex;
+        min-width: 0;
         justify-content: space-between;
         gap: 12px;
     }

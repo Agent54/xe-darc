@@ -48,7 +48,7 @@ function shellHarness() {
     ])
     const api = new Function('window', 'document', 'data', 'localStorage', 'setTimeout', 'clearTimeout', `
         let contextMenu = { visible: true }, appearanceMenu = {}, isDragEnabled = false
-        let menuForceClose = false, newTabMenuVisible = true, shortcutOverviewVisible = true
+        let menuForceClose = false, newTabMenuVisible = true, shortcutOverviewVisible = true, gestureOverviewVisible = true
         let newTabMenuHoverTimeout = setTimeout(() => { newTabMenuVisible = true }, 800)
         let newTabMenuLeaveTimeout = setTimeout(() => {}, 150)
         let lastUsedViewMode = 'tile', backToDefault = false
@@ -59,7 +59,7 @@ function shellHarness() {
         return {
             selectViewMode, toggleViewMode, toggleAppsOverlay, toggleFocusMode,
             get state() { return { context: contextMenu.visible, appearanceMenu, menuForceClose,
-                newTabMenuVisible, shortcutOverviewVisible, isDragEnabled, showAppsOverlay } }
+                newTabMenuVisible, shortcutOverviewVisible, gestureOverviewVisible, isDragEnabled, showAppsOverlay } }
         }
     `)(window, document, data, storage, timers.setTimeout, timers.clearTimeout)
     return { api, data, timers, events, get popovers() { return popovers } }
@@ -74,7 +74,7 @@ Deno.test('every view selection dismisses menus and popovers and cancels pending
             assert.equal(h.data.ui.viewMode, mode)
             assert.deepEqual(h.api.state, {
                 context: false, appearanceMenu: null, menuForceClose: true,
-                newTabMenuVisible: false, shortcutOverviewVisible: false, isDragEnabled: true, showAppsOverlay: false
+                newTabMenuVisible: false, shortcutOverviewVisible: false, gestureOverviewVisible: false, isDragEnabled: true, showAppsOverlay: false
             })
             assert.deepEqual(h.events, ['darc-dismiss-hovercards', 'darc-dismiss-overlays'])
             assert.equal(h.popovers, 1)

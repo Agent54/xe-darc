@@ -2358,6 +2358,12 @@ header.window-controls-overlay + .content-area-scrim {
     transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
+.help-menu-icon:focus-within .help-menu {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
 header:hover .hover-menu {
     transition: opacity 0.25s ease, visibility 0.25s ease !important;
 }

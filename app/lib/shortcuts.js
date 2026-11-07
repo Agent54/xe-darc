@@ -90,7 +90,7 @@ export function createShortcutHandler(matchShortcut, runShortcut, { schedule = s
         if (event.key === 'Meta' || event.key === 'Control') {
             if (!modifier) {
                 modifier = event.key
-                if (!helpAborted && !event.repeat && !pressedKeys.size && !event.altKey && !event.shiftKey && !(event.metaKey && event.ctrlKey)) {
+                if (!helpAborted && !event.repeat && !pressedKeys.size && !event.otherKeysDown && !event.altKey && !event.shiftKey && !(event.metaKey && event.ctrlKey)) {
                     helpTimer = schedule(() => {
                         helpTimer = null
                         if (!helpAborted && modifier) {
@@ -114,7 +114,9 @@ export function createShortcutHandler(matchShortcut, runShortcut, { schedule = s
     }
 
     function helpKeyup(event) {
-        pressedKeys.delete(event.code || event.key)
+        if (!event.otherKeysDown) {
+            pressedKeys.delete(event.code || event.key)
+        }
         if (!event.metaKey && !event.ctrlKey) {
             hideHelp(event)
             modifier = null
@@ -217,11 +219,26 @@ export function isMacPlatform() {
 
 export function getFrameShortcutScript(tabId) {
     return `(() => {
+        const otherKeys = new Set();
         const reportHelp = (type, event) => console.log('iwa:shortcut-help:' + JSON.stringify({
             tabId: ${JSON.stringify(tabId)}, type,
-            event: event && { key: event.key, code: event.code, repeat: event.repeat,
+            event: event && { key: ['Meta', 'Control', 'Escape'].includes(event.key) ? event.key : 'Other',
+                otherKeysDown: otherKeys.size > 0, repeat: event.repeat,
                 metaKey: event.metaKey, ctrlKey: event.ctrlKey, altKey: event.altKey, shiftKey: event.shiftKey }
         }));
+        const reportKey = (type, event) => {
+            if (event.key !== 'Meta' && event.key !== 'Control') {
+                if (type === 'keydown') {
+                    otherKeys.add(event.code || event.key);
+                } else {
+                    otherKeys.delete(event.code || event.key);
+                }
+            }
+            reportHelp(type, event);
+            if (type === 'keyup' && !event.metaKey && !event.ctrlKey && (event.key === 'Meta' || event.key === 'Control')) {
+                otherKeys.clear();
+            }
+        };
         const match = (${createShortcutMatcher.toString()})(${JSON.stringify(shortcuts)}, ${isMacPlatform()});
         const handle = (${createShortcutHandler.toString()})(match, (id) => {
             console.log('iwa:shortcut:' + JSON.stringify({ id, tabId: ${JSON.stringify(tabId)} }));
@@ -230,8 +247,8 @@ export function getFrameShortcutScript(tabId) {
             return id !== 'escape';
         }, { help: false });
         // One shell timer owns the hold across all guest documents and previews.
-        window.addEventListener('keydown', event => reportHelp('keydown', event), true);
-        window.addEventListener('keyup', event => reportHelp('keyup', event), true);
+        window.addEventListener('keydown', event => reportKey('keydown', event), true);
+        window.addEventListener('keyup', event => reportKey('keyup', event), true);
         (${listenForShortcutHelpCancellation.toString()})(window, () => reportHelp('cancel'));
         window.addEventListener('keydown', handle, { capture: true, passive: false });
         window.addEventListener('keyup', handle.keyup, true);
@@ -240,6 +257,6 @@ export function getFrameShortcutScript(tabId) {
             if (event.key === 'Control') console.log('iwa:shortcut:' + JSON.stringify({ id: 'finish-tab-switch', tabId: ${JSON.stringify(tabId)} }));
         }, true);
         window.addEventListener('blur', handle.reset);
-        window.addEventListener('blur', () => reportHelp('cancel'));
+        window.addEventListener('blur', () => { otherKeys.clear(); reportHelp('cancel'); });
     })();`
 }

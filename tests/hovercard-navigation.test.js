@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
-import { createShortcutHandler, getFrameShortcutScript, listenForShortcutHelpCancellation } from '../app/lib/shortcuts.js'
+import { createShortcutHandler, getFrameShortcutScript, listenForShortcutHelpCancellation, shortcutActionIds } from '../app/lib/shortcuts.js'
 
 const source = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
 const functions = ['closeHovercard', 'dismissHovercards', 'handleHovercardPointerDown', 'navigateTabHistory', 'handleTabMouseEnter', 'handleFrameMouseDown', 'handleFrameClick']
@@ -124,9 +124,16 @@ function shortcutHelpHarness() {
         cancel(id) { timers.delete(id) }
     })
     const shell = new EventTarget()
-    const node = parse(source).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'handleFrameShortcutHelp')
-    const bridge = new Function('handleKeyDown', `${source.slice(node.start, node.end)}; return handleFrameShortcutHelp`)(handler)
-    shell.addEventListener('darc-shortcut-help', bridge)
+    const functions = parse(source).instance.content.body
+        .filter(node => node.type === 'FunctionDeclaration' && ['handleFrameShortcutHelp', 'handleFrameShortcut'].includes(node.id.name))
+        .map(node => source.slice(node.start, node.end)).join('\n')
+    const bridge = new Function('handleKeyDown', 'data', 'shortcutActionIds', 'runShortcut', `
+        let shortcutHelpEscapeTabId = null
+        ${functions}
+        return { handleFrameShortcutHelp, handleFrameShortcut }
+    `)(handler, { docs: { 'darc:tab:a': {}, 'darc:tab:b': {} } }, shortcutActionIds, id => calls.push(id))
+    shell.addEventListener('darc-shortcut-help', bridge.handleFrameShortcutHelp)
+    shell.addEventListener('darc-shortcut', bridge.handleFrameShortcut)
     listenForShortcutHelpCancellation(shell, handler.cancelHelp)
     const guests = [contentClickBridge(shell, 'darc:tab:a'), contentClickBridge(shell, 'darc:tab:b', true)]
     return {
@@ -158,7 +165,7 @@ Deno.test('guest clicks and scrolling abort the single shell help timer across n
         h.expire()
         assert.deepEqual(h.calls, ['show-shortcuts'])
         h.key(first, 'keyup', 'Control')
-        assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts'])
+        assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts', 'finish-tab-switch'])
         assert.deepEqual(h.guests.flatMap(guest => guest.errors), [])
     }
 })
@@ -172,8 +179,10 @@ Deno.test('shell previews cancel guest holds and extra keys stay disqualifying a
     assert.deepEqual(h.calls, [])
     h.key(first, 'keyup', 'Meta')
     h.key(first, 'keydown', 'a')
+    h.key(first, 'keydown', 'b')
+    h.key(first, 'keyup', 'a')
     h.key(nested, 'keydown', 'Meta', { metaKey: true })
-    h.key(first, 'keyup', 'a', { metaKey: true })
+    h.key(first, 'keyup', 'b', { metaKey: true })
     h.expire()
     assert.deepEqual(h.calls, [])
     h.key(nested, 'keyup', 'Meta')
@@ -182,6 +191,23 @@ Deno.test('shell previews cancel guest holds and extra keys stay disqualifying a
     assert.deepEqual(h.calls, ['show-shortcuts'])
     h.shell.dispatchEvent(new Event('darc-link-preview'))
     assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts'])
+    const reportedKeys = h.guests.flatMap(guest => guest.messages)
+        .filter(message => message.startsWith('iwa:shortcut-help:'))
+        .map(message => JSON.parse(message.slice('iwa:shortcut-help:'.length)).event)
+        .filter(Boolean)
+    assert.ok(reportedKeys.every(event => ['Meta', 'Control', 'Escape', 'Other'].includes(event.key) && !('code' in event)))
+})
+
+Deno.test('Escape from a guest dismisses help without also dismissing the underlying lightbox', () => {
+    const h = shortcutHelpHarness()
+    const [first] = h.guests
+    h.key(first, 'keydown', 'Meta', { metaKey: true })
+    h.expire()
+    h.key(first, 'keydown', 'Escape')
+    assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts'])
+    h.key(first, 'keyup', 'Escape')
+    h.key(first, 'keydown', 'Escape')
+    assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts', 'escape'])
 })
 
 Deno.test('back and forward reveal the hovercard immediately for 800 ms', () => {

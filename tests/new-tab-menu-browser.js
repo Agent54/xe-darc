@@ -20,7 +20,9 @@ await withSidebarFixture('new-tab-menu', async ({ page, errors }) => {
         await page.click('.new-tab-button', { button: 'right' })
         await page.waitForFunction(selector => {
             const button = document.querySelector(selector)
-            return button && !button.disabled
+            if (!button || button.disabled) return false
+            const rect = button.getBoundingClientRect()
+            return button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))
         }, {}, action)
     }
 

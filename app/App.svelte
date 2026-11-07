@@ -24,6 +24,7 @@
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import ShortcutOverlay from './components/ShortcutOverlay.svelte'
+    import GestureOverlay from './components/GestureOverlay.svelte'
     import Favicon from './components/Favicon.svelte'
     import UrlRenderer from './components/UrlRenderer.svelte'
     // import AttachmentImage from './components/AttachmentImage.svelte'
@@ -126,6 +127,7 @@
     let hovercardComponent = $state(null)
     let shortcutOverlayVisible = $state(false)
     let shortcutOverviewVisible = $state(false)
+    let gestureOverviewVisible = $state(false)
     let instantModeResetTimer = null
     let headerPartOfMain = $state(false)
     let isScrolling = $state(false)
@@ -216,6 +218,7 @@
         newTabMenuHoverTimeout = null
         newTabMenuLeaveTimeout = null
         shortcutOverviewVisible = false
+        gestureOverviewVisible = false
         for (const popover of document.querySelectorAll(':popover-open')) {
             popover.hidePopover()
         }
@@ -336,7 +339,15 @@
     function showShortcutOverview() {
         dismissHovercards()
         closeMenuImmediately()
+        gestureOverviewVisible = false
         shortcutOverviewVisible = true
+    }
+
+    function showGestureOverview() {
+        dismissHovercards()
+        closeMenuImmediately()
+        shortcutOverviewVisible = false
+        gestureOverviewVisible = true
     }
     
     let isWindowResizing = $state(false)
@@ -654,6 +665,10 @@
 
     function handleFrameShortcut(event) {
         const { id, tabId } = event.detail
+        if (id === 'escape' && shortcutHelpEscapeTabId === tabId) {
+            shortcutHelpEscapeTabId = null
+            return
+        }
         if (data.docs[tabId] && shortcutActionIds.has(id)) runShortcut(id, event, tabId)
     }
 
@@ -939,6 +954,7 @@
         return shortcutActions(id, event, sourceTabId)
     }
     const handleKeyDown = createShortcutHandler(createShortcutMatcher(shortcuts, detectMacPlatform()), runShortcut)
+    let shortcutHelpEscapeTabId = null
 
     function handleFrameShortcutHelp(event) {
         const detail = event.detail
@@ -946,7 +962,8 @@
             return
         }
         if (detail.type === 'keydown') {
-            handleKeyDown.helpKeydown(detail.event)
+            const wasVisible = handleKeyDown.helpKeydown(detail.event)
+            shortcutHelpEscapeTabId = wasVisible && detail.event.key === 'Escape' ? detail.tabId : null
         } else if (detail.type === 'keyup') {
             handleKeyDown.helpKeyup(detail.event)
         } else if (detail.type === 'cancel') {
@@ -974,6 +991,10 @@
     }
 
     function handleShortcutEscape(event) {
+        if (gestureOverviewVisible) {
+            gestureOverviewVisible = false
+            return true
+        }
         if (newTabMenuVisible) {
             newTabMenuVisible = false
             return true
@@ -3381,8 +3402,11 @@
     }}
 />
 
-{#if shortcutOverlayVisible || shortcutOverviewVisible}
+{#if !gestureOverviewVisible && (shortcutOverlayVisible || shortcutOverviewVisible)}
     <ShortcutOverlay isMac={detectMacPlatform()} dismissible={shortcutOverviewVisible} onClose={() => { shortcutOverviewVisible = false }} />
+{/if}
+{#if gestureOverviewVisible}
+    <GestureOverlay onClose={() => { gestureOverviewVisible = false }} />
 {/if}
 
 <header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} class:has-navigation-toolbar={showNavigationToolbar} class:has-tab-sidebar={tabSidebarVisible} style="--tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;" onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) { cancelFocusModeHide(); focusModeHovered = true } }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) scheduleFocusModeHide() }}>
@@ -3799,8 +3823,10 @@
         tabindex="0"
         title="Help"
         aria-label="Help"
+        aria-haspopup="true"
         class:hidden={focusModeEnabled && !focusModeHovered}
         onmouseenter={() => menuForceClose = false}
+        onfocus={() => menuForceClose = false}
         onmousedown={(e) => { e.stopPropagation(); closeMenuImmediately() }}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showShortcutOverview() } }}>
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
@@ -3821,6 +3847,19 @@
                     </svg>
                 </span>
                 <span>Keyboard shortcuts</span>
+            </button>
+            <button type="button" class="settings-menu-item menu-item menu-action"
+                onmousedown={(e) => e.stopPropagation()}
+                onmouseup={(e) => { e.stopPropagation(); showGestureOverview() }}
+                onclick={(e) => { if (e.detail === 0) { e.stopPropagation(); showGestureOverview() } }}
+                onkeydown={(e) => e.stopPropagation()}>
+                <span class="menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <rect x="3" y="7" width="18" height="14" rx="3" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 15V5m3 10V3m3 12V5M6 10 9 7m9 3-3-3" />
+                    </svg>
+                </span>
+                <span>Gestures</span>
             </button>
         </div>
     </div>
