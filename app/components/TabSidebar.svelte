@@ -1000,6 +1000,7 @@
     }
     
     function handleClosedTabsMouseEnter() {
+        if (tabDrag.active || tabDrag.pending) return
         if (closedTabsHideTimeout) {
             clearTimeout(closedTabsHideTimeout)
             closedTabsHideTimeout = null
@@ -2250,7 +2251,7 @@
                  role="region"
                  aria-label="Recently closed tabs">
                 <button class="closed-tabs-header"
-                        onmouseenter={() => { closedTabsHeaderHovered = true }}
+                        onmouseenter={() => { if (!tabDrag.active && !tabDrag.pending) closedTabsHeaderHovered = true }}
                         onmouseleave={() => { closedTabsHeaderHovered = false }}
                         onclick={() => { data.clearClosedTabs(); handleClosedTabsMouseLeave() }}
                         aria-label="Clear all recently closed tabs">
