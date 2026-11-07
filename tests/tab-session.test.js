@@ -224,6 +224,21 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
     return { data, refresh, window, storage, queries, indexes, writes, db, emitChange: (doc, { normalizeSort = true } = {}) => changeListeners.get('change')({ id: doc._id, doc: normalizeSort ? documentSort.withDocumentSort(doc) : doc, seq: 1 }) }
 }
 
+Deno.test('stopping a tab cancels only its frame and clears its loading state', () => {
+    const { data } = session({ tabs: [] })
+    const stopped = []
+    data.frames.target = { loading: true, frame: { stop: () => stopped.push('target') } }
+    data.frames.other = { loading: true, frame: { stop: () => stopped.push('other') } }
+    data.stopTab('target')
+    assert.deepEqual(stopped, ['target'])
+    assert.equal(data.frames.target.loading, false)
+    assert.equal(data.frames.other.loading, true)
+    data.stopTab('removed')
+    data.frames.sleeping = { loading: false, frame: null }
+    data.stopTab('sleeping')
+    assert.equal(data.frames.sleeping.loading, false)
+})
+
 Deno.test('sidebar group placement leaves a live single-tab frame attached', async () => {
     const moves = []
     let ticks = 0

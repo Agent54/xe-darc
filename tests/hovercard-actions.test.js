@@ -25,6 +25,57 @@ function components (path, name) {
     return found
 }
 
+Deno.test('navigation controls switch between reload and stop with the target tab loading state', () => {
+    const source = Deno.readTextFileSync(new URL('../app/components/TabActionButtons.svelte', import.meta.url))
+    const actions = parse(source).instance.content.body
+        .flatMap(node => node.declarations || []).find(node => node.id.name === 'actions').init.arguments[0]
+    const calls = []
+    const readActions = new Function('loading', 'onReload', 'onStop', `
+        const isClosedTab = false, showDevTools = false, showSettingsButton = false
+        const showCloseButton = false, copyUrlSuccess = false, onGoBack = null, onGoForward = null, onCopyUrl = null
+        return ${source.slice(actions.start, actions.end)}
+    `)
+    const reload = () => calls.push('reload')
+    const stop = () => calls.push('stop')
+    const idle = readActions(false, reload, stop)[2]
+    const loading = readActions(true, reload, stop)[2]
+    assert.equal(idle.label, 'Reload')
+    assert.equal(loading.label, 'Stop')
+    assert.notEqual(idle.path, loading.path)
+    idle.run()
+    loading.run()
+    readActions(false, reload, stop)[2].run()
+    assert.deepEqual(calls, ['reload', 'stop', 'reload'])
+})
+
+Deno.test('URL bars and tab menus stop their displayed tab without triggering reload', () => {
+    for (const path of ['../app/components/UrlBar.svelte', '../app/components/TabContextMenu.svelte']) {
+        const actions = components(path, 'TabActionButtons')[0]
+        const calls = []
+        const tab = { id: 'preview' }
+        const data = { frames: { preview: { loading: true }, unrelated: { loading: false } }, stopTab: id => calls.push(id) }
+        const read = new Function('data', 'tabId', 'menu', 'runTabAction', `
+            return { loading: ${actions.loading}, stop: ${actions.onStop} }
+        `)
+        const controls = read(data, tab.id, { tab }, action => action(tab))
+        assert.equal(controls.loading, true)
+        controls.stop()
+        assert.deepEqual(calls, ['preview'])
+        data.frames.preview.loading = false
+        assert.equal(read(data, tab.id, { tab }, action => action(tab)).loading, false)
+    }
+})
+
+Deno.test('URL bar reload supports lightboxes without a custom callback', () => {
+    const actions = components('../app/components/UrlBar.svelte', 'TabActionButtons')[0]
+    const calls = []
+    const create = new Function('data', 'tabId', 'onReload', `return ${actions.onReload}`)
+    const data = { reloadTab: id => calls.push(id) }
+    create(data, 'lightbox', null)()
+    create(data, 'preview', () => calls.push('custom'))()
+    assert.deepEqual(calls, ['lightbox', 'custom'])
+})
+
 Deno.test('all top and sidebar hovercards wire settings and developer tools to their target', async () => {
     const cards = [
         ...components('../app/App.svelte', 'TabHoverCard'),

@@ -2349,6 +2349,13 @@ const data = {
         }
     },
 
+    stopTab: (tabId) => {
+        const frame = frames[tabId]
+        if (!frame) return
+        frame.frame?.stop()
+        frame.loading = false
+    },
+
     reloadTab: (tabId) => {
         const tab = docs[tabId]
         const frame = frames[tabId]?.frame

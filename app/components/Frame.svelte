@@ -28,9 +28,9 @@
     const tab = $derived(data.docs[tabId])
 
     function lightboxTransition(node, options) {
-        return node.parentElement.classList.contains('lightbox-effects')
+        return /* node.parentElement.classList.contains('lightbox-effects')
             ? scale(node, options)
-            : fade(node, options)
+            : */ fade(node, options)
     }
 
     // Immediately unhibernate unhidden pinned frames on initial load
@@ -822,6 +822,7 @@
 
         {#if globalHoverPreviewVisible && globalHoverPreview && globalHoverPreviewTabId}
             {#key globalHoverPreview.href}
+                <!-- out:scale={{duration: 200}} -->
                 <div 
                     class="global-hover-preview" 
                     class:shown={globalHoverPreviewShown}
@@ -831,7 +832,6 @@
                     role="dialog"
                     aria-label="Link preview"
                     tabindex="-1"
-                    out:scale={{duration: 200}}
                     onmouseenter={() => { 
                         isHoveringPreview = true 
                         // Cancel pending hide when mouse enters the preview

@@ -4899,11 +4899,11 @@
     @keyframes hovercard-sidebar-fade-in {
         from {
             opacity: 0;
-            transform: translateX(-10px) scale(0.95);
+             /*  transform: translateX(-10px)scale(0.95) */
         }
         to {
             opacity: 1;
-            transform: translateX(0) scale(1);
+            /*transform: translateX(0)  scale(1) */
         }
     }
 </style>

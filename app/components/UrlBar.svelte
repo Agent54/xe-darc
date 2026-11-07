@@ -217,7 +217,10 @@
         
         <div class="url-bar-controls">
             <TabActionButtons {variant} {isClosedTab} {showDevTools} {showSettingsButton} {showCloseButton}
-                {copyUrlSuccess} {onGoBack} {onGoForward} {onReload} {onDevTools} {onSettings} {onCloseTab}
+                loading={data.frames[tabId]?.loading ?? false}
+                onStop={() => data.stopTab(tabId)}
+                onReload={() => onReload ? onReload() : data.reloadTab(tabId)}
+                {copyUrlSuccess} {onGoBack} {onGoForward} {onDevTools} {onSettings} {onCloseTab}
                 onCopyUrl={handleCopyUrlClick} />
         </div>
     </div>

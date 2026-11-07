@@ -387,6 +387,8 @@
         {:else if menu.tab.type !== 'divider'}
             {#if !isGroup}
                 <TabActionButtons variant="menu" {showDevTools} showSettingsButton={!!onSettings}
+                    loading={data.frames[menu.tab.id]?.loading ?? false}
+                    onStop={() => runTabAction(tab => data.stopTab(tab.id))}
                     onGoBack={() => runTabAction(tab => onNavigateHistory?.(tab.id, 'back'))}
                     onGoForward={() => runTabAction(tab => onNavigateHistory?.(tab.id, 'forward'))}
                     onReload={() => reloadTab(menu.tab)}
