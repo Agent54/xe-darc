@@ -1,2053 +1,354 @@
 <script>
-	import { getTabTitle } from '../lib/tab-title.js'
-	import { onMount, tick } from 'svelte'
-	import RightSidebar from './RightSidebar.svelte'
-	import data from '../data.svelte.js'
-	import * as smd from 'streaming-markdown'
-	// import { AgentClient } from 'agents/client'
-
-	let client = {}
-
-	async function startVoice() {
-		conv = true
-	}
-
-	async function stopVoice() {
-		conv = false
-	}
-
-	// const conversation = await Conversation.startSession({ signedUrl });
-	// 	app.get('/signed-url', yourAuthMiddleware, async (req, res) => {
-	//   const response = await fetch(
-	//     `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${process.env.AGENT_ID}`,
-	//     {
-	//       method: 'GET',
-	//       headers: {
-	//         // Requesting a signed url requires your ElevenLabs API key
-	//         // Do NOT expose your API key to the client!
-	//         'xi-api-key': process.env.XI_API_KEY,
-	//       },
-	//     }
-	//   );
-	//   if (!response.ok) {
-	//     return res.status(500).send('Failed to get signed URL');
-	//   }
-	//   const body = await response.json();
-	//   res.send(body.signed_url);
-	// });
-
-	// // Send messages to the Agent
-	// setTimeout(() => {
-
-		// JSON.stringify({
-		//   type: "message",
-		//   text: "hello world",
-		//   timestamp: Date.now(),
-		// }),
-		//   );
-	// }, 1000)
-
-
-	// setTimeout(()=> {
-	//     connection.send(
-	//         JSON.stringify(  {
-	//             "type": "cf_agent_use_chat_request",
-	//             "id": "unique-request-id",
-	//             "init": {
-	//             "method": "POST",
-	//             "headers": {"Content-Type": "application/json"},
-	//             "body": "{\"messages\":[{\"id\":\"msg_1\",\"role\":\"user\",\"content\":\"Hello\"}]}"
-	//             }
-	//         })
-	//     )
-	//     },2000)
-	// setTimeout(()=> {
-	//     connection.call('sendMessage', ['test']);
-	// })
-
-	let {
-		onClose,
-		openSidebars,
-		switchToResources,
-		switchToSettings,
-		switchToUserMods,
-		switchToActivity,
-		switchToAIAgent,
-		switchToDevTools,
-		devModeEnabled = false,
-		viewMode = 'default',
-		currentTab = null,
-		conv = $bindable(false)
-	} = $props()
-
-	let selectedTarget = $state('')
-	let conversation = $state('')
-	let isProcessing = $state(false)
-	let chatHistory = $state([])
-	let selectedModel = $state('claude-3-5-haiku-20241022')
-	let hoveredMessageId = $state(null)
-	let currentTimeout = null
-	let currentStreamingMessage = $state(null)
-	let messageQueue = $state([])
-	let queuePaused = $state(false)
-	let chatHistoryList = $state([])
-	let editingMessageId = $state(null)
-	let editingContent = $state('')
-	let isMarkdownStreaming = $state(false)
-	let selectedHistoryId = $state('current')
-
-	// Model configurations with proper names and IDs
-	const models = [
-		{
-			name: 'Claude Sonnet',
-			id: 'claude-4-sonnet-20250514',
-            avatarTitle: 'S',
-			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Simple Icons by Simple Icons Collaborators - https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md --><path fill="currentColor" d="m4.714 15.956l4.718-2.648l.079-.23l-.08-.128h-.23l-.79-.048l-2.695-.073l-2.337-.097l-2.265-.122l-.57-.121l-.535-.704l.055-.353l.48-.321l.685.06l1.518.104l2.277.157l1.651.098l2.447.255h.389l.054-.158l-.133-.097l-.103-.098l-2.356-1.596l-2.55-1.688l-1.336-.972l-.722-.491L2 6.223l-.158-1.008l.656-.722l.88.06l.224.061l.893.686l1.906 1.476l2.49 1.833l.364.304l.146-.104l.018-.072l-.164-.274l-1.354-2.446l-1.445-2.49l-.644-1.032l-.17-.619a3 3 0 0 1-.103-.729L6.287.133L6.7 0l.995.134l.42.364l.619 1.415L9.735 4.14l1.555 3.03l.455.898l.243.832l.09.255h.159V9.01l.127-1.706l.237-2.095l.23-2.695l.08-.76l.376-.91l.747-.492l.583.28l.48.685l-.067.444l-.286 1.851l-.558 2.903l-.365 1.942h.213l.243-.242l.983-1.306l1.652-2.064l.728-.82l.85-.904l.547-.431h1.032l.759 1.129l-.34 1.166l-1.063 1.347l-.88 1.142l-1.263 1.7l-.79 1.36l.074.11l.188-.02l2.853-.606l1.542-.28l1.84-.315l.832.388l.09.395l-.327.807l-1.967.486l-2.307.462l-3.436.813l-.043.03l.049.061l1.548.146l.662.036h1.62l3.018.225l.79.522l.473.638l-.08.485l-1.213.62l-1.64-.389l-3.825-.91l-1.31-.329h-.183v.11l1.093 1.068l2.003 1.81l2.508 2.33l.127.578l-.321.455l-.34-.049l-2.204-1.657l-.85-.747l-1.925-1.62h-.127v.17l.443.649l2.343 3.521l.122 1.08l-.17.353l-.607.213l-.668-.122l-1.372-1.924l-1.415-2.168l-1.141-1.943l-.14.08l-.674 7.254l-.316.37l-.728.28l-.607-.461l-.322-.747l.322-1.476l.388-1.924l.316-1.53l.285-1.9l.17-.632l-.012-.042l-.14.018l-1.432 1.967l-2.18 2.945l-1.724 1.845l-.413.164l-.716-.37l.066-.662l.401-.589l2.386-3.036l1.439-1.882l.929-1.086l-.006-.158h-.055L4.138 18.56l-1.13.146l-.485-.456l.06-.746l.231-.243l1.907-1.312Z"/></svg>
-			`
-		},
-		{
-			name: 'Claude Haiku',
-			id: 'claude-3-5-haiku-20241022',
-            avatarTitle: 'H',
-			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Simple Icons by Simple Icons Collaborators - https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md --><path fill="currentColor" d="m4.714 15.956l4.718-2.648l.079-.23l-.08-.128h-.23l-.79-.048l-2.695-.073l-2.337-.097l-2.265-.122l-.57-.121l-.535-.704l.055-.353l.48-.321l.685.06l1.518.104l2.277.157l1.651.098l2.447.255h.389l.054-.158l-.133-.097l-.103-.098l-2.356-1.596l-2.55-1.688l-1.336-.972l-.722-.491L2 6.223l-.158-1.008l.656-.722l.88.06l.224.061l.893.686l1.906 1.476l2.49 1.833l.364.304l.146-.104l.018-.072l-.164-.274l-1.354-2.446l-1.445-2.49l-.644-1.032l-.17-.619a3 3 0 0 1-.103-.729L6.287.133L6.7 0l.995.134l.42.364l.619 1.415L9.735 4.14l1.555 3.03l.455.898l.243.832l.09.255h.159V9.01l.127-1.706l.237-2.095l.23-2.695l.08-.76l.376-.91l.747-.492l.583.28l.48.685l-.067.444l-.286 1.851l-.558 2.903l-.365 1.942h.213l.243-.242l.983-1.306l1.652-2.064l.728-.82l.85-.904l.547-.431h1.032l.759 1.129l-.34 1.166l-1.063 1.347l-.88 1.142l-1.263 1.7l-.79 1.36l.074.11l.188-.02l2.853-.606l1.542-.28l1.84-.315l.832.388l.09.395l-.327.807l-1.967.486l-2.307.462l-3.436.813l-.043.03l.049.061l1.548.146l.662.036h1.62l3.018.225l.79.522l.473.638l-.08.485l-1.213.62l-1.64-.389l-3.825-.91l-1.31-.329h-.183v.11l1.093 1.068l2.003 1.81l2.508 2.33l.127.578l-.321.455l-.34-.049l-2.204-1.657l-.85-.747l-1.925-1.62h-.127v.17l.443.649l2.343 3.521l.122 1.08l-.17.353l-.607.213l-.668-.122l-1.372-1.924l-1.415-2.168l-1.141-1.943l-.14.08l-.674 7.254l-.316.37l-.728.28l-.607-.461l-.322-.747l.322-1.476l.388-1.924l.316-1.53l.285-1.9l.17-.632l-.012-.042l-.14.018l-1.432 1.967l-2.18 2.945l-1.724 1.845l-.413.164l-.716-.37l.066-.662l.401-.589l2.386-3.036l1.439-1.882l.929-1.086l-.006-.158h-.055L4.138 18.56l-1.13.146l-.485-.456l.06-.746l.231-.243l1.907-1.312Z"/></svg>
-			`
-		},
-		{
-			name: 'Claude Opus',
-			id: 'claude-4-opus-20250514',
-            avatarTitle: 'O',
-			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Simple Icons by Simple Icons Collaborators - https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md --><path fill="currentColor" d="m4.714 15.956l4.718-2.648l.079-.23l-.08-.128h-.23l-.79-.048l-2.695-.073l-2.337-.097l-2.265-.122l-.57-.121l-.535-.704l.055-.353l.48-.321l.685.06l1.518.104l2.277.157l1.651.098l2.447.255h.389l.054-.158l-.133-.097l-.103-.098l-2.356-1.596l-2.55-1.688l-1.336-.972l-.722-.491L2 6.223l-.158-1.008l.656-.722l.88.06l.224.061l.893.686l1.906 1.476l2.49 1.833l.364.304l.146-.104l.018-.072l-.164-.274l-1.354-2.446l-1.445-2.49l-.644-1.032l-.17-.619a3 3 0 0 1-.103-.729L6.287.133L6.7 0l.995.134l.42.364l.619 1.415L9.735 4.14l1.555 3.03l.455.898l.243.832l.09.255h.159V9.01l.127-1.706l.237-2.095l.23-2.695l.08-.76l.376-.91l.747-.492l.583.28l.48.685l-.067.444l-.286 1.851l-.558 2.903l-.365 1.942h.213l.243-.242l.983-1.306l1.652-2.064l.728-.82l.85-.904l.547-.431h1.032l.759 1.129l-.34 1.166l-1.063 1.347l-.88 1.142l-1.263 1.7l-.79 1.36l.074.11l.188-.02l2.853-.606l1.542-.28l1.84-.315l.832.388l.09.395l-.327.807l-1.967.486l-2.307.462l-3.436.813l-.043.03l.049.061l1.548.146l.662.036h1.62l3.018.225l.79.522l.473.638l-.08.485l-1.213.62l-1.64-.389l-3.825-.91l-1.31-.329h-.183v.11l1.093 1.068l2.003 1.81l2.508 2.33l.127.578l-.321.455l-.34-.049l-2.204-1.657l-.85-.747l-1.925-1.62h-.127v.17l.443.649l2.343 3.521l.122 1.08l-.17.353l-.607.213l-.668-.122l-1.372-1.924l-1.415-2.168l-1.141-1.943l-.14.08l-.674 7.254l-.316.37l-.728.28l-.607-.461l-.322-.747l.322-1.476l.388-1.924l.316-1.53l.285-1.9l.17-.632l-.012-.042l-.14.018l-1.432 1.967l-2.18 2.945l-1.724 1.845l-.413.164l-.716-.37l.066-.662l.401-.589l2.386-3.036l1.439-1.882l.929-1.086l-.006-.158h-.055L4.138 18.56l-1.13.146l-.485-.456l.06-.746l.231-.243l1.907-1.312Z"/></svg>
-			`
-		},
-		{
-			name: 'OpenAI O3',
-			id: 'openai-o3',
-			icon: `
-				<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
-					<path fill="currentColor" d="M22.282 9.821a6 6 0 0 0-.516-4.91a6.05 6.05 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a6 6 0 0 0-3.998 2.9a6.05 6.05 0 0 0 .743 7.097a5.98 5.98 0 0 0 .51 4.911a6.05 6.05 0 0 0 6.515 2.9A6 6 0 0 0 13.26 24a6.06 6.06 0 0 0 5.772-4.206a6 6 0 0 0 3.997-2.9a6.06 6.06 0 0 0-.747-7.073M13.26 22.43a4.48 4.48 0 0 1-2.876-1.04l.141-.081l4.779-2.758a.8.8 0 0 0 .392-.681v-6.737l2.02 1.168a.07.07 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494M3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085l4.783 2.759a.77.77 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646M2.34 7.896a4.5 4.5 0 0 1 2.366-1.973V11.6a.77.77 0 0 0 .388.677l5.815 3.354l-2.02 1.168a.08.08 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.08.08 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667m2.01-3.023l-.141-.085l-4.774-2.782a.78.78 0 0 0-.785 0L9.409 9.23V6.897a.07.07 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.8.8 0 0 0-.393.681zm1.097-2.365l2.602-1.5l2.607 1.5v2.999l-2.597 1.5l-2.607-1.5Z"/>
-				</svg>
-			`
-		},
-		
-		{
-			name: 'Mark (ElevenLabs)',
-			id: 'elevenlabs-mark',
-			avatarTitle: 'M',
-			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#3b82f6" viewBox="100 100 680 680" fill="none">
-				<path d="M468 292H528V584H468V292Z" fill="#3b82f6"/>
-				<path d="M348 292H408V584H348V292Z" fill="#3b82f6"/>
-				</svg>
-			`
-		},
-		{
-			name: 'Dana (ElevenLabs)',
-			id: 'elevenlabs-dana',
-			avatarTitle: 'D',
-			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#ec4899" viewBox="100 100 680 680" fill="none">
-				<path d="M468 292H528V584H468V292Z" fill="#ec4899"/>
-				<path d="M348 292H408V584H348V292Z" fill="#ec4899"/>
-				</svg>
-			`
-		},
-		{
-			name: 'River Slow (ElevenLabs)',
-			id: 'elevenlabs-river-slow',
-			avatarTitle: 'Rs',
-			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#ec4899" viewBox="100 100 680 680" fill="none">
-				<path d="M468 292H528V584H468V292Z" fill="#ec4899"/>
-				<path d="M348 292H408V584H348V292Z" fill="#ec4899"/>
-				</svg>
-			`
-		},
-		{
-			name: 'River Fast (ElevenLabs)',
-			id: 'elevenlabs-river-fast',
-			avatarTitle: 'Rf',
-			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#ec4899" viewBox="100 100 680 680" fill="none">
-				<path d="M468 292H528V584H468V292Z" fill="#ec4899"/>
-				<path d="M348 292H408V584H348V292Z" fill="#ec4899"/>
-				</svg>
-			`
-		},
-		{
-			name: 'River (ElevenLabs)',
-			id: 'elevenlabs-river',
-			avatarTitle: 'R',
-			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="#ec4899" viewBox="100 100 680 680" fill="none">
-				<path d="M468 292H528V584H468V292Z" fill="#ec4899"/>
-				<path d="M348 292H408V584H348V292Z" fill="#ec4899"/>
-				</svg>
-			`
-		},
-		{
-			name: 'ElevenLabs Voice',
-			id: 'elevenlabs-voice',
-			icon: `
-				<svg xmlns="http://www.w3.org/2000/svg" width="940" height="940" color="white"viewBox="100 100 680 680" fill="none">
-				<path d="M468 292H528V584H468V292Z" fill="white"/>
-				<path d="M348 292H408V584H348V292Z" fill="white"/>
-				</svg>
-			`
-		}
-	]
-
-	// Function to parse XML tags and determine model
-	function parseVoiceContent(content) {
-		// Check for <mark>...</mark> tags
-		const markMatch = content.match(/<mark>(.*?)<\/mark>/s)
-		if (markMatch) {
-			return {
-				model: 'elevenlabs-mark',
-				cleanContent: markMatch[1]
-			}
-		}
-		
-		// Check for <dana>...</dana> tags
-		const danaMatch = content.match(/<dana>(.*?)<\/dana>/s)
-		if (danaMatch) {
-			return {
-				model: 'elevenlabs-dana',
-				cleanContent: danaMatch[1]
-			}
-		}
-		
-		// Check for <riverslow>...</riverslow> tags
-		const riverslowMatch = content.match(/<river_slow>(.*?)<\/river_slow>/s)
-		if (riverslowMatch) {
-			return {
-				model: 'elevenlabs-river-slow',
-				cleanContent: riverslowMatch[1]
-			}
-		}
-		
-		// Check for <riverfast>...</riverfast> tags
-		const riverfastMatch = content.match(/<river_fast>(.*?)<\/river_fast>/s)
-		if (riverfastMatch) {
-			return {
-				model: 'elevenlabs-river-fast',
-				cleanContent: riverfastMatch[1]
-			}
-		}
-		
-		// Check for <river>...</river> tags
-		const riverMatch = content.match(/<river>(.*?)<\/river>/s)
-		if (riverMatch) {
-			return {
-				model: 'elevenlabs-river',
-				cleanContent: riverMatch[1]
-			}
-		}
-		
-		// No XML tags found, return original content with default voice model
-		return {
-			model: 'elevenlabs-voice',
-			cleanContent: content
-		}
-	}
-
-	// Streaming markdown state
-	let streamingRenderer = $state(null)
-	let streamingParser = $state(null)
-	let streamingElement = $state(null)
-	
-	// Add state for tracking active streams
-	let activeStreams = $state(new Map()) // messageId -> { message, parser, renderer, element }
-	
-	// Track known message IDs to avoid duplicates
-	let knownMessageIds = $state(new Set())
-
-	function initializeStreamingMarkdown(element) {
-		if (!element) return null
-
-		const renderer = smd.default_renderer(element)
-		const parser = smd.parser(renderer)
-
-		return { renderer, parser }
-	}
-
-	function initializeNonStreamingMessage(messageId, content) {
-		// Find the streaming element for this message
-		const messageElement = document.querySelector(`[data-message-id="${messageId}"]`)
-		if (!messageElement) return
-
-		const contentElement = messageElement.querySelector('.agent-markdown-streaming')
-		if (!contentElement) return
-
-		// Initialize streaming markdown and render the content immediately
-		const { renderer, parser } = initializeStreamingMarkdown(contentElement)
-		if (parser && content) {
-			smd.parser_write(parser, content)
-			smd.parser_end(parser)
-		}
-	}
-
-	function startMarkdownStream(messageId) {
-		// Find the streaming element for this message
-		const messageElement = document.querySelector(`[data-message-id="${messageId}"]`)
-		if (!messageElement) return null
-
-		const contentElement = messageElement.querySelector('.agent-markdown-streaming')
-		if (!contentElement) return null
-
-		const { renderer, parser } = initializeStreamingMarkdown(contentElement)
-
-		return { renderer, parser, element: contentElement }
-	}
-
-	function writeMarkdownChunk(parser, chunk) {
-		if (parser) {
-			smd.parser_write(parser, chunk)
-		}
-	}
-
-	function endMarkdownStream(parser) {
-		if (parser) {
-			smd.parser_end(parser)
-		}
-	}
-
-	function handleModelChange(event) {
-		console.log('Model changed to:', event.target.value)
-		selectedModel = event.target.value
-		localStorage.setItem('selectedModel', selectedModel)
-	}
-
-	async function handleStreamingChunk(data, { type } = {}) {
-		try {
-			console.log('handleStreamingChunk called with data:', data)
-			const messageId = data.id
-			const body = data.body
-			
-			// Handle completion message (e:)
-			if (type === 'completion' || body.startsWith('e:')) {
-				console.log('🏁 COMPLETION MESSAGE - messageId:', messageId)
-				const stream = activeStreams.get(messageId)
-				if (stream) {
-					// End the stream
-					endMarkdownStream(stream.parser)
-					stream.message.streaming = false
-					
-					// Mark the final message as a complete server message
-					// This helps prevent duplicates when server sends complete message updates
-					stream.message.isServerMessage = true
-					
-					// Remove from active streams
-					activeStreams.delete(messageId)
-					console.log('🗑️ STREAM REMOVED - activeStreams=' + activeStreams.size)
-					
-					// Update chat history
-					chatHistory = [...chatHistory]
-					
-					// Clear global streaming state if this was the last stream
-					if (activeStreams.size === 0) {
-						isMarkdownStreaming = false
-						currentStreamingMessage = null
-						streamingParser = null
-						streamingRenderer = null
-						streamingElement = null
-						isProcessing = false
-						console.log('✅ STREAMING COMPLETE - isProcessing=false isMarkdownStreaming=false')
-					}
-				}
-				return
-			}
-			
-			// Parse the streaming message format: { "body": "0:\" content here\"\n", "done": false, "id": "xxx", "type": "cf_agent_use_chat_response" }
-			// Extract content after "0:" and parse as JSON
-			const contentStart = body.indexOf('0:') + 2
-			const contentPart = body.substring(contentStart)
-			
-			// Parse the JSON-encoded content
-			let content = ''
-			try {
-				content = JSON.parse(contentPart.trim())
-			} catch (parseError) {
-				// If parsing fails, use the raw content
-				content = contentPart.trim()
-			}
-			
-			// Skip if there's no actual content
-			if (!content || content.trim() === '') {
-				console.log('Skipping empty content chunk for messageId:', messageId)
-				return
-			}
-			
-			// Check if this is the first chunk for this message
-			if (!activeStreams.has(messageId)) {
-				// Create new streaming message - ALL messages use streaming markdown now
-				const streamingMessageId = Date.now().toString()
-				const streamingMessage = {
-					id: streamingMessageId,
-					role: type === 'assistant-doc' ? 'assistant-doc' : 'assistant',
-					content: '',
-					rawContent: '',
-					timestamp: new Date().toISOString(),
-					streaming: true,
-					sourceMessageId: messageId,
-					model: selectedModel
-				}
-
-				// Add to chat history
-				chatHistory = [...chatHistory, streamingMessage]
-				currentStreamingMessage = streamingMessage
-				
-				// Track this message as known
-				knownMessageIds.add(streamingMessageId)
-
-				// Wait for Svelte to update the DOM, then initialize streaming
-				await tick()
-				
-				const streamingSetup = startMarkdownStream(streamingMessageId)
-				if (streamingSetup) {
-					activeStreams.set(messageId, {
-						message: streamingMessage,
-						parser: streamingSetup.parser,
-						renderer: streamingSetup.renderer,
-						element: streamingSetup.element
-					})
-					
-					// Set global streaming state for first stream
-					if (activeStreams.size === 1) {
-						isMarkdownStreaming = true
-						streamingParser = streamingSetup.parser
-						streamingRenderer = streamingSetup.renderer
-						streamingElement = streamingSetup.element
-						console.log('📝 STREAMING START - activeStreams=' + activeStreams.size + ' isMarkdownStreaming=true')
-					}
-				} else {
-					console.warn('Failed to initialize streaming for messageId:', messageId)
-				}
-			}
-
-			// Get the active stream
-			const stream = activeStreams.get(messageId)
-			if (stream && content) {
-				// Add content to the message
-				stream.message.rawContent += content
-				
-				// Check if we should switch from chat bubble to document style
-				const lineCount = (stream.message.rawContent.match(/\n/g) || []).length + 1
-				if (lineCount > 16 && stream.message.role === 'assistant') {
-					// Switch to document style
-					stream.message.role = 'assistant-doc'
-					// Update the message in chat history
-					const messageIndex = chatHistory.findIndex(m => m.id === stream.message.id)
-					if (messageIndex !== -1) {
-						chatHistory[messageIndex] = { ...stream.message }
-					}
-				}
-				
-				// Write to streaming parser
-				writeMarkdownChunk(stream.parser, content)
-				
-				// Update chat history to trigger reactivity
-				chatHistory = [...chatHistory]
-			}
-
-			// Old completion detection removed - now handled by 'e:' messages above
-			
-		} catch (error) {
-			console.error('Error parsing streaming message:', error)
-			
-			// Clean up any hanging streams on error
-			const messageId = data.id
-			if (activeStreams.has(messageId)) {
-				const stream = activeStreams.get(messageId)
-				if (stream) {
-					endMarkdownStream(stream.parser)
-					stream.message.streaming = false
-				}
-				activeStreams.delete(messageId)
-			}
-			
-			// Reset processing state if no streams remain
-			if (activeStreams.size === 0) {
-				isMarkdownStreaming = false
-				currentStreamingMessage = null
-				streamingParser = null
-				streamingRenderer = null
-				streamingElement = null
-				isProcessing = false
-				console.log('⚠️ ERROR CLEANUP - isProcessing=false (streaming error)')
-			}
-			
-			// Fall back to regular message display
-			const assistantMessageId = (Date.now() + 1).toString()
-			const errorMessage = {
-				id: assistantMessageId,
-				role: 'assistant',
-				content: `Error parsing stream: ${data.body}`,
-				timestamp: new Date().toISOString()
-			}
-			
-			chatHistory = [...chatHistory, errorMessage]
-			knownMessageIds.add(assistantMessageId)
-		}
-	}
-
-	function handleToolCall(data) {
-		try {
-			// Parse the tool call format: { "body": "9:{\"toolCallId\":\"toolu_01V5FvBnDEuQWSMgHjsXi1fr\",\"toolName\":\"getWeatherInformation\",\"args\":{\"city\":\"Tallinn\"}}\n", ... }
-			const body = data.body
-			
-			// Extract content after "9:" and parse as JSON
-			const contentStart = body.indexOf('9:') + 2
-			const contentPart = body.substring(contentStart)
-			
-			// Parse the JSON-encoded content
-			const toolCallData = JSON.parse(contentPart.trim())
-			
-			console.log('Tool call received:', toolCallData)
-			
-			// Assume all tool calls might need permission initially
-			// We'll determine this based on the response format later
-			const toolCard = {
-				type: 'tool',
-				action: 'tool-call',
-				status: 'processing',
-				title: toolCallData.toolName,
-				details: formatToolArgs(toolCallData.args),
-				toolCallId: toolCallData.toolCallId,
-				toolArgs: toolCallData.args, // Store original args for easy access
-				needsPermission: true, // Start as true, will be updated based on response
-				awaitingPermission: true // Track that we're waiting to see what kind of response this gets
-			}
-			
-			// Add tool call card to chat history
-			const toolCardMessage = {
-				id: Date.now().toString(),
-				role: 'info-cards',
-				cards: [toolCard],
-				timestamp: new Date().toISOString()
-			}
-			
-			chatHistory = [...chatHistory, toolCardMessage]
-			knownMessageIds.add(toolCardMessage.id)
-			
-		} catch (error) {
-			console.error('Error parsing tool call:', error)
-		}
-	}
-
-	function handleToolResult(data) {
-		try {
-			// Parse the tool result format: { "body": "a:{\"toolCallId\":\"toolu_01M2WQV8xT3dN2wTYXMTbMMC\",\"result\":\"10am\"}\n", ... }
-			const body = data.body
-			
-			// Extract content after "a:" and parse as JSON
-			const contentStart = body.indexOf('a:') + 2
-			const contentPart = body.substring(contentStart)
-			
-			// Parse the JSON-encoded content
-			const toolResultData = JSON.parse(contentPart.trim())
-			
-			console.log('Tool result received via a: message:', toolResultData)
-			
-			// If we get an "a:" message, this tool does NOT require permission
-			// Tools that require permission don't get "a:" messages, they get handled via complete message payload
-			
-			// Find the corresponding tool call card and update it
-			const updatedHistory = chatHistory.map(message => {
-				if (message.role === 'info-cards') {
-					const updatedCards = message.cards.map(card => {
-						if (card.toolCallId === toolResultData.toolCallId) {
-							// This tool doesn't need permission since it got a direct result
-							return {
-								...card,
-								status: 'accessed',
-								needsPermission: false,
-								awaitingPermission: false,
-								result: toolResultData.result,
-								details: card.details + '\n\nResult: ' + JSON.stringify(toolResultData.result, null, 2)
-							}
-						}
-						return card
-					})
-					return { ...message, cards: updatedCards }
-				}
-				return message
-			})
-			
-			chatHistory = updatedHistory
-			
-		} catch (error) {
-			console.error('Error parsing tool result:', error)
-		}
-	}
-
-	function formatToolArgs(args) {
-		if (!args || typeof args !== 'object') return ''
-		
-		// Format args as readable JSON with proper indentation
-		return JSON.stringify(args, null, 2)
-	}
-
-	function handleResponseSummary(data) {
-		try {
-			// Parse the response summary format: { "body": "d:{\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":1288,\"completionTokens\":89}}\n", ... }
-			const body = data.body
-			
-			// Extract content after "d:" and parse as JSON
-			const contentStart = body.indexOf('d:') + 2
-			const contentPart = body.substring(contentStart)
-			
-			// Parse the JSON-encoded content
-			const summaryData = JSON.parse(contentPart.trim())
-			
-			console.log('Response summary received:', summaryData)
-			
-			// Add response summary divider
-			const responseDividerMessage = {
-				id: Date.now().toString(),
-				role: 'response-divider',
-				content: `${summaryData.usage.promptTokens} prompt • ${summaryData.usage.completionTokens} completion`,
-				usage: summaryData.usage,
-				timestamp: new Date().toISOString()
-			}
-			
-			chatHistory = [...chatHistory, responseDividerMessage]
-			knownMessageIds.add(responseDividerMessage.id)
-			
-			// Ensure processing is stopped when we get the response summary
-			// This acts as a fallback in case streaming completion wasn't detected properly
-			setTimeout(() => {
-				if (activeStreams.size === 0 && isProcessing) {
-					isProcessing = false
-					isMarkdownStreaming = false
-					currentStreamingMessage = null
-					streamingParser = null
-					streamingRenderer = null
-					streamingElement = null
-					console.log('📊 RESPONSE SUMMARY FALLBACK - isProcessing=false')
-				}
-			}, 100)
-			
-		} catch (error) {
-			console.error('Error parsing response summary:', error)
-		}
-	}
-
-	function handleChatMessages(data) {
-		try {
-			const messages = data.messages || []
-			console.log('Handling chat messages:', messages)
-			
-			// Find messages that are truly new (not already in chat history)
-			const newMessages = []
-			
-			for (const message of messages) {
-				// Skip if we've already processed this message ID
-				if (message.id && knownMessageIds.has(message.id)) {
-					console.log('⏭️ Skipping known message ID:', message.id)
-					continue
-				}
-				
-				// Handle potential conflicts with active streams
-				if (message.role === 'assistant' && activeStreams.size > 0) {
-					const conflictingStream = Array.from(activeStreams.entries()).find(([streamId, stream]) => {
-						// Check if this server message might be the complete version of a streaming message
-						return stream.message.rawContent && message.content &&
-							stream.message.rawContent.includes(message.content.substring(0, 50))
-					})
-					
-					if (conflictingStream) {
-						const [streamId, stream] = conflictingStream
-						console.log('🔄 Found conflicting stream, checking if server message is complete...')
-						
-						// If server message is significantly longer than streaming content, 
-						// it might be a complete replacement
-						if (message.content.length > stream.message.rawContent.length * 1.5) {
-							console.log('📝 Server message is complete, replacing streaming message')
-							
-							// Stop the stream and replace with server message
-							endMarkdownStream(stream.parser)
-							activeStreams.delete(streamId)
-							
-							// Remove the streaming message from chat history
-							chatHistory = chatHistory.filter(msg => msg.id !== stream.message.id)
-							
-							// Don't skip this message - process it as a replacement
-						} else {
-							console.log('⏭️ Skipping message that conflicts with active stream:', message.id)
-							continue
-						}
-					}
-				}
-				
-				// Skip if this message content already exists in chat history
-				// (handles case where local message gets server ID later)
-				const isDuplicate = chatHistory.some(existing => {
-					// Exact content match with same role
-					if (existing.content === message.content && existing.role === message.role) {
-						// Check if timestamps are close (within 5 seconds)
-						const timeDiff = Math.abs(new Date(existing.timestamp).getTime() - new Date(message.createdAt).getTime())
-						if (timeDiff < 5000) {
-							console.log('⏭️ Skipping duplicate content message:', message.id)
-							return true
-						}
-					}
-					
-					// Check if this is a streaming message that might be replaced by server message
-					if (existing.streaming && existing.role === 'assistant' && message.role === 'assistant') {
-						// If existing message is streaming and has similar content, it might be a duplicate
-						const contentSimilarity = existing.rawContent && message.content && 
-							existing.rawContent.includes(message.content.substring(0, 50))
-						if (contentSimilarity) {
-							console.log('⏭️ Skipping message similar to streaming content:', message.id)
-							return true
-						}
-					}
-					
-					return false
-				})
-				
-				if (!isDuplicate) {
-					newMessages.push(message)
-					knownMessageIds.add(message.id)
-				}
-			}
-			
-			// Only process truly new messages
-			for (const message of newMessages) {
-				console.log('Processing new message:', message)
-				
-				// Convert the message to our internal format
-				const internalMessage = {
-					id: message.id,
-					role: message.role,
-					content: message.content,
-					timestamp: message.createdAt || new Date().toISOString(),
-					streaming: false,
-					isServerMessage: true,
-					model: selectedModel
-				}
-				
-				// Handle tool invocations if present
-				if (message.toolInvocations && message.toolInvocations.length > 0) {
-					// Process each tool invocation
-					for (const invocation of message.toolInvocations) {
-						// Check if this is a permission request based on the result format
-						const isPermissionResult = invocation.result === 'No, denied.' || 
-												   invocation.result === 'Yes, confirmed.' ||
-												   (invocation.result && typeof invocation.result === 'string' && 
-												    (invocation.result.includes('denied') || invocation.result.includes('confirmed')))
-						
-						if (isPermissionResult) {
-							// This is a tool that required permission - update existing card if it exists
-							const isApproved = invocation.result === 'Yes, confirmed.' || 
-											  (invocation.result && invocation.result.includes('confirmed'))
-							
-							// Try to find existing card and update it
-							const updatedHistory = chatHistory.map(msg => {
-								if (msg.role === 'info-cards') {
-									const updatedCards = msg.cards.map(card => {
-										if (card.toolCallId === invocation.toolCallId) {
-											return {
-												...card,
-												status: isApproved ? 'approved' : 'denied',
-												needsPermission: true,
-												awaitingPermission: false,
-												permissionResult: invocation.result
-											}
-										}
-										return card
-									})
-									return { ...msg, cards: updatedCards }
-								}
-								return msg
-							})
-							
-							// Check if we found and updated an existing card
-							const cardFound = updatedHistory.some(msg => 
-								msg.role === 'info-cards' && 
-								msg.cards.some(card => card.toolCallId === invocation.toolCallId)
-							)
-							
-							if (cardFound) {
-								chatHistory = updatedHistory
-							} else {
-								// Create new card for this permission result
-								const toolCard = {
-									type: 'tool',
-									action: 'tool-call',
-									status: isApproved ? 'approved' : 'denied',
-									title: invocation.toolName,
-									details: formatToolInvocationDetails(invocation),
-									toolCallId: invocation.toolCallId,
-									toolArgs: invocation.args, // Store original args for easy access
-									needsPermission: true,
-									awaitingPermission: false,
-									permissionResult: invocation.result
-								}
-								
-								const toolCardMessage = {
-									id: `tool-${message.id}-${invocation.toolCallId}`,
-									role: 'info-cards',
-									cards: [toolCard],
-									timestamp: new Date().toISOString()
-								}
-								
-								chatHistory = [...chatHistory, toolCardMessage]
-								knownMessageIds.add(toolCardMessage.id)
-							}
-						}
-						// For non-permission results, we don't create cards here since they'll be handled by "a:" messages
-					}
-				}
-				
-				// Add the message to chat history
-				chatHistory = [...chatHistory, internalMessage]
-			}
-			
-			// Safeguard: Don't accidentally clear history
-			if (newMessages.length === 0 && messages.length > 0) {
-				console.log('⚠️ No new messages found but server sent messages - possible duplicate detection')
-			}
-			
-			// Update current chat timestamp if we have new messages
-			if (newMessages.length > 0) {
-				updateCurrentChatTimestamp()
-			}
-			
-		} catch (error) {
-			console.error('Error handling chat messages:', error)
-		}
-	}
-
-	function formatToolInvocationDetails(invocation) {
-		const details = []
-		
-		if (invocation.args) {
-			details.push(`Args: ${JSON.stringify(invocation.args, null, 2)}`)
-		}
-		
-		if (invocation.result) {
-			details.push(`Result: ${JSON.stringify(invocation.result, null, 2)}`)
-		}
-		
-		return details.join('\n\n')
-	}
-
-	// Get available targets with actual names in brackets
-	let availableTargets = $derived.by(() => {
-		const currentTabTitle = currentTab ? getTabTitle(currentTab) : 'No active tab'
-		const currentSpaceName = data.spaceMeta.activeSpace
-			? data.spaces[data.spaceMeta.activeSpace]?.name || 'Unnamed Space'
-			: 'No active space'
-
-		return [
-			{
-				id: 'current-tab',
-				name: `Current Tab [${currentTabTitle}]`,
-				type: 'current-tab',
-				description: currentTab ? currentTab.url || 'No URL' : 'No active tab'
-			},
-			{
-				id: 'current-space',
-				name: `Current Space [${currentSpaceName}]`,
-				type: 'current-space',
-				description: data.spaceMeta.activeSpace
-					? `${data.spaces[data.spaceMeta.activeSpace]?.tabs?.filter(tab => tab.type === 'tab').length || 0} tabs`
-					: 'No active space'
-			},
-			{
-				id: 'all-spaces',
-				name: `All Spaces [${Object.keys(data.spaces).length} spaces]`,
-				type: 'all-spaces',
-				description: 'Access all workspaces'
-			}
-		]
-	})
-
-	// Auto-select current target based on view mode
-	$effect(() => {
-		if (viewMode === 'canvas') {
-			selectedTarget = 'current-space'
-		} else {
-			selectedTarget = 'current-tab'
-		}
-	})
-
-	// Context metadata gathering function
-	function gatherContextMetadata(selectedTarget) {
-		const context = {
-			type: selectedTarget,
-			timestamp: new Date().toISOString()
-		}
-
-		if (selectedTarget === 'current-tab' && currentTab) {
-			context.currentTab = {
-				id: currentTab.id,
-				url: currentTab.url,
-				title: getTabTitle(currentTab),
-				favicon: currentTab.favicon
-			}
-		} else if (selectedTarget === 'current-space' && data.spaceMeta.activeSpace) {
-			const activeSpace = data.spaces[data.spaceMeta.activeSpace]
-			context.currentSpace = {
-				id: data.spaceMeta.activeSpace,
-				name: activeSpace?.name || 'Unnamed Space',
-				tabs: activeSpace?.tabs?.filter(tab => tab.type === 'tab').map(tab => ({
-					id: tab.id,
-					url: tab.url,
-					title: getTabTitle(tab)
-				})) || []
-			}
-		} else if (selectedTarget === 'all-spaces') {
-			context.allSpaces = Object.entries(data.spaces).map(([spaceId, space]) => ({
-				id: spaceId,
-				name: space.name || 'Unnamed Space',
-				tabCount: space.tabs?.filter(tab => tab.type === 'tab').length || 0,
-				tabs: space.tabs?.filter(tab => tab.type === 'tab').map(tab => ({
-					id: tab.id,
-					url: tab.url,
-					title: getTabTitle(tab)
-				})) || []
-			}))
-			context.currentSpaceId = data.spaceMeta.activeSpace
-		}
-
-		return context
-	}
-
-	// Keep selectedHistoryId in sync with current state
-	$effect(() => {
-		if (currentChatId) {
-			selectedHistoryId = currentChatId
-		} else {
-			selectedHistoryId = 'current'
-		}
-	})
-
-	function handleKeyDown(event) {
-		if (event.key === 'Enter' && !event.shiftKey) {
-			event.preventDefault()
-			sendMessage()
-		}
-	}
-
-	async function sendMessage() {
-		if (!conversation.trim()) return
-
-		const userMessage = conversation.trim()
-		conversation = ''
-
-		// Check for test commands
-		if (userMessage.toLowerCase() === 'cards') {
-			handleTestCards()
-			const input = document.querySelector('.agent-conversation-input')
-			if (input) input.focus()
-			return
-		}
-
-		if (userMessage.toLowerCase() === 'doc') {
-			handleTestDoc()
-			const input = document.querySelector('.agent-conversation-input')
-			if (input) input.focus()
-			return
-		}
-
-		if (userMessage.toLowerCase() === 'test') {
-			handleTestMessage()
-			const input = document.querySelector('.agent-conversation-input')
-			if (input) input.focus()
-			return
-		}
-
-		// Add message to queue
-		const queueItem = {
-			id: Date.now().toString(),
-			userMessage,
-			selectedTarget,
-			selectedModel,
-			timestamp: new Date().toISOString(),
-			status: 'queued', // queued, processing, completed
-			paused: false // Add paused state for individual items
-		}
-
-		messageQueue = [...messageQueue, queueItem]
-
-		// Process queue if not already processing
-		if (!isProcessing) {
-			processQueue()
-		}
-
-		// Re-focus input
-		const input = document.querySelector('.agent-conversation-input')
-		if (input) input.focus()
-	}
-
-	async function processQueue() {
-		if (queuePaused || messageQueue.length === 0) return
-
-		isProcessing = true
-		console.log('🔄 PROCESSING START - isProcessing=true')
-
-		while (messageQueue.length > 0 && !queuePaused) {
-			// Find first unpaused item
-			const queueIndex = messageQueue.findIndex((item) => item.status === 'queued' && !item.paused)
-			if (queueIndex === -1) {
-				// No unpaused items, wait or break
-				break
-			}
-
-			const queueItem = messageQueue[queueIndex]
-			queueItem.status = 'processing'
-			messageQueue = [...messageQueue]
-
-			const processingResult = await processMessage(queueItem)
-
-			// Remove processed item from queue (regardless of result)
-			messageQueue = messageQueue.filter((item) => item.id !== queueItem.id)
-
-			// If processing was cancelled, break
-			if (!processingResult) {
-				break
-			}
-		}
-
-		// Keep isProcessing = true until streaming actually completes
-		// Don't set it to false here - let handleStreamingChunk handle it
-	}
-
-	async function processMessage(queueItem) {
-		// Add user message to history
-		const messageId = queueItem.id
-		const userMessage = {
-			id: messageId,
-			role: 'user',
-			content: queueItem.userMessage,
-			timestamp: queueItem.timestamp,
-			model: queueItem.selectedModel
-		}
-		
-		chatHistory = [...chatHistory, userMessage]
-		
-		// Track this message as known
-		knownMessageIds.add(messageId)
-
-		// Gather context metadata based on selected target
-		const contextMetadata = gatherContextMetadata(queueItem.selectedTarget)
-
-        client?.send(
-			JSON.stringify(
-				{
-					id: crypto.randomUUID(),
-					init: {
-						body: JSON.stringify({
-							id: crypto.randomUUID(),
-							messages: [
-								{
-									id: crypto.randomUUID(),
-									createdAt: new Date().toISOString(),
-									role: 'user',
-									content: queueItem.userMessage,
-									model: queueItem.selectedModel,
-									parts: [{ type: 'text', text: 'user context: ' + JSON.stringify(contextMetadata) + '\n\n' }, { type: 'text', text: queueItem.userMessage }]
-								}
-							]
-						}),
-						headers: { 'Content-Type': 'application/json' },
-						method: 'POST'
-					},
-					type: 'cf_agent_use_chat_request',
-					url: '/api/chat'
-				}
-			)
-		)
-
-		// Set a fallback timeout to ensure isProcessing doesn't get stuck
-		const fallbackTimeout = setTimeout(() => {
-			if (isProcessing && activeStreams.size === 0) {
-				isProcessing = false
-				isMarkdownStreaming = false
-				currentStreamingMessage = null
-				streamingParser = null
-				streamingRenderer = null
-				streamingElement = null
-				console.log('⏰ FALLBACK TIMEOUT - isProcessing=false (15s timeout)')
-			}
-		}, 15000) // 15 second fallback
-
-		try {
-			// Add info cards showing what the agent is accessing/doing
-			// const selectedTargetObj = availableTargets.find((t) => t.id === queueItem.selectedTarget)
-			// const infoCards = []
-
-			// Show context access
-			// if (queueItem.selectedTarget === 'current-tab' && currentTab) {
-			// 	infoCards.push({
-			// 		type: 'context',
-			// 		action: 'read-tab',
-			// 		status: 'accessed',
-			// 		title: currentTab.title || 'Untitled Tab',
-			// 		url: currentTab.url,
-			// 		favicon: currentTab.favicon || null
-			// 	})
-			// } else if (queueItem.selectedTarget === 'current-space') {
-			// 	const spaceName = data.spaceMeta.activeSpace
-			// 		? data.spaces[data.spaceMeta.activeSpace]?.name || 'Unnamed Space'
-			// 		: 'No active space'
-			// 	const tabCount = data.spaces[data.spaceMeta.activeSpace]?.tabs?.length || 0
-			// 	infoCards.push({
-			// 		type: 'context',
-			// 		action: 'read-space',
-			// 		status: 'accessed',
-			// 		title: spaceName,
-			// 		details: `${tabCount} tabs`
-			// 	})
-			// } else if (queueItem.selectedTarget === 'all-spaces') {
-			// 	infoCards.push({
-			// 		type: 'context',
-			// 		action: 'read-all-spaces',
-			// 		status: 'accessed',
-			// 		title: 'All Spaces',
-			// 		details: `${Object.keys(data.spaces).length} spaces`
-			// 	})
-			// }
-
-
-
-			// Add info cards to chat history
-			// if (infoCards.length > 0) {
-			// 	const infoCardsMessage = {
-			// 		id: Date.now().toString(),
-			// 		role: 'info-cards',
-			// 		cards: infoCards,
-			// 		timestamp: new Date().toISOString()
-			// 	}
-			// 	
-			// 	chatHistory = [...chatHistory, infoCardsMessage]
-			// 	knownMessageIds.add(infoCardsMessage.id)
-			// }
-
-			// Update chat timestamp to bump to top
-			updateCurrentChatTimestamp()
-
-			// Keep processing active until streaming completes
-			// Processing will be set to false when streaming ends
-			return true // Processing completed successfully
-		} catch (error) {
-			console.error('Agent processing error:', error)
-			const errorMessageId = (Date.now() + 2).toString()
-			const errorMessage = {
-				id: errorMessageId,
-				role: 'error',
-				content: 'Sorry, I encountered an error. Please try again.',
-				timestamp: new Date().toISOString()
-			}
-			
-			chatHistory = [...chatHistory, errorMessage]
-			knownMessageIds.add(errorMessageId)
-
-			clearTimeout(fallbackTimeout)
-			isProcessing = false
-			return true // Error handled, continue processing
-		} finally {
-			currentTimeout = null
-			clearTimeout(fallbackTimeout)
-		}
-	}
-
-	function clearHistory() {
-		// Send clear message to agent
-		// client?.send(JSON.stringify({"type":"cf_agent_chat_clear"}))
-
-		// Cancel current task and queue
-		if (currentTimeout) {
-			clearTimeout(currentTimeout)
-			currentTimeout = null
-		}
-
-		// Stop all active streams
-		for (const [messageId, stream] of activeStreams) {
-			if (stream.parser) {
-				endMarkdownStream(stream.parser)
-			}
-			if (stream.message) {
-				stream.message.streaming = false
-			}
-		}
-		activeStreams.clear()
-
-		// Stop processing and clear queue
-		isProcessing = false
-		messageQueue = []
-		queuePaused = false
-
-		// Save current chat to history before clearing
-		saveChatHistory()
-
-		// Clear chat state
-		chatHistory = []
-		currentStreamingMessage = null
-		isMarkdownStreaming = false
-		currentChatId = null
-		selectedHistoryId = 'current'
-
-		// Clear known message IDs
-		knownMessageIds.clear()
-
-		// Clear streaming parser
-		streamingParser = null
-		streamingRenderer = null
-		streamingElement = null
-
-		// Re-focus the input
-		const input = document.querySelector('.agent-conversation-input')
-		if (input) input.focus()
-	}
-
-	function pauseQueue() {
-		queuePaused = true
-		// Don't interrupt current task, just pause queue processing
-
-		// Re-focus the input
-		const input = document.querySelector('.agent-conversation-input')
-		if (input) input.focus()
-	}
-
-	function resumeQueue() {
-		queuePaused = false
-		if (messageQueue.length > 0) {
-			processQueue()
-		}
-
-		// Re-focus the input
-		const input = document.querySelector('.agent-conversation-input')
-		if (input) input.focus()
-	}
-
-	function stopCurrentTask() {
-		console.log('stopCurrentTask called, cleaning up streams...')
-		
-		// Stop all active streams
-		for (const [messageId, stream] of activeStreams) {
-			if (stream.parser) {
-				endMarkdownStream(stream.parser)
-			}
-			if (stream.message) {
-				stream.message.streaming = false
-			}
-		}
-		
-		// Clear all active streams
-		activeStreams.clear()
-		
-		// Clear streaming state immediately
-		isMarkdownStreaming = false
-		currentStreamingMessage = null
-		streamingParser = null
-		streamingRenderer = null
-		streamingElement = null
-
-		// Only stop the current active task, don't clear queue
-		if (currentTimeout) {
-			clearTimeout(currentTimeout)
-			currentTimeout = null
-		}
-
-		// Stop the current processing immediately
-		isProcessing = false
-		console.log('🛑 STOP TASK - isProcessing=false (user stopped)')
-
-		// Update chat history to reflect stopped state and trigger reactivity
-		chatHistory = [...chatHistory]
-
-		// Re-focus the input
-		const input = document.querySelector('.agent-conversation-input')
-		if (input) input.focus()
-	}
-
-	function pauseQueueItem(itemId) {
-		const item = messageQueue.find((q) => q.id === itemId)
-		if (item && item.status === 'queued') {
-			item.paused = true
-			messageQueue = [...messageQueue]
-		}
-	}
-
-	function resumeQueueItem(itemId) {
-		const item = messageQueue.find((q) => q.id === itemId)
-		if (item && item.status === 'queued') {
-			item.paused = false
-			messageQueue = [...messageQueue]
-
-			// If queue isn't paused and we're not processing, start processing
-			if (!queuePaused && !isProcessing) {
-				processQueue()
-			}
-		}
-	}
-
-	function stopQueueItem(itemId) {
-		// Remove item from queue
-		messageQueue = messageQueue.filter((q) => q.id !== itemId)
-	}
-
-	function stopProcessing() {
-		pauseQueue()
-		messageQueue = []
-
-		// Re-focus the input
-		const input = document.querySelector('.agent-conversation-input')
-		if (input) input.focus()
-	}
-
-	function editMessage(messageId) {
-		const message = chatHistory.find((m) => m.id === messageId)
-		if (message && message.role === 'user') {
-			editingMessageId = messageId
-			editingContent = message.content
-		}
-	}
-
-	function editQueueItem(queueItemId) {
-		const queueItem = messageQueue.find((q) => q.id === queueItemId)
-		if (queueItem && queueItem.status === 'queued') {
-			editingMessageId = queueItemId
-			editingContent = queueItem.userMessage
-		}
-	}
-
-	function saveMessageEdit(messageId) {
-		const messageIndex = chatHistory.findIndex((m) => m.id === messageId)
-		if (messageIndex !== -1) {
-			chatHistory[messageIndex].content = editingContent
-			chatHistory = [...chatHistory]
-		}
-		editingMessageId = null
-		editingContent = ''
-	}
-
-	function saveQueueItemEdit(queueItemId) {
-		const queueItemIndex = messageQueue.findIndex((q) => q.id === queueItemId)
-		if (queueItemIndex !== -1) {
-			messageQueue[queueItemIndex].userMessage = editingContent
-			messageQueue = [...messageQueue]
-		}
-		editingMessageId = null
-		editingContent = ''
-	}
-
-	function cancelMessageEdit() {
-		editingMessageId = null
-		editingContent = ''
-	}
-
-	let currentChatId = $state(null)
-
-	function generateHistoryTitle() {
-		const firstUserMessage = chatHistory.find((m) => m.role === 'user')
-		if (firstUserMessage) {
-			return firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '')
-		}
-		return 'Chat conversation'
-	}
-
-	function saveChatHistory() {
-		if (chatHistory.length > 0) {
-			const historyItem = {
-				id: Date.now().toString(),
-				timestamp: new Date().toISOString(),
-				title: generateHistoryTitle(),
-				messages: [...chatHistory]
-			}
-			// Add new item to the beginning for proper sorting
-			chatHistoryList = [historyItem, ...chatHistoryList]
-		}
-	}
-
-	function updateCurrentChatTimestamp() {
-		if (currentChatId && chatHistory.length > 0) {
-			const index = chatHistoryList.findIndex((h) => h.id === currentChatId)
-			if (index !== -1) {
-				chatHistoryList[index].timestamp = new Date().toISOString()
-				chatHistoryList[index].messages = [...chatHistory]
-				// Move to front
-				const item = chatHistoryList.splice(index, 1)[0]
-				chatHistoryList = [item, ...chatHistoryList]
-			}
-		}
-	}
-
-	function loadChatHistory(historyId) {
-		if (historyId === 'current' || historyId === currentChatId) {
-			// Already current chat, do nothing
-			return
-		}
-
-		const historyItem = chatHistoryList.find((h) => h.id === historyId)
-		if (historyItem) {
-			// Save current chat before switching
-			if (chatHistory.length > 0 && !currentChatId) {
-				saveChatHistory()
-			}
-
-			chatHistory = [...historyItem.messages]
-			currentChatId = historyId
-			isMarkdownStreaming = false
-			selectedHistoryId = historyId
-			
-			// Rebuild known message IDs from the loaded history
-			knownMessageIds.clear()
-			for (const message of chatHistory) {
-				if (message.id) {
-					knownMessageIds.add(message.id)
-				}
-			}
-		}
-	}
-
-	function handleHistoryChange(event) {
-		const value = event.target.value
-		if (value === 'current') {
-			// Switch to current chat
-			if (currentChatId) {
-				chatHistory = []
-				currentChatId = null
-				isMarkdownStreaming = false
-				knownMessageIds.clear()
-			}
-		} else if (value === 'show-all') {
-			// TODO: Implement show all functionality
-			console.log('Show all history')
-			// Reset to current for now
-			selectedHistoryId = 'current'
-		} else if (value && value !== '') {
-			loadChatHistory(value)
-		}
-	}
-
-	// function deleteChatHistory(historyId) {
-	// 	chatHistoryList = chatHistoryList.filter((h) => h.id !== historyId)
-	// }
-
-	function copyMessage(messageId) {
-		const message = chatHistory.find((m) => m.id === messageId)
-		if (message) {
-			// For streaming markdown messages, copy the raw content instead of HTML
-			const contentToCopy =
-				(message.role === 'assistant' || message.role === 'assistant-doc') ? message.rawContent || message.content : message.content
-			navigator.clipboard.writeText(contentToCopy)
-		}
-	}
-
-	function thumbsUp(messageId) {
-		console.log('Thumbs up for message:', messageId)
-		// TODO: Implement feedback system
-	}
-
-	function thumbsDown(messageId) {
-		console.log('Thumbs down for message:', messageId)
-		// TODO: Implement feedback system
-	}
-
-	async function approveToolPermission(toolCallId) {
-		console.log('Approving tool permission for:', toolCallId)
-		
-		// Find the tool call information
-		let toolCallInfo = null
-		for (const message of chatHistory) {
-			if (message.role === 'info-cards') {
-				const toolCard = message.cards.find(card => card.toolCallId === toolCallId)
-				if (toolCard) {
-					toolCallInfo = toolCard
-					break
-				}
-			}
-		}
-
-		if (!toolCallInfo) {
-			console.error('Could not find tool call information for:', toolCallId)
-			return
-		}
-
-		// Find the most recent user message and assistant response
-		const userMessage = [...chatHistory].reverse().find(msg => msg.role === 'user')
-		const assistantMessage = [...chatHistory].reverse().find(msg => msg.role === 'assistant' || msg.role === 'assistant-doc')
-		
-		if (!userMessage || !assistantMessage) {
-			console.error('Could not find user or assistant message for tool permission')
-			return
-		}
-		
-		// Get tool args from stored toolArgs or parse from details as fallback
-		let toolArgs = toolCallInfo.toolArgs || {}
-		if (!toolArgs || Object.keys(toolArgs).length === 0) {
-			try {
-				// First try to parse as "Args:" prefixed format
-				const argsMatch = toolCallInfo.details.match(/Args:\s*({[\s\S]*?})(?:\n\n|$)/m)
-				if (argsMatch) {
-					toolArgs = JSON.parse(argsMatch[1])
-				} else {
-					// If no "Args:" prefix, try parsing the entire details as JSON
-					toolArgs = JSON.parse(toolCallInfo.details)
-				}
-			} catch (error) {
-				console.warn('Could not parse tool args from details:', toolCallInfo.details, error)
-			}
-		}
-
-        let result = 'Yes, confirmed.'
-
-        if (toolCallInfo.title === 'readPageContent') {
-            result += `\n---page content---\n${await data.readPage(currentTab.id, { textOnly: toolArgs?.textOnly || false })}` 
+    import { onMount, tick } from 'svelte'
+    import RightSidebar from './RightSidebar.svelte'
+    import data from '../data.svelte.js'
+    import { getTabTitle } from '../lib/tab-title.js'
+    import { agent, agentState } from '../lib/agent.js'
+    import { captureAgentContext } from '../lib/agent-context.js'
+    import { readAcpSettings } from '../lib/acp-settings.js'
+    import { getModelConfig, modelAvatar } from '../lib/agent-models.js'
+    import { default_renderer, parser as createMarkdownParser, parser_write as writeMarkdownChunk, parser_end as endMarkdownStream } from 'streaming-markdown'
+
+    let {
+        onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods,
+        switchToActivity, switchToAIAgent, switchToDevTools, devModeEnabled = false,
+        viewMode = 'default', currentTab = null, conv = $bindable(false)
+    } = $props()
+
+    let conversation = $state('')
+    let selectedTarget = $state('')
+    let hoveredMessageId = $state(null)
+    let editingMessageId = $state(null)
+    let editingContent = $state('')
+    let connectionError = $state('')
+    let showAllHistory = $state(false)
+    let input = $state(null)
+    const chat = $derived($agentState.conversations.find(item => item.id === $agentState.activeConversationId))
+    const isProcessing = $derived($agentState.processing)
+    const queuePaused = $derived($agentState.queuePaused)
+    const target = $derived(selectedTarget || (viewMode === 'canvas' ? 'current-space' : 'current-tab'))
+    const selectedHistoryId = $derived($agentState.activeConversationId || 'current')
+    const chatHistoryList = $derived($agentState.conversations)
+    const modelConfig = $derived(getModelConfig(chat?.configOptions))
+    const selectedModel = $derived(modelConfig?.currentValue || 'agent')
+    const availableTargets = $derived([
+        { id: 'current-tab', name: `Current tab${currentTab ? ': ' + getTabTitle(currentTab) : ''}` },
+        { id: 'current-space', name: 'Current space' },
+        { id: 'all-spaces', name: 'All spaces' }
+    ])
+    const messageQueue = $derived($agentState.queue.map(item => ({ ...item, userMessage: item.text, status: 'queued' })))
+    const chatHistory = $derived.by(() => {
+        const messages = (chat?.messages || []).map(message => {
+            if (message.role !== 'tool') { return message }
+            return { ...message, role: 'info-cards', cards: [{
+                action: ({ read: 'read-tab', search: 'web-search', execute: 'execute-js', edit: 'modify-content' })[message.kind] || 'tool-call',
+                title: message.title || 'Tool', toolCallId: message.toolCallId,
+                status: message.status === 'failed' ? 'error' : message.status === 'completed' ? 'completed' : 'pending',
+                details: message.rawInput ? JSON.stringify(message.rawInput, null, 2) : '',
+                result: message.content || (message.rawOutput ? JSON.stringify(message.rawOutput, null, 2) : '')
+            }] }
+        })
+        for (const approval of $agentState.approvals.filter(item => item.conversationId === chat?.id)) {
+            messages.push({ id: approval.id, role: 'info-cards', cards: [{
+                action: 'grant-permission', title: approval.title, details: approval.details,
+                awaitingPermission: true, needsPermission: true, status: 'pending',
+                approvalId: approval.id, options: approval.options
+            }] })
         }
+        return messages
+    })
 
-        if (toolCallInfo.title === 'openNewTab') {
-            const newTab = data.newTab(data.spaceMeta.activeSpace, { 
-                url: toolArgs.url,
-                title: toolArgs.title
-            })
-            if (newTab) {
-                // Activate the new tab
-                data.activate(newTab.id)
-                result += `\n---new tab created---\nTab ID: ${newTab.id}\nURL: ${toolArgs.url || 'about:newtab'}`
-            } else {
-                result += `\n---error---\nFailed to create new tab`
+    function streamingMarkdown(node, message) {
+        let parser = createMarkdownParser(default_renderer(node))
+        let rendered = ''
+        let ended = false
+        function update(next) {
+            if (!next.content.startsWith(rendered) || (ended && next.content !== rendered)) {
+                node.replaceChildren()
+                parser = createMarkdownParser(default_renderer(node))
+                rendered = ''
+                ended = false
+            }
+            if (next.content.length > rendered.length) {
+                writeMarkdownChunk(parser, next.content.slice(rendered.length))
+                rendered = next.content
+            }
+            if (!next.streaming && !ended) {
+                endMarkdownStream(parser)
+                ended = true
             }
         }
-        if (toolCallInfo.title === 'displayHtml') {
-            try {
-                // The result should contain dataUrl and title from the tool execution
-                const { html, title } = toolArgs;
+        update(message)
+        return { update }
+    }
 
-				const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(html)
+    async function connect() {
+        connectionError = ''
+        try { await agent.prepareConversation() } catch (error) { connectionError = error.message }
+    }
 
-				console.log('displayHtml', {dataUrl, title, toolArgs, toolCallInfo })
-                const newTab = data.newTab(data.spaceMeta.activeSpace, { 
-                    url: dataUrl,
-                    title: title,
-					shouldFocus: true
-                })
-                // if (newTab) {
-                //     // Activate the new tab
-                //     data.activate(newTab.id)
-               result = `\n---HTML displayed in new tab---\nTab ID: ${newTab.id}\nTitle: ${title}`
-                // } else {
-                //     result = `\n---error---\nFailed to create HTML tab`
-                // }
-            } catch (parseError) {
-                console.error('Failed to parse displayHtml result:', parseError);
-                result = `\n---error---\nFailed to parse HTML display result: ${result}`
-            }
+    function sendMessage() {
+        const text = conversation.trim()
+        if (!text) { return }
+        const command = text.toLowerCase()
+        if (!['cards', 'doc', 'test'].includes(command) && !readAcpSettings().endpoint) {
+            connectionError = 'Configure an ACP endpoint in Settings before sending a message.'
+            return
         }
+        conversation = ''
+        connectionError = ''
+        switch (command) {
+            case 'cards':
+                showTestCards()
+                break
+            case 'doc':
+                generateTestMarkdownDocument()
+                break
+            case 'test':
+                showTestMessage()
+                break
+            default:
+                agent.submit(text, captureAgentContext(data, target))
+        }
+        input?.focus()
+    }
 
-		// Construct the message payload with tool invocation result
-		console.log('Sending model to backend:', selectedModel)
-		const messagePayload = {
-			id: crypto.randomUUID(),
-			model: selectedModel,
-			messages: [
-				{
-					id: userMessage.id,
-					createdAt: userMessage.timestamp,
-					role: 'user',
-					content: userMessage.content,
-					model: selectedModel,
-					parts: [{
-						type: 'text',
-						text: userMessage.content
-					}]
-				},
-				{
-					id: assistantMessage.id,
-					createdAt: assistantMessage.timestamp,
-					role: 'assistant',
-					content: assistantMessage.content || assistantMessage.rawContent || '',
-					parts: [
-						{ type: 'step-start' },
-						{ type: 'text', text: assistantMessage.content || assistantMessage.rawContent || '' },
-						{
-							type: 'tool-invocation',
-							toolInvocation: {
-								state: 'result',
-								step: 0,
-								toolCallId: toolCallId,
-								toolName: toolCallInfo.title,
-								args: toolArgs,
-								result
-							}
-						}
-					],
-					toolInvocations: [{
-						state: 'result',
-						step: 0,
-						toolCallId: toolCallId,
-						toolName: toolCallInfo.title,
-						args: toolArgs,
-						result
-					}],
-					revisionId: crypto.randomUUID()
-				}
-			]
-		}
-		
-		// Send the complete chat message
-		client?.send(JSON.stringify({
-			id: crypto.randomUUID(),
-			init: {
-				body: JSON.stringify(messagePayload),
-				headers: { 'Content-Type': 'application/json' },
-				method: 'POST'
-			},
-			type: 'cf_agent_use_chat_request',
-			url: '/api/chat'
-		}))
-		
-		// Update the card status
-		const updatedHistory = chatHistory.map(message => {
-			if (message.role === 'info-cards') {
-				const updatedCards = message.cards.map(card => {
-					if (card.toolCallId === toolCallId) {
-						return {
-							...card,
-							status: 'approved',
-							permissionResult: 'Yes, confirmed.',
-							awaitingPermission: false
-						}
-					}
-					return card
-				})
-				return { ...message, cards: updatedCards }
-			}
-			return message
-		})
-		
-		chatHistory = updatedHistory
-	}
+    function handleKeyDown(event) {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+            event.preventDefault()
+            sendMessage()
+        }
+    }
 
-	function rejectToolPermission(toolCallId) {
-		console.log('Rejecting tool permission for:', toolCallId)
-		
-		// Find the tool call information
-		let toolCallInfo = null
-		for (const message of chatHistory) {
-			if (message.role === 'info-cards') {
-				const toolCard = message.cards.find(card => card.toolCallId === toolCallId)
-				if (toolCard) {
-					toolCallInfo = toolCard
-					break
-				}
-			}
-		}
-		
-		if (!toolCallInfo) {
-			console.error('Could not find tool call information for:', toolCallId)
-			return
-		}
-		
-		// Find the most recent user message and assistant response
-		const userMessage = [...chatHistory].reverse().find(msg => msg.role === 'user')
-		const assistantMessage = [...chatHistory].reverse().find(msg => msg.role === 'assistant' || msg.role === 'assistant-doc')
-		
-		if (!userMessage || !assistantMessage) {
-			console.error('Could not find user or assistant message for tool permission')
-			return
-		}
-		
-		// Get tool args from stored toolArgs or parse from details as fallback
-		let toolArgs = toolCallInfo.toolArgs || {}
-		if (!toolArgs || Object.keys(toolArgs).length === 0) {
-			try {
-				// First try to parse as "Args:" prefixed format
-				const argsMatch = toolCallInfo.details.match(/Args:\s*({[\s\S]*?})(?:\n\n|$)/m)
-				if (argsMatch) {
-					toolArgs = JSON.parse(argsMatch[1])
-				} else {
-					// If no "Args:" prefix, try parsing the entire details as JSON
-					toolArgs = JSON.parse(toolCallInfo.details)
-				}
-			} catch (error) {
-				console.warn('Could not parse tool args from details:', toolCallInfo.details, error)
-			}
-		}
-		
-		// Construct the message payload with tool invocation result
-		console.log('Sending model to backend:', selectedModel)
-		const messagePayload = {
-			id: crypto.randomUUID(),
-			model: selectedModel,
-			messages: [
-				{
-					id: userMessage.id,
-					createdAt: userMessage.timestamp,
-					role: 'user',
-					content: userMessage.content,
-					model: selectedModel,
-					parts: [{
-						type: 'text',
-						text: userMessage.content
-					}]
-				},
-				{
-					id: assistantMessage.id,
-					createdAt: assistantMessage.timestamp,
-					role: 'assistant',
-					content: assistantMessage.content || assistantMessage.rawContent || '',
-					parts: [
-						{ type: 'step-start' },
-						{ type: 'text', text: assistantMessage.content || assistantMessage.rawContent || '' },
-						{
-							type: 'tool-invocation',
-							toolInvocation: {
-								state: 'result',
-								step: 0,
-								toolCallId: toolCallId,
-								toolName: toolCallInfo.title,
-								args: toolArgs,
-								result: 'No, denied.'
-							}
-						}
-					],
-					toolInvocations: [{
-						state: 'result',
-						step: 0,
-						toolCallId: toolCallId,
-						toolName: toolCallInfo.title,
-						args: toolArgs,
-						result: 'No, denied.'
-					}],
-					revisionId: crypto.randomUUID()
-				}
-			]
-		}
-		
-		// Send the complete chat message
-		client?.send(JSON.stringify({
-			id: crypto.randomUUID(),
-			init: {
-				body: JSON.stringify(messagePayload),
-				headers: { 'Content-Type': 'application/json' },
-				method: 'POST'
-			},
-			type: 'cf_agent_use_chat_request',
-			url: '/api/chat'
-		}))
-		
-		// Update the card status
-		const updatedHistory = chatHistory.map(message => {
-			if (message.role === 'info-cards') {
-				const updatedCards = message.cards.map(card => {
-					if (card.toolCallId === toolCallId) {
-						return {
-							...card,
-							status: 'denied',
-							permissionResult: 'No, denied.',
-							awaitingPermission: false
-						}
-					}
-					return card
-				})
-				return { ...message, cards: updatedCards }
-			}
-			return message
-		})
-		
-		chatHistory = updatedHistory
-	}
+    function handleModelChange(event) { agent.setConfig(modelConfig.id, event.currentTarget.value) }
+    function handleHistoryChange(event) {
+        const id = event.currentTarget.value
+        if (id === 'show-all') { showAllHistory = true; event.currentTarget.value = selectedHistoryId }
+        else if (id !== 'current') { agent.selectConversation(id) }
+    }
+    function clearHistory() {
+        const id = agent.newConversation()
+        if (id && $agentState.status === 'connected') {
+            connect()
+        }
+        input?.focus()
+    }
+    function pauseQueue() { agent.pauseQueue(); input?.focus() }
+    function resumeQueue() { agent.resumeQueue(); input?.focus() }
+    function stopCurrentTask() { agent.stop(); input?.focus() }
+    function pauseQueueItem(id) { if (!messageQueue.find(item => item.id === id)?.paused) { agent.toggleQueued(id) } }
+    function resumeQueueItem(id) { if (messageQueue.find(item => item.id === id)?.paused) { agent.toggleQueued(id) } }
+    function stopQueueItem(id) { agent.removeQueued(id) }
+    function editQueueItem(id) {
+        const item = messageQueue.find(item => item.id === id)
+        if (item) { editingMessageId = id; editingContent = item.userMessage }
+    }
+    function editMessage(id) {
+        const message = chat?.messages.find(item => item.id === id && item.role === 'user')
+        if (message) { editingMessageId = id; editingContent = message.content }
+    }
+    function saveQueueItemEdit(id) { agent.updateQueued(id, editingContent); cancelMessageEdit() }
+    function saveMessageEdit(id) { agent.editMessage(id, editingContent); cancelMessageEdit() }
+    function cancelMessageEdit() { editingMessageId = null; editingContent = '' }
+    function copyMessage(id) {
+        const message = chat?.messages.find(item => item.id === id)
+        if (message) { navigator.clipboard.writeText(message.content) }
+    }
+    function thumbsUp(id) {
+        agent.rateMessage(id, 'good')
+        // TODO: Implement feedback system
+    }
+    function thumbsDown(id) {
+        agent.rateMessage(id, 'poor')
+        // TODO: Implement feedback system
+    }
+    function handleActionButton(action) {
+        if (action === 'listen') { conv = !conv; return }
+        if (action === 'search') {
+            generateTestMarkdownDocumentForTest()
+        } else {
+            const prefixes = { ask: 'ask about ', do: 'do ', remember: 'remember ', see: 'show me ' }
+            conversation = conversation || prefixes[action] || ''
+        }
+        input?.focus()
+    }
 
-	function handleActionButton(action) {
-		switch (action) {
-			case 'search':
-				// Use test doc function
-				handleTestDoc()
-				break
-			case 'ask':
-				conversation = conversation || 'ask about '
-				break
-			case 'do':
-				conversation = conversation || 'do '
-				break
-			case 'remember':
-				conversation = conversation || 'remember '
-				break
-			case 'listen':
-				// conversation = conversation || 'listen to '
-				if (!conv) {
-					startVoice()
-				} else {
-					stopVoice()
-				}
-				return
-			case 'see':
-				conversation = conversation || 'show me '
-				break
-			default:
-				break
-		}
-		const input = document.querySelector('.agent-conversation-input')
-		if (input) input.focus()
-	}
+    function showTestCards() {
+        const testCards = [
+            {
+                type: 'context',
+                action: 'read-tab',
+                status: 'accessed',
+                title: currentTab ? getTabTitle(currentTab) : 'Test Tab',
+                url: currentTab ? currentTab.url : 'https://example.com',
+                favicon: currentTab ? currentTab.favicon : null
+            },
+            {
+                type: 'context',
+                action: 'read-space',
+                status: 'accessed',
+                title: 'Current Space',
+                details: '5 tabs'
+            },
+            {
+                type: 'context',
+                action: 'read-all-spaces',
+                status: 'accessed',
+                title: 'All Spaces',
+                details: '3 spaces total'
+            },
+            {
+                type: 'tool',
+                action: 'web-search',
+                status: 'accessed',
+                title: 'Web Search',
+                details: 'Searching for relevant information'
+            },
+            {
+                type: 'tool',
+                action: 'execute-js',
+                status: 'accessed',
+                title: 'JavaScript Execution',
+                details: currentTab ? getTabTitle(currentTab) : 'No target tab'
+            },
+            {
+                type: 'tool',
+                action: 'screenshot',
+                status: 'accessed',
+                title: 'Page Analysis',
+                details: 'Analyzing current page content'
+            },
+            {
+                type: 'tool',
+                action: 'modify-content',
+                status: 'modified',
+                title: 'Content Modification',
+                details: 'Modifying page content'
+            },
+            {
+                type: 'tool',
+                action: 'inject-script',
+                status: 'accessed',
+                title: 'Script Injection',
+                details: 'Adding custom functionality'
+            },
+            {
+                type: 'tool',
+                action: 'clipboard-access',
+                status: 'accessed',
+                title: 'Clipboard Access',
+                details: 'Reading/writing clipboard'
+            },
+            {
+                type: 'tool',
+                action: 'file-download',
+                status: 'accessed',
+                title: 'File Download',
+                details: 'Downloading file to device'
+            },
+            {
+                type: 'tool',
+                action: 'file-upload',
+                status: 'accessed',
+                title: 'File Upload',
+                details: 'Uploading file from device'
+            },
+            {
+                type: 'tool',
+                action: 'api-call',
+                status: 'accessed',
+                title: 'API Request',
+                details: 'Making external API call'
+            },
+            {
+                type: 'tool',
+                action: 'local-storage',
+                status: 'accessed',
+                title: 'Local Storage',
+                details: 'Storing data locally'
+            },
+            {
+                type: 'tool',
+                action: 'css-injection',
+                status: 'modified',
+                title: 'CSS Injection',
+                details: 'Custom styling applied'
+            },
+            {
+                type: 'security',
+                action: 'camera-access',
+                status: 'accessed',
+                title: 'Camera Access',
+                details: 'Requesting camera permission'
+            },
+            {
+                type: 'security',
+                action: 'microphone-access',
+                status: 'denied',
+                title: 'Microphone Access',
+                details: 'User denied microphone access'
+            },
+            {
+                type: 'security',
+                action: 'location-access',
+                status: 'accessed',
+                title: 'Location Access',
+                details: 'Accessing device location'
+            },
+            {
+                type: 'security',
+                action: 'notification-permission',
+                status: 'accessed',
+                title: 'Notifications',
+                details: 'Permission to show notifications'
+            },
+            {
+                type: 'security',
+                action: 'fullscreen-request',
+                status: 'accessed',
+                title: 'Fullscreen Mode',
+                details: 'Entering fullscreen view'
+            },
+            {
+                type: 'security',
+                action: 'ad-block',
+                status: 'denied',
+                title: 'Ad Blocked',
+                details: 'Blocked advertisement content'
+            },
+            {
+                type: 'security',
+                action: 'analytics-block',
+                status: 'denied',
+                title: 'Analytics Blocked',
+                details: 'Blocked tracking scripts'
+            },
+            {
+                type: 'security',
+                action: 'malware-scan',
+                status: 'accessed',
+                title: 'Security Scan',
+                details: 'Scanning for threats'
+            },
+            {
+                type: 'security',
+                action: 'proxy-detection',
+                status: 'accessed',
+                title: 'Proxy Detection',
+                details: 'Checking network routing'
+            }
+        ]
 
-	function handleTestCards() {
-		// Add user message
-		const userMessage = {
-			id: Date.now().toString(),
-			role: 'user',
-			content: 'cards',
-			timestamp: new Date().toISOString()
-		}
-		chatHistory = [...chatHistory, userMessage]
-		knownMessageIds.add(userMessage.id)
+        agent.addLocalExchange('cards', { role: 'info-cards', cards: testCards })
+    }
 
-		// Show all possible test cards
-		const testCards = [
-			{
-				type: 'context',
-				action: 'read-tab',
-				status: 'accessed',
-				title: currentTab ? getTabTitle(currentTab) : 'Test Tab',
-				url: currentTab ? currentTab.url : 'https://example.com',
-				favicon: currentTab ? currentTab.favicon : null
-			},
-			{
-				type: 'context',
-				action: 'read-space',
-				status: 'accessed',
-				title: 'Current Space',
-				details: '5 tabs'
-			},
-			{
-				type: 'context',
-				action: 'read-all-spaces',
-				status: 'accessed',
-				title: 'All Spaces',
-				details: '3 spaces total'
-			},
-			{
-				type: 'tool',
-				action: 'web-search',
-				status: 'accessed',
-				title: 'Web Search',
-				details: 'Searching for relevant information'
-			},
-			{
-				type: 'tool',
-				action: 'execute-js',
-				status: 'accessed',
-				title: 'JavaScript Execution',
-				details: currentTab ? getTabTitle(currentTab) : 'No target tab'
-			},
-			{
-				type: 'tool',
-				action: 'screenshot',
-				status: 'accessed',
-				title: 'Page Analysis',
-				details: 'Analyzing current page content'
-			},
-			{
-				type: 'tool',
-				action: 'modify-content',
-				status: 'modified',
-				title: 'Content Modification',
-				details: 'Modifying page content'
-			},
-			{
-				type: 'tool',
-				action: 'inject-script',
-				status: 'accessed',
-				title: 'Script Injection',
-				details: 'Adding custom functionality'
-			},
-			{
-				type: 'tool',
-				action: 'clipboard-access',
-				status: 'accessed',
-				title: 'Clipboard Access',
-				details: 'Reading/writing clipboard'
-			},
-			{
-				type: 'tool',
-				action: 'file-download',
-				status: 'accessed',
-				title: 'File Download',
-				details: 'Downloading file to device'
-			},
-			{
-				type: 'tool',
-				action: 'file-upload',
-				status: 'accessed',
-				title: 'File Upload',
-				details: 'Uploading file from device'
-			},
-			{
-				type: 'tool',
-				action: 'api-call',
-				status: 'accessed',
-				title: 'API Request',
-				details: 'Making external API call'
-			},
-			{
-				type: 'tool',
-				action: 'local-storage',
-				status: 'accessed',
-				title: 'Local Storage',
-				details: 'Storing data locally'
-			},
-			{
-				type: 'tool',
-				action: 'css-injection',
-				status: 'modified',
-				title: 'CSS Injection',
-				details: 'Custom styling applied'
-			},
-			{
-				type: 'security',
-				action: 'camera-access',
-				status: 'accessed',
-				title: 'Camera Access',
-				details: 'Requesting camera permission'
-			},
-			{
-				type: 'security',
-				action: 'microphone-access',
-				status: 'denied',
-				title: 'Microphone Access',
-				details: 'User denied microphone access'
-			},
-			{
-				type: 'security',
-				action: 'location-access',
-				status: 'accessed',
-				title: 'Location Access',
-				details: 'Accessing device location'
-			},
-			{
-				type: 'security',
-				action: 'notification-permission',
-				status: 'accessed',
-				title: 'Notifications',
-				details: 'Permission to show notifications'
-			},
-			{
-				type: 'security',
-				action: 'fullscreen-request',
-				status: 'accessed',
-				title: 'Fullscreen Mode',
-				details: 'Entering fullscreen view'
-			},
-			{
-				type: 'security',
-				action: 'ad-block',
-				status: 'denied',
-				title: 'Ad Blocked',
-				details: 'Blocked advertisement content'
-			},
-			{
-				type: 'security',
-				action: 'analytics-block',
-				status: 'denied',
-				title: 'Analytics Blocked',
-				details: 'Blocked tracking scripts'
-			},
-			{
-				type: 'security',
-				action: 'malware-scan',
-				status: 'accessed',
-				title: 'Security Scan',
-				details: 'Scanning for threats'
-			},
-			{
-				type: 'security',
-				action: 'proxy-detection',
-				status: 'accessed',
-				title: 'Proxy Detection',
-				details: 'Checking network routing'
-			}
-		]
+    function showTestMessage() {
+        agent.addLocalExchange('test', { role: 'assistant', content: 'Hello world! This is a test response.' })
+    }
 
-		const infoCardsMessage = {
-			id: Date.now().toString(),
-			role: 'info-cards',
-			cards: testCards,
-			timestamp: new Date().toISOString()
-		}
-		
-		chatHistory = [...chatHistory, infoCardsMessage]
-		knownMessageIds.add(infoCardsMessage.id)
-		updateCurrentChatTimestamp()
-	}
-
-	function handleTestDoc() {
-		// Add user message
-		const userMessage = {
-			id: Date.now().toString(),
-			role: 'user',
-			content: 'doc',
-			timestamp: new Date().toISOString()
-		}
-		chatHistory = [...chatHistory, userMessage]
-		knownMessageIds.add(userMessage.id)
-
-		// Generate test markdown document but manage processing state properly
-		generateTestMarkdownDocumentForTest()
-	}
-
-	async function handleTestMessage() {
-		// Add user message
-		const userMessage = {
-			id: Date.now().toString(),
-			role: 'user',
-			content: 'test',
-			timestamp: new Date().toISOString()
-		}
-		chatHistory = [...chatHistory, userMessage]
-		knownMessageIds.add(userMessage.id)
-
-		// Add simple assistant response with proper content structure
-		const assistantMessage = {
-			id: Date.now().toString(),
-			role: 'assistant',
-			content: 'Hello world! This is a test response.',
-			rawContent: 'Hello world! This is a test response.',
-			timestamp: new Date().toISOString(),
-			streaming: false,
-			model: selectedModel
-		}
-
-		chatHistory = [...chatHistory, assistantMessage]
-		knownMessageIds.add(assistantMessage.id)
-		updateCurrentChatTimestamp()
-
-		// Wait for DOM to update, then initialize content for non-streaming message
-		await tick()
-		initializeNonStreamingMessage(assistantMessage.id, assistantMessage.rawContent)
-	}
-
-	async function generateTestMarkdownDocumentForTest() {
-		// Add streaming markdown message without setting global processing state
-		const markdownMessageId = Date.now().toString()
-		const streamingMessage = {
-			id: markdownMessageId,
-			role: 'assistant-doc',
-			content: '',
-			rawContent: '',
-			timestamp: new Date().toISOString(),
-			streaming: true,
-			model: selectedModel
-		}
-
-		chatHistory = [...chatHistory, streamingMessage]
-		knownMessageIds.add(markdownMessageId)
-
-		// Wait for DOM to update, then initialize streaming parser
-		await tick()
-		
-		const streamingSetup = startMarkdownStream(markdownMessageId)
-		if (!streamingSetup) return
-
-		// Test markdown document (shorter version)
-		const testMarkdown = `# Test Document
+    function generateTestMarkdownDocumentForTest() {
+        // Test markdown document (shorter version)
+        const testMarkdown = `# Test Document
 
 ## Overview
 
@@ -2075,86 +376,12 @@ This demonstrates the assistant-doc message format with proper markdown renderin
 ---
 
 *Test completed successfully*`
+        streamTestDocument(testDocumentChunks(testMarkdown, { minLength: 30, lengthVariation: 40, initialDelay: 100, interval: 150 }))
+    }
 
-		// Split into chunks and stream
-		const chunks = []
-		let remaining = testMarkdown
-		while (remaining.length > 0) {
-			const chunkLength = Math.floor(Math.random() * 40) + 30
-			const chunk = remaining.substring(0, chunkLength)
-			chunks.push(chunk)
-			remaining = remaining.substring(chunkLength)
-		}
-
-		// Stream the chunks
-		let chunkIndex = 0
-		const streamNextChunk = () => {
-			if (chunkIndex < chunks.length) {
-				const chunk = chunks[chunkIndex]
-				streamingMessage.rawContent += chunk
-				writeMarkdownChunk(streamingSetup.parser, chunk)
-				chatHistory = [...chatHistory]
-				chunkIndex++
-				setTimeout(streamNextChunk, 150)
-			} else {
-				// Streaming complete
-				streamingMessage.streaming = false
-				endMarkdownStream(streamingSetup.parser)
-				chatHistory = [...chatHistory]
-				updateCurrentChatTimestamp()
-			}
-		}
-
-		setTimeout(streamNextChunk, 100)
-	}
-
-	async function generateTestMarkdownDocument() {
-		if (isProcessing) return
-
-		isProcessing = true
-		const messageId = Date.now().toString()
-
-		// Add user message
-		const userMessage = {
-			id: messageId,
-			role: 'user',
-			content: 'Generate a test markdown document',
-			timestamp: new Date().toISOString()
-		}
-		
-		chatHistory = [...chatHistory, userMessage]
-		knownMessageIds.add(messageId)
-
-		// Add streaming markdown message
-		const markdownMessageId = (Date.now() + 1).toString()
-		currentStreamingMessage = {
-			id: markdownMessageId,
-			role: 'assistant-doc',
-			content: '',
-			rawContent: '',
-			timestamp: new Date().toISOString(),
-			streaming: true,
-			model: selectedModel
-		}
-
-		chatHistory = [...chatHistory, currentStreamingMessage]
-		knownMessageIds.add(markdownMessageId)
-
-		// Initialize streaming
-		isMarkdownStreaming = true
-
-		// Wait for DOM to update, then initialize streaming parser
-		await new Promise((resolve) => setTimeout(resolve, 100))
-
-		const streamingSetup = startMarkdownStream(markdownMessageId)
-		if (streamingSetup) {
-			streamingParser = streamingSetup.parser
-			streamingRenderer = streamingSetup.renderer
-			streamingElement = streamingSetup.element
-		}
-
-		// Test markdown document
-		const testMarkdown = `# Comprehensive Analysis Report
+    function generateTestMarkdownDocument() {
+        // Test markdown document
+        const testMarkdown = `# Comprehensive Analysis Report
 
 ## Executive Summary
 
@@ -2244,220 +471,52 @@ The current system demonstrates strong performance and security characteristics.
 ---
 
 *Report generated on ${new Date().toLocaleDateString()}*`
+        streamTestDocument(testDocumentChunks(testMarkdown, { minLength: 65, lengthVariation: 55, initialDelay: 450, interval: 300 }))
+    }
 
-		// Split into small random-length chunks (20-40 chars)
-		const chunks = []
-		let remaining = testMarkdown
+    async function streamTestDocument(chunks) {
+        const panel = input?.closest('.agent-panel')
+        agent.addLocalExchange('doc', { role: 'assistant-doc', chunks })
+        await tick()
+        const reply = Array.from(panel?.querySelectorAll('.assistant-doc') || []).at(-1)
+        reply?.scrollIntoView({ block: 'center', inline: 'nearest' })
+    }
 
-		while (remaining.length > 0) {
-			const chunkLength = Math.floor(Math.random() * 55) + 65
-			const chunk = remaining.substring(0, chunkLength)
-			chunks.push(chunk)
-			remaining = remaining.substring(chunkLength)
-		}
+    async function* testDocumentChunks(testMarkdown, { minLength, lengthVariation, initialDelay, interval }) {
+        // Split into chunks and stream
+        const chunks = []
+        let remaining = testMarkdown
+        while (remaining.length > 0) {
+            const chunkLength = Math.floor(Math.random() * lengthVariation) + minLength
+            const chunk = remaining.substring(0, chunkLength)
+            chunks.push(chunk)
+            remaining = remaining.substring(chunkLength)
+        }
 
-		// Stream the chunks
-		let chunkIndex = 0
+        // Stream the chunks
+        await new Promise(resolve => setTimeout(resolve, initialDelay))
+        for (const chunk of chunks) {
+            yield chunk
+            await new Promise(resolve => setTimeout(resolve, interval))
+        }
+    }
 
-		const streamNextChunk = () => {
-			if (chunkIndex < chunks.length) {
-				const chunk = chunks[chunkIndex]
-
-				// Add to raw content for backup
-				currentStreamingMessage.rawContent += chunk
-
-				// Write to streaming parser
-				writeMarkdownChunk(streamingParser, chunk)
-
-				chatHistory = [...chatHistory]
-
-				chunkIndex++
-
-				currentTimeout = setTimeout(streamNextChunk, 300)
-			} else {
-				// Streaming complete
-				isMarkdownStreaming = false
-				currentStreamingMessage.streaming = false
-
-				// End the stream
-				endMarkdownStream(streamingParser)
-
-				chatHistory = [...chatHistory]
-
-				isProcessing = false
-				currentTimeout = null
-
-				// Clear streaming state but keep the content
-				currentStreamingMessage = null
-				streamingParser = null
-				streamingRenderer = null
-				streamingElement = null
-
-				const input = document.querySelector('.agent-conversation-input')
-				if (input) input.focus()
-			}
-		}
-
-		setTimeout(streamNextChunk, 350)
-	}
-
-	onMount(() => {
-		// client = new AgentClient({
-		// 	agent: 'chat',
-		// 	name: 'default',
-		// 	host: 'localhost:5193',
-		// 	protocol: 'wss'
-		// })
-
-		// client.onopen = () => {
-		// 	console.log('Connected to agent')
-		// 	// Send an initial message
-		// 	// client?.send(JSON.stringify({ type: "join", user: "user123" }));
-		// }
-
-		// Load selected model from localStorage
-		if (typeof localStorage !== 'undefined') {
-			const savedModel = localStorage.getItem('selectedModel')
-			if (savedModel) {
-				selectedModel = savedModel
-				console.log('Loaded model from localStorage:', savedModel)
-			}
-		}
-
-		// Listen for messages from ElevenLabs voice agent iframe
-		async function handleAgentMessage(event) {
-			// Validate origin for security
-			// if (event.origin !== 'https://localhost:5194') {
-			// 	return
-			// }
-			// console.log('event', event)
-			
-			if (event.data.type === 'agent-message') {
-				const message = event.data.data
-				console.log('Received agent message:', message)
-				console.log('Message source:', message.source)
-				console.log('Message content:', message.message)
-				
-				// Add message to chat history
-				const messageId = crypto.randomUUID()
-				const content = message.message || message.text || message.content || JSON.stringify(message)
-				
-				// Parse XML tags for voice agent responses (only for assistant messages)
-				let parsedContent = { model: 'elevenlabs-voice', cleanContent: content }
-				if (message.source !== 'user') {
-					parsedContent = parseVoiceContent(content)
-				}
-				
-				const agentMessage = {
-					id: messageId,
-					role: message.source === 'user' ? 'user' : 'assistant',
-					content: parsedContent.cleanContent,
-					rawContent: parsedContent.cleanContent,
-					timestamp: Date.now(),
-					streaming: false,
-					model: message.source === 'user' ? 'elevenlabs-voice' : parsedContent.model
-				}
-				
-				console.log('Created agent message:', agentMessage)
-				chatHistory = [...chatHistory, agentMessage]
-				knownMessageIds.add(messageId)
-
-				// Initialize content for non-streaming assistant messages
-				if (agentMessage.role === 'assistant') {
-					await tick()
-					initializeNonStreamingMessage(messageId, parsedContent.cleanContent)
-				}
-			}
-		}
-
-		window.addEventListener('message', handleAgentMessage)
-
-		// Only set event handlers if client has the required methods
-		if (client && typeof client.addEventListener === 'function') {
-			client.onmessage = (event) => {
-				// Handle incoming messages
-				const data = JSON.parse(event.data)
-				console.log('Received message:', data)
-
-
-				// { "mcp": { "prompts": [], "resources": [], "servers": {}, "tools": [] }, "type": "cf_agent_mcp_servers" }
-
-				// "body": "f:{\"messageId\":\"msg-AI9pv13V8IEr5o6jevyUFeAL\"}\n", "done": false, "id": "LdxkiFBI
-				//  { "body": "0:\" you've typed \\\"asdf\\\" - that doesn't seem to be a specific\"\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
-
-				//{ "body": "e:{\"finishReason\":\"stop\",\"usage\":{\"promptTokens\":1287,\"completionTokens\":124},\"isContinued\":false}\n", "done": false, "id": "LdxkiFBI", "type": "cf_agent_use_chat_response" }
-
-				// Ignore empty status messages - these are just completion signals
-				if (data.type === 'cf_agent_use_chat_response' && (!data.body || data.body.trim() === '')) {
-					console.log('Ignoring empty status message:', data)
-					return
-				}
-
-				// Check if this is a streaming message chunk
-				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('0:')) {
-					handleStreamingChunk(data, { type: 'message' })
-					return
-				}
-
-				// Check if this is a stream completion message
-				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('e:')) {
-					handleStreamingChunk(data, { type: 'completion' })
-					return
-				}
-
-				// Check if this is a tool call message
-				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('9:')) {
-					handleToolCall(data)
-					return
-				}
-
-				// Check if this is a tool result message
-				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('a:')) {
-					handleToolResult(data)
-					return
-				}
-
-				// Check if this is a response summary
-				if (data.type === 'cf_agent_use_chat_response' && data.body && data.body.startsWith('d:')) {
-					handleResponseSummary(data)
-					return
-				}
-
-				// Handle complete message updates
-				if (data.type === 'cf_agent_chat_messages') {
-					handleChatMessages(data)
-					return
-				}
-
-				if (data.type === 'state_update') {
-					// Update local UI with new state
-					//updateUI(data.state);
-					console.log('state upd', data)
-				}
-			}
-
-			client.onclose = () => console.log('Disconnected from agent')
-		}
-		
-		// Auto-focus the input when sidebar opens
-		const input = document.querySelector('.agent-conversation-input')
-		if (input) {
-			setTimeout(() => input.focus(), 100)
-		}
-
-		// Initialize empty history (no localStorage persistence)
-		chatHistoryList = []
-
-		return () => {
-
-			window.removeEventListener('message', handleAgentMessage)
-
-			if (client && typeof client.close === 'function') {
-				client.close()
-			}
-		}
-	})
+    onMount(() => { input?.focus() })
 </script>
+
+{#snippet configChoices(options)}
+    {#each options as option}
+        {#if option.options}
+            <optgroup label={option.name}>
+                {#each option.options as value (value.value)}
+                    <option value={value.value}>{value.name}</option>
+                {/each}
+            </optgroup>
+        {:else}
+            <option value={option.value}>{option.name}</option>
+        {/if}
+    {/each}
+{/snippet}
 
 <RightSidebar
 	title="Agent"
@@ -2473,31 +532,61 @@ The current system demonstrates strong performance and security characteristics.
 	{devModeEnabled}
 >
 	{#snippet children()}
+		<div class="agent-panel">
 		<div class="agent-sticky-header">
 			<div class="agent-header-row">
-				<select class="agent-model-select" bind:value={selectedHistoryId} onchange={handleHistoryChange}>
+				<select class="agent-model-select" aria-label="Conversation" value={selectedHistoryId} disabled={isProcessing} onchange={handleHistoryChange}>
 					<option value="current">Current chat</option>
-					{#each chatHistoryList.slice(0, 10) as historyItem}
+					{#each (showAllHistory ? chatHistoryList : chatHistoryList.slice(0, 10)) as historyItem}
 						<option value={historyItem.id}
-							>{historyItem.title} [{new Date(historyItem.timestamp).toLocaleDateString()}]</option
+							>{historyItem.title} [{new Date(historyItem.timestamp).toLocaleDateString('de-DE')}]</option
 						>
 					{/each}
-					{#if chatHistoryList.length > 10}
+					{#if !showAllHistory && chatHistoryList.length > 10}
 						<option value="show-all">Show all {chatHistoryList.length} chats...</option>
 					{/if}
 				</select>
 
-				<select class="agent-model-select" bind:value={selectedModel} onchange={handleModelChange}>
-					{#each models as model}
-						<option value={model.id}>{model.name}</option>
-					{/each}
+				<select class="agent-model-select" aria-label={modelConfig?.name || 'Agent model'} value={selectedModel} disabled={isProcessing || !modelConfig} onchange={handleModelChange}>
+					{#if modelConfig}
+						{@render configChoices(modelConfig.options)}
+					{:else}
+						<option value="agent">{$agentState.agentName || 'Agent model'}</option>
+					{/if}
 				</select>
 			</div>
 
+			<div class="agent-connection-row">
+				<span role="status">{$agentState.status === 'connected' ? $agentState.agentName : $agentState.status === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
+				{#if $agentState.status === 'connected'}
+					<button class="agent-quick-action" onmousedown={() => agent.disconnect()}>Disconnect</button>
+				{:else}
+					<button class="agent-quick-action" disabled={$agentState.status === 'connecting'} onmousedown={connect}>Connect</button>
+				{/if}
+				<button class="agent-quick-action" onmousedown={switchToSettings} aria-label="Configure agent connection">Settings</button>
+			</div>
+			{#each chat?.configOptions.filter(option => option !== modelConfig) || [] as option (option.id)}
+				<label class="agent-selector-row">{option.name}
+					{#if option.type === 'select'}
+						<select class="agent-context-select" aria-label={option.name} value={option.currentValue} disabled={isProcessing} onchange={event => agent.setConfig(option.id, event.currentTarget.value)}>
+							{@render configChoices(option.options)}
+						</select>
+					{:else if option.type === 'boolean'}
+						<input type="checkbox" checked={option.currentValue} disabled={isProcessing} onchange={event => agent.setConfig(option.id, event.currentTarget.checked)} />
+					{/if}
+				</label>
+			{/each}
+			{#if !chat?.configOptions.length && chat?.modes}
+				<label class="agent-selector-row">Mode
+					<select class="agent-context-select" aria-label="Agent mode" value={chat.modes.currentModeId} disabled={isProcessing} onchange={event => agent.setMode(event.currentTarget.value)}>
+						{#each chat.modes.availableModes as mode (mode.id)}<option value={mode.id}>{mode.name}</option>{/each}
+					</select>
+				</label>
+			{/if}
 			<div class="agent-target-selector">
 				<div class="agent-selector-row">
 					<label class="agent-context-label" for="agent-context-select">Context:</label>
-					<select class="agent-context-select" bind:value={selectedTarget}>
+					<select id="agent-context-select" aria-label="Browser context" class="agent-context-select" value={target} onchange={event => { selectedTarget = event.currentTarget.value }}>
 						{#each availableTargets as target}
 							<option value={target.id}>{target.name}</option>
 						{/each}
@@ -2506,15 +595,16 @@ The current system demonstrates strong performance and security characteristics.
 			</div>
 		</div>
 
-		<div class="agent-chat-container">
+		<div class="agent-chat-container" aria-label="Agent conversation" role="log" aria-live="polite">
 			{#if chatHistory.length > 0 || messageQueue.length > 0}
 				<div class="agent-chat-history">
-					{#each chatHistory as message}
+					{#each chatHistory as message (message.id)}
 						{#if message.role === 'info-cards'}
 							<div class="agent-info-cards">
 								{#each message.cards as card}
 									<div
 										class="agent-info-card"
+										class:agent-approval={!!card.approvalId}
 										class:context={card.type === 'context'}
 										class:tool={card.type === 'tool'}
 										class:security={card.type === 'security'}
@@ -2774,17 +864,21 @@ The current system demonstrates strong performance and security characteristics.
 											{/if}
 										</div>
 									</div>
-									
+
 									<!-- Debug info -->
 									<!-- <div style="font-size: 9px; color: rgba(255,255,255,0.3); margin-top: 4px;">
 										DEBUG: needsPermission={card.needsPermission}, awaitingPermission={card.awaitingPermission}, status={card.status}, result={card.result}
 									</div> -->
-									
+
 									{#if card.awaitingPermission}
 										<div class="agent-info-card-actions">
+											{#each card.options || [] as option (option.optionId)}
+												<button class="agent-permission-btn" onmousedown={() => agent.answer(card.approvalId, option.optionId)}>{option.name}</button>
+											{/each}
+											{#if !card.approvalId}
 											<button
 												class="agent-permission-btn approve"
-												onclick={() => approveToolPermission(card.toolCallId)}
+												disabled
 												title="Approve tool permission"
 											>
 												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2798,7 +892,7 @@ The current system demonstrates strong performance and security characteristics.
 											</button>
 											<button
 												class="agent-permission-btn reject"
-												onclick={() => rejectToolPermission(card.toolCallId)}
+												disabled
 												title="Reject tool permission"
 											>
 												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -2810,6 +904,7 @@ The current system demonstrates strong performance and security characteristics.
 												</svg>
 												Reject
 											</button>
+											{/if}
 										</div>
 									{:else if card.needsPermission && card.permissionResult}
 										<div class="agent-info-card-result">
@@ -2828,44 +923,41 @@ The current system demonstrates strong performance and security characteristics.
 								{/each}
 							</div>
 						{:else if message.role === 'assistant' || message.role === 'assistant-doc'}
+							{@const avatar = modelAvatar(message.model, message.modelName)}
+							{@const documentLayout = message.role === 'assistant-doc' || message.content.split('\n', 17).length > 16}
 							<div
 								class="agent-markdown-message"
-								class:assistant-chat={message.role === 'assistant'}
-								class:assistant-doc={message.role === 'assistant-doc'}
+								class:assistant-chat={!documentLayout}
+								class:assistant-doc={documentLayout}
 								data-message-id={message.id}
 								role="group"
 								onmouseenter={() => (hoveredMessageId = message.id)}
 								onmouseleave={() => (hoveredMessageId = null)}
 							>
 								<div class="agent-message-header">
-									<div class="agent-avatar">
-										{@html models.find(m => m.id === message.model)?.icon || `
-											<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
-												<circle cx="12" cy="12" r="10" fill="#8B5CF6"/>
-												<circle cx="12" cy="12" r="6" fill="#FFFFFF"/>
-												<circle cx="12" cy="12" r="2" fill="#8B5CF6"/>
-											</svg>
-										`}
-										{#if models.find(m => m.id === message.model)?.avatarTitle}
+									<div class="agent-avatar" title={message.modelName}>
+										{@html avatar.icon}
+										{#if avatar.badge}
 											<div class="agent-avatar-title-overlay">
-												{models.find(m => m.id === message.model)?.avatarTitle}
+												{avatar.badge}
 											</div>
 										{/if}
 									</div>
 								</div>
 								<div class="agent-markdown-content">
-									<div class="agent-markdown-streaming" class:streaming={message.streaming}>
+									<div class="agent-markdown-streaming agent-markdown" class:streaming={message.streaming} use:streamingMarkdown={message}>
 										<!-- Markdown content will be inserted here by the streaming-markdown library -->
 									</div>
 								</div>
 								<div class="agent-markdown-time-row">
 									<div class="agent-chat-message-time">
-										{new Date(message.timestamp).toLocaleTimeString()}
+										{new Date(message.timestamp).toLocaleTimeString('en-GB')}
 									</div>
 									<div class="agent-message-actions" class:visible={hoveredMessageId === message.id}>
 										<button
 											class="agent-action-btn"
-											onclick={() => thumbsUp(message.id)}
+											onmousedown={() => thumbsUp(message.id)}
+											aria-pressed={message.feedback === 'good'}
 											title="Good response"
 											aria-label="Good response"
 										>
@@ -2879,7 +971,8 @@ The current system demonstrates strong performance and security characteristics.
 										</button>
 										<button
 											class="agent-action-btn"
-											onclick={() => thumbsDown(message.id)}
+											onmousedown={() => thumbsDown(message.id)}
+											aria-pressed={message.feedback === 'poor'}
 											title="Poor response"
 											aria-label="Poor response"
 										>
@@ -2893,7 +986,7 @@ The current system demonstrates strong performance and security characteristics.
 										</button>
 										<button
 											class="agent-action-btn"
-											onclick={() => copyMessage(message.id)}
+											onmousedown={() => copyMessage(message.id)}
 											title="Copy message"
 											aria-label="Copy message"
 										>
@@ -2941,11 +1034,12 @@ The current system demonstrates strong performance and security characteristics.
 										<div class="agent-message-text">
 											{message.content}
 										</div>
+										{#if message.role === 'user'}<button class="agent-action-btn" disabled={isProcessing} onmousedown={() => editMessage(message.id)} aria-label="Edit displayed message">Edit</button>{/if}
 									{/if}
 								</div>
 								<div class="agent-chat-message-time-row">
 									<div class="agent-chat-message-time">
-										{new Date(message.timestamp).toLocaleTimeString()}
+										{new Date(message.timestamp).toLocaleTimeString('en-GB')}
 									</div>
 								</div>
 							</div>
@@ -3013,6 +1107,8 @@ The current system demonstrates strong performance and security characteristics.
 										<div
 											class="agent-message-text editable"
 											role="button"
+											tabindex="0"
+											onkeydown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); editQueueItem(queueItem.id) } }}
 											onclick={() => editQueueItem(queueItem.id)}
 										>
 											{queueItem.userMessage}
@@ -3052,7 +1148,7 @@ The current system demonstrates strong performance and security characteristics.
 										{/if}
 										<button
 											class="agent-queue-item-btn stop"
-											onmousedown={() => stopQueueItem(queueItem.id)}
+												onclick={() => stopQueueItem(queueItem.id)}
 											title="Remove this item"
 										>
 											<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -3070,10 +1166,16 @@ The current system demonstrates strong performance and security characteristics.
 				</div>
 
 	<div class="agent-bottom-sticky">
+		{#if chat?.plan.length}<div class="agent-plan"><h4>Plan</h4>{#each chat.plan as entry}<p>{entry.status}: {entry.content}</p>{/each}</div>{/if}
+		{#if connectionError || $agentState.error}<p class="agent-error" role="alert">{connectionError || $agentState.error}</p>{/if}
+		{#if conv}<p class="agent-voice-status" role="status">Voice controls enabled. Voice input is not connected yet.</p>{/if}
+		{#if chat?.commands.length}<p class="agent-commands">{chat.commands.map(command => '/' + command.name).join(' · ')}</p>{/if}
 		<div class="agent-chat-input-container">
 			<div class="agent-textarea-container">
 				<textarea
 					class="agent-conversation-input"
+					aria-label="Message agent"
+					bind:this={input}
 					bind:value={conversation}
 					onkeydown={handleKeyDown}
 					placeholder="We can do anything..."
@@ -3085,6 +1187,7 @@ The current system demonstrates strong performance and security characteristics.
 					onmousedown={() => handleActionButton('listen')}
 					title="Voice Input"
 					aria-label="Voice Input"
+					aria-pressed={conv}
 				>
 					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
 						<path
@@ -3153,7 +1256,7 @@ The current system demonstrates strong performance and security characteristics.
 
 		{#if chatHistory.length > 0}
 			<div class="agent-chat-actions">
-				<button class="agent-clear-button" onmouseup={clearHistory}> New </button>
+				<button class="agent-clear-button" onmousedown={clearHistory} disabled={isProcessing}> New </button>
 			</div>
 		{/if}
 	</div>
@@ -3162,11 +1265,18 @@ The current system demonstrates strong performance and security characteristics.
 		{#if chatHistory.length > 0}
 			<div class="agent-chat-scroll-padding"></div>
 		{/if}
+		</div>
 	{/snippet}
 </RightSidebar>
 
 <style>
+	.agent-panel { display: flex; flex-direction: column; min-height: 100%; color: #ddd }
+	.agent-connection-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px }
+	.agent-connection-row span { flex: 1 }
+	.agent-error, .agent-voice-status, .agent-commands, .agent-plan { font-size: 12px; color: #aaa; padding: 0 20px; overflow-wrap: anywhere }
+	.agent-action-btn[aria-pressed="true"] { background: #ffffff25 }
 	.agent-sticky-header {
+		flex-shrink: 0;
 		position: sticky;
 		background: rgba(0, 0, 0, 0.95);
 		backdrop-filter: blur(10px);
@@ -3427,7 +1537,7 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	.agent-chat-history {
-		flex: 1;
+		flex: 0 0 auto;
 		padding: 16px 0;
 		overflow-y: auto;
 		min-height: 0;
@@ -3568,6 +1678,7 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	.agent-bottom-sticky {
+		flex-shrink: 0;
 		position: sticky;
 		bottom: 0;
 		background: rgba(0, 0, 0, 0.95);
@@ -4129,6 +2240,11 @@ The current system demonstrates strong performance and security characteristics.
         font-size: 10px;
         font-weight: 200;
         z-index: 1;
+	}
+
+	.agent-avatar :global(svg) {
+		width: 20px;
+		height: 20px;
 	}
 
 	/* Chat bubble style for regular assistant messages */

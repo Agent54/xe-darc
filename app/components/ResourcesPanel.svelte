@@ -30,6 +30,7 @@
 		{ id: 'window', label: 'Current window' },
 		{ id: 'instance', label: 'Current instance' },
         { id: 'origin', label: 'Current origin' },
+        { id: 'mcp', label: 'MCP connections' },
 	]
 	let scope = $state(localStorage.getItem('resourcesScope') || 'origin')
 	$effect(() => {
@@ -127,7 +128,8 @@
             requestId: rule._id, ruleId: rule._id, type: permissionType(rule.permission), permission: rule.permission,
             scope: rule, url: rule.requestingOrigin, tabId: data.spaceMeta.activeTabId,
             status: rule.decision === 'deny' ? 'denied' : 'granted', decision: rule.decision, supported: true,
-            lifetime: 'persistent', timestamp: rule.modified, instanceId: rule.instanceId
+            lifetime: 'persistent', timestamp: rule.modified, instanceId: rule.instanceId,
+            ...(rule.subject ? { subject: rule.subject, target: rule.target } : {})
         }))
         for (const resource of [...history, ...saved]) {
             if (resource.status === 'requested' && resource.windowId === window.darcWindowId) {
@@ -135,7 +137,7 @@
                 usedResourceTypes.add(resource.type)
                 continue
             }
-            const matches = scope === 'origin'
+            const matches = scope === 'mcp' ? !!resource.scope?.subject : scope === 'origin'
                 ? resource.scope?.topLevelOrigin === currentOrigin && resource.scope?.partition === currentPartition
                 : scope === 'window' ? resource.windowId === window.darcWindowId : true
             if (!matches) {
@@ -156,7 +158,7 @@
             used,
             mocked,
             blocked,
-            unused: unused.filter(unusedResource => !usedResourceTypes.has(unusedResource.type)),
+            unused: unused.filter(unusedResource => !resourceTypes[unusedResource.type]?.mcp && !usedResourceTypes.has(unusedResource.type)),
             archived
         }
 

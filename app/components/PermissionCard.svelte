@@ -3,6 +3,7 @@
     import Tooltip from './Tooltip.svelte'
     import data from '../data.svelte.js'
     import { onMount } from 'svelte'
+    import { permissionTargetKey } from '../lib/permissions.js'
 
     let { resource, sectionId = 'requested', onResolved = () => {}, onOpen = null, dismissible = false } = $props()
     const unknownPermissionIcon = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519a3 3 0 1 1 5.242 2.962c-.8.64-1.621 1.24-1.621 2.269v.75m-1.5 3h.008v.008H12V16.5Z" /></svg>'
@@ -14,6 +15,7 @@
     let savingRequest = $state(null)
     let actionError = $state('')
     let acceptDropdown = $state(null)
+    let chosenTarget = $state('')
 
     onMount(() => {
         window.addEventListener('mousedown', handleMouseDownOutside, true)
@@ -64,7 +66,7 @@
         savingRequest = resource.requestId
         actionError = ''
         try {
-            if (await data.allowPermission(resource.requestId, permission)) {
+            if (await data.allowPermission(resource.requestId, permission, chosenTarget || undefined)) {
                 onResolved()
             } else {
                 actionError = resource.error || 'This request can no longer be allowed.'
@@ -158,6 +160,17 @@
             <div class="unseen-indicator" title="New request"></div>
         {/if}
     </div>
+    {#if resource.subject || resource.scope?.subject}
+        {@const subject = resource.subject || resource.scope.subject}
+        <div class="mcp-requester">
+            <strong>{subject.title}</strong>
+            <span>MCP connection · {subject.id}</span>
+            {#if subject.description}<span>{subject.description}</span>{/if}
+            {#if resource.target || resource.scope?.target}<span>Scope: {(resource.target || resource.scope.target).label || (resource.target || resource.scope.target).kind}</span>{/if}
+            {#if resource.agent?.name}<span>Reported agent: {resource.agent.name}{resource.agent.version ? ` ${resource.agent.version}` : ''}</span>{/if}
+            {#if resource.agent?.headers?.['user-agent']}<span>User-Agent: {resource.agent.headers['user-agent']}</span>{/if}
+        </div>
+    {/if}
     <div class="resource-details">
         <div class="resource-status {resource.status.toLowerCase().replace(' ', '-')}">
             <span class="status-indicator"></span>
@@ -256,6 +269,13 @@
                 <span class="explanation-text">{resource.explanation}</span>
             </div>
         </div>
+        {#if resource.permissionTargets?.length > 1}
+            <label class="mcp-target-selector">Permission scope
+                <select aria-label="MCP permission scope" value={chosenTarget || permissionTargetKey(resource.target)} onchange={event => { chosenTarget = event.currentTarget.value }}>
+                    {#each resource.permissionTargets as option}<option value={permissionTargetKey(option.target)}>{option.label}</option>{/each}
+                </select>
+            </label>
+        {/if}
         <div class="resource-actions">
             <div class="accept-dropdown" bind:this={acceptDropdown}>
                 <button class="accept-btn main" disabled={!resource.supported || savingRequest !== null} title={resource.error || 'Allow this request once'} onmousedown={() => acceptResource(resource)} onclick={event => { if (event.detail === 0) { acceptResource(resource) } }}>Allow once</button>
@@ -281,6 +301,10 @@
 </div>
 
 <style>
+    .mcp-requester { display: grid; gap: 4px; margin: 8px 0; font-size: 11px; overflow-wrap: anywhere; color: #aaa }
+    .mcp-requester strong { color: #ddd }
+    .mcp-target-selector { display: grid; gap: 5px; font-size: 12px; margin: 8px 0 }
+    .mcp-target-selector select { padding: 6px; color: #ddd; background: #242424; border: 1px solid #ffffff25; border-radius: 5px }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
     .permission-error { color: #aaa; font-size: 12px; margin: 8px 0 0; }
     .resource-card.toast {

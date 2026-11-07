@@ -1,6 +1,9 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
     import data from '../data.svelte.js'
+    import AcpSettings from './AcpSettings.svelte'
+    import McpConnections from './McpConnections.svelte'
+    import { readAcpSettings, exportableStorage } from '../lib/acp-settings.js'
     
     let { onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods, switchToActivity, switchToAgent, switchToDevTools, devModeEnabled = false, tabs = [], closed = [] } = $props()
 
@@ -8,7 +11,7 @@
     let defaultSearchEngine = $state('google')
     let defaultNewTabUrl = $state('about:newtab')
     let newTabPosition = $state('right')
-    let selectedAiProvider = $state('writer')
+    let acpSettingsPanel
     let customSearchUrl = $state('')
     let customNewTabUrl = $state('')
     let syncServerUrl = $state('https://darc.cloudless.one')
@@ -17,14 +20,6 @@
     let isExporting = $state(false)
     let exportStatus = $state('')
     let isLoadingDirectory = $state(true)
-
-    // AI provider tokens
-    let aiTokens = $state({
-        gemini: '',
-        openai: '',
-        anthropic: '',
-        elevenlabs: ''
-    })
 
     // Biometric authentication state
     let isAuthenticating = $state(false)
@@ -75,55 +70,6 @@
         { id: 'right', name: 'New tabs to right', description: 'Open new tabs at the right end of the current tab group' },
         { id: 'next', name: 'Next to current tab', description: 'Open new tabs immediately after the selected tab' }
     ]
-
-    const aiProviders = [
-        { 
-            id: 'writer', 
-            name: 'Writer API (Gemini Nano)', 
-            description: 'Local agent model running in browser',
-            icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64'
-        },
-        { 
-            id: 'gemini', 
-            name: 'Google Gemini', 
-            description: 'Google\'s advanced multimodal agent',
-            icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://google.com&size=64'
-        },
-        { 
-            id: 'openai', 
-            name: 'OpenAI GPT', 
-            description: 'Cloud-based agent model',
-            icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://openai.com&size=64'
-        },
-        { 
-            id: 'anthropic', 
-            name: 'Anthropic Claude', 
-            description: 'Cloud-based agent model',
-            icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anthropic.com&size=64'
-        },
-        { 
-            id: 'elevenlabs', 
-            name: 'Eleven Labs', 
-            description: 'AI voice generation and speech synthesis',
-            icon: 'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://elevenlabs.io&size=64'
-        },
-        { 
-            id: 'disabled', 
-            name: 'Disabled', 
-            description: 'Turn off agent models',
-            icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
-            </svg>`
-        }
-    ]
-
-    // Derived state: which providers are enabled (have tokens or are built-in)
-    const enabledProviders = $derived.by(() => {
-        return aiProviders.filter(provider => {
-            if (provider.id === 'writer' || provider.id === 'disabled') return true
-            return aiTokens[provider.id]?.trim()
-        })
-    })
 
     // WebAuthn credential options
     const credentialOptions = {
@@ -429,29 +375,6 @@
     function handleNewTabPositionChange(position) {
         newTabPosition = position
         localStorage.setItem('newTabPosition', position)
-    }
-
-    function handleAiProviderChange(providerId) {
-        // Only allow selection of enabled providers
-        const isEnabled = enabledProviders.some(p => p.id === providerId)
-        if (!isEnabled) {
-            console.log('Cannot select provider without token:', providerId)
-            return
-        }
-        
-        selectedAiProvider = providerId
-        localStorage.setItem('selectedAiProvider', providerId)
-    }
-
-    function handleAiTokenChange(providerId, token) {
-        aiTokens[providerId] = token
-        localStorage.setItem(`aiToken_${providerId}`, token)
-        
-        // If the currently selected provider's token is cleared, switch to writer
-        if (selectedAiProvider === providerId && !token.trim()) {
-            selectedAiProvider = 'writer'
-            localStorage.setItem('selectedAiProvider', 'writer')
-        }
     }
 
     function handleSyncServerUrlChange(url) {
@@ -795,7 +718,7 @@
                     defaultSearchEngine,
                     defaultNewTabUrl,
                     newTabPosition,
-                    selectedAiProvider,
+                    acpConnection: { endpoint: readAcpSettings().endpoint, cwd: readAcpSettings().cwd },
                     customSearchUrl,
                     customNewTabUrl
                 },
@@ -821,7 +744,7 @@
                     })),
                     activeTabId: data.spaceMeta.activeTabId || tabs[0]?.id || null
                 },
-                localStorage: { ...localStorage },
+                localStorage: exportableStorage(),
                 version: '1.0.0'
             }
 
@@ -850,7 +773,7 @@ Files:
 - README.txt: This information file
 
 Exported Data Includes:
-- Browser settings (search engine, new tab page, AI provider)
+- Browser settings (search engine, new tab page, ACP endpoint)
 - Open tabs (URLs, titles, favicons, pinned status, audio state)
 - Recently closed tabs
 - Local storage data
@@ -877,31 +800,19 @@ To import this data back into DARC, use the import function in Settings.
         defaultSearchEngine = 'google'
         defaultNewTabUrl = 'about:newtab'
         newTabPosition = 'right'
-        selectedAiProvider = 'writer'
+        acpSettingsPanel?.reset()
         customSearchUrl = ''
         customNewTabUrl = ''
         syncServerUrl = 'https://darc.cloudless.one'
         syncServerToken = ''
-        aiTokens = {
-            gemini: '',
-            openai: '',
-            anthropic: '',
-            elevenlabs: ''
-        }
         
         localStorage.removeItem('defaultSearchEngine')
         localStorage.removeItem('defaultNewTabUrl')
         localStorage.removeItem('newTabPosition')
-        localStorage.removeItem('selectedAiProvider')
         localStorage.removeItem('customSearchUrl')
         localStorage.removeItem('customNewTabUrl')
         localStorage.removeItem('syncServerUrl')
         localStorage.removeItem('syncServerToken')
-        
-        // Clear AI tokens
-        Object.keys(aiTokens).forEach(providerId => {
-            localStorage.removeItem(`aiToken_${providerId}`)
-        })
         
         // Clear biometric authentication
         clearBiometricAuth()
@@ -912,25 +823,15 @@ To import this data back into DARC, use the import function in Settings.
         const savedSearchEngine = localStorage.getItem('defaultSearchEngine')
         const savedNewTabUrl = localStorage.getItem('defaultNewTabUrl')
         newTabPosition = localStorage.getItem('newTabPosition') === 'next' ? 'next' : 'right'
-        const savedAiProvider = localStorage.getItem('selectedAiProvider')
         const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
         const savedCustomNewTabUrl = localStorage.getItem('customNewTabUrl')
         const savedSyncServerUrl = localStorage.getItem('syncServerUrl')
 
         if (savedSearchEngine) defaultSearchEngine = savedSearchEngine
         if (savedNewTabUrl) defaultNewTabUrl = savedNewTabUrl
-        if (savedAiProvider) selectedAiProvider = savedAiProvider
         if (savedCustomSearchUrl) customSearchUrl = savedCustomSearchUrl
         if (savedCustomNewTabUrl) customNewTabUrl = savedCustomNewTabUrl
         if (savedSyncServerUrl) syncServerUrl = savedSyncServerUrl
-        
-        // Load AI tokens
-        Object.keys(aiTokens).forEach(providerId => {
-            const savedToken = localStorage.getItem(`aiToken_${providerId}`)
-            if (savedToken) {
-                aiTokens[providerId] = savedToken
-            }
-        })
         
         // Check for stored credential
         hasStoredCredential = !!localStorage.getItem('darc-credential-id')
@@ -954,59 +855,8 @@ To import this data back into DARC, use the import function in Settings.
 
 <RightSidebar title="Settings" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
-        <!-- AI Providers Section -->
-        <div class="setting-section">
-            <h3 class="section-title">Agent Models</h3>
-            <div class="setting-cards">
-                {#each aiProviders as provider}
-                    {@const isEnabled = enabledProviders.some(p => p.id === provider.id)}
-                    <div class="setting-card {selectedAiProvider === provider.id ? 'selected' : ''}" 
-                         role="button" 
-                         tabindex="0"
-                         onclick={() => handleAiProviderChange(provider.id)}
-                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleAiProviderChange(provider.id) } }}>
-                        <div class="setting-header">
-                            <span class="setting-icon">
-                                {#if provider.icon.startsWith('http')}
-                                    <img src={provider.icon} alt={provider.name} class="favicon" />
-                                {:else}
-                                    {@html provider.icon}
-                                {/if}
-                            </span>
-                            <div class="setting-info">
-                                <h4 class="setting-name">{provider.name}</h4>
-                                <p class="setting-description">{provider.description}</p>
-                            </div>
-                        </div>
-                        <div class="setting-status">
-                            <span class="status-indicator {isEnabled ? 'available' : 'disabled'}"></span>
-                            <span class="status-text">{isEnabled ? 'Available' : (provider.id === 'writer' || provider.id === 'disabled' ? 'Built-in' : 'Token Required')}</span>
-                        </div>
-                        {#if provider.id !== 'writer' && provider.id !== 'disabled'}
-                            <div class="token-input-section" 
-                                 onclick={(e) => e.stopPropagation()}
-                                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
-                                 role="presentation">
-                                <input 
-                                    type="password"
-                                    bind:value={aiTokens[provider.id]}
-                                    oninput={(e) => handleAiTokenChange(provider.id, e.target.value)}
-                                    placeholder="API Token"
-                                    class="ai-token-input"
-                                />
-                            </div>
-                        {/if}
-                        {#if selectedAiProvider === provider.id}
-                            <div class="selected-indicator">
-                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                </svg>
-                            </div>
-                        {/if}
-                    </div>
-                {/each}
-            </div>
-        </div>
+        <McpConnections />
+        <AcpSettings bind:this={acpSettingsPanel} />
 
         <!-- Search Engine Section -->
         <div class="setting-section">
@@ -1742,31 +1592,4 @@ To import this data back into DARC, use the import function in Settings.
         animation: spin 1s linear infinite;
     }
 
-    /* AI Token Input Styles */
-    .token-input-section {
-        margin-top: 8px;
-        width: 100%;
-    }
-
-    .ai-token-input {
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 4px;
-        padding: 6px 8px;
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 11px;
-        font-family: 'SF Mono', Consolas, monospace;
-        width: 100%;
-        transition: all 0.2s ease;
-    }
-
-    .ai-token-input:focus {
-        outline: none;
-        border-color: rgba(59, 130, 246, 0.3);
-        background: rgba(255, 255, 255, 0.08);
-    }
-
-    .ai-token-input::placeholder {
-        color: rgba(255, 255, 255, 0.4);
-    }
 </style>

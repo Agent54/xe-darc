@@ -198,10 +198,9 @@ export default defineConfig({
       origin: '*' // /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/ 
     },
     proxy: {
-      '/agents': {
-        target: 'ws://localhost:8787',
+      '/mcp': {
+        target: 'http://localhost:8787',
         ws: true,
-        rewriteWsOrigin: true,
       },
       '/devtools-api': {
         target: `http://${process.env.container === 'true' ? 'host.docker.internal' : '127.0.0.1'}:9226`,
@@ -239,7 +238,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
-        agent_app: './agent_app.html',
         service_worker: './service-worker.js'
         // web_request_test: './web_request_test.html',
         // tldraw_webview: './tldraw_webview.html'

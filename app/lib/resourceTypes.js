@@ -1,4 +1,7 @@
+import mcpPermissionTypes from './mcp-permission-types.js'
+
 export default {
+    ...mcpPermissionTypes,
     pointerLock: {
         name: 'Pointer Lock',
         description: 'Capture the pointer for this page',

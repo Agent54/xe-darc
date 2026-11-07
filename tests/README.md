@@ -1,5 +1,13 @@
 # Sidebar browser tests
 
+MCP checks:
+
+- `deno test --no-check --allow-env --allow-read --allow-sys tests/mcp-permissions.test.js tests/permissions.test.js`
+- `deno run --allow-env --allow-read --allow-sys --allow-write=./,/tmp --allow-ffi --allow-net --allow-run tests/mcp-worker.test.js`
+- `deno run --allow-env --allow-read --allow-sys --allow-write=./,/tmp --allow-ffi --allow-net --allow-run tests/mcp-browser.js`
+
+The MCP worker and browser tests start isolated Miniflare/workerd instances and use workspace-local build artifacts.
+
 Run a suite with `deno run --allow-env --allow-read --allow-sys --allow-write=./,/tmp --allow-ffi --allow-net --allow-run tests/<suite>.js`. Each suite starts its own local
 fixture server and headless Chromium session.
 

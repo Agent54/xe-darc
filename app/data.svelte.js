@@ -5,6 +5,7 @@ import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
 import { getFrameMoveIds } from './lib/frame-lifecycle.js'
+import { pageContentScript } from './lib/page-content.js'
 import { scheduleBackgroundTabMetadata } from './lib/background-tab-metadata.js'
 import { getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
 import { withDocumentSort } from './lib/document-sort.js'
@@ -316,7 +317,7 @@ const permissionStore = createPermissionStore({
         return { url: frame?.committedUrl || tab?.url, partition: tab?.partition || 'persist:myapp', frame: frame?.frame }
     },
     onRevoke: (scope, permission) => {
-        if (['open-tab', 'navigate-off-origin'].includes(permission?.name)) {
+        if (['open-tab', 'navigate-off-origin'].includes(permission?.name) || permission?.name?.startsWith('mcp-')) {
             return
         }
         for (const [tabId, frameData] of Object.entries(frames)) {
@@ -1527,6 +1528,8 @@ const data = {
     permissionDecision: (type, tabId, url, context) => permissionStore.decision(type, tabId, url, context),
     setPermissionDecision: (type, tabId, decision, url) => permissionStore.setDecision(type, tabId, decision, url),
     cancelFramePermissions: frame => permissionStore.cancelFrame(frame),
+    cancelPermissionRequest: requestId => permissionStore.cancelRequest(requestId),
+    removeMcpPermissions: subjectId => permissionStore.removeSubject(subjectId),
 
     ui,
 
@@ -1665,14 +1668,14 @@ const data = {
         return restoring
     },
 
-    readPage: async (tabId, { textOnly = false } = {}) => {
+    readPage: async (tabId, options = {}) => {
         const frame = frames[tabId]
 
         if (!frame?.frame) {
-            return 'Error: frame not active'
+            throw new Error('The requested tab has no active frame')
         }
 
-        const result = await frame.frame.executeScript({code: textOnly ? 'document.body.innerText' : 'document.body.innerHTML'})
+        const result = await frame.frame.executeScript({ code: pageContentScript(options) })
 
         return result[0]
     },
@@ -2441,8 +2444,8 @@ const data = {
         }
     },
 
-    allowPermission: (requestId, lifetime = 'always') => permissionStore.resolve(requestId, 'allow',
-        lifetime === 'always' ? 'persistent' : lifetime === 'until-app-close' ? 'session' : 'once'),
+    allowPermission: (requestId, lifetime = 'always', targetKey) => permissionStore.resolve(requestId, 'allow',
+        lifetime === 'always' ? 'persistent' : lifetime === 'until-app-close' ? 'session' : 'once', targetKey),
     denyPermission: requestId => permissionStore.resolve(requestId, 'deny'),
     ignorePermission: requestId => permissionStore.resolve(requestId, 'ignore'),
     changePermission: resource => permissionStore.reset(resource),

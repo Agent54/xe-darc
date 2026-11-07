@@ -14,6 +14,7 @@
     import Activity from './components/Activity.svelte'
     import AgentSidebar from './components/AgentSidebar.svelte'
     import Agent from './components/Agent.svelte'
+    import { startMcpConnections } from './lib/mcp-service.js'
     import Excalidraw from './components/Excalidraw.svelte'
     import GridView from './components/GridView.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
@@ -315,6 +316,13 @@
     
     // Detect Mac platform
     onMount(() => {
+        let stopMcp = null
+        let destroyed = false
+        startMcpConnections().then(stop => { if (destroyed) { stop() } else { stopMcp = stop } })
+        return () => { destroyed = true; stopMcp?.() }
+    })
+
+    onMount(() => {
         isMacPlatform = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent) || navigator.platform.includes('Mac')
         
         window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
@@ -496,9 +504,6 @@
 
             const savedNewTabUrl = localStorage.getItem('defaultNewTabUrl')
             if (savedNewTabUrl) data.settings.defaultNewTabUrl = savedNewTabUrl
-
-            const savedAiProvider = localStorage.getItem('selectedAiProvider')
-            if (savedAiProvider) data.settings.selectedAiProvider = savedAiProvider
 
             const savedCustomSearchUrl = localStorage.getItem('customSearchUrl')
             if (savedCustomSearchUrl) data.settings.customSearchUrl = savedCustomSearchUrl
@@ -4582,7 +4587,7 @@
 />
 
 {#if agentEnabled}
-    <Agent></Agent>
+    <Agent />
 {/if}
 
 
