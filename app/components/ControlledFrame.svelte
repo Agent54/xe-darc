@@ -130,10 +130,20 @@
 
     // LED indicator functions - directly set timestamps in data store
     function showNetworkAccess() {
+        const frame = data.frames[tabId]
+        if (frame) {
+            frame.requestActivity ??= { allowed: 0, blocked: 0 }
+            frame.requestActivity.allowed += 1
+        }
         data.ledIndicators.networkAccess = Date.now()
     }
 
     function showBlockedRequest() {
+        const frame = data.frames[tabId]
+        if (frame) {
+            frame.requestActivity ??= { allowed: 0, blocked: 0 }
+            frame.requestActivity.blocked += 1
+        }
         data.ledIndicators.blockedRequest = Date.now()
     }
 
@@ -1307,6 +1317,9 @@ document.addEventListener('input', function(event) {
                 showBlockedRequest()
                 return { cancel: true }
             } else {
+                if (requestType === 'main-frame' && data.frames[tabId]) {
+                    data.frames[tabId].requestActivity = { allowed: 0, blocked: 0 }
+                }
                 // Show green LED for allowed network access
                 showNetworkAccess()
                 return { cancel: false }

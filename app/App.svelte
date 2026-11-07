@@ -8,6 +8,8 @@
     import Settings from './components/Settings.svelte'
     import { openTabDevTools } from './lib/tab-devtools.js'
     import { closeButtonHistory } from './lib/close-button-history.js'
+    import { getPendingPermissionRequests } from './lib/permissions.js'
+    import resourceTypes from './lib/resourceTypes.js'
     import UserMods from './components/UserMods.svelte'
     import Activity from './components/Activity.svelte'
     import AgentSidebar from './components/AgentSidebar.svelte'
@@ -324,6 +326,20 @@
     let blockedRequestActive = $state(false)
     let mockedActivationActive = $state(false)
     let permissionRequestActive = $state(false)
+    const requestPages = $derived(Object.entries(data.frames)
+        .filter(([id, frame]) => frame.frame && data.docs[id] && !data.docs[id].archive && !data.docs[id]._deleted)
+        .map(([id, frame]) => ({ tab: data.docs[id], ...frame.requestActivity })))
+    const networkAccessTooltip = $derived(['Network access', ...requestPages
+        .filter(page => page.allowed > 0)
+        .map(page => `${getTabTitle(page.tab)}: ${page.allowed} allowed ${page.allowed === 1 ? 'request' : 'requests'}`)]
+        .join('\n'))
+    const blockedRequestTooltip = $derived(['Blocked requests', ...requestPages
+        .filter(page => page.blocked > 0)
+        .map(page => `${getTabTitle(page.tab)}: ${page.blocked} blocked`)]
+        .join('\n'))
+    const permissionRequestTooltip = $derived(['Permission requests', ...getPendingPermissionRequests(data.permissions, window.darcWindowId)
+        .map(request => `${getTabTitle(data.docs[request.tabId]) || request.origin || request.url}: ${resourceTypes[request.type]?.name || request.type}`)]
+        .join('\n'))
     let globalTabComplete = $state(true)
     let lightboxModeEnabled = $state(true)
     let tabsOpenRight = $state(true)
@@ -4746,10 +4762,18 @@
                     </svg>
                 </div>
             {/if} -->
-            <div class="led-dot network-access" class:active={networkAccessActive}></div>
-            <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>
-            <div class="led-dot mocked-activation" class:active={mockedActivationActive}></div>
-            <div class="led-dot permission-request" class:active={permissionRequestActive}></div>
+            <div class="led-target" role="img" aria-label={networkAccessTooltip} title={networkAccessTooltip}>
+                <div class="led-dot network-access" class:active={networkAccessActive}></div>
+            </div>
+            <div class="led-target" role="img" aria-label={blockedRequestTooltip} title={blockedRequestTooltip}>
+                <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>
+            </div>
+            <div class="led-target" role="img" aria-label="Mocked activation" title="Mocked activation">
+                <div class="led-dot mocked-activation" class:active={mockedActivationActive}></div>
+            </div>
+            <div class="led-target" role="img" aria-label={permissionRequestTooltip} title={permissionRequestTooltip}>
+                <div class="led-dot permission-request" class:active={permissionRequestActive}></div>
+            </div>
         {/if}
     </div>
     <!-- class:drag-enabled={isDragEnabled} -->
@@ -5287,6 +5311,16 @@
 
     .sidebar-right:hover .led-indicator-array { 
          right: 8px;
+    }
+
+    .led-target {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 17px;
+        height: 11px;
+        margin: -2px -5px;
+        flex-shrink: 0;
     }
 
     .led-dot {

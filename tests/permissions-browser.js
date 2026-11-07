@@ -224,6 +224,7 @@ try {
     assert.equal(bounds.top, 16)
     assert.equal(bounds.right, 16)
     assert.ok(bounds.bottom <= 800)
+    assert.equal(await page.$eval('.permission-toasts', region => region.firstElementChild.getBoundingClientRect().top >= region.getBoundingClientRect().top), true)
     await page.screenshot({ path: `${root}.cache/permission-toasts.png` })
     await page.locator(`${toast('geolocation')} .permission-card-open`).click()
     await page.waitForFunction(() => window.promptFixture.sidebarOpen)
@@ -281,8 +282,16 @@ try {
     await page.locator(`${lastCard} button::-p-text(Always allow)`).click()
     await page.waitForFunction(() => document.querySelectorAll('.permission-toasts .resource-card').length === 7)
     await page.setViewport({ width: 320, height: 700 })
+    await page.$eval('.permission-toasts', region => { region.scrollTop = 0 })
     await page.screenshot({ path: `${root}.cache/permission-toasts-mobile.png` })
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    assert.equal(await page.$$eval('.permission-toasts .resource-actions', groups => groups.every(group => {
+        const card = group.closest('.resource-card').getBoundingClientRect()
+        return Array.from(group.querySelectorAll('.accept-btn, .action-btn')).every(button => {
+            const rect = button.getBoundingClientRect()
+            return rect.left >= card.left && rect.right <= card.right
+        })
+    })), true)
     await page.evaluate(() => window.fixture.store.cancelFrame(window.fixture.data.frames.page.frame))
     await page.waitForFunction(() => document.querySelector('.permission-toasts') === null)
     assert.deepEqual(errors, [])
