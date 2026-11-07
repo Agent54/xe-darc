@@ -49,6 +49,15 @@ function moveFromSpaceMenu(data, tab, isGroup = false) {
     return new Function('data', 'menu', 'isGroup', 'sourceSpaceId', 'onHide',
         `${contextMenuSource.slice(spaceMoveHandler.start, spaceMoveHandler.end)}; return moveToSpace`)(data, { tab }, isGroup, tab.spaceId, () => {})(otherSpace)
 }
+const sidebarSource = Deno.readTextFileSync(new URL('../app/components/TabSidebar.svelte', import.meta.url))
+const sidebarCreation = parse(sidebarSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'createSidebarTab')
+function sidebarCreator(data) {
+    return new Function('data', 'tick', `
+        let lastCreatedSidebarTabId = null
+        ${sidebarSource.slice(sidebarCreation.start, sidebarCreation.end)}
+        return createSidebarTab
+    `)(data, () => Promise.resolve())
+}
 const workerSource = Deno.readTextFileSync(new URL('../public/test-shared-worker.js', import.meta.url))
 const appsSource = Deno.readTextFileSync(new URL('../app/components/Apps.svelte', import.meta.url))
 const addAppHandler = parse(appsSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'addApp')
@@ -1052,6 +1061,107 @@ Deno.test('new tabs activate and show their buttons before the first async bound
     assert.equal((await db.get(newId)).created, data.docs[newId].created)
 })
 
+Deno.test('sidebar creation inserts and activates exactly one tab before storage, including in an empty or inactive space', async () => {
+    for (const target of [defaultSpace, otherSpace]) {
+        for (const empty of [false, true]) {
+            const { data, refresh, db } = session({ tabs: [tab('anchor'), ...(empty ? [] : [tab('other', otherSpace)])], history: ['anchor'], runtime: 'client' })
+            await refresh()
+            const before = data.spaces[target].tabs.length
+            const put = db.put
+            let finishCreation
+            db.put = doc => new Promise(resolve => { finishCreation = () => resolve(put(doc)) })
+            const creating = sidebarCreator(data)(target)
+            const id = data.spaceMeta.activeTabId
+            assert.equal(data.spaceMeta.activeSpace, target)
+            assert.equal(data.spaces[target].tabs.length, before + 1)
+            assert.equal(data.spaces[target].tabs.filter(tab => tab.id === id).length, 1)
+            assert.equal(data.docs[id]._rev, undefined)
+            assert.equal(data.ui.tabActivation.tabId, id)
+            assert.equal(data.spaces[target].activeTabsOrder[0].id, id)
+            finishCreation()
+            assert.equal((await creating).id, id)
+        }
+    }
+})
+
+Deno.test('out-of-order sidebar saves cannot steal focus from newer creation, selection, closing or space switching', async () => {
+    for (const action of ['create', 'select', 'close', 'space']) {
+        const { data, refresh, db } = session({ tabs: [tab('anchor'), tab('other', otherSpace)], history: ['anchor'], runtime: 'client' })
+        await refresh()
+        const put = db.put
+        const saves = new Map()
+        db.put = doc => saves.has(doc.id) || doc._rev ? put(doc) : new Promise(resolve => saves.set(doc.id, () => resolve(put(doc))))
+        const create = sidebarCreator(data)
+        const first = create(defaultSpace)
+        const firstId = data.spaceMeta.activeTabId
+        let following
+        if (action === 'create') following = create(defaultSpace)
+        if (action === 'select') data.activate('anchor')
+        if (action === 'close') following = data.closeTab(defaultSpace, firstId)
+        if (action === 'space') data.activateSpace(otherSpace)
+        const expectedSpace = data.spaceMeta.activeSpace
+        const expectedTab = data.spaceMeta.activeTabId
+        if (action === 'create') {
+            saves.get(expectedTab)()
+            await following
+        }
+        saves.get(firstId)()
+        await first
+        await following
+        assert.equal(data.spaceMeta.activeSpace, expectedSpace)
+        assert.equal(data.spaceMeta.activeTabId, expectedTab)
+        if (action === 'close') assert.equal(data.spaces[defaultSpace].tabs.some(tab => tab.id === firstId), false)
+    }
+})
+
+Deno.test('refresh preserves unsaved local tabs while applying replicated additions, edits and removals', async () => {
+    const { data, refresh, db, emitChange } = session({ tabs: [tab('anchor'), tab('removed')], history: ['anchor'], runtime: 'client' })
+    await refresh()
+    const put = db.put
+    let finishCreation
+    db.put = doc => doc._id.startsWith('darc:tab_') ? new Promise(resolve => { finishCreation = () => resolve(put(doc)) }) : put(doc)
+    const creating = sidebarCreator(data)(defaultSpace)
+    const id = data.spaceMeta.activeTabId
+    for (const remote of [tab('remote'), tab('anchor', defaultSpace, { title: 'Edited elsewhere', order: 20 }), tab('removed', defaultSpace, { archive: 'deleted' })]) {
+        await db.put(remote)
+        await emitChange(remote)
+    }
+    await refresh(defaultSpace)
+    assert.deepEqual(new Set(data.spaces[defaultSpace].tabs.map(tab => tab.id)), new Set(['anchor', 'remote', id]))
+    assert.equal(data.docs.anchor.title, 'Edited elsewhere')
+    assert.equal(data.spaceMeta.activeTabId, id)
+    assert.equal(data.spaces[defaultSpace].activeTabsOrder[0].id, id)
+    finishCreation()
+    await creating
+    await refresh(defaultSpace)
+    assert.equal(data.spaces[defaultSpace].tabs.filter(tab => tab.id === id).length, 1)
+    assert.equal(data.spaceMeta.activeTabId, id)
+})
+
+Deno.test('stale overlapping queries preserve tabs created and saved after the queries started', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('anchor')], history: ['anchor'], runtime: 'client' })
+    await refresh()
+    const find = db.find
+    const queries = []
+    db.find = async query => {
+        const result = await find(query)
+        await new Promise(resolve => queries.push(resolve))
+        return result
+    }
+    const firstRefresh = refresh(defaultSpace)
+    const secondRefresh = refresh(defaultSpace)
+    while (queries.length < 2) await Promise.resolve()
+    const created = await sidebarCreator(data)(defaultSpace)
+    assert.ok(created._rev)
+    for (const [queryIndex, refreshing] of [[1, secondRefresh], [0, firstRefresh]]) {
+        queries[queryIndex]()
+        await refreshing
+        assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['anchor', created.id])
+        assert.equal(data.spaceMeta.activeTabId, created.id)
+        assert.equal(data.spaces[defaultSpace].activeTabsOrder[0].id, created.id)
+    }
+})
+
 Deno.test('new tab navigation publishes URL and loading state while storage and the frame are unavailable', async () => {
     const { data, refresh, db } = session({ tabs: [tab('new', defaultSpace, { url: 'about:newtab', title: 'New Tab' })], runtime: 'client' })
     await refresh()
@@ -1158,6 +1268,30 @@ Deno.test('only previously loaded or explicitly hibernated tabs sleep, including
     await restored.refresh()
     assert.equal(restored.data.isTabHibernated('unopened'), true)
     assert.equal(restored.data.docs.unopened.lastLoadedAt, 456)
+})
+
+Deno.test('first loads render a live frame without the hibernated placeholder', async () => {
+    const source = Deno.readTextFileSync(new URL('../app/components/Frame.svelte', import.meta.url))
+    const root = parse(source).html.children.find(node => node.type === 'Element' && node.name === 'div')
+    const conditions = root.children.filter(node => node.type === 'IfBlock')
+    const placeholder = conditions.find(node => source.slice(node.start, node.end).includes('hibernated-placeholder')).expression
+    const liveFrame = conditions.find(node => source.slice(node.start, node.end).includes('<ControlledFrame')).expression
+    const shows = expression => new Function('data', 'tab', `return ${source.slice(expression.start, expression.end)}`)
+    const showPlaceholder = shows(placeholder)
+    const showLiveFrame = shows(liveFrame)
+    const { data, refresh } = session({ tabs: [tab('anchor')], runtime: 'client' })
+    await refresh()
+    const background = await data.newTab(defaultSpace, { url: 'https://background.example/' })
+    assert.equal(showPlaceholder(data, background), false)
+    data.activate(background.id)
+    assert.equal(showLiveFrame(data, background), true)
+    assert.equal(showPlaceholder(data, background), false)
+    data.frames[background.id].frame = { remove() {} }
+    data.frames[background.id].loading = true
+    assert.equal(showPlaceholder(data, background), false)
+    data.hibernate(background.id, true)
+    assert.equal(showPlaceholder(data, background), true)
+    assert.equal(showLiveFrame(data, background), false)
 })
 
 Deno.test('background tab creation schedules metadata without starting a live frame', async () => {

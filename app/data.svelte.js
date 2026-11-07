@@ -314,6 +314,7 @@ const canvasShapeStates = new Map()
 const desiredDocumentUpdates = new Map()
 const documentUpdateSaveTasks = new Map()
 const tabCreationTasks = new Map()
+const tabRefreshes = new Set()
 
 function getCanvasShapeState(element, canvasOrder, files = {}) {
     return {
@@ -769,15 +770,33 @@ const refresh = throttle(async function (spaceId) {
     // console.time('qry')
     // console.timeLog('updt', 'exec refresh')
     await ensureDocumentIndex()
-    const { docs: newDocs } = await db.find({
-        selector: {
-            archive: { $lt: 'deleted' },
-            spaceId: spaceId ? spaceId : { $exists: true }
-        },
-        fields: initialLoad ? undefined : ['_id'],
-        sort: sortOrder.map(key => ({ [key]: 'asc' })),
-        limit: 4000
-    })
+    // Preserve local creations across queries that cannot see their writes yet,
+    // including tabs created and saved while a query is in flight.
+    const localTabIds = new Set(tabCreationTasks.keys())
+    tabRefreshes.add(localTabIds)
+    let newDocs
+    try {
+        const result = await db.find({
+            selector: {
+                archive: { $lt: 'deleted' },
+                spaceId: spaceId ? spaceId : { $exists: true }
+            },
+            fields: initialLoad ? undefined : ['_id'],
+            sort: sortOrder.map(key => ({ [key]: 'asc' })),
+            limit: 4000
+        })
+        newDocs = result.docs
+    } finally {
+        tabRefreshes.delete(localTabIds)
+    }
+    const refreshedIds = new Set(newDocs.map(doc => doc._id))
+    for (const tabId of localTabIds) {
+        const tab = docs[tabId]
+        if (tab && !tab._deleted && tab.archive !== 'deleted' &&
+            (!spaceId || tab.spaceId === spaceId) && !refreshedIds.has(tabId)) {
+            newDocs.push(tab)
+        }
+    }
 
     // console.timeEnd('qry')
     // console.log('qry', newDocs.length)
@@ -813,6 +832,7 @@ const refresh = throttle(async function (spaceId) {
             console.warn('doc not found', refreshDoc)
             continue
         }
+        if (doc._deleted) continue
 
         if (doc.type === 'space') {
             const { activeTabsOrder: _ignoredActiveHistory, ...spaceDoc } = doc
@@ -1103,7 +1123,7 @@ function ensureSpaceHasTab(spaceId, { shouldFocus = false, groupTabId } = {}) {
     return data.newTab(spaceId, { shouldFocus, groupTabId: groupTabId || getCurrentGroupTabId(spaceId) })
 }
 
-function activateSpace(spaceId) {
+function activateSpace(spaceId, { ensureTab = true } = {}) {
     if (!spaces[spaceId]) {
         console.warn('activateSpace: space does not exist:', spaceId)
         return false
@@ -1116,7 +1136,7 @@ function activateSpace(spaceId) {
     
     spaceMeta.activeSpace = spaceId
     persistActiveSpaceForWindow(spaceId)
-    ensureSpaceHasTab(spaceId, { shouldFocus: true })
+    if (ensureTab) ensureSpaceHasTab(spaceId, { shouldFocus: true })
     
     return true
 }
@@ -1993,6 +2013,7 @@ const data = {
         
         docs[tab._id] = tab
         syncTabPreview(docs[tab._id])
+        for (const localTabIds of tabRefreshes) localTabIds.add(tab.id)
         const creation = putDocument(tab).then(result => {
             applyDocumentUpdate(tab.id, { _rev: result.rev })
         }).finally(() => tabCreationTasks.delete(tab.id))

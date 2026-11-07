@@ -102,14 +102,16 @@ const modules = {
             data.docs[tabId].lastActivityAt = Math.max(Date.now(), ...data.spaces.space.tabs.flatMap(tab => [tab.lastActivityAt ?? tab.order ?? 0, tab.tabGroupOrder ?? tab.order ?? 0])) + 1
         }
         let newTabCount = 0
-        data.newTab = async spaceId => {
+        data.newTab = async (spaceId, { shouldFocus } = {}) => {
             const id = newTabCount++ ? 'new-normal-' + newTabCount : 'new-normal'
             const newTab = tab(id, '/one.svg', { spaceId })
             data.spaces[spaceId].tabs.unshift(newTab)
             data.docs[newTab.id] = newTab
+            if (shouldFocus) data.activate(newTab.id)
+            await data.waitForTabCreation?.(id)
             return newTab
         }
-        data.activateSpace = spaceId => { data.spaceMeta.activeSpace = spaceId }
+        data.activateSpace = spaceId => { data.spaceMeta.activeSpace = spaceId; return true }
         data.addDivider = spaceId => data.menuActions.push({ action: 'add-divider', spaceId })
         data.activate = tabId => { data.spaceMeta.activeTabId = tabId }
         data.previous = () => {}

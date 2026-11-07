@@ -761,13 +761,10 @@
     let lastCreatedSidebarTabId = null
 
     async function createSidebarTab(spaceId, options) {
-        const tab = await data.newTab(spaceId, options)
-        if (!tab) {
-            return null
-        }
-        lastCreatedSidebarTabId = tab.id
-        data.activateSpace(spaceId)
-        data.activate(tab.id)
+        if (!data.activateSpace(spaceId, { ensureTab: false })) return null
+        const creation = data.newTab(spaceId, { ...options, shouldFocus: true })
+        lastCreatedSidebarTabId = data.spaceMeta.activeTabId
+        const tab = await creation
         await tick()
         return tab
     }

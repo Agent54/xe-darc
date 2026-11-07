@@ -74,4 +74,38 @@ await withSidebarFixture('tab-creation', async ({ page, errors }) => {
     await page.waitForFunction(() => !window.tabDrag.active)
     await page.hover('.add-spacer-preview')
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.add-spacer-preview-line')).opacity === '1')
+
+    const creation = await page.evaluate(async () => {
+        window.flushSync(() => window.data.activate('outside'))
+        let finishCreation
+        window.data.waitForTabCreation = () => new Promise(resolve => { finishCreation = resolve })
+        const read = () => ({
+            active: window.data.spaceMeta.activeTabId,
+            rows: [...document.querySelectorAll('.tabs-list .tab-item-container')].map(row => ({ id: row.dataset.tabId, active: row.classList.contains('active') }))
+        })
+        const renders = []
+        const observer = new MutationObserver(() => renders.push(read()))
+        observer.observe(document.querySelector('.tabs-list'), { childList: true, subtree: true, attributes: true })
+        window.flushSync(() => document.querySelector('.new-tab-button').click())
+        const immediate = read()
+        await new Promise(requestAnimationFrame)
+        await new Promise(requestAnimationFrame)
+        const pending = read()
+        observer.disconnect()
+        window.flushSync(() => window.data.activate('outside'))
+        finishCreation()
+        delete window.data.waitForTabCreation
+        await new Promise(requestAnimationFrame)
+        return { immediate, pending, renders, afterSave: read() }
+    })
+    const newId = creation.immediate.active
+    assert.notEqual(newId, 'outside')
+    assert.ok(creation.renders.length > 0)
+    for (const state of [creation.immediate, creation.pending, ...creation.renders]) {
+        assert.equal(state.active, newId, 'new tab must be active before storage completes')
+        assert.deepEqual(state.rows.filter(row => row.active).map(row => row.id), [newId], 'the first rendered update must contain the active new tab')
+        assert.equal(state.rows.filter(row => row.id === newId).length, 1)
+    }
+    assert.equal(creation.afterSave.active, 'outside', 'saving must not reactivate a tab after a later selection')
+    console.log('Chromium: sidebar creation renders one active tab synchronously with storage blocked and preserves later selection')
 })
