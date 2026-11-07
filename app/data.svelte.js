@@ -1746,7 +1746,13 @@ const data = {
         return true
     },
 
-    newSpace: async ({ name = 'Space ' + (Object.keys(spaces).length + 1), color = projectColors[Object.keys(spaces).length % projectColors.length].color, glyph, createTab = true } = {}) => {
+    newSpace: async ({ name, color = projectColors[Object.keys(spaces).length % projectColors.length].color, glyph, createTab = true } = {}) => {
+        if (name === undefined) {
+            const names = new Set(Object.values(spaces).map(space => space.name))
+            let number = 1
+            while (names.has(`Space ${number}`)) number++
+            name = `Space ${number}`
+        }
         const _id = `darc:space_${crypto.randomUUID()}`
         const space = {
             _id,

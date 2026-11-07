@@ -2059,6 +2059,25 @@ Deno.test('closing the only group creates one replacement and normal space creat
     assert.equal(data.spaceMeta.spaceOrder.includes(space._id), true)
 })
 
+Deno.test('new space titles start at one and use the first unused number', async () => {
+    const { data, refresh, writes } = session({ tabs: [] })
+    await refresh()
+    const first = await data.newSpace({ createTab: false })
+    assert.equal(first.name, 'Space 1')
+    const custom = await data.newSpace({ name: 'Research', createTab: false })
+    assert.equal(custom.name, 'Research')
+    const reserved = await data.newSpace({ name: 'Space 3', createTab: false })
+    assert.equal(reserved.name, 'Space 3')
+    assert.equal((await data.newSpace({ createTab: false })).name, 'Space 2')
+    assert.equal((await data.newSpace({ createTab: false })).name, 'Space 4')
+    data.deleteSpace(first._id)
+    const replacement = await data.newSpace({ createTab: false })
+    assert.equal(replacement.name, 'Space 1')
+    assert.equal(writes.find(doc => doc._id === replacement._id).name, 'Space 1')
+    assert.equal(writes.at(-1).action, 'space_create')
+    assert.equal(writes.at(-1).name, 'Space 1')
+})
+
 Deno.test('closing the only group with sidepins creates one standalone replacement', async () => {
     for (const pinFirst of [false, true]) {
         const { data, refresh, writes } = session({ tabs: [
