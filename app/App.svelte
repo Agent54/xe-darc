@@ -5195,6 +5195,48 @@
         }
     }
 
+    .hover-menu {
+        --menu-active-background: var(--menu-hover-background);
+        --menu-active-hover-background: var(--menu-hover-background);
+        --menu-active-color: var(--menu-color);
+    }
+
+    .hover-menu .menu-item {
+        padding: 8px 10px;
+        color: var(--menu-color);
+        font: var(--menu-font);
+        letter-spacing: -0.008em;
+    }
+
+    .hover-menu .menu-item.active:hover {
+        color: var(--menu-color);
+    }
+
+    .hover-menu .menu-caption {
+        padding: 8px 10px 6px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+    }
+
+    .hover-menu .settings-menu-version {
+        color: var(--menu-muted-color);
+        font-size: 10px;
+        font-weight: 400;
+        letter-spacing: 0;
+    }
+
+    .hover-menu .menu-icon-item :global(svg) {
+        width: 16px;
+        height: 16px;
+    }
+
+    .hover-menu .checkmark {
+        color: var(--menu-color);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+    }
+
     .menu-item {
         padding: 6px 8px;
         color: rgba(255, 255, 255, 0.8);
