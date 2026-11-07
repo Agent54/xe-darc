@@ -280,7 +280,7 @@ try {
     assert.ok(menuBounds.top >= 0 && menuBounds.bottom <= menuBounds.height)
     await page.locator(`${lastCard} button::-p-text(Always allow)`).click()
     await page.waitForFunction(() => document.querySelectorAll('.permission-toasts .resource-card').length === 7)
-    await page.setViewport({ width: 320, height: 700, isMobile: true, hasTouch: true })
+    await page.setViewport({ width: 320, height: 700 })
     await page.screenshot({ path: `${root}.cache/permission-toasts-mobile.png` })
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
     await page.evaluate(() => window.fixture.store.cancelFrame(window.fixture.data.frames.page.frame))
