@@ -661,9 +661,6 @@
 
     
     function exitMultiSpaceMode() {
-        // Store active space before any changes
-        const activeSpace = data.spaceMeta.activeSpace
-        
         // Start closing animation
         isClosingMultiSpace = true
         closeRubberBandOffset = 0
@@ -679,14 +676,10 @@
             // Reset hover state so sidebar collapses properly
             isHovered = false
             
-            // Wait for DOM to update, then scroll to active space
+            // Resolve the active space after closing: the click that started this
+            // animation may have switched to a tab or space in another lane.
             setTimeout(() => {
-                if (tabListRef && activeSpace) {
-                    const targetElement = tabListRef.querySelector(`[data-space-id="${activeSpace}"]`)
-                    if (targetElement) {
-                        targetElement.scrollIntoView({ behavior: 'instant', inline: 'start' })
-                    }
-                }
+                scrollToCurrentSpace('instant')
             }, 50)
         }, 300) // Match the transition duration
     }

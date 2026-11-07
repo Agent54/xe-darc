@@ -20,8 +20,8 @@ const Favicon = component('Favicon', { SecurityIndicator })
 const LinkPreviewFavicon = component('LinkPreviewFavicon', { Favicon })
 const previewSource = compileModule(Deno.readTextFileSync(new URL('../app/lib/tab-group-preview.svelte.js', import.meta.url)), { generate: 'server' }).js.code
     .replace(/^import .*$/gm, '').replace(/^export /gm, '')
-const getFaviconWindow = new Function(`${previewSource}\nreturn getFaviconWindow`)()
-const TabGroupPreview = component('TabGroupPreview', { Favicon, getFaviconWindow })
+const { getFaviconWindow, getDefaultGroupTabIndex } = new Function(`${previewSource}\nreturn { getFaviconWindow, getDefaultGroupTabIndex }`)()
+const TabGroupPreview = component('TabGroupPreview', { Favicon, getFaviconWindow, getDefaultGroupTabIndex })
 const LightboxHeader = component('LightboxHeader', {
     Favicon,
     UrlBar: () => {},
