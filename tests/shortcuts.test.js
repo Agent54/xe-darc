@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
-import { shortcuts, getShortcutHelp, shortcutActionIds, createShortcutMatcher, createShortcutHandler, getFrameShortcutScript } from '../app/lib/shortcuts.js'
+import { shortcuts, getShortcutHelp, shortcutActionIds, createShortcutMatcher, createShortcutHandler, listenForShortcutHelpCancellation, getFrameShortcutScript } from '../app/lib/shortcuts.js'
 import { createShortcutActions, getShortcutTab } from '../app/lib/shortcut-actions.js'
 
 const mac = createShortcutMatcher(shortcuts, true)
@@ -144,6 +144,69 @@ Deno.test('normal shortcuts and typing cancel modifier help, and Escape only dis
     h.down(key('a', { ctrlKey: true }))
     h.advance(3000)
     assert.equal(h.calls.filter(id => id === 'show-shortcuts').length, 1)
+})
+
+Deno.test('every pointer, scroll and preview action aborts help until the modifier is released', () => {
+    for (const modifier of [cmd('Meta'), key('Control', { ctrlKey: true })]) {
+        for (const type of ['pointerdown', 'mousedown', 'click', 'auxclick', 'contextmenu', 'wheel', 'scroll', 'touchstart', 'touchmove',
+            'darc-controlled-frame-mousedown', 'darc-controlled-frame-click', 'darc-link-preview']) {
+            for (const alreadyVisible of [false, true]) {
+                const h = holdHarness()
+                const target = new EventTarget()
+                const cleanup = listenForShortcutHelpCancellation(target, h.handler.cancelHelp)
+                h.down(modifier)
+                h.advance(alreadyVisible ? 2000 : 1000)
+                target.dispatchEvent(new Event(type))
+                h.down({ ...modifier, repeat: true })
+                h.down(modifier)
+                h.advance(10000)
+                assert.deepEqual(h.calls, alreadyVisible ? ['show-shortcuts', 'hide-shortcuts'] : [], type)
+                h.up(key(modifier.key))
+                h.down(modifier)
+                h.advance(2000)
+                assert.equal(h.calls.at(-1), 'show-shortcuts', `${type}: a fresh hold works`)
+                cleanup()
+                target.dispatchEvent(new Event(type))
+                assert.equal(h.calls.at(-1), 'show-shortcuts', `${type}: cleanup removes the listener`)
+                h.handler.reset()
+            }
+        }
+    }
+})
+
+Deno.test('other keys before or during the hold prevent help even after that key is released', () => {
+    for (const other of ['a', 'Shift', 'Alt', 'Control']) {
+        const h = holdHarness()
+        h.down(cmd('Meta'))
+        h.advance(1000)
+        h.down(cmd(other, { ctrlKey: other === 'Control' }))
+        h.up(cmd(other))
+        h.down(cmd('Meta', { repeat: true }))
+        h.advance(10000)
+        assert.deepEqual(h.calls, [], other)
+        h.up(key('Meta'))
+        h.down(cmd('Meta'))
+        h.advance(2000)
+        assert.deepEqual(h.calls, ['show-shortcuts'])
+    }
+    const h = holdHarness()
+    h.down(key('a'))
+    h.down(cmd('Meta'))
+    h.up(cmd('a'))
+    h.advance(10000)
+    assert.deepEqual(h.calls, [])
+    h.up(key('Meta'))
+    h.down(cmd('Meta'))
+    h.advance(2000)
+    assert.deepEqual(h.calls, ['show-shortcuts'])
+})
+
+Deno.test('ordinary pointer activity before a modifier hold does not disable help', () => {
+    const h = holdHarness()
+    h.handler.cancelHelp()
+    h.down(cmd('Meta'))
+    h.advance(2000)
+    assert.deepEqual(h.calls, ['show-shortcuts'])
 })
 
 Deno.test('blur and cleanup cancel pending tabs and modifier timers without opening anything', () => {
@@ -325,16 +388,17 @@ Deno.test('reopen skips deleted tabs and pin commands select the requested side'
 })
 
 Deno.test('serialized frame matcher forwards once, preserves colon-containing IDs, and leaves plain Escape available', () => {
-    const listeners = [], messages = []
+    const listeners = new Map(), messages = []
     new Function('window', 'console', getFrameShortcutScript('darc:tab:frame'))(
-        { addEventListener(type, handler) { listeners.push(handler) } },
-        { log(message) { messages.push(JSON.parse(message.slice('iwa:shortcut:'.length))) } }
+        { addEventListener(type, handler) { const list = listeners.get(type) || []; list.push(handler); listeners.set(type, list) } },
+        { log(message) { if (message.startsWith('iwa:shortcut:')) messages.push(JSON.parse(message.slice('iwa:shortcut:'.length))) } }
     )
+    const down = event => { for (const listener of listeners.get('keydown')) listener(event) }
     // getFrameShortcutScript uses this host's platform; exercise that binding.
     const modifier = /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true }
-    assert.equal(dispatch(listeners[0], key('l', modifier)).prevented, true)
-    assert.equal(dispatch(listeners[0], key('w', { ...modifier, repeat: true })).prevented, true)
-    assert.equal(dispatch(listeners[0], key('Escape')).prevented, false)
+    assert.equal(dispatch(down, key('l', modifier)).prevented, true)
+    assert.equal(dispatch(down, key('w', { ...modifier, repeat: true })).prevented, true)
+    assert.equal(dispatch(down, key('Escape')).prevented, false)
     assert.deepEqual(messages, [{ id: 'open-location', tabId: 'darc:tab:frame' }, { id: 'escape', tabId: 'darc:tab:frame' }])
 })
 

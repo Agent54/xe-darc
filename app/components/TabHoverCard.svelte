@@ -82,21 +82,17 @@
     let hoveredHistoryEntry = $state(null)
     let hoveredEntryIndex = $state(null)
     const screenshotTab = $derived(hoveredHistoryEntry?.screenshot ? hoveredHistoryEntry : tab)
-    const metadataEntries = $derived.by(() => {
-        const spaceId = tab.spaceId || previewTab.spaceId
-        const entries = [
-            { label: 'State', value: isClosedTab ? 'Closed' : data.spaceMeta.activeTabId === tab.id ? 'Active' : data.isTabHibernated(tab.id) ? 'Sleeping' : 'Open' },
-            { label: 'Opened', timestamp: tab.created },
-            { label: 'Last active', timestamp: data.getTabLastActiveAt?.(tab.id, spaceId) }
-        ]
-        if (isClosedTab) {
-            entries.push({ label: 'Closed', timestamp: tab.closedAt || previewTab.closedAt || tab.modified || previewTab.modified })
-        }
-        if (data.spaces[spaceId]?.name) {
-            entries.push({ label: 'Space', value: data.spaces[spaceId].name })
-        }
-        return entries
-    })
+    const openerTab = $derived(data.docs[tab.opener])
+    const openedTabs = $derived(Object.values(data.docs).filter(candidate =>
+        candidate.opener === tab.id && candidate.type === 'tab' &&
+        !candidate.archive && !candidate._deleted && !candidate.preview && !candidate.lightbox
+    ))
+    const containerName = $derived(!tab.partition || tab.partition === 'persist:myapp' ? 'Default' : tab.partition)
+
+    function openRelatedTab(relatedTab) {
+        if (relatedTab.spaceId && data.spaceMeta.activeSpace !== relatedTab.spaceId) data.activateSpace(relatedTab.spaceId)
+        data.activate(relatedTab.id)
+    }
 
     $effect(() => {
         if (!showHistory) {
@@ -423,18 +419,32 @@
     {:else if showPreview}
         <div class="hovercard-preview hovercard-metadata" class:has-history={showHistory && historyEntries.length > 0} role="region" aria-label="Tab details">
             <dl>
-                {#each metadataEntries as entry (entry.label)}
+                <div class="metadata-row">
+                    <dt title="Tabs in the same container share cookies and sign-ins">Container</dt>
+                    <dd title={containerName}>{containerName}</dd>
+                </div>
+                {#if openerTab && !openerTab._deleted}
                     <div class="metadata-row">
-                        <dt>{entry.label}</dt>
+                        <dt>Opened from</dt>
                         <dd>
-                            {#if Number.isFinite(entry.timestamp) && entry.timestamp > 0}
-                                <time datetime={new Date(entry.timestamp).toISOString()} title={formatAbsoluteTime(entry.timestamp)}>{formatRelativeTime(entry.timestamp)}</time>
+                            {#if !openerTab.archive}
+                                <button type="button" title={getTabTitle(openerTab)} onclick={() => openRelatedTab(openerTab)}>{getTabTitle(openerTab)}</button>
                             {:else}
-                                {entry.value || 'Not recorded'}
+                                <span title={getTabTitle(openerTab)}>{getTabTitle(openerTab)}</span>
                             {/if}
                         </dd>
                     </div>
-                {/each}
+                {/if}
+                {#if openedTabs.length}
+                    <div class="metadata-row">
+                        <dt>Opened tabs <span class="metadata-count">{openedTabs.length}</span></dt>
+                        <dd>
+                            {#each openedTabs as openedTab (openedTab.id)}
+                                <button type="button" title={getTabTitle(openedTab)} onclick={() => openRelatedTab(openedTab)}>{getTabTitle(openedTab)}</button>
+                            {/each}
+                        </dd>
+                    </div>
+                {/if}
             </dl>
         </div>
     {/if}
@@ -728,8 +738,12 @@
 
     .hovercard-metadata {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         padding: 16px;
+        background: #080808;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
         font-family: 'Inter', sans-serif;
         font-size: 12px;
         line-height: 1.4;
@@ -739,7 +753,7 @@
         width: 100%;
         margin: 0;
         display: grid;
-        gap: 8px;
+        gap: 12px;
     }
 
     .metadata-row {
@@ -750,17 +764,56 @@
 
     .metadata-row dt {
         flex-shrink: 0;
-        color: rgba(255, 255, 255, 0.5);
+        color: #888;
+    }
+
+    .metadata-count {
+        margin-left: 3px;
+        color: #aaa;
     }
 
     .metadata-row dd {
         min-width: 0;
         margin: 0;
-        color: rgba(255, 255, 255, 0.85);
+        color: #aaa;
         text-align: right;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    .metadata-row dd button,
+    .metadata-row dd span {
+        display: block;
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .metadata-row dd button {
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: right;
+        cursor: pointer;
+    }
+
+    .metadata-row dd button + button {
+        margin-top: 6px;
+    }
+
+    .metadata-row dd button:hover {
+        color: #ddd;
+        text-decoration: underline;
+    }
+
+    .metadata-row dd button:focus-visible {
+        outline: 1px solid #888;
+        outline-offset: -1px;
+        border-radius: 2px;
     }
     
     .expand-button {

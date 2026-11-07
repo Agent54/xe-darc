@@ -101,7 +101,7 @@ Deno.test('a newly focused controlled frame forwards Control release without rec
             console: { log: message => messages.push(message) }, setTimeout, clearTimeout
         })
         for (const listener of listeners.get('keyup')) listener({ key: 'Control', ctrlKey: false })
-        assert.deepEqual(messages, ['iwa:shortcut:' + JSON.stringify({ id: 'finish-tab-switch', tabId: 'new-frame' })])
+        assert.deepEqual(messages.filter(message => message.startsWith('iwa:shortcut:')), ['iwa:shortcut:' + JSON.stringify({ id: 'finish-tab-switch', tabId: 'new-frame' })])
     } finally {
         if (originalNavigator) Object.defineProperty(globalThis, 'navigator', originalNavigator)
         else delete globalThis.navigator

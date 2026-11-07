@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
-import { getFrameShortcutScript } from '../app/lib/shortcuts.js'
+import { createShortcutHandler, getFrameShortcutScript, listenForShortcutHelpCancellation } from '../app/lib/shortcuts.js'
 
 const source = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
 const functions = ['closeHovercard', 'dismissHovercards', 'handleHovercardPointerDown', 'navigateTabHistory', 'handleTabMouseEnter', 'handleFrameMouseDown', 'handleFrameClick']
@@ -115,6 +115,74 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
         }
     }
 }
+
+function shortcutHelpHarness() {
+    const calls = [], timers = new Map()
+    let nextTimer = 0
+    const handler = createShortcutHandler(() => null, id => calls.push(id), {
+        schedule(callback) { const id = ++nextTimer; timers.set(id, callback); return id },
+        cancel(id) { timers.delete(id) }
+    })
+    const shell = new EventTarget()
+    const node = parse(source).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'handleFrameShortcutHelp')
+    const bridge = new Function('handleKeyDown', `${source.slice(node.start, node.end)}; return handleFrameShortcutHelp`)(handler)
+    shell.addEventListener('darc-shortcut-help', bridge)
+    listenForShortcutHelpCancellation(shell, handler.cancelHelp)
+    const guests = [contentClickBridge(shell, 'darc:tab:a'), contentClickBridge(shell, 'darc:tab:b', true)]
+    return {
+        calls, timers, shell, guests,
+        key(guest, type, key, modifiers = {}) {
+            guest.contentWindow.dispatchEvent(Object.assign(new Event(type), { key, ...modifiers }))
+        },
+        expire() {
+            for (const [id, callback] of timers) {
+                timers.delete(id)
+                callback()
+            }
+        }
+    }
+}
+
+Deno.test('guest clicks and scrolling abort the single shell help timer across nested documents until release', () => {
+    for (const type of ['pointerdown', 'click', 'auxclick', 'contextmenu', 'wheel', 'scroll', 'touchmove']) {
+        const h = shortcutHelpHarness()
+        const [first, nested] = h.guests
+        h.key(first, 'keydown', 'Meta', { metaKey: true })
+        assert.equal(h.timers.size, 1)
+        nested.contentWindow.dispatchEvent(new Event(type))
+        h.key(nested, 'keydown', 'Meta', { metaKey: true, repeat: true })
+        h.expire()
+        assert.deepEqual(h.calls, [], type)
+        h.key(nested, 'keyup', 'Meta')
+        h.key(nested, 'keydown', 'Control', { ctrlKey: true })
+        h.expire()
+        assert.deepEqual(h.calls, ['show-shortcuts'])
+        h.key(first, 'keyup', 'Control')
+        assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts'])
+        assert.deepEqual(h.guests.flatMap(guest => guest.errors), [])
+    }
+})
+
+Deno.test('shell previews cancel guest holds and extra keys stay disqualifying across documents', () => {
+    const h = shortcutHelpHarness()
+    const [first, nested] = h.guests
+    h.key(first, 'keydown', 'Meta', { metaKey: true })
+    h.shell.dispatchEvent(new Event('darc-link-preview'))
+    h.expire()
+    assert.deepEqual(h.calls, [])
+    h.key(first, 'keyup', 'Meta')
+    h.key(first, 'keydown', 'a')
+    h.key(nested, 'keydown', 'Meta', { metaKey: true })
+    h.key(first, 'keyup', 'a', { metaKey: true })
+    h.expire()
+    assert.deepEqual(h.calls, [])
+    h.key(nested, 'keyup', 'Meta')
+    h.key(first, 'keydown', 'Meta', { metaKey: true })
+    h.expire()
+    assert.deepEqual(h.calls, ['show-shortcuts'])
+    h.shell.dispatchEvent(new Event('darc-link-preview'))
+    assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts'])
+})
 
 Deno.test('back and forward reveal the hovercard immediately for 800 ms', () => {
     for (const direction of ['back', 'forward']) {

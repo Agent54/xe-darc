@@ -34,7 +34,7 @@
     import { colors } from './lib/utils.js'
     import { getComposeAppPorts } from './lib/compose-api.js'
     import { resolveSidepinVisibility } from './lib/sidepin-visibility.js'
-    import { shortcuts, shortcutActionIds, createShortcutMatcher, createShortcutHandler, isMacPlatform as detectMacPlatform } from './lib/shortcuts.js'
+    import { shortcuts, shortcutActionIds, createShortcutMatcher, createShortcutHandler, listenForShortcutHelpCancellation, isMacPlatform as detectMacPlatform } from './lib/shortcuts.js'
     import { createShortcutActions } from './lib/shortcut-actions.js'
     import { createTabHistorySwitcher } from './lib/tab-activation-history.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
@@ -939,6 +939,29 @@
         return shortcutActions(id, event, sourceTabId)
     }
     const handleKeyDown = createShortcutHandler(createShortcutMatcher(shortcuts, detectMacPlatform()), runShortcut)
+
+    function handleFrameShortcutHelp(event) {
+        const detail = event.detail
+        if ((detail.type === 'keydown' || detail.type === 'keyup') && typeof detail.event?.key !== 'string') {
+            return
+        }
+        if (detail.type === 'keydown') {
+            handleKeyDown.helpKeydown(detail.event)
+        } else if (detail.type === 'keyup') {
+            handleKeyDown.helpKeyup(detail.event)
+        } else if (detail.type === 'cancel') {
+            handleKeyDown.cancelHelp()
+        }
+    }
+
+    onMount(() => {
+        const cleanup = listenForShortcutHelpCancellation(window, handleKeyDown.cancelHelp)
+        window.addEventListener('darc-shortcut-help', handleFrameShortcutHelp)
+        return () => {
+            cleanup()
+            window.removeEventListener('darc-shortcut-help', handleFrameShortcutHelp)
+        }
+    })
 
     function handleShortcutKeyUp(event) {
         handleKeyDown.keyup(event)

@@ -1607,6 +1607,15 @@ document.addEventListener('input', function(event) {
                     isCommandKeyDown = false
                     commandKeyPressed = false
                 }
+            } else if (message.startsWith('iwa:shortcut-help:')) {
+                try {
+                    const detail = JSON.parse(message.slice('iwa:shortcut-help:'.length))
+                    if (detail.tabId === mytab.id) {
+                        window.dispatchEvent(new CustomEvent('darc-shortcut-help', { detail }))
+                    }
+                } catch (error) {
+                    console.warn('Invalid frame shortcut help message', error)
+                }
             } else if (message.startsWith('iwa:shortcut:')) {
                 try {
                     const detail = JSON.parse(message.slice('iwa:shortcut:'.length))

@@ -61,10 +61,12 @@ export function createShortcutMatcher(bindings, isMac) {
     }
 }
 
-export function createShortcutHandler(matchShortcut, runShortcut, { schedule = setTimeout, cancel = clearTimeout } = {}) {
+export function createShortcutHandler(matchShortcut, runShortcut, { schedule = setTimeout, cancel = clearTimeout, help = true } = {}) {
     let modifier = null
     let helpTimer = null
     let helpVisible = false
+    let helpAborted = false
+    const pressedKeys = new Map()
     let pendingTab = null
     let tabHeld = false
 
@@ -75,6 +77,57 @@ export function createShortcutHandler(matchShortcut, runShortcut, { schedule = s
         if (helpVisible) runShortcut('hide-shortcuts', event)
         helpVisible = false
         return wasVisible
+    }
+
+    function cancelHelp(event) {
+        if (modifier || event?.metaKey || event?.ctrlKey) {
+            helpAborted = true
+        }
+        return hideHelp(event)
+    }
+
+    function helpKeydown(event) {
+        if (event.key === 'Meta' || event.key === 'Control') {
+            if (!modifier) {
+                modifier = event.key
+                if (!helpAborted && !event.repeat && !pressedKeys.size && !event.altKey && !event.shiftKey && !(event.metaKey && event.ctrlKey)) {
+                    helpTimer = schedule(() => {
+                        helpTimer = null
+                        if (!helpAborted && modifier) {
+                            helpVisible = runShortcut('show-shortcuts', event) !== false
+                        }
+                    }, 2000)
+                } else {
+                    cancelHelp(event)
+                }
+            } else if (!event.repeat) {
+                cancelHelp(event)
+            }
+            return false
+        }
+        pressedKeys.set(event.code || event.key, !!(modifier || event.metaKey || event.ctrlKey))
+        const wasVisible = hideHelp(event)
+        if (modifier || event.metaKey || event.ctrlKey) {
+            helpAborted = true
+        }
+        return wasVisible
+    }
+
+    function helpKeyup(event) {
+        pressedKeys.delete(event.code || event.key)
+        if (!event.metaKey && !event.ctrlKey) {
+            hideHelp(event)
+            modifier = null
+            helpAborted = false
+            // macOS can omit letter keyup during Command combinations.
+            for (const [key, duringHold] of pressedKeys) {
+                if (duringHold) {
+                    pressedKeys.delete(key)
+                }
+            }
+        } else if (event.key === 'Meta' || event.key === 'Control') {
+            cancelHelp(event)
+        }
     }
 
     function finishTab() {
@@ -93,17 +146,10 @@ export function createShortcutHandler(matchShortcut, runShortcut, { schedule = s
     }
 
     function handleShortcut(event) {
+        const wasShowingHelp = help ? helpKeydown(event) : false
         if (event.key === 'Meta' || event.key === 'Control') {
-            if (!event.repeat && !modifier && !event.altKey && !event.shiftKey && !(event.metaKey && event.ctrlKey)) {
-                modifier = event.key
-                helpTimer = schedule(() => {
-                    helpTimer = null
-                    helpVisible = runShortcut('show-shortcuts', event) !== false
-                }, 2000)
-            } else if (!event.repeat) hideHelp(event)
             return false
         }
-        const wasShowingHelp = hideHelp(event)
         if (wasShowingHelp && event.key === 'Escape') return consume(event)
         const binding = matchShortcut(event)
         if (pendingTab && binding?.id !== 'new-tab') finishTab()
@@ -125,9 +171,8 @@ export function createShortcutHandler(matchShortcut, runShortcut, { schedule = s
     }
 
     handleShortcut.keyup = event => {
-        if (event.key === modifier || (modifier === 'Meta' && !event.metaKey) || (modifier === 'Control' && !event.ctrlKey)) {
-            hideHelp(event)
-            modifier = null
+        if (help) {
+            helpKeyup(event)
         }
         // macOS can omit letter keyup while Command is down. Modifier release
         // must also finish a quick Cmd+T, without creating a second tab after a hold.
@@ -143,9 +188,27 @@ export function createShortcutHandler(matchShortcut, runShortcut, { schedule = s
         pendingTab = null
         tabHeld = false
         modifier = null
+        helpAborted = false
+        pressedKeys.clear()
     }
 
+    handleShortcut.cancelHelp = cancelHelp
+    handleShortcut.helpKeydown = helpKeydown
+    handleShortcut.helpKeyup = helpKeyup
     return handleShortcut
+}
+
+export function listenForShortcutHelpCancellation(target, cancelHelp) {
+    const events = ['pointerdown', 'mousedown', 'click', 'auxclick', 'contextmenu', 'wheel', 'scroll', 'touchstart', 'touchmove',
+        'darc-controlled-frame-mousedown', 'darc-controlled-frame-click', 'darc-link-preview']
+    for (const type of events) {
+        target.addEventListener(type, cancelHelp, { capture: true, passive: true })
+    }
+    return () => {
+        for (const type of events) {
+            target.removeEventListener(type, cancelHelp, true)
+        }
+    }
 }
 
 export function isMacPlatform() {
@@ -154,13 +217,22 @@ export function isMacPlatform() {
 
 export function getFrameShortcutScript(tabId) {
     return `(() => {
+        const reportHelp = (type, event) => console.log('iwa:shortcut-help:' + JSON.stringify({
+            tabId: ${JSON.stringify(tabId)}, type,
+            event: event && { key: event.key, code: event.code, repeat: event.repeat,
+                metaKey: event.metaKey, ctrlKey: event.ctrlKey, altKey: event.altKey, shiftKey: event.shiftKey }
+        }));
         const match = (${createShortcutMatcher.toString()})(${JSON.stringify(shortcuts)}, ${isMacPlatform()});
         const handle = (${createShortcutHandler.toString()})(match, (id) => {
             console.log('iwa:shortcut:' + JSON.stringify({ id, tabId: ${JSON.stringify(tabId)} }));
             // The shell decides whether Escape has an app target. Ordinary pages
             // must still receive it, including previews later promoted to lightboxes.
             return id !== 'escape';
-        });
+        }, { help: false });
+        // One shell timer owns the hold across all guest documents and previews.
+        window.addEventListener('keydown', event => reportHelp('keydown', event), true);
+        window.addEventListener('keyup', event => reportHelp('keyup', event), true);
+        (${listenForShortcutHelpCancellation.toString()})(window, () => reportHelp('cancel'));
         window.addEventListener('keydown', handle, { capture: true, passive: false });
         window.addEventListener('keyup', handle.keyup, true);
         // Release may arrive in a newly focused frame that did not receive Tab.
@@ -168,5 +240,6 @@ export function getFrameShortcutScript(tabId) {
             if (event.key === 'Control') console.log('iwa:shortcut:' + JSON.stringify({ id: 'finish-tab-switch', tabId: ${JSON.stringify(tabId)} }));
         }, true);
         window.addEventListener('blur', handle.reset);
+        window.addEventListener('blur', () => reportHelp('cancel'));
     })();`
 }

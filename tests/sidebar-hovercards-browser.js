@@ -147,7 +147,8 @@ await withSidebarFixture('sidebar-hovercards', async ({ page }) => {
     await hovercardLeft('.tab-group-main', true)
     await page.waitForFunction(() => [...document.querySelectorAll('.group-hovercards .attachment-image')].length === 2 && [...document.querySelectorAll('.group-hovercards .attachment-image')].every(image => image.naturalWidth > 0))
     assert.deepEqual(await page.$$eval('.group-hovercards .hovercard-preview', previews => [...new Set(previews.map(preview => `${preview.clientWidth}x${preview.clientHeight}`))]), ['318x180'], 'metadata panels must occupy the same preview area as screenshots')
-    assert.equal(await page.$$eval('.group-hovercards .hovercard-metadata', panels => panels.some(metadata => metadata.textContent.includes('Not recorded'))), true, 'missing timestamps must be identified instead of invented')
+    assert.equal(await page.$$eval('.group-hovercards .hovercard-metadata', panels => panels.every(metadata => metadata.textContent.trim() === 'ContainerDefault')), true, 'tabs without extra context show only their container, without repetitive state or missing timestamps')
+    assert.equal(await page.$eval('.group-hovercards .hovercard-metadata', metadata => getComputedStyle(metadata).backgroundColor), 'rgb(8, 8, 8)', 'the missing-preview surface stays close to the dark card background')
     const groupGeometry = await page.evaluate(() => window.previewGeometry())
     const firstGroupCard = '.group-hovercards .hovercard-content:nth-child(1)'
     const secondGroupCard = '.group-hovercards .hovercard-content:nth-child(2)'
@@ -164,7 +165,7 @@ await withSidebarFixture('sidebar-hovercards', async ({ page }) => {
     const metadataGroupCard = '.group-hovercards .hovercard-content:nth-child(3)'
     await page.hover(`${metadataGroupCard} .hovercard-title`)
     await page.waitForSelector(`${metadataGroupCard} .history-section`, { timeout: 500 })
-    assert.deepEqual(await page.$eval(`${metadataGroupCard} .hovercard-metadata`, metadata => [...metadata.querySelectorAll('time')].map(time => time.dateTime)), await page.evaluate(() => [window.data.docs['group-tail-0'].created, window.data.docs['group-tail-0'].lastActiveAt].map(timestamp => new Date(timestamp).toISOString())), 'metadata must use the recorded opening and activity times')
+    assert.equal(await page.$eval(`${metadataGroupCard} .hovercard-metadata`, metadata => metadata.querySelectorAll('time').length), 0, 'the fallback must not repeat activity information already shown in history')
     assert.deepEqual(await page.evaluate(() => window.previewGeometry()), groupGeometry, 'metadata previews must retain their geometry when side history opens')
     await (await page.$(metadataGroupCard)).screenshot({ path: `${root}.cache/tab-metadata-history.png` })
     await page.mouse.move(1100, 750)
@@ -200,11 +201,28 @@ await withSidebarFixture('sidebar-hovercards', async ({ page }) => {
         const history = card.querySelector('.history-section').getBoundingClientRect()
         return !card.classList.contains('history-beside') && card.offsetWidth === 320 && history.top >= screenshot.bottom
     }), true, 'top-bar hovercards keep history below the screenshot on wide windows')
-    await page.evaluate(() => window.mountMetadataHovercard())
+    await page.evaluate(() => {
+        window.flushSync(() => {
+            window.data.docs['closed-two'].partition = 'ephemeral:2'
+            window.data.docs['closed-two'].opener = 'outside'
+            window.data.docs['group-tail-0'].opener = 'closed-two'
+            window.data.docs['group-tail-0'].title = 'A related page with a long title that should truncate within the preview'
+            window.data.docs['closed-one'].opener = 'closed-two'
+            window.data.docs['closed-one'].archive = 'closed'
+        })
+        window.mountMetadataHovercard()
+    })
     await page.waitForSelector('#metadata-hovercard-fixture .history-section')
-    assert.deepEqual(await page.$eval('#metadata-hovercard-fixture .hovercard-metadata', metadata => [...metadata.querySelectorAll('time')].map(time => time.dateTime)), await page.evaluate(() => [window.data.docs['closed-two'].created, window.data.docs['closed-two'].closedAt].map(timestamp => new Date(timestamp).toISOString())), 'closed metadata must prefer its recorded close time over later modifications')
+    assert.deepEqual(await page.$eval('#metadata-hovercard-fixture .hovercard-metadata', metadata => [...metadata.querySelectorAll('.metadata-row')].map(row => [row.querySelector('dt').textContent.trim(), row.querySelector('dd').textContent.trim()])), [
+        ['Container', 'ephemeral:2'], ['Opened from', 'outside'], ['Opened tabs 1', 'A related page with a long title that should truncate within the preview']
+    ], 'the fallback uses recorded container and opener relationships, excluding closed children')
     await page.setViewport({ width: 375, height: 800 })
-    assert.equal(await page.$eval('#metadata-hovercard-fixture .hovercard-metadata', metadata => metadata.clientHeight === 180 && metadata.scrollWidth === metadata.clientWidth && metadata.textContent.includes('Closed')), true, 'closed-tab details must fit the same preview area on narrow screens')
+    assert.equal(await page.$eval('#metadata-hovercard-fixture .hovercard-metadata', metadata => metadata.clientHeight === 180 && metadata.scrollWidth === metadata.clientWidth), true, 'related-tab details must fit the same preview area on narrow screens')
     await (await page.$('#metadata-hovercard-fixture .hovercard-content')).screenshot({ path: `${root}.cache/closed-tab-metadata.png` })
+    await page.focus('#metadata-hovercard-fixture .metadata-row:nth-child(2) button')
+    await page.keyboard.press('Enter')
+    assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), 'outside', 'the opener link supports keyboard activation')
+    await page.click('#metadata-hovercard-fixture .metadata-row:nth-child(3) button')
+    assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), 'group-tail-0', 'related tabs can be opened directly from the fallback')
     console.log('Chromium: sidebar hovercard placement, gaps, responsive history, screenshots and metadata pass')
 })

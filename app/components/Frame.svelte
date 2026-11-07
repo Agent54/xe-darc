@@ -436,6 +436,7 @@
                 console.log('❌ No hovered link, aborting preview creation')
                 return
             }
+            window.dispatchEvent(new Event('darc-link-preview'))
             const generation = previewGeneration
             const link = hoveredLink
             const tab = await data.newTab(data.spaceMeta.activeSpace, { url: link.href, preview: true, opener: tabId })

@@ -16,6 +16,7 @@ export function showLinkPreview(node) {
     // Follow scrolling, resizing and animated frame layouts while visible.
     updatePosition()
     node.showPopover()
+    window.dispatchEvent(new Event('darc-link-preview'))
 
     function dismiss() {
         cancelAnimationFrame(animationFrame)

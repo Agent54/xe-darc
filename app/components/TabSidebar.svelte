@@ -1526,9 +1526,10 @@
         'ephemeral:3'
     ]
 
-    function showNewTabMenu(spaceId) {
+    function showNewTabMenu(spaceId, refresh = false) {
         if (tabDrag.active || tabDrag.pending) return
         clearTimeout(newTabMenuCloseTimeout)
+        if (newTabMenuSpaceId === spaceId && !refresh) return
         newTabMenuSpaceId = spaceId
         newTabMenuOpenVersion++
     }
@@ -2041,7 +2042,7 @@
                                     <div class="new-tab-button"
                                             onmouseenter={() => clearTimeout(newTabMenuCloseTimeout)}
                                             onmouseleave={() => { newTabMenuCloseTimeout = setTimeout(() => { newTabMenuSpaceId = null }, 150) }}
-                                            oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); showNewTabMenu(spaceId) }}
+                                            oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); showNewTabMenu(spaceId, true) }}
                                             onmousedown={(e) => {
                                                 if (!e.target.closest('.new-tab-more-button')) {
                                                     startCreationDrag('tab', e.currentTarget, spaceId, e)
