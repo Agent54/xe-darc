@@ -2,12 +2,35 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
 import { mkdir, readFile, rm } from 'node:fs/promises'
-import { compile, compileModule } from 'svelte/compiler'
+import { compile, compileModule, parse } from 'svelte/compiler'
 import puppeteer from 'puppeteer'
 
 const require = createRequire(import.meta.url)
 const { build } = createRequire(require.resolve('vite'))('esbuild')
 const root = new URL('../', import.meta.url).pathname
+const appSource = await readFile(`${root}app/App.svelte`, 'utf8')
+const sidebarHandler = parse(appSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'switchToSidebar')
+const promptFixture = compile(`
+    <script>
+        import PermissionToasts from './app/components/PermissionToasts.svelte'
+        import ResourcesPanel from './app/components/ResourcesPanel.svelte'
+        let openSidebars = $state(new Set())
+        let isSwitchingSidebars = false
+        const persistOpenSidebars = () => { window.sidebarWrites++ }
+        const updateSidebarState = () => {}
+        ${appSource.slice(sidebarHandler.start, sidebarHandler.end)}
+        const switchToResources = () => switchToSidebar('resources')
+        window.sidebarWrites = 0
+        window.promptFixture = {
+            get sidebarOpen() { return openSidebars.has('resources') },
+            close() { openSidebars = new Set() }
+        }
+    </script>
+    <PermissionToasts visible={!openSidebars.has('resources')} onOpenResources={switchToResources} />
+    {#if openSidebars.has('resources')}
+        <ResourcesPanel onClose={() => { openSidebars = new Set() }} {openSidebars} />
+    {/if}
+`, { generate: 'client', filename: 'permission-prompt-fixture.svelte', css: 'injected' }).js.code
 const fixture = compileModule(`
     import PouchDB from 'pouchdb-browser'
     import definitions from './app/lib/resourceTypes.js'
@@ -45,6 +68,7 @@ const { outputFiles } = await build({
         import { mount, flushSync } from 'svelte'
         import ResourcesPanel from './app/components/ResourcesPanel.svelte'
         import LightboxHeader from './app/components/LightboxHeader.svelte'
+        import PermissionPromptFixture from 'permission-prompt-fixture'
         import data from 'fixture-data'
         await window.fixture.store.ready
         window.flushSync = flushSync
@@ -57,11 +81,17 @@ const { outputFiles } = await build({
             tab: { id: 'popup', opener: 'page', title: 'Popup example', url: 'https://popup.example/' },
             onMoveToTab: () => window.promotions++, onClose: () => window.denials++
         } })
-        mount(ResourcesPanel, { target: document.body, props: { onClose() {}, openSidebars: new Set(['resources']) } })
+        if (new URL(location.href).searchParams.has('toasts')) {
+            mount(PermissionPromptFixture, { target: document.body })
+        } else {
+            mount(ResourcesPanel, { target: document.body, props: { onClose() {}, openSidebars: new Set(['resources']) } })
+        }
         flushSync()
         window.fixtureReady = true
     ` },
     plugins: [{ name: 'permission-fixture', setup(builder) {
+        builder.onResolve({ filter: /^permission-prompt-fixture$/ }, () => ({ path: 'prompt', namespace: 'prompt' }))
+        builder.onLoad({ filter: /.*/, namespace: 'prompt' }, () => ({ contents: promptFixture, resolveDir: root }))
         builder.onResolve({ filter: /^(fixture-data)$|data\.svelte(\.js)?$/ }, () => ({ path: 'fixture-data', namespace: 'fixture' }))
         builder.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: fixture, resolveDir: root }))
         builder.onLoad({ filter: /\.svelte$/ }, async args => ({
@@ -167,7 +197,97 @@ try {
     assert.deepEqual(conflict, { before: 'ask', after: 'deny', conflicts: [] })
     assert.deepEqual(errors, [])
     await peer.close()
+
+    const promptURL = new URL(url)
+    promptURL.searchParams.set('db', `permission-toast-test-${crypto.randomUUID()}`)
+    promptURL.searchParams.set('toasts', '1')
+    await page.goto(promptURL.href)
+    await page.waitForFunction(() => window.fixtureReady)
+    await page.evaluate(() => {
+        for (const permission of ['geolocation', 'microphone', 'download']) {
+            window.fixture.data.permissionRequest('page', { permission, url: 'https://site.example/page' })
+        }
+    })
+    await page.waitForFunction(() => document.querySelectorAll('.permission-toasts .resource-card').length === 3)
+    assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false)
+    assert.equal(await page.evaluate(() => window.sidebarWrites), 0)
+    const toast = type => `.permission-toasts .resource-card[data-permission-type="${type}"]`
+    const buttonStyle = async selector => page.$eval(selector, button => {
+        const style = getComputedStyle(button)
+        return { font: style.font, color: style.color, background: style.backgroundColor, padding: style.padding, radius: style.borderRadius }
+    })
+    const toastButton = await buttonStyle(`${toast('geolocation')} .accept-btn.main`)
+    const bounds = await page.$eval('.permission-toasts', element => {
+        const rect = element.getBoundingClientRect()
+        return { top: rect.top, right: innerWidth - rect.right, bottom: rect.bottom }
+    })
+    assert.equal(bounds.top, 16)
+    assert.equal(bounds.right, 16)
+    assert.ok(bounds.bottom <= 800)
+    await page.screenshot({ path: `${root}.cache/permission-toasts.png` })
+    await page.locator(`${toast('geolocation')} .permission-card-open`).click()
+    await page.waitForFunction(() => window.promptFixture.sidebarOpen)
+    assert.equal(await page.$('.permission-toasts'), null)
+    assert.deepEqual(await buttonStyle('.sidebar .resource-card[data-permission-type="geolocation"] .accept-btn.main'), toastButton)
+    assert.equal(await page.evaluate(() => window.sidebarWrites), 1)
+    await page.locator('[aria-label="Close Resources"]').click()
+    await page.evaluate(() => {
+        for (const type of Object.values(window.fixture.data.permissions)) {
+            for (const origin of Object.values(type.origins || {})) {
+                for (const resource of origin.requests) { resource.unseen = false }
+            }
+        }
+    })
+    await page.waitForFunction(() => document.querySelectorAll('.permission-toasts .resource-card').length === 3)
+    await page.locator(`${toast('geolocation')} .accept-btn.main`).click()
+    await page.waitForFunction(() => document.querySelectorAll('.permission-toasts .resource-card').length === 2)
+    assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false)
+    await page.locator(`${toast('microphone')} .action-btn.deny`).click()
+    await page.waitForFunction(() => window.fixture.data.permissionDecision('microphone', 'page') === 'deny')
+    await page.mouse.move(0, 0)
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.permission-card-dismiss')).opacity === '0')
+    await page.locator(toast('download')).hover()
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.permission-card-dismiss')).opacity === '1')
+    await page.locator(`${toast('download')} .permission-card-dismiss`).click()
+    await page.waitForFunction(() => document.querySelector('.permission-toasts') === null)
+    assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false)
+    assert.equal(await page.evaluate(() => Object.values(window.fixture.data.permissions.download.origins)[0].requests[0].status), 'ignored')
+
+    await page.evaluate(() => window.fixture.data.permissionRequest('page', { permission: 'clipboardReadWrite', url: 'https://site.example/page' }))
+    await page.locator(`${toast('clipboardReadWrite')} .accept-btn.dropdown`).click()
+    await page.locator(`${toast('clipboardReadWrite')} button::-p-text(Always allow)`).click()
+    await page.waitForFunction(() => window.fixture.data.permissionDecision('clipboardReadWrite', 'page') === 'allow')
+    assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false)
+    await page.evaluate(() => window.fixture.data.permissionRequest('page', { permission: 'pointerLock', url: 'https://site.example/page' }))
+    await page.locator(`${toast('pointerLock')} .accept-btn.dropdown`).click()
+    await page.locator(`${toast('pointerLock')} button::-p-text(Allow until closing this window)`).click()
+    await page.waitForFunction(() => document.querySelector('.permission-toasts') === null)
+    assert.equal(await page.evaluate(() => window.fixture.data.permissionDecision('pointerLock', 'page')), 'allow')
+    assert.equal(await page.evaluate(async () => (await window.fixture.db.allDocs({ include_docs: true })).rows.some(row => row.doc.permission?.name === 'pointerLock')), false)
+
+    await page.evaluate(() => {
+        for (let i = 0; i < 8; i++) {
+            window.fixture.data.permissionRequest('page', { permission: 'fullscreen', url: `https://widget-${i}.example/page` })
+        }
+    })
+    await page.waitForFunction(() => document.querySelectorAll('.permission-toasts .resource-card').length === 8)
+    const lastCard = '.permission-toasts .permission-toast:last-child .resource-card'
+    await page.locator(`${lastCard} .accept-btn.dropdown`).click()
+    const menuBounds = await page.$eval(`${lastCard} .dropdown-menu`, menu => {
+        const rect = menu.getBoundingClientRect()
+        return { top: rect.top, bottom: rect.bottom, height: innerHeight }
+    })
+    assert.ok(menuBounds.top >= 0 && menuBounds.bottom <= menuBounds.height)
+    await page.locator(`${lastCard} button::-p-text(Always allow)`).click()
+    await page.waitForFunction(() => document.querySelectorAll('.permission-toasts .resource-card').length === 7)
+    await page.setViewport({ width: 320, height: 700, isMobile: true, hasTouch: true })
+    await page.screenshot({ path: `${root}.cache/permission-toasts-mobile.png` })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    await page.evaluate(() => window.fixture.store.cancelFrame(window.fixture.data.frames.page.frame))
+    await page.waitForFunction(() => document.querySelector('.permission-toasts') === null)
+    assert.deepEqual(errors, [])
     console.log('Chromium/PouchDB: header settings, cross-window updates, reset, restart persistence, conflict resolution, blocked unknown grants and disabled Mock tooltip pass')
+    console.log('Permission toasts: all pending requests, identical sidebar actions, card opening, hover dismissal, permanent/session/once decisions, scroll-safe dropdowns and narrow layouts pass')
 } finally {
     await browser?.close()
     await new Promise(resolve => server.close(resolve))

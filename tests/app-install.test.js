@@ -215,6 +215,25 @@ Deno.test('opening saved pin settings creates the focused pinned tab only at ope
     ])
 })
 
+Deno.test('saved app Docker actions retain actual service names and target a selected container only once', async () => {
+    const handler = parse(appsSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'handleDockerAction')
+    const calls = []
+    const action = new Function('runComposeAction', `
+        let contextMenu = null, dockerAction = null, dockerMessage = ''
+        const refresh = async () => {}
+        ${appsSource.slice(handler.start, handler.end)}
+        return handleDockerAction
+    `)(async (action, app, container) => calls.push({ name: app.name, container: container?.id }))
+    const web = { name: 'web', containers: [{ id: 'web-1' }] }
+    const worker = { name: 'worker', containers: [{ id: 'worker-1' }] }
+    const app = { name: 'Custom app name', composeApps: [web, worker] }
+    await action('start', app)
+    assert.deepEqual(calls, [{ name: 'web', container: undefined }, { name: 'worker', container: undefined }])
+    calls.length = 0
+    await action('start', app, worker.containers[0])
+    assert.deepEqual(calls, [{ name: 'worker', container: 'worker-1' }])
+})
+
 Deno.test('app installation components compile for the client', () => {
     for (const name of ['Apps', 'AddAppModal']) {
         const filename = new URL(`../app/components/${name}.svelte`, import.meta.url).pathname
