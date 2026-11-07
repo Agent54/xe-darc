@@ -33,3 +33,83 @@ all:
 
 
 controlled frame:
+# Permission decisions
+
+`app/data.svelte.js` owns the permission store in `app/lib/permissions.js`.
+Remembered rules are ordinary documents in the `darc` PouchDB database.
+The data module loads them independently of the tab query and applies live
+changes before guests are mounted. Pending native controllers stay in memory.
+
+Each rule is scoped to the existing `darcInstanceId` from localStorage,
+the storage partition, the top-level origin, the requesting origin, and a
+permission descriptor. Its deterministic ID encodes those fields.
+The instance ID identifies app storage, not the user or hardware; synced
+rules for another instance do not authorize this one.
+
+```json
+{
+  "_id": "darc:permission:example-instance:persist%3Amyapp:https%3A%2F%2Fexample.com:https%3A%2F%2Fexample.com:media:camera",
+  "type": "permission",
+  "schemaVersion": 1,
+  "instanceId": "example-instance",
+  "partition": "persist:myapp",
+  "topLevelOrigin": "https://example.com",
+  "requestingOrigin": "https://example.com",
+  "permission": { "name": "media", "capability": "camera" },
+  "decision": "allow",
+  "lifetime": "persistent",
+  "created": 1794009600000,
+  "modified": 1794009600000,
+  "sort": 0
+}
+```
+
+PouchDB adds `_rev`. Always allow and Deny are remembered; resetting a rule
+removes it. Session grants last until the current window closes. Allow once
+resolves only the selected native request. For controllers that cannot be
+deferred, it arms one retry in that same frame and page for up to 60 seconds.
+Ignore dismisses the selected request without remembering a decision.
+
+The implemented descriptors are `open-tab`, `navigate-off-origin`,
+`geolocation`, `pointerLock`, `download`, `filesystem`, `fullscreen`, `hid`,
+`clipboardReadWrite`, `clipboardSanitizedWrite`, and `media` with a `camera`
+or `microphone` capability. Requests for both capabilities need both decisions.
+Media requests that do not identify their capabilities are denied and shown
+as unsupported. Filesystem refers to the guest sandbox, not unrestricted
+editing of files on the host.
+
+Unknown requests, invalid or opaque origins, unsupported schema versions,
+and conflicting saved decisions cannot grant access. Revision conflicts are
+retried; an explicit new decision also removes conflicting revision leaves.
+Registry entries without enforcement have disabled permission controls.
+Availability checks never prompt. Mock is disabled with a “Not implemented yet”
+tooltip.
+
+Popups, including OAuth windows, use the ordinary guest lifecycle and retain
+their native window controller and opener partition. The `open-tab` policy
+defaults to a lightbox. Its header settings can remember opening in a new tab,
+navigating the opener in the same tab (`decision: "same-tab"`), deny future
+openings, or restore the default. Choosing same-tab also navigates to the
+currently displayed lightbox URL and closes that lightbox. The same choice
+lets off-origin navigation continue in place. Explicit modifier-clicks retain
+the new-tab behavior unless the opening policy is denied. Forced off-origin
+lightboxes also honor denial.
+
+The guest console bridge uses a module-generated secret with a separate token
+per frame, held in the injected script's closure. Unsigned messages, messages
+from other frames, and messages from released frames are ignored. The IPC
+handshake validates trusted embedder messages and authenticates messages over
+the transferred port; its public connection message contains no secret.
+Privileged input forwarding ignores synthetic events. This is an interim
+guard while console commands move to the IPC layer.
+
+Run the focused tests with:
+
+```sh
+deno test --no-check --allow-read --allow-env tests/permissions.test.js tests/frame-ipc.test.js tests/direct-navigation.test.js tests/controlled-frame-cleanup.test.js tests/frame-lifecycle.test.js tests/hovercard-navigation.test.js tests/shortcuts.test.js tests/tab-activation-history.test.js
+deno run --unstable-bare-node-builtins --allow-env --allow-read --allow-sys --allow-write=./,/tmp --allow-ffi --allow-net --allow-run tests/permissions-browser.js
+```
+
+The browser fixture verifies PouchDB persistence, cross-window updates,
+the actual header/resource controls, and disabled Mock behavior in Chromium.
+It does not emulate a native IWA controlled-frame guest.

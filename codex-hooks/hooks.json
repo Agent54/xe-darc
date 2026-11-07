@@ -1,0 +1,35 @@
+{
+  "description": "Hold todo: prompts without inference; bracket the first runnable turn in a new jj chat exactly once.",
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "/opt/homebrew/bin/deno run --quiet --no-config --no-prompt --allow-read --allow-write=/Users/jan/.codex/hooks/state --allow-env=CODEX_LIFECYCLE_STATE_DIR --allow-run=/opt/homebrew/bin/jj /Users/jan/.codex/hooks/lifecycle.ts",
+        "timeout": 60
+      }]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "/opt/homebrew/bin/deno run --quiet --no-config --no-prompt --allow-read --allow-write=/Users/jan/.codex/hooks/state --allow-env=CODEX_LIFECYCLE_STATE_DIR --allow-run=/opt/homebrew/bin/jj /Users/jan/.codex/hooks/lifecycle.ts",
+        "timeout": 60,
+        "statusMessage": "Checking todo and jj lifecycle"
+      }]
+    }],
+    "PreToolUse": [{
+      "hooks": [{
+        "type": "command",
+        "command": "/opt/homebrew/bin/deno run --quiet --no-config --no-prompt --allow-read --allow-write=/Users/jan/.codex/hooks/state --allow-env=CODEX_LIFECYCLE_STATE_DIR --allow-run=/opt/homebrew/bin/jj /Users/jan/.codex/hooks/lifecycle.ts",
+        "timeout": 60
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "/opt/homebrew/bin/deno run --quiet --no-config --no-prompt --allow-read --allow-write=/Users/jan/.codex/hooks/state --allow-env=CODEX_LIFECYCLE_STATE_DIR --allow-run=/opt/homebrew/bin/jj /Users/jan/.codex/hooks/lifecycle.ts",
+        "timeout": 60,
+        "statusMessage": "Finishing the first jj run"
+      }]
+    }]
+  }
+}

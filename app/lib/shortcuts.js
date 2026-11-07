@@ -247,14 +247,14 @@ export function getFrameShortcutScript(tabId) {
             return id !== 'escape';
         }, { help: false });
         // One shell timer owns the hold across all guest documents and previews.
-        window.addEventListener('keydown', event => reportKey('keydown', event), true);
-        window.addEventListener('keyup', event => reportKey('keyup', event), true);
+        window.addEventListener('keydown', event => { if (event.isTrusted) reportKey('keydown', event); }, true);
+        window.addEventListener('keyup', event => { if (event.isTrusted) reportKey('keyup', event); }, true);
         (${listenForShortcutHelpCancellation.toString()})(window, () => reportHelp('cancel'));
-        window.addEventListener('keydown', handle, { capture: true, passive: false });
-        window.addEventListener('keyup', handle.keyup, true);
+        window.addEventListener('keydown', event => { if (event.isTrusted) handle(event); }, { capture: true, passive: false });
+        window.addEventListener('keyup', event => { if (event.isTrusted) handle.keyup(event); }, true);
         // Release may arrive in a newly focused frame that did not receive Tab.
         window.addEventListener('keyup', event => {
-            if (event.key === 'Control') console.log('iwa:shortcut:' + JSON.stringify({ id: 'finish-tab-switch', tabId: ${JSON.stringify(tabId)} }));
+            if (event.isTrusted && event.key === 'Control') console.log('iwa:shortcut:' + JSON.stringify({ id: 'finish-tab-switch', tabId: ${JSON.stringify(tabId)} }));
         }, true);
         window.addEventListener('blur', handle.reset);
         window.addEventListener('blur', () => { otherKeys.clear(); reportHelp('cancel'); });

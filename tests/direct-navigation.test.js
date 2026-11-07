@@ -3,14 +3,15 @@ import { parse } from 'svelte/compiler'
 import { origin } from '../app/lib/utils.js'
 
 const source = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
-const names = ['isDirectNavigation', 'handleLoadRedirect', 'handleLoadCommit', 'handleLoadStart', 'handleLoadStop', 'handleLoadAbort', 'handleNewWindow', 'updateTabMeta', 'setupRequestHandler', 'shouldUseLightboxForOffOrigin', 'wasRecentlyBlocked', 'markAsBlocked']
+const names = ['isDirectNavigation', 'handleLoadRedirect', 'handleLoadCommit', 'handleLoadStart', 'handleLoadStop', 'handleLoadAbort', 'handleNewWindow', 'updateTabMeta', 'setupRequestHandler', 'shouldUseLightboxForOffOrigin', 'shouldNavigateInSameTab', 'wasRecentlyBlocked', 'markAsBlocked']
 const handlers = parse(source).instance.content.body
     .filter(node => node.type === 'FunctionDeclaration' && names.includes(node.id.name))
     .map(node => source.slice(node.start, node.end)).join('\n')
 
-function navigationHarness({ direct = true, legacy = false, command = false } = {}) {
+function navigationHarness({ direct = true, legacy = false, command = false, policy = 'ask' } = {}) {
     const listeners = {}
     const opened = []
+    const navigated = []
     let stopped = 0
     const frame = {
         src: 'https://original.example/',
@@ -37,14 +38,17 @@ function navigationHarness({ direct = true, legacy = false, command = false } = 
         } },
         origins: {},
         spaceMeta: { activeSpace: 'space' },
-        isPermissionGranted: () => false,
+        isPermissionGranted: () => policy === 'allow',
+        permissionDecision: () => policy,
         getCurrentGroupTabId: () => 'current-group-tab',
         newTab: (space, options) => opened.push(options),
+        navigate: (id, url) => navigated.push({ id, url }),
         updateTab: (id, update) => Object.assign(data.docs[id], update),
         isInternalPage: url => url?.startsWith('about:')
     }
     const noop = () => {}
     const api = new Function('data', 'tab', 'origin', 'window', 'console', 'setTimeout', `
+        const tabId = tab.id
         let hoveredLink = null, isCommandKeyDown = ${command}
         const recentlyBlockedUrls = new Map(), BLOCK_DEDUP_TIMEOUT = 2000
         const instantlyCleanupGlobalPreview = () => {}, evaluateSecurityState = () => {}
@@ -75,13 +79,78 @@ function navigationHarness({ direct = true, legacy = false, command = false } = 
         return { cancel: event.defaultPrevented || result?.cancel === true, prevented: event.defaultPrevented }
     }
     return {
-        ...api, data, tab, frame, opened, requestEvent,
+        ...api, data, tab, frame, opened, navigated, requestEvent,
         get stopped() { return stopped },
         request: (url, options) => requestEvent('beforerequest', url, options),
         load(url, isTopLevel = true) { api.start(legacy ? { isTopLevel, url } : { loadInfo: { isTopLevel, url } }) },
         commitUrl(url, isTopLevel = true) { api.commit(legacy ? { isTopLevel, url } : { loadInfo: { isTopLevel, url } }) }
     }
 }
+
+Deno.test('OAuth-looking URLs use the common open-tab policy and preserve the native popup controller', () => {
+    const controller = { attach() {} }
+    for (const policy of ['ask', 'allow']) {
+        const h = navigationHarness({ policy })
+        h.newWindow({ targetUrl: 'https://login.example/oauth', initialWidth: 500, initialHeight: 500, window: controller })
+        assert.equal(h.opened.length, 1)
+        assert.equal(h.opened[0].lightbox, policy !== 'allow')
+        assert.equal(h.opened[0].guestWindow, controller)
+    }
+    let discarded = 0
+    const denied = navigationHarness({ policy: 'deny' })
+    denied.newWindow({ targetUrl: 'https://login.example/oauth', window: { discard() { discarded++ } } })
+    assert.equal(denied.opened.length, 0)
+    assert.equal(discarded, 1)
+})
+
+Deno.test('a denied opening policy blocks forced off-origin lightboxes as well as popups', () => {
+    const h = navigationHarness({ direct: false, policy: 'deny' })
+    assert.equal(h.request('https://other.example/').cancel, true)
+    assert.equal(h.opened.length, 0)
+    h.load('https://another.example/')
+    assert.equal(h.opened.length, 0)
+})
+
+Deno.test('popup policy uses the committed page after navigation replaces the captured tab metadata', () => {
+    const h = navigationHarness()
+    h.data.frames.page.committedUrl = 'https://current.example/path'
+    h.data.docs.page = { ...h.tab, url: 'https://current.example/path' }
+    h.data.permissionDecision = (type, id, url) => {
+        assert.equal(url, 'https://current.example')
+        return 'deny'
+    }
+    h.newWindow({ targetUrl: 'https://other.example/' })
+    assert.equal(h.opened.length, 0)
+})
+
+for (const legacy of [false, true]) {
+    Deno.test(`${legacy ? 'legacy' : 'current'} same-tab popup policy discards the popup and navigates its opener`, () => {
+        const h = navigationHarness({ policy: 'same-tab', legacy })
+        let discarded = 0
+        const popup = { targetUrl: 'https://destination.example/', window: { discard() { discarded++ } } }
+        h.newWindow(legacy ? popup : { newWindow: popup })
+        assert.deepEqual(h.navigated, [{ id: 'page', url: popup.targetUrl }])
+        assert.equal(h.opened.length, 0)
+        assert.equal(discarded, 1)
+    })
+
+    Deno.test(`${legacy ? 'legacy' : 'current'} same-tab policy allows off-origin requests and their loadstart fallback`, () => {
+        const h = navigationHarness({ direct: false, policy: 'same-tab', legacy })
+        assert.equal(h.request('https://destination.example/').cancel, false)
+        h.load('https://destination.example/')
+        assert.equal(h.stopped, 0)
+        assert.equal(h.opened.length, 0)
+    })
+}
+
+Deno.test('explicit command-click still opens a background tab with a remembered same-tab policy', () => {
+    const h = navigationHarness({ policy: 'same-tab', command: true })
+    h.newWindow({ targetUrl: 'https://destination.example/' })
+    assert.equal(h.opened.length, 1)
+    assert.equal(h.opened[0].lightbox, false)
+    assert.equal(h.opened[0].shouldFocus, false)
+    assert.deepEqual(h.navigated, [])
+})
 
 for (const legacy of [false, true]) {
     const api = legacy ? 'legacy' : 'current'
@@ -146,7 +215,7 @@ for (const legacy of [false, true]) {
         assert.equal(h.tab.url, 'https://original.example/')
     })
 
-    Deno.test(`${api} new-window links open lightboxes while command-clicks open background tabs`, () => {
+    Deno.test(`${api} page-requested foreground and background windows default to lightboxes`, () => {
         const h = navigationHarness({ legacy })
         for (const disposition of ['new_foreground_tab', 'new_background_tab']) {
             const info = { targetUrl: 'https://other.example/', windowOpenDisposition: disposition }
@@ -155,9 +224,9 @@ for (const legacy of [false, true]) {
         assert.equal(h.opened[0].url, 'https://other.example/')
         assert.equal(h.opened[0].lightbox, true)
         assert.equal(h.opened[0].groupTabId, undefined)
-        assert.equal(h.opened[1].lightbox, false)
+        assert.equal(h.opened[1].lightbox, true)
         assert.equal(h.opened[1].shouldFocus, false)
-        assert.equal(h.opened[1].groupTabId, 'current-group-tab')
+        assert.equal(h.opened[1].groupTabId, undefined)
         assert.equal(h.tab.url, 'https://original.example/')
     })
 

@@ -393,7 +393,7 @@ Deno.test('serialized frame matcher forwards once, preserves colon-containing ID
         { addEventListener(type, handler) { const list = listeners.get(type) || []; list.push(handler); listeners.set(type, list) } },
         { log(message) { if (message.startsWith('iwa:shortcut:')) messages.push(JSON.parse(message.slice('iwa:shortcut:'.length))) } }
     )
-    const down = event => { for (const listener of listeners.get('keydown')) listener(event) }
+    const down = event => { event.isTrusted = true; for (const listener of listeners.get('keydown')) listener(event) }
     // getFrameShortcutScript uses this host's platform; exercise that binding.
     const modifier = /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true }
     assert.equal(dispatch(down, key('l', modifier)).prevented, true)

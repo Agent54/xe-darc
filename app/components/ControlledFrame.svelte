@@ -11,7 +11,8 @@
     import { generateDiff, throttle } from '../lib/utils.js'
     import select from '../inject/select-patch.js?raw'
     import ipc from '../inject/ipc.js?raw'
-    import { connectFrameIPC } from '../lib/frame-ipc.js'
+    import { connectFrameIPC, scopedGuestScript, readGuestMessage, releaseFrameIPC } from '../lib/frame-ipc.js'
+    import { handleFramePermission } from '../lib/permissions.js'
     import { getFrameShortcutScript } from '../lib/shortcuts.js'
     import { isLiveFrameTab, registerFrameWrapper, releasedFrames } from '../lib/frame-lifecycle.js'
     import { frameScreenshots } from '../lib/frame-screenshot.js'
@@ -97,7 +98,7 @@
     function shouldUseLightboxForNewTab(originUrl, forceNewTab = false) {
         if (forceNewTab) return false
         const tabOrigin = origin(originUrl)
-        if (data.isPermissionGranted('open-tab', tabOrigin)) {
+        if (data.isPermissionGranted('open-tab', tabOrigin, tabId)) {
             return false
         }
         return true
@@ -112,10 +113,19 @@
     function shouldUseLightboxForOffOrigin(originUrl, forceNewTab = false) {
         if (forceNewTab) return false
         const tabOrigin = origin(originUrl)
-        if (data.isPermissionGranted('navigate-off-origin', tabOrigin)) {
+        if (data.isPermissionGranted('navigate-off-origin', tabOrigin, tabId) || data.isPermissionGranted('open-tab', tabOrigin, tabId)) {
             return false
         }
         return true
+    }
+
+    function shouldNavigateInSameTab(originUrl, forceNewTab = false) {
+        if (forceNewTab) {
+            return false
+        }
+        const tabOrigin = origin(originUrl)
+        const decisions = ['open-tab', 'navigate-off-origin'].map(type => data.permissionDecision(type, tabId, tabOrigin))
+        return !decisions.includes('deny') && decisions.includes('same-tab')
     }
 
     // LED indicator functions - directly set timestamps in data store
@@ -225,7 +235,7 @@
 
     // Check if the current URL is about:newtab
     function isNewTabUrl(url) {
-        return url?.startsWith('about:newtab') || url?.startsWith('about:blank')
+        return url?.startsWith('about:newtab') || (!data.frames[tabId]?.nativeGuest && url?.startsWith('about:blank'))
     }
     
     // Check if the current URL is about:tabhistory
@@ -234,27 +244,11 @@
     }
 
     function handlePermissionRequest(tabId, event) {
-        const { granted } = data.permissionRequest(tabId, event)
-        // FIXME: permission requests only work sync?
-        // requestedResources.push({
-        //     permission: event.permission,
-        //     url: event.url,
-        //     tabId: tabId,
-        //     timestamp: new Date().toISOString(),
-        //     id: event.permission,
-        //     lastUsed: 'now',
-        //     status: 'Request'
-        // })
-
-        //  event.cancel()
-
-        if (granted) {
-            event.request.allow()
-        } else {
-            event.request.deny()
-        }
-        // event.request.deny()
-        //    return granted ? event.request.allow() : event.request.deny()
+        const frame = event.currentTarget || data.frames[tabId]?.frame
+        handleFramePermission(data, tabId, event, {
+            url: data.frames[tabId]?.committedUrl || data.docs[tabId]?.url,
+            partition: frame?.partition || data.docs[tabId]?.partition || 'persist:myapp', frame
+        })
     }
 
     // Check if an error code represents a certificate issue
@@ -562,7 +556,7 @@
             
             // Skip origin check for about: pages and same-origin navigation
             if (event.isTopLevel && currentOrigin !== 'about' && currentOrigin !== 'unknown' && 
-                targetOrigin !== currentOrigin && targetOrigin !== 'about') {
+                targetOrigin !== currentOrigin && targetOrigin !== 'about' && !shouldNavigateInSameTab(currentTabUrl, isCommandKeyDown)) {
                 
                 // Check if already blocked by onBeforeRequest (deduplication)
                 if (wasRecentlyBlocked(event.url)) {
@@ -587,6 +581,10 @@
                 // Otherwise check if origin has 'navigate-off-origin' permission
                 const useLightbox = shouldUseLightboxForOffOrigin(currentTabUrl, isCommandKeyDown)
                 const shouldFocus = !isCommandKeyDown
+                if (data.permissionDecision('open-tab', tab.id, currentOrigin) === 'deny' ||
+                    data.permissionDecision('navigate-off-origin', tab.id, currentOrigin) === 'deny') {
+                    return
+                }
                 
                 data.newTab(data.spaceMeta.activeSpace, {
                     url: event.url,
@@ -664,14 +662,16 @@
     }
 
     function handleNewWindow(tab, e) {
+        const nativeEvent = e
         e = e.newWindow || e
         // Check for modifier keys in the event
         // windowOpenDisposition can be: "new_foreground_tab", "new_background_tab", "new_popup", "new_window"
         // Cmd+click typically sets this to "new_background_tab"
-        const hasModifierKey = isCommandKeyDown || e.windowOpenDisposition === 'new_background_tab'
+        const hasModifierKey = isCommandKeyDown
         console.log('New window request:', e, 'isCommandKeyDown:', isCommandKeyDown, 'hasModifierKey:', hasModifierKey)
         
         // Check if this looks like an OAuth popup based on URL patterns or window features
+        /* OAuth presentation no longer bypasses the normal guest lifecycle.
         const isOAuthPopup = e.targetUrl && (
             // Generic OAuth patterns
             e.targetUrl.includes('oauth') || 
@@ -698,33 +698,38 @@
             (e.name && (e.name.includes('oauth') || e.name.includes('auth') || e.name.includes('login')))
         )
 
-        if (isOAuthPopup) {
-            handleOAuthPopup(tab, e)
-        } else {
-            const currentOrigin = origin(tab.url)
-            
-            // Command+click always opens in new tab (not lightbox), in background
-            // hasModifierKey is set above based on isCommandKeyDown or windowOpenDisposition
-            const forceNewTab = hasModifierKey
-            
-            // Check if origin has permission to open tabs
-            const hasOpenTabPermission = data.isPermissionGranted('open-tab', currentOrigin)
-            
-            // Use lightbox if: not command+click AND (permission not granted or permission is mocked)
-            const useLightbox = !forceNewTab && !hasOpenTabPermission
-            
-            // Command+click opens in background, otherwise use window disposition
-            const shouldFocus = forceNewTab ? false : e.windowOpenDisposition !== "new_background_tab"
-            
-            data.newTab(data.spaceMeta.activeSpace, {
-                url: e.targetUrl,
-                title: e.title,
-                opener: tab.id,
-                groupTabId: forceNewTab ? data.getCurrentGroupTabId() : undefined,
-                lightbox: useLightbox,
-                shouldFocus
-            })         
+        */
+
+        const currentTab = data.docs[tab.id] || tab
+        const currentOrigin = origin(data.frames[tab.id]?.committedUrl || currentTab.url)
+        const decision = data.permissionDecision('open-tab', tab.id, currentOrigin)
+        if (decision === 'deny') {
+            e.window?.discard?.()
+            return
         }
+        if (decision === 'same-tab' && !hasModifierKey) {
+            e.window?.discard?.()
+            data.navigate(tab.id, e.targetUrl || 'about:blank')
+            return
+        }
+        if (!nativeEvent.newWindow && nativeEvent.cancelable === true && typeof nativeEvent.preventDefault === 'function') {
+            nativeEvent.preventDefault()
+        }
+
+        // Command+click always opens in new tab (not lightbox), in background
+        const forceNewTab = hasModifierKey
+        const hasOpenTabPermission = data.isPermissionGranted('open-tab', currentOrigin, tab.id)
+        const useLightbox = !forceNewTab && !hasOpenTabPermission
+        const shouldFocus = forceNewTab ? false : e.windowOpenDisposition !== 'new_background_tab'
+        data.newTab(currentTab.spaceId || data.spaceMeta.activeSpace, {
+            url: e.targetUrl || 'about:blank',
+            title: e.title,
+            opener: tab.id,
+            groupTabId: forceNewTab ? data.getCurrentGroupTabId(currentTab.spaceId) : undefined,
+            lightbox: useLightbox,
+            shouldFocus,
+            guestWindow: e.window
+        })
     }
 
     // Handle OAuth popup windows with proper window.opener support
@@ -851,8 +856,8 @@ function setupContentScripts(frame) {
             name: 'system-script',
             urlPatterns: ['http://*/*', 'https://*/*'], // '<all_urls>', 
             js: {
-                code: `
-const tabId = '${tab?.id || tabId}';
+                code: scopedGuestScript(frame, `
+const tabId = ${JSON.stringify(tab?.id || tabId)};
 
 ${getFrameShortcutScript(tab?.id || tabId)}
 
@@ -1107,9 +1112,9 @@ document.addEventListener('input', function(event) {
     
     inputDebounceTimeouts.set(elementId, timeoutId);
 }, { capture: true, passive: true });
-`,
+`),
             },
-            runAt: 'document-end',
+            runAt: 'document-start',
             allFrames: true,
             matchAboutBlank: true
         }]
@@ -1136,7 +1141,12 @@ document.addEventListener('input', function(event) {
         ]
 
         if (!frame.addContentScripts) {
-            frame.src = untrack(() => tab.url)
+            if (data.frames[currentTabId]?.guestWindow) {
+                data.frames[currentTabId].guestWindow.attach(frame)
+                delete data.frames[currentTabId].guestWindow
+            } else {
+                frame.src = untrack(() => tab.url)
+            }
         } else {
             frame.addContentScripts([...systemInjections, ...userInjections]).then((res) => {
                 if (releasedFrames.has(frame) || data.frames[currentTabId]?.frame !== frame) return
@@ -1144,7 +1154,12 @@ document.addEventListener('input', function(event) {
                 if (!isLiveFrameTab(currentTab)) return
                 console.log('####### 💉 [INJECT] Successful script injection | tabId:', tab?.id || tabId, '| res:', res)
 
-                frame.src = currentTab.url
+                if (data.frames[currentTabId]?.guestWindow) {
+                    data.frames[currentTabId].guestWindow.attach(frame)
+                    delete data.frames[currentTabId].guestWindow
+                } else {
+                    frame.src = currentTab.url
+                }
             
                 // Now add the focus/blur script
                 // return frame.addContentScripts([contentScript])
@@ -1214,7 +1229,7 @@ document.addEventListener('input', function(event) {
                     
                     // Skip origin check for about: pages and same-origin navigation
                     if (currentOrigin !== 'about' && currentOrigin !== 'unknown' && 
-                        targetOrigin !== currentOrigin && targetOrigin !== 'about') {
+                        targetOrigin !== currentOrigin && targetOrigin !== 'about' && !shouldNavigateInSameTab(currentTabUrl, isCommandKeyDown)) {
                         
                         // Deduplicate: check if this URL was already blocked recently
                         if (wasRecentlyBlocked(url.href)) {
@@ -1238,6 +1253,11 @@ document.addEventListener('input', function(event) {
                         // Otherwise check if origin has 'navigate-off-origin' permission
                         const useLightbox = shouldUseLightboxForOffOrigin(currentTabUrl, isCommandKeyDown)
                         const shouldFocus = !isCommandKeyDown
+                        if (data.permissionDecision('open-tab', tab.id, currentOrigin) === 'deny' ||
+                            data.permissionDecision('navigate-off-origin', tab.id, currentOrigin) === 'deny') {
+                            showBlockedRequest()
+                            return { cancel: true }
+                        }
                         
                         data.newTab(data.spaceMeta.activeSpace, {
                             url: url.href,
@@ -1581,7 +1601,10 @@ document.addEventListener('input', function(event) {
 
         frame.onconsolemessage = (event) => {
             // console.log('consolemessage', event)
-            const message = event.message
+            const message = readGuestMessage(frame, event.message)
+            if (message === null) {
+                return
+            }
             
             if (message === `iwa:ipc-ready:${mytab.id}`) {
                 connectFrameIPC(frame, mytab.id)
@@ -2031,11 +2054,12 @@ document.addEventListener('input', function(event) {
         // Wrapper and anchor readiness must trigger attachment as well as URL changes.
         const currentTabUrl = tab?.url
         const currentTab = tab
+        const permissionsReady = data.permissionState.status === 'ready'
         const isInternalPage = isNewTabUrl(currentTabUrl) || isTabHistoryUrl(currentTabUrl)
         
         const wrapper = frameWrapper
         const frameAnchor = anchor
-        if (!frameAnchor || !wrapper?.isConnected || !currentTab) {
+        if (!frameAnchor || !wrapper?.isConnected || !currentTab || (!isInternalPage && !permissionsReady)) {
             return
         }
 
@@ -2179,9 +2203,9 @@ document.addEventListener('input', function(event) {
 
     function releaseControlledFrame(frame) {
         releasedFrames.add(frame)
+        data.cancelFramePermissions(frame)
         frameScreenshots.cancel(frame)
-        frame.ipcPort?.close()
-        frame.ipcPort = null
+        releaseFrameIPC(frame)
         // Keep the final navigation out of tab metadata and cancel queued callbacks.
         for (const event of [
             'newwindow', 'audiostatechanged', 'loadstart', 'loadstop', 'loadabort', 'loadcommit',
@@ -2487,7 +2511,12 @@ document.addEventListener('input', function(event) {
 
         <div class="hidden" bind:this={anchor}></div>
 
-        {#if currentCertificateError}
+        {#if data.permissionState.status === 'error'}
+            <div class="permission-load-error" role="alert">
+                <p>Permission settings could not be loaded.</p>
+                <button onmousedown={() => window.location.reload()}>Reload Darc</button>
+            </div>
+        {:else if currentCertificateError}
             <SSLErrorPage
                 {tab}
                 certificateError={currentCertificateError}

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
 import { getFrameShortcutScript } from '../app/lib/shortcuts.js'
 import { isLiveFrameTab, registerFrameWrapper, releasedFrames } from '../app/lib/frame-lifecycle.js'
+import { scopedGuestScript, releaseFrameIPC } from '../app/lib/frame-ipc.js'
 
 const source = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
 const names = ['createControlledFrame', 'releaseControlledFrame', 'detach', 'closeOAuthPopup', 'appendPopupFrame', 'setupContentScripts', 'handleAudioStateChanged']
@@ -15,8 +16,9 @@ const destroySource = source.slice(destroyCallback.start, destroyCallback.end)
 function harness() {
     const events = []
     const screenshotCancels = []
+    const downloadCancels = []
     const tab = { id: 'page', _id: 'page', url: 'https://example.com/', title: 'Example', favicon: 'icon' }
-    const data = { docs: { page: tab }, frames: { page: {} } }
+    const data = { docs: { page: tab }, frames: { page: {} }, cancelFramePermissions(frame) { downloadCancels.push(frame) } }
     const wrapper = {
         isConnected: true,
         querySelector() { return frame.parentNode === wrapper ? frame : null },
@@ -43,7 +45,7 @@ function harness() {
         },
         getElementById(id) { return id === 'backgroundFrames' ? background : {} }
     }
-    const api = new Function('data', 'tab', 'document', 'console', 'getFrameShortcutScript', 'frameScreenshots', 'releasedFrames', 'isLiveFrameTab', `
+    const api = new Function('data', 'tab', 'document', 'console', 'getFrameShortcutScript', 'frameScreenshots', 'releasedFrames', 'isLiveFrameTab', 'scopedGuestScript', 'releaseFrameIPC', `
         const tabId = tab.id
         let detached = false, oauthPopup = null
         let frameRegistration
@@ -61,11 +63,12 @@ function harness() {
             getPopup: () => oauthPopup,
             isDetached: () => detached
         }
-    `)(data, tab, document, { log() {} }, getFrameShortcutScript, { cancel(frame) { screenshotCancels.push(frame) } }, releasedFrames, isLiveFrameTab)
+    `)(data, tab, document, { log() {} }, getFrameShortcutScript, { cancel(frame) { screenshotCancels.push(frame) } }, releasedFrames, isLiveFrameTab,
+        (frame, code) => scopedGuestScript(frame, code, 'https://darc.example'), releaseFrameIPC)
     const frame = api.createControlledFrame()
     data.frames.page.frame = frame
     api.setRegistration(registerFrameWrapper(data, tab.id, wrapper, { parentNode: wrapper }, () => {}))
-    return { ...api, tab, data, frame, events, wrapper, background, screenshotCancels }
+    return { ...api, tab, data, frame, events, wrapper, background, screenshotCancels, downloadCancels }
 }
 
 Deno.test('closing a tab blanks its DOM instance even after the shared frame reference is cleared', () => {
@@ -86,6 +89,7 @@ Deno.test('closing a tab blanks its DOM instance even after the shared frame ref
     assert.equal(h.frame.onloadabort, null)
     assert.equal(h.data.frames.page.frame, null)
     assert.ok(h.screenshotCancels.includes(h.frame))
+    assert.deepEqual(h.downloadCancels, [h.frame])
 })
 
 Deno.test('audio events update the current document after metadata replaces the captured tab', () => {
@@ -178,6 +182,18 @@ Deno.test('a new frame at about:blank navigates to the search URL after script s
     await Promise.resolve()
     assert.equal(h.frame.src, h.tab.url)
     assert.deepEqual(h.events, [h.tab.url])
+})
+
+Deno.test('native popup attachment uses the configured guest instead of navigating away from its opener', async () => {
+    const h = harness()
+    const attachments = []
+    h.frame.addContentScripts = () => Promise.resolve()
+    h.data.frames.page.guestWindow = { attach(frame) { attachments.push(frame) } }
+    h.setupContentScripts(h.frame)
+    await Promise.resolve()
+    assert.deepEqual(attachments, [h.frame])
+    assert.equal(h.data.frames.page.guestWindow, undefined)
+    assert.equal(h.events.includes(h.tab.url), false)
 })
 
 Deno.test('pending content script setup cannot reload a released frame', async () => {

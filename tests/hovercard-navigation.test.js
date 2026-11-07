@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
 import { createShortcutHandler, getFrameShortcutScript, listenForShortcutHelpCancellation, shortcutActionIds } from '../app/lib/shortcuts.js'
+import { scopedGuestScript, readGuestMessage } from '../app/lib/frame-ipc.js'
+import { releasedFrames, isLiveFrameTab } from '../app/lib/frame-lifecycle.js'
 
 const source = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
 const functions = ['closeHovercard', 'dismissHovercards', 'handleHovercardPointerDown', 'navigateTabHistory', 'handleTabMouseEnter', 'handleFrameMouseDown', 'handleFrameClick']
@@ -78,15 +80,17 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
     const messages = []
     const errors = []
     const frame = { addContentScripts(injections) { scripts.push(...injections); return Promise.resolve() } }
-    const setup = new Function('frame', 'window', 'CustomEvent', 'tab', 'tabId', 'ipc', 'console', 'getFrameShortcutScript', 'connectFrameIPC', `
+    const setup = new Function('frame', 'window', 'CustomEvent', 'tab', 'tabId', 'ipc', 'console', 'getFrameShortcutScript', 'connectFrameIPC', 'scopedGuestScript', 'readGuestMessage', 'releasedFrames', 'isLiveFrameTab', `
         const untrack = callback => callback()
+        const data = { docs: { [tabId]: tab }, frames: { [tabId]: { frame } } }
         const userMods = { css: [], js: [] }, select = '', zoomControl = '', contextMenu = ''
         let isCommandKeyDown = false, commandKeyPressed = false
         ${bridgeHandlers}
         setupMessageListener(frame)
         setupContentScripts(frame)
     `)
-    setup(frame, shellWindow, CustomEvent, { id: tabId, url: 'https://example.com' }, tabId, ipc, { log() {}, error: error => errors.push(error) }, getFrameShortcutScript, () => {})
+    setup(frame, shellWindow, CustomEvent, { id: tabId, url: 'https://example.com' }, tabId, ipc, { log() {}, error: error => errors.push(error) }, getFrameShortcutScript, () => {},
+        (frame, code) => scopedGuestScript(frame, code, 'https://darc.example'), readGuestMessage, releasedFrames, isLiveFrameTab)
     const script = scripts.find(script => script.name === 'system-script')
     assert.equal(script.allFrames, true, 'the click bridge is injected into nested frames')
     assert.equal(script.matchAboutBlank, true)
@@ -97,11 +101,15 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
     const addEventListener = contentWindow.addEventListener.bind(contentWindow)
     contentWindow.addEventListener = (type, listener, options) => {
         registrations.push({ type, options })
-        addEventListener(type, listener, options)
+        addEventListener(type, event => listener(new Proxy(event, { get(target, key) {
+            if (key === 'isTrusted') return true
+            const value = Reflect.get(target, key, target)
+            return typeof value === 'function' ? value.bind(target) : value
+        } })), options)
     }
     const contentDocument = new EventTarget()
-    const contentConsole = { log(message) { messages.push(message); frame.onconsolemessage({ message }) } }
-    new Function('window', 'document', 'console', script.js.code)(contentWindow, contentDocument, contentConsole)
+    const contentConsole = { log(message) { messages.push(readGuestMessage(frame, message) || message); frame.onconsolemessage({ message }) } }
+    new Function('window', 'document', 'globalThis', script.js.code)(contentWindow, contentDocument, { console: contentConsole })
     return {
         frame, messages, errors, registrations, contentWindow,
         click(properties = {}) {

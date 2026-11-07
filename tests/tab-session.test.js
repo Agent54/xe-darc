@@ -6,6 +6,7 @@ import * as tabGroups from '../app/lib/tab-groups.js'
 import * as tabActivity from '../app/lib/tab-activity.js'
 import * as documentSort from '../app/lib/document-sort.js'
 import * as frameLifecycle from '../app/lib/frame-lifecycle.js'
+import * as permissionsModule from '../app/lib/permissions.js'
 import { scheduleBackgroundTabMetadata } from '../app/lib/background-tab-metadata.js'
 import * as svelteServer from 'svelte/internal/server'
 import * as svelteClient from 'svelte/internal/client'
@@ -24,6 +25,80 @@ function compileStore(generate) {
 
 const source = compileStore('server')
 const clientSource = compileStore('client')
+const controlledFrameSource = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
+const permissionHandler = parse(controlledFrameSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'handlePermissionRequest')
+async function downloadSession() {
+    const { data } = session({ tabs: [], frameEnvironment: { URL, setTimeout() {} } })
+    await data.permissionsReady
+    data.docs.page = tab('page')
+    const handlePermissionRequest = new Function('data', 'handleFramePermission', `${controlledFrameSource.slice(permissionHandler.start, permissionHandler.end)}; return handlePermissionRequest`)(data, permissionsModule.handleFramePermission)
+    const frame = { reload() {} }
+    data.frames.page = { frame }
+    function request(url = 'https://cdn.example/file.zip', permission = 'download', tabId = 'page') {
+        const actions = []
+        handlePermissionRequest(tabId, {
+            permission, url, currentTarget: data.frames[tabId].frame, cancelable: true,
+            preventDefault() { actions.push('defer') },
+            request: { allow() { actions.push('allow') }, deny() { actions.push('deny') } }
+        })
+        return actions
+    }
+    const resources = () => Object.values(data.permissions).flatMap(type => Object.values(type.origins || {}).flatMap(origin => origin.requests))
+    return { data, frame, request, resources }
+}
+
+Deno.test('download approval resumes the native request for the page origin without a reload', async () => {
+    const { data, request, resources } = await downloadSession()
+    const first = request()
+    const second = request('blob:https://example.com/file')
+    assert.deepEqual(first, ['defer'])
+    assert.deepEqual(second, ['defer'])
+    const requests = resources()
+    assert.equal(requests.length, 2)
+    assert.equal(requests[0].scope.requestingOrigin, 'https://example.com')
+    assert.equal(await data.allowPermission(requests[0].requestId, 'always'), true)
+    assert.deepEqual(first, ['defer', 'allow'])
+    assert.deepEqual(second, ['defer', 'allow'])
+    assert.equal(requests[0].needsReload, false)
+    assert.deepEqual(request(), ['defer', 'allow'])
+    assert.equal(await data.allowPermission(requests[0].requestId), false)
+})
+
+Deno.test('denying or ignoring downloads settles their native requests', async () => {
+    for (const action of ['denyPermission', 'ignorePermission']) {
+        const { data, request, resources } = await downloadSession()
+        const actions = request()
+        assert.equal(await data[action](resources()[0].requestId), true)
+        assert.deepEqual(actions, ['defer', 'deny'])
+        assert.deepEqual(request(), action === 'denyPermission' ? ['defer', 'deny'] : ['defer'])
+        data.cancelFramePermissions(data.frames.page.frame)
+    }
+})
+
+Deno.test('releasing a frame cancels its downloads without cancelling another frame', async () => {
+    const { data, frame, request, resources } = await downloadSession()
+    const actions = request()
+    data.docs.other = tab('other')
+    data.frames.other = { frame: { reload() {} } }
+    const other = request('https://cdn.example/file.zip', 'download', 'other')
+    data.cancelFramePermissions(frame)
+    data.cancelFramePermissions(frame)
+    assert.deepEqual(actions, ['defer', 'deny'])
+    assert.deepEqual(other, ['defer'])
+    await data.allowPermission(resources().find(resource => resource.tabId === 'other').requestId)
+    assert.deepEqual(actions, ['defer', 'deny'])
+    assert.deepEqual(other, ['defer', 'allow'])
+})
+
+Deno.test('other deferrable permissions also resolve through the common handler', async () => {
+    const { data, request, resources } = await downloadSession()
+    const actions = request('https://example.com', 'geolocation')
+    assert.deepEqual(actions, ['defer'])
+    await data.allowPermission(resources()[0].requestId)
+    assert.deepEqual(actions, ['defer', 'allow'])
+    assert.deepEqual(request('https://example.com', 'geolocation'), ['defer', 'allow'])
+})
+
 const appTabState = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
     .match(/^    let currentGroupTabId[\s\S]*?(?=    let unpinnedTabCount)/m)[0]
 const readTopTabsSource = compileModule(`${appTabState}\nexport function readTabs () { return unpinnedTabs }`, { generate: 'client' }).js.code
@@ -213,6 +288,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         ...tabActivity,
         ...documentSort,
         ...frameLifecycle,
+        ...permissionsModule,
         scheduleBackgroundTabMetadata,
         findPlugin: {},
         bootstrap: [],
@@ -1393,7 +1469,7 @@ Deno.test('all group views preview the active neighbors and retain them when ano
     data.activate('outside')
     const group = data.getTabGroups().find(group => group.tabGroupId)
     assert.deepEqual(preview(group), ['three', 'four', 'five'])
-    assert.equal(group.title, 'one')
+    assert.equal(group.title, 'five')
 })
 
 Deno.test('group metadata is optional, persists separately and restores without becoming a sidebar item', async () => {

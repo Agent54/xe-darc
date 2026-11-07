@@ -43,7 +43,7 @@ function movedWrappers(before, after) {
 
 function attachmentEffect() {
     const tab = { id: 'page', spaceId: 'space', url: 'https://search.example/?q=one' }
-    const data = { docs: { page: tab } }
+    const data = { docs: { page: tab }, permissionState: { status: 'ready' } }
     const wrapper = { isConnected: true }
     const anchor = { parentNode: wrapper }
     const ticks = []
@@ -64,6 +64,16 @@ Deno.test('attachment waits until the pending Svelte flush completes', async () 
     h.ticks[0]()
     await Promise.resolve()
     assert.deepEqual(h.mounted, [h.tab.url])
+})
+
+Deno.test('guest mounting waits for persisted permission rules before starting navigation', () => {
+    const h = attachmentEffect()
+    h.data.permissionState.status = 'loading'
+    h.effect()
+    assert.equal(h.ticks.length, 0)
+    h.data.permissionState.status = 'ready'
+    h.effect()
+    assert.equal(h.ticks.length, 1)
 })
 
 Deno.test('live previews mount while closed and deleted tabs cannot mount', async () => {

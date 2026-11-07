@@ -1,6 +1,8 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
     import resourceTypes from '../lib/resourceTypes.js'
+    import { permissionType, permissionOrigin } from '../lib/permissions.js'
+    import Tooltip from './Tooltip.svelte'
 	import data from '../data.svelte'
     // FIXME: use app global click outside scrim handler
     // filter: current page's resources/ all resources
@@ -77,6 +79,8 @@
     
     // Track which accept dropdown is open
     let openAcceptDropdown = $state(null)
+    let savingRequest = $state(null)
+    let actionError = $state('')
     
     // Resource action handlers
     function closeWhenRequestsResolved() {
@@ -94,51 +98,60 @@
         }
     }
 
-    function acceptResource(resource, permission = 'once', event = null) {
+    async function acceptResource(resource, permission = 'once', event = null) {
         if (event) {
             event.stopPropagation()
             event.preventDefault()
         }
         
-        const origin = new URL(resource.url).origin
-        const success = data.allowPermission(resource.type, origin, permission)
-        
-        if (success) {
-            console.log('Accept resource:', resource.type, 'with permission:', permission, 'for origin:', origin)
-            closeWhenRequestsResolved()
-        } else {
-            console.warn('Failed to accept resource:', resource.type)
+        savingRequest = resource.requestId
+        actionError = ''
+        try {
+            if (await data.allowPermission(resource.requestId, permission)) {
+                closeWhenRequestsResolved()
+            } else {
+                actionError = resource.error || 'This request can no longer be allowed.'
+            }
+        } catch (error) {
+            actionError = 'Could not save the permission decision. Try again.'
+        } finally {
+            savingRequest = null
         }
         
         openAcceptDropdown = null
     }
     
-    function denyResource(resource) {
-        const origin = new URL(resource.url).origin
-        const success = data.denyPermission(resource.type, origin)
-        
-        if (success) {
-            console.log('Deny resource:', resource.type, 'for origin:', origin)
-            closeWhenRequestsResolved()
-        } else {
-            console.warn('Failed to deny resource:', resource.type)
+    async function denyResource(resource) {
+        savingRequest = resource.requestId
+        actionError = ''
+        try {
+            if (await data.denyPermission(resource.requestId)) {
+                closeWhenRequestsResolved()
+            }
+        } catch (error) {
+            actionError = 'Could not save the permission decision. Try again.'
+        } finally {
+            savingRequest = null
         }
     }
     
-    function mockResource(resourceId) {
-        console.log('Mock resource:', resourceId)
-        // TODO: Implement actual mocking logic
-    }
-    
-    function ignoreResource(resource) {
-        const origin = new URL(resource.url).origin
-        const success = data.ignorePermission(resource.type, origin)
+    async function ignoreResource(resource) {
+        const success = await data.ignorePermission(resource.requestId)
         
         if (success) {
-            console.log('Ignore resource:', resource.type, 'for origin:', origin)
+            console.log('Ignore resource:', resource.type)
             closeWhenRequestsResolved()
         } else {
             console.warn('Failed to ignore resource:', resource.type)
+        }
+    }
+
+    async function changeResource(resource) {
+        actionError = ''
+        try {
+            await data.changePermission(resource)
+        } catch (error) {
+            actionError = 'Could not reset the permission decision. Try again.'
         }
     }
     
@@ -170,13 +183,15 @@
         const newUnused = []
         for (const resourceType in resourceTypes) {
             try {
-                const result = await resourceTypes[resourceType].availability()
+                const implemented = data.permissionSupported(resourceType)
+                const result = implemented ? await resourceTypes[resourceType].availability() : { available: false, error: 'Not implemented' }
                 newUnused.push({
                     id: resourceType,
                     type: resourceType,
                     lastUsed: 'Never',
                     status: result.available ? 'Available' : 'Unavailable',
-                    error: result.error
+                    error: result.error,
+                    supported: implemented
                 })
             } catch (e) {
                 newUnused.push({
@@ -204,36 +219,37 @@
         const usedResourceTypes = new Set()
 
         const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
-        const currentOrigin = currentUrl ? new URL(currentUrl).origin : null // scope === 'origin' ? origin(tab.url) : null
-
-        Object.entries(data.permissions).forEach(([resourceType, permission]) => {
-            Object.values(permission.origins || {}).forEach(origin => {
-                const request = origin.requests?.at(-1)
-                if (request?.status === 'requested' && request.windowId === window.darcWindowId) {
-                    requested.push(request)
-                    usedResourceTypes.add(resourceType)
-                }
-            })
-
-            if (scope === 'origin' && currentOrigin) {
-                const request = permission.origins?.[currentOrigin]?.requests?.at(-1)
-                if (request?.status === 'granted') {
-                    used.push(request)
-                    usedResourceTypes.add(resourceType)
-                } else if (request?.status === 'denied') {
-                    blocked.push(request)
-                    usedResourceTypes.add(resourceType)
-                } else if (request?.status === 'mocked') {
-                    mocked.push(request)
-                    usedResourceTypes.add(resourceType)
-                } else if (request?.status === 'ignored') {
-                    archived.push(request)
-                    usedResourceTypes.add(resourceType)
-                }
-            } else if (scope !== 'origin') {
-                console.warn('permission scopes other than origin not implemented')
+        const currentOrigin = permissionOrigin(currentUrl)
+        const currentPartition = data.docs[data.spaceMeta.activeTabId]?.partition || 'persist:myapp'
+        const history = Object.values(data.permissions).flatMap(permission => Object.values(permission.origins || {}).flatMap(entry => entry.requests || []))
+        const represented = new Set(history.filter(request => request.status !== 'ignored').map(request => request.ruleId))
+        const saved = Object.values(data.permissionRules).filter(rule => !represented.has(rule._id)).map(rule => ({
+            requestId: rule._id, ruleId: rule._id, type: permissionType(rule.permission), permission: rule.permission,
+            scope: rule, url: rule.requestingOrigin, tabId: data.spaceMeta.activeTabId,
+            status: rule.decision === 'deny' ? 'denied' : 'granted', decision: rule.decision, supported: true,
+            lifetime: 'persistent', timestamp: rule.modified, instanceId: rule.instanceId
+        }))
+        for (const resource of [...history, ...saved]) {
+            if (resource.status === 'requested' && resource.windowId === window.darcWindowId) {
+                requested.push(resource)
+                usedResourceTypes.add(resource.type)
+                continue
             }
-        })
+            const matches = scope === 'origin'
+                ? resource.scope?.topLevelOrigin === currentOrigin && resource.scope?.partition === currentPartition
+                : scope === 'window' ? resource.windowId === window.darcWindowId : true
+            if (!matches) {
+                continue
+            }
+            const rule = data.permissionRules[resource.ruleId]
+            const status = resource.status !== 'requested' && rule ? rule.decision === 'deny' ? 'denied' : 'granted'
+                : resource.lifetime === 'persistent' && resource.ruleId && !rule ? 'ignored' : resource.status
+            const section = status === 'granted' ? used : status === 'denied' ? blocked : status === 'ignored' ? archived : null
+            if (section) {
+                section.push({ ...resource, status, decision: rule?.decision || resource.decision })
+                usedResourceTypes.add(resource.type)
+            }
+        }
 
         return {
             requested,
@@ -256,6 +272,9 @@
 
 <RightSidebar title="Resources" onClose={handleClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
+        {#if actionError || data.permissionState.error}
+            <p role="alert">{actionError || data.permissionState.error}</p>
+        {/if}
 		<div class="resources-controls">
 			<div class="scope-control">
 				<label class="sr-only" for="resources-scope">Scope</label>
@@ -282,7 +301,7 @@
                             {#each resourceData[section.id] as resource}
                                 {@const knownType = Object.hasOwn(resourceTypes, resource.type) ? resourceTypes[resource.type] : null}
                                 {@const resourceType = knownType?.icon ? knownType : { name: knownType?.name || resource.type || 'Unknown permission', icon: unknownPermissionIcon, description: knownType?.description || 'Permission requested by this page' }}
-                                <div class="resource-card" class:unseen={resource.unseen}>
+                                <div class="resource-card" data-permission-type={resource.type} class:unseen={resource.unseen}>
                                     <div class="resource-header">
                                         <span class="resource-icon">{@html resourceType.icon}</span>
                                         <div class="resource-info">
@@ -297,6 +316,7 @@
                                         <div class="resource-status {resource.status.toLowerCase().replace(' ', '-')}">
                                             <span class="status-indicator"></span>
                                             <span class="status-text">{resource.status}</span>
+                                            {#if resource.decision === 'same-tab'}<span> · Same tab</span>{/if}
                                         </div>
                                         <div class="resource-last-used">
                                             <span class="last-used-label">Last used:</span>
@@ -314,7 +334,7 @@
                                             <div class="reload-message">
                                                 {#if section.id === 'used'}
                                                     <span class="reload-text">You might need to reload the page for changes to take effect</span>
-                                                    <button class="reload-btn" onmousedown={() => data.reloadCurrentTab()} title="Reload page">
+                                                    <button class="reload-btn" onmousedown={() => data.reloadTab(resource.tabId)} title="Reload requesting page">
                                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
                                                             <path d="M21 3v5h-5"/>
@@ -324,16 +344,10 @@
                                                         Reload
                                                     </button>
                                                 {:else if section.id === 'blocked'}
-                                                    <span class="reload-text">Changes might require restarting Darc</span>
-                                                    <button class="reload-btn" onmousedown={() => console.log('Restart Darc - to be implemented')} title="Restart Darc">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                                                        </svg>
-                                                        Restart Darc
-                                                    </button>
+                                                    <span class="reload-text">New requests will use this decision.</span>
                                                 {/if}
                                             </div>
-                                            <button class="change-btn-inline" onmousedown={() => data.changePermission(resource.type, new URL(data.docs[data.spaceMeta.activeTabId]?.url).origin)} title="Change permission decision">
+                                            <button class="change-btn-inline" disabled={!data.permissionSupported(resource.type)} onmousedown={() => changeResource(resource)} title="Change permission decision">
                                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                     <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
                                                     <path d="M21 3v5h-5"/>
@@ -346,13 +360,13 @@
                                     {/if}
                                     {#if section.id !== 'requested'}
                                         {#if section.id === 'unused'}
-                                            <button class="change-btn" onmousedown={() => data.permissionRequest(data.spaceMeta.activeTabId, {
+                                            <button class="change-btn" disabled={!data.permissionSupported(resource.type)} title={data.permissionSupported(resource.type) ? 'Request permission proactively' : 'Not implemented'} onmousedown={() => data.permissionRequest(data.spaceMeta.activeTabId, {
                                                 permission: resource.type,
                                                 url: data.docs[data.spaceMeta.activeTabId]?.url,
                                                 requester: 'User (proactive)',
                                                 explanation: 'User-initiated proactive permission request',
                                                 requestType: 'always'
-                                            })} title="Request permission proactively">
+                                            })}>
                                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                     <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
                                                     <path d="M21 3v5h-5"/>
@@ -362,7 +376,7 @@
                                                 Change
                                             </button>
                                         {:else}
-                                            <button class="change-btn" onmousedown={() => data.changePermission(resource.type, new URL(data.docs[data.spaceMeta.activeTabId]?.url).origin)} title="Change permission decision">
+                                            <button class="change-btn" disabled={!data.permissionSupported(resource.type)} onmousedown={() => changeResource(resource)} title="Change permission decision">
                                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                     <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
                                                     <path d="M21 3v5h-5"/>
@@ -398,23 +412,24 @@
                                         </div>
                                         <div class="resource-actions">
                                             <div class="accept-dropdown">
-                                                <button class="accept-btn main" onmousedown={() => acceptResource(resource)}>Allow</button>
-                                                <button class="accept-btn dropdown" aria-label="Accept options" onmousedown={(event) => toggleAcceptDropdown(resource.requestId, event)}>
+                                                <button class="accept-btn main" disabled={!resource.supported || savingRequest !== null} title={resource.error || 'Allow this request once'} onmousedown={() => acceptResource(resource)}>Allow once</button>
+                                                <button class="accept-btn dropdown" disabled={!resource.supported || savingRequest !== null} aria-label="Accept options" onmousedown={(event) => toggleAcceptDropdown(resource.requestId, event)}>
                                                     <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
                                                         <path d="M2 3L4 5L6 3" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
                                                     </svg>
                                                 </button>
                                                 {#if openAcceptDropdown === resource.requestId}
                                                     <div class="dropdown-menu" role="menu" tabindex="-1" onmousedown={(event) => { event.stopPropagation(); event.preventDefault(); }} onkeydown={(event) => event.stopPropagation()}>
-                                                        <button onmouseup={(event) => acceptResource(resource, 'always', event)}>Always allow (default)</button>
-                                                        <button onmouseup={(event) => acceptResource(resource, 'until-app-close', event)}>Allow until closing app</button>
+                                                        <button disabled={savingRequest !== null} onmouseup={(event) => acceptResource(resource, 'always', event)}>Always allow</button>
+                                                        <button disabled={savingRequest !== null} onmouseup={(event) => acceptResource(resource, 'until-app-close', event)}>Allow until closing this window</button>
                                                     </div>
                                                 {/if}
                                             </div>
-                                            <button class="action-btn deny" onmousedown={() => denyResource(resource)}>Deny</button>
-                                            <button class="action-btn mock" onmousedown={() => mockResource(resource.type)}>Mock</button>
-                                            <button class="action-btn ignore" onmousedown={() => ignoreResource(resource)}>Ignore</button>
+                                            <button class="action-btn deny" disabled={savingRequest !== null} onmousedown={() => denyResource(resource)}>Deny</button>
+                                            <Tooltip text="Not implemented yet"><button class="action-btn mock" disabled>Mock</button></Tooltip>
+                                            <button class="action-btn ignore" disabled={savingRequest !== null} onmousedown={() => ignoreResource(resource)}>Ignore</button>
                                         </div>
+                                        {#if resource.error}<p class="permission-error">{resource.error}</p>{/if}
                                     {/if}
                                 </div>
                             {/each}
@@ -439,6 +454,8 @@
 </RightSidebar>
 
 <style>
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .permission-error { color: #aaa; font-size: 12px; margin: 8px 0 0; }
 	.resources-controls {
 		display: flex;
 		justify-content: flex-end;
@@ -852,6 +869,7 @@
 
     .accept-btn.main {
         border-radius: 3px 0 0 3px;
+        white-space: nowrap;
     }
 
     .accept-btn.dropdown {
@@ -960,6 +978,11 @@
     .action-btn.mock:focus {
         background: rgba(139, 92, 246, 0.22);
         color: rgba(139, 92, 246, 1);
+    }
+
+    .action-btn.mock:disabled {
+        background: rgb(255 255 255 / 6%);
+        color: #999;
     }
 
     .action-btn.ignore {

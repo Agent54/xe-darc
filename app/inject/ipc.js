@@ -4,7 +4,7 @@ if (window === window.top) {
     let ipcPort = null
 
     window.addEventListener('message', event => {
-        if (event.data?.type !== 'darc:ipc-connect' || event.data.tabId !== tabId || ipcPort) {
+        if (!event.isTrusted || event.origin !== embedderOrigin || event.data?.type !== 'darc:ipc-connect' || event.data.tabId !== tabId || ipcPort) {
             return
         }
 
@@ -13,14 +13,16 @@ if (window === window.top) {
             return
         }
 
+        event.stopImmediatePropagation()
+
         console.log('[IPC] Content script received the MessagePort')
         ipcPort = event.ports[0]
         ipcPort.onmessage = ({ data }) => {
-            if (data?.type === 'darc:ipc-reply' && data.message === 'Hello world') {
+            if (data?.secret === bridgeSecret && data?.type === 'darc:ipc-reply' && data.message === 'Hello world') {
                 console.log('[IPC] Hello world from parent (MessagePort round trip complete)')
             }
         }
-        ipcPort.postMessage({ type: 'darc:ipc-hello', message: 'Hello world' })
+        ipcPort.postMessage({ type: 'darc:ipc-hello', message: 'Hello world', secret: bridgeSecret })
     })
 
     console.log(`iwa:ipc-ready:${tabId}`)
@@ -49,6 +51,7 @@ window.addEventListener('blur', () => {
 }, false);
 
 document.addEventListener('keyup', function(event) {
+    if (!event.isTrusted) return;
     // Track command key state
     if (event.key === 'Meta' || event.key === 'Control') {
         console.log(`iwa:command-key-up:${tabId}`);
@@ -58,6 +61,7 @@ document.addEventListener('keyup', function(event) {
 
 // Track modifiers independently of the shared shortcut dispatcher.
 document.addEventListener('keydown', function(event) {
+    if (!event.isTrusted) return;
     // Track command key state
     if (event.metaKey || event.ctrlKey) {
         console.log(`iwa:command-key-down:${tabId}`);
@@ -67,6 +71,7 @@ document.addEventListener('keydown', function(event) {
 // Global mouse event listeners for controlled frame
 // Capture on window before page handlers can stop the event from reaching document.
 window.addEventListener('click', function(event) {
+    if (!event.isTrusted) return;
     console.log(`iwa:click:${tabId}:` + JSON.stringify({
         button: event.button,
         clientX: event.clientX,
@@ -83,6 +88,7 @@ window.addEventListener('click', function(event) {
 }, { capture: true, passive: true });
 
 document.addEventListener('mousedown', function(event) {
+    if (!event.isTrusted) return;
     // Track modifier key state with mousedown for link clicks
     // This ensures we capture cmd+click before navigation starts
     const hasModifier = event.metaKey || event.ctrlKey;
@@ -90,6 +96,7 @@ document.addEventListener('mousedown', function(event) {
 }, { capture: true, passive: true });
 
 document.addEventListener('mouseup', function(event) {
+    if (!event.isTrusted) return;
     // console.log('🖱️ [CONTROLLED-FRAME] mouseup detected in tab ${tab.id}', {
     //     button: event.button,
     //     target: event.target?.tagName,

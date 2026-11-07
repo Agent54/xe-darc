@@ -13,6 +13,7 @@ import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, g
 // import indexeddb from 'pouchdb-adapter-indexeddb'
 // PouchDB.plugin(indexeddb)
 import permissionTypes from './lib/resourceTypes.js'
+import { createPermissionStore, permissionDescriptor, permissionOrigin } from './lib/permissions.js'
 
 import { colors as projectColors } from './lib/utils.js'
 
@@ -261,8 +262,9 @@ if (!window.darcInstanceId) {
     localStorage.setItem('darcInstanceId', window.darcInstanceId)
 }
 
-let permissions = $state(permissionTypes)
-
+let permissions = $state(Object.fromEntries(Object.entries(permissionTypes).map(([type, definition]) => [type, { ...definition }])))
+const permissionRules = $state({})
+const permissionState = $state({ status: 'loading', error: null })
 PouchDB.plugin(findPlugin)
 const db = new PouchDB('darc', { adapter: 'idb' })
 
@@ -304,6 +306,29 @@ const spaces = $state({
 const activity = $state({})
 const resources = $state({})
 const frames = $state({})
+const permissionStore = createPermissionStore({
+    db, putDocument, permissions, rules: permissionRules, state: permissionState,
+    instanceId: window.darcInstanceId,
+    getWindowId: () => window.darcWindowId,
+    getContext: tabId => {
+        const tab = docs[tabId]
+        const frame = frames[tabId]
+        return { url: frame?.committedUrl || tab?.url, partition: tab?.partition || 'persist:myapp', frame: frame?.frame }
+    },
+    onRevoke: (scope, permission) => {
+        if (['open-tab', 'navigate-off-origin'].includes(permission?.name)) {
+            return
+        }
+        for (const [tabId, frameData] of Object.entries(frames)) {
+            const tab = docs[tabId]
+            if (frameData.frame && permissionOrigin(frameData.committedUrl || tab?.url) === scope.topLevelOrigin &&
+                (tab?.partition || 'persist:myapp') === scope.partition) {
+                permissionStore.cancelFrame(frameData.frame)
+                frameData.frame.reload()
+            }
+        }
+    }
+})
 let lastForceHibernateTime = 0
 const previews = $state({})
 const settings = $state({})
@@ -1005,10 +1030,14 @@ const changesFeed = db.changes({
 live: true,
     since: 'now',
     include_docs: true,
+    conflicts: true,
     filter: doc => !doc._id.startsWith('_design/')
 }).on('change', async change => {
     lastLocalSeq = change.seq
     if (change.id.startsWith('_design/')) return
+    if (permissionStore.ingest(change.doc)) {
+        return
+    }
     const prepared = withDocumentSort(change.doc)
     if (prepared.sort !== change.doc.sort) {
         try {
@@ -1491,6 +1520,13 @@ const data = {
     settings,
     ledIndicators,
     permissions,
+    permissionRules,
+    permissionState,
+    permissionsReady: permissionStore.ready,
+    permissionSupported: type => !!permissionDescriptor(type),
+    permissionDecision: (type, tabId, url, context) => permissionStore.decision(type, tabId, url, context),
+    setPermissionDecision: (type, tabId, decision, url) => permissionStore.setDecision(type, tabId, decision, url),
+    cancelFramePermissions: frame => permissionStore.cancelFrame(frame),
 
     ui,
 
@@ -1968,7 +2004,7 @@ const data = {
         removal.catch(error => console.error('Failed to remove divider:', error))
     },
     
-    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned, pinScope = 'group', groupTabId } = {}) => {
+    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned, pinScope = 'group', groupTabId, guestWindow } = {}) => {
         // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
         const firstItem = getSidebarItems(spaces[spaceId]?.tabs).at(-1)
@@ -2005,6 +2041,7 @@ const data = {
             } : {}),
             ...(canvasPosition ? { canvas: { [spaceId]: canvasPosition } } : {}),
             opener,
+            ...(docs[opener]?.partition ? { partition: docs[opener].partition } : {}),
             preview: !!preview,
             archive: preview ? 'preview' : undefined,
             lightbox: !!lightbox,
@@ -2036,6 +2073,10 @@ const data = {
         }
        
         frames[tab.id].pendingLoad = !!shouldFocus && !isInternalPage(tab.url)
+        if (guestWindow) {
+            frames[tab.id].guestWindow = guestWindow
+            frames[tab.id].nativeGuest = true
+        }
         frames[tab.id].loading = frames[tab.id].pendingLoad
 
         if (shouldFocus && !preview && !lightbox) {
@@ -2267,91 +2308,15 @@ const data = {
         return Promise.all([promotion, move, closing])
     },
 
-    permissionRequest: (tabId, event) => {
-        if (typeof event?.permission !== 'string' || !event.permission.trim()) {
-            console.warn('Permission request has no permission type', event)
-            return { granted: false }
+    permissionRequest: (tabId, event, context) => {
+        const result = permissionStore.request(tabId, event, context)
+        if (result.pending) {
+            ledIndicators.permissionRequest = Date.now()
+            setTimeout(() => { ledIndicators.permissionRequest = 0 }, 1000)
         }
-
-        let origin
-        try {
-            origin = new URL(event.url).origin
-        } catch {
-            console.warn('Permission request has no valid URL', event)
-            return { granted: false }
-        }
-
-        let permission = permissions[event.permission]
-
-        if (!permission) {
-            console.warn(`Unknown permission type: ${event.permission}`)
-            permission = permissions[event.permission] = {
-                name: event.permission,
-                icon: '',
-                description: `${event.permission} permission`
-            }
-        }
-
-        permission.origins ??= {}
-        permission.origins[origin] ??= {}
-        permission.origins[origin].requests ??= []
-
-        ledIndicators.permissionRequest = Date.now()
-
-        setTimeout(() => {
-            ledIndicators.permissionRequest = 0
-        }, 1000)
-
-        console.log('permissionRequest', event, permission)
-
-
-        if (permission.origins[origin].permission === 'denied') {
-            return { granted: false }
-        }
-
-        const granted = permission.origins[origin].permission === 'always' || permission.origins[origin].permission === 'ephemeral'
-
-        if (granted) {
-            const latestRequest = permission.origins[origin].requests.at(-1)
-            if (latestRequest) {
-                latestRequest.timestamp = Date.now()
-            }
-            return { granted }
-        }
-
-        const pendingRequest = permission.origins[origin].requests.at(-1)
-        if (pendingRequest?.status === 'requested' && pendingRequest.windowId === window.darcWindowId) {
-            pendingRequest.timestamp = Date.now()
-            pendingRequest.url = event.url
-            pendingRequest.tabId = tabId
-            pendingRequest.requester = event.requester || pendingRequest.requester
-            pendingRequest.explanation = event.explanation || pendingRequest.explanation
-            pendingRequest.requestType = event.requestType || pendingRequest.requestType
-            return { granted: false }
-        }
-
-        permission.origins[origin].requests.push({
-            requestId: crypto.randomUUID(),
-            type: event.permission,
-            url: event.url,
-            tabId: tabId,
-            agentId: null,
-            status: granted ? 'granted' : 'requested',
-            timestamp: Date.now(),
-            created: Date.now(),
-            instanceId: window.darcInstanceId,
-            windowId: window.darcWindowId,
-            unseen: true,
-            requester: event.requester,
-            explanation: event.explanation || '',
-            // status: resource.status || 'Requested',
-            requestType: event.requestType || 'always' // foreground
-        })
-
-        return { granted }
+        return result
     },
 
-   
     clearUnseenResourceFlags: () => {
         for (const resourceKey of Object.keys(permissions)) {
             for (const origin of Object.keys(permissions[resourceKey].origins || {})) {
@@ -2456,111 +2421,13 @@ const data = {
         }
     },
 
-    allowPermission: (permissionType, origin, permission = 'always') => {
-        const permissionObj = permissions[permissionType]
-        console.log('allowPermission', permissionType, origin, permission, permissionObj)
-        if (!permissionObj?.origins?.[origin]?.requests?.length) {
-            return false
-        }
-
-        const request = permissionObj.origins[origin].requests.at(-1)
-        if (request.status === 'requested') {
-            request.status = 'granted'
-            request.unseen = false
-            request.needsReload = true
-            request.timestamp = Date.now()
-            
-            if (permission === 'always') {
-                permissionObj.origins[origin].permission = 'always'
-            } else {
-                permissionObj.origins[origin].permission = 'ephemeral'
-            }
-            
-            return true
-        }
-        return false
-    },
-
-    denyPermission: (permissionType, origin) => {
-        const permissionObj = permissions[permissionType]
-        if (!permissionObj?.origins?.[origin]?.requests?.length) {
-            return false
-        }
-
-        // Find the pending request for this permission type and origin
-        const request = permissionObj.origins[origin].requests.at(-1)
-        if (request.status === 'requested') {
-            // Update the request status
-            request.status = 'denied'
-            request.unseen = false
-            request.needsReload = true
-            request.timestamp = Date.now()
-            
-            // Set the permission to denied for this origin
-            permissionObj.origins[origin].permission = 'denied'
-            
-            return true
-        }
-        
-        return false
-    },
-
-    ignorePermission: (permissionType, origin) => {
-        const permissionObj = permissions[permissionType]
-        if (!permissionObj?.origins?.[origin]?.requests?.length) {
-            return false
-        }
-
-        const request = permissionObj.origins[origin].requests.at(-1)
-        if (request.status === 'requested') {
-            request.status = 'ignored'
-            request.unseen = false
-            request.timestamp = Date.now()
-            return true
-        }
-        
-        return false
-    },
-
-    changePermission: (permissionType, origin) => {
-        const permissionObj = permissions[permissionType]
-        if (!permissionObj?.origins?.[origin]?.requests?.length) {
-            return false
-        }
-
-        const latestRequest = permissionObj.origins[origin].requests.at(-1)
-        if (latestRequest.status !== 'requested') {
-            latestRequest.status = 'requested'
-            latestRequest.unseen = true
-            latestRequest.needsReload = false
-            latestRequest.timestamp = Date.now()
-            
-            // Clear the persistent permission setting
-            permissionObj.origins[origin].permission = null
-            
-            return true
-        }
-        
-        return false
-    },
-
-    isPermissionGranted: (permissionType, origin) => {
-        const permissionObj = permissions[permissionType]
-        if (!permissionObj?.origins?.[origin]) {
-            return false
-        }
-        const permission = permissionObj.origins[origin].permission
-        return permission === 'always' || permission === 'ephemeral'
-    },
-
-    isPermissionMocked: (permissionType, origin) => {
-        const permissionObj = permissions[permissionType]
-        if (!permissionObj?.origins?.[origin]?.requests?.length) {
-            return false
-        }
-        const latestRequest = permissionObj.origins[origin].requests.at(-1)
-        return latestRequest?.status === 'mocked'
-    },
+    allowPermission: (requestId, lifetime = 'always') => permissionStore.resolve(requestId, 'allow',
+        lifetime === 'always' ? 'persistent' : lifetime === 'until-app-close' ? 'session' : 'once'),
+    denyPermission: requestId => permissionStore.resolve(requestId, 'deny'),
+    ignorePermission: requestId => permissionStore.resolve(requestId, 'ignore'),
+    changePermission: resource => permissionStore.reset(resource),
+    isPermissionGranted: (type, url, tabId = spaceMeta.activeTabId) => permissionStore.decision(type, tabId, url) === 'allow',
+    isPermissionMocked: () => false,
 
     closeTab,
 

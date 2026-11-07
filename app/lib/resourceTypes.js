@@ -1,4 +1,24 @@
 export default {
+    pointerLock: {
+        name: 'Pointer Lock',
+        description: 'Capture the pointer for this page',
+        availability: async () => ({ available: 'requestPointerLock' in Element.prototype, error: null })
+    },
+    fullscreen: {
+        name: 'Full Screen',
+        description: 'Let this page enter full screen',
+        availability: async () => ({ available: !!document.fullscreenEnabled, error: null })
+    },
+    filesystem: {
+        name: 'Sandboxed File System',
+        description: 'Access the guest’s sandboxed file system',
+        availability: async () => ({ available: true, error: null })
+    },
+    hid: {
+        name: 'HID Device Access',
+        description: 'Request access to human interface devices',
+        availability: async () => ({ available: !!navigator.hid, error: null })
+    },
     'open-tab': {
         name: 'Open Tab',
         icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -143,16 +163,6 @@ export default {
             if (!window.DeviceOrientationEvent && !window.DeviceMotionEvent) {
                 return { available: false, error: 'Motion sensors not supported by browser' }
             }
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permission = await DeviceOrientationEvent.requestPermission()
-                    if (permission !== 'granted') {
-                        return { available: false, error: 'Motion sensor permission denied by user' }
-                    }
-                } catch (e) {
-                    return { available: false, error: 'Unable to request motion sensor permission' }
-                }
-            }
             return { available: true, error: null }
         }
     },
@@ -238,14 +248,15 @@ export default {
             return { available: true, error: null }
         }
     },
-    'automatic-downloads': {
-        name: 'Automatic Downloads',
+    download: {
+        name: 'Downloads',
         icon: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
         </svg>`,
-        description: 'Automatic file downloads and transfers',
+        description: 'Save files to the system Downloads folder',
         availability: async () => {
-            return { available: false, error: 'Blocked by browser security policy' } // Usually blocked
+            const available = typeof window.HTMLControlledFrameElement !== 'undefined' || !!window.customElements?.get('controlledframe')
+            return { available, error: available ? null : 'Downloads require Controlled Frame support' }
         }
     },
     'midi-devices': {
