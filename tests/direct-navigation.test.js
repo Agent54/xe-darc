@@ -41,6 +41,7 @@ function navigationHarness({ direct = true, legacy = false, command = false } = 
         getCurrentGroupTabId: () => 'current-group-tab',
         newTab: (space, options) => opened.push(options),
         updateTab: (id, update) => Object.assign(data.docs[id], update)
+        ,isInternalPage: url => url?.startsWith('about:')
     }
     const noop = () => {}
     const api = new Function('data', 'tab', 'origin', 'window', 'console', 'setTimeout', `
@@ -202,8 +203,10 @@ Deno.test('commit clears direct-navigation intent without waiting for slow subre
 Deno.test('same-document commits clear URL-bar intent and subframe commits cannot change the parent', () => {
     const h = navigationHarness()
     h.commitUrl('https://subframe.example/', false)
+    assert.equal(h.tab.lastLoadedAt, undefined)
     assert.equal(h.data.frames.page.committedUrl, 'https://original.example/')
     h.commitUrl('https://destination.example/#section')
+    assert.ok(h.tab.lastLoadedAt > 0)
     assert.equal(h.data.frames.page.directNavigation, null)
     assert.equal(h.request('https://other.example/').cancel, true)
 })

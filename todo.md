@@ -3451,3 +3451,5 @@ test:  esc dnd abort, escape menu close, cmd t, cmd long t,  cmd l, zoom reset, 
 
 sidebar width tripple width sidebar modes for content area reveal on hover or click togle
 
+point and change message feature cdp
+

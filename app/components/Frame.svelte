@@ -618,7 +618,7 @@
 <svelte:window onkeydown={handleWindowKeyDown} onkeyup={handleWindowKeyUp} />
 
 <div bind:this={frameWrapper} id="tab_{tab.id}" class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
-    {#if data.isTabHibernated(tab.id) || (!data.frames[tab.id]?.initialLoad && !data.isInternalPage(tab.url))}
+    {#if data.isTabHibernated(tab.id)}
         <div 
             transition:fade={{duration: 200, delay: 0}}
             class="frame hibernated-frame"

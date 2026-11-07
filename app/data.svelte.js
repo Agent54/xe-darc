@@ -5,6 +5,7 @@ import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
 import { getFrameMoveIds } from './lib/frame-lifecycle.js'
+import { scheduleBackgroundTabMetadata } from './lib/background-tab-metadata.js'
 import { getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
 import { withDocumentSort } from './lib/document-sort.js'
 import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getSpacePins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
@@ -1270,7 +1271,7 @@ function loadSampleData () {
 
 function hibernate (tabId, force = false) {
     // remove background frames from dom node parking
-    const frame = frames[tabId]
+    const frame = frames[tabId] ??= {}
     if (frame.frame) {
         frame.frame.remove()
     }
@@ -1305,7 +1306,8 @@ function isInternalPage (url) {
 function isTabHibernated (tabId) {
     const tab = docs[tabId]
     if (isInternalPage(tab?.url)) return false
-    return !frames[tabId]?.frame && !frames[tabId]?.pendingLoad
+    const frame = frames[tabId]
+    return !!(frame?.hibernated || tab?.lastLoadedAt) && !frame?.frame && !frame?.pendingLoad
 }
 
 // Helper function to resolve attachment URLs to blob URLs
@@ -1635,9 +1637,8 @@ const data = {
 
     hibernateOthers: (keepTabId) => {
         for (const tabId of Object.keys(frames)) {
-            if (!docs[tabId].pinned && tabId !== keepTabId) {
-                frames[tabId].frame = null
-                frames[tabId].hibernated = Date.now()
+            if (frames[tabId].frame && !docs[tabId]?.pinned && tabId !== keepTabId) {
+                hibernate(tabId)
             }
         }
     },
@@ -1890,7 +1891,6 @@ const data = {
         frame.loading = !isInternalPage(url)
         frame.directNavigation = isInternalPage(url) ? null : { urls: [url.split('#')[0]], requestId: null }
         frame.forceHibernated = false
-        frame.initialLoad = true
         const saving = queueDocumentUpdate(tabId, {
             url,
             title: url.startsWith('about:newtab') || url.startsWith('about:blank') ? 'New Tab' : url,
@@ -2002,7 +2002,6 @@ const data = {
             frames[tab.id] = {}
         }
        
-        frames[tab.id].initialLoad = true
         frames[tab.id].pendingLoad = !!shouldFocus && !isInternalPage(tab.url)
         frames[tab.id].loading = frames[tab.id].pendingLoad
 
@@ -2010,6 +2009,10 @@ const data = {
             if (spaceMeta.activeSpace === spaceId && !docs[_id].archive) {
                 activate(_id)
             }
+        }
+
+        if (!shouldFocus && !preview && !lightbox) {
+            scheduleBackgroundTabMetadata(data, tab.id)
         }
 
         await creation
@@ -2089,11 +2092,14 @@ const data = {
         changedShapes.forEach(queueCanvasShapeSave)
     },
 
-    updateTab: async (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url } = {}) => {
+    updateTab: async (tabId, { canvas, lightbox, preview, screenshot, favicon, title, url, lastLoadedAt } = {}) => {
         const tab = docs[tabId]
         if (tab?.type !== 'tab') return
        
         let newProps = {}
+        if (typeof lastLoadedAt !== 'undefined') {
+            newProps.lastLoadedAt = lastLoadedAt
+        }
         if (canvas) {
             canvas = { ...(tab.canvas || {}), ...canvas }
             newProps.canvas = canvas

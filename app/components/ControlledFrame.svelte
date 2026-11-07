@@ -459,6 +459,9 @@
             return
         }
         data.frames[tab.id].committedUrl = info.url
+        if (!data.isInternalPage(info.url)) {
+            data.updateTab(tab.id, { lastLoadedAt: Date.now() })
+        }
         if (isDirectNavigation(info.url)) {
             data.frames[tab.id].directNavigation = null
         }
@@ -608,7 +611,6 @@
         if (!data.frames[tab.id]) return
         const wasLoading = data.frames[tab.id].loading
         data.frames[tab.id].loading = false
-        data.frames[tab.id].initialLoad = true
         
         const originValue = origin(tab.url)
         const currentNetworkErr = data.origins[originValue]?.networkError

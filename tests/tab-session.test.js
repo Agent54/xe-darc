@@ -6,6 +6,7 @@ import * as tabGroups from '../app/lib/tab-groups.js'
 import * as tabActivity from '../app/lib/tab-activity.js'
 import * as documentSort from '../app/lib/document-sort.js'
 import * as frameLifecycle from '../app/lib/frame-lifecycle.js'
+import { scheduleBackgroundTabMetadata } from '../app/lib/background-tab-metadata.js'
 import * as svelteServer from 'svelte/internal/server'
 import * as svelteClient from 'svelte/internal/client'
 import { createTabHistorySwitcher } from '../app/lib/tab-activation-history.js'
@@ -202,6 +203,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         ...tabActivity,
         ...documentSort,
         ...frameLifecycle,
+        scheduleBackgroundTabMetadata,
         findPlugin: {},
         bootstrap: [],
         testData: [],
@@ -1064,7 +1066,6 @@ Deno.test('new tab navigation publishes URL and loading state while storage and 
     assert.equal(data.docs.new.favicon, null)
     assert.equal(data.frames.new.loading, true)
     assert.equal(data.frames.new.pendingLoad, true)
-    assert.equal(data.frames.new.initialLoad, true)
     assert.deepEqual(data.frames.new.directNavigation.urls, [url])
     assert.equal(data.isTabHibernated('new'), false)
     await Promise.resolve()
@@ -1131,7 +1132,7 @@ Deno.test('fresh web tabs stay pending until frame creation and hibernation stil
     assert.equal(data.frames[pending.id].loading, false)
     assert.equal(data.docs[pending.id].title, 'New Tab')
     const background = await data.newTab(defaultSpace, { url: 'https://background.example/' })
-    assert.equal(data.isTabHibernated(background.id), true)
+    assert.equal(data.isTabHibernated(background.id), false)
     assert.equal(data.frames[background.id].pendingLoad, false)
     assert.equal(data.frames[background.id].loading, false)
 })
