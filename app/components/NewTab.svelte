@@ -2,7 +2,7 @@
     import { Canvas } from '@threlte/core'
     import Scene from './InteractiveLineScene.svelte'
     import data from '../data.svelte.js'
-    import { detectUrl } from '../lib/utils.js'
+    import { resolveNewTabInput } from '../lib/new-tab-input.js'
     // import { sandbox } from './sandbox.js'
     
     let { tab, isActive = false } = $props()
@@ -396,54 +396,8 @@
 
     function handleSubmit(event) {
         event.preventDefault()
-        
-        if (!inputValue.trim()) {
-            return
-        }
-        
-        const url = detectUrl(inputValue)
-        if (url) {
-            data.navigate(tab.id, url)
-        } else {
-            // Not a valid URL, check for Kagi prefix or use default search engine
-            if (inputValue.toLowerCase().startsWith('k ')) {
-                // Use Kagi search, remove the "k " prefix
-                let searchUrl = new URL('https://kagi.com/search')
-                searchUrl.searchParams.set('q', inputValue.slice(2))
-                data.navigate(tab.id, searchUrl.href)
-            } else {
-                // Use default search engine from settings
-                const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
-                let searchUrl
-                
-                switch (defaultSearchEngine) {
-                    case 'kagi':
-                        searchUrl = new URL('https://kagi.com/search')
-                        break
-                    case 'custom':
-                        const customUrl = localStorage.getItem('customSearchUrl')
-                        if (customUrl) {
-                            try {
-                                searchUrl = new URL(customUrl + encodeURIComponent(inputValue))
-                                data.navigate(tab.id, searchUrl.href)
-                                return
-                            } catch {
-                                // Fallback to Google if custom URL is invalid
-                                searchUrl = new URL('https://www.google.com/search')
-                            }
-                        } else {
-                            searchUrl = new URL('https://www.google.com/search')
-                        }
-                        break
-                    default: // google
-                        searchUrl = new URL('https://www.google.com/search')
-                        break
-                }
-                
-                searchUrl.searchParams.set('q', inputValue)
-                data.navigate(tab.id, searchUrl.href)
-            }
-        }
+        const input = resolveNewTabInput(inputValue)
+        if (input) data.navigate(tab.id, input.url)
     }
     
     function handleMouseMove(event) {

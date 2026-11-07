@@ -18,6 +18,7 @@
     import TabGroupPreview from './components/TabGroupPreview.svelte'
     import TabHoverCard from './components/TabHoverCard.svelte'
     import TabContextMenu from './components/TabContextMenu.svelte'
+    import NewTabMenu from './components/NewTabMenu.svelte'
     import PinMenu from './components/PinMenu.svelte'
     import AppearanceContextMenu from './components/AppearanceContextMenu.svelte'
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
@@ -241,6 +242,8 @@
     let tabHistoryTabId = $state(null)
     
     let newTabMenuVisible = $state(false)
+    let newTabMenuInline = $state(false)
+    let newTabMenuOpenVersion = $state(0)
     let newTabMenuHoverTimeout = null
     let newTabMenuLeaveTimeout = null
     let inlineNewTabMenuElement = $state(null)
@@ -811,9 +814,11 @@
         if (tabDrag.active || tabDrag.pending) return
         if (isInline && inlineNewTabButtonElement) {
             const rect = inlineNewTabButtonElement.getBoundingClientRect()
-            newTabMenuPosition = { left: rect.left }
+            newTabMenuPosition = { left: Math.min(rect.left, Math.max(8, window.innerWidth - 368)) }
         }
         newTabMenuVisible = true
+        newTabMenuInline = isInline
+        newTabMenuOpenVersion++
     }
 
     function handleNewTabButtonMouseEnter(isInline = false) {
@@ -871,6 +876,7 @@
     
     function handleNewTabButtonContextMenu(e, isInline = false) {
         e.preventDefault()
+        e.stopPropagation()
         if (newTabMenuHoverTimeout) {
             clearTimeout(newTabMenuHoverTimeout)
             newTabMenuHoverTimeout = null
@@ -878,32 +884,12 @@
         showNewTabMenu(isInline)
     }
 
-    async function handleNewFromClipboard() {
+    async function handleNewFromClipboard(url) {
         newTabMenuVisible = false
-        try {
-            const text = (await navigator.clipboard.readText())?.trim()
-            if (!text) {
-                openNewTab()
-                return
-            }
-            let url = text
-            try {
-                if (!/^https?:\/\//i.test(url)) {
-                    new URL('https://' + url)
-                    url = 'https://' + url
-                } else {
-                    new URL(url)
-                }
-            } catch (e) {
-                url = 'about:newtab'
-            }
-            collapseAndRemovePlaceholders()
-            const tab = await data.newGroupTab(data.spaceMeta.activeSpace, { url, shouldFocus: true })
-            if (tab) {
-                setTimeout(checkTabListOverflow, 50)
-            }
-        } catch (err) {
-            openNewTab()
+        collapseAndRemovePlaceholders()
+        const tab = await data.newGroupTab(data.spaceMeta.activeSpace, { url, shouldFocus: true })
+        if (tab) {
+            setTimeout(checkTabListOverflow, 50)
         }
     }
 
@@ -965,6 +951,10 @@
     }
 
     function handleShortcutEscape(event) {
+        if (newTabMenuVisible) {
+            newTabMenuVisible = false
+            return true
+        }
         if (shortcutOverviewVisible) {
             shortcutOverviewVisible = false
             return true
@@ -1267,6 +1257,7 @@
 
     // Handle right-clicks anywhere to close context menu
     function handleGlobalContextMenu(event) {
+        if (!event.target?.closest?.('.new-tab-header-menu')) newTabMenuVisible = false
         appearanceMenu = null
         if (contextMenu.visible) {
             event.preventDefault()
@@ -1872,6 +1863,7 @@
     }
 
     function handleGlobalMouseDown(event) {
+        if (!event.target?.closest?.('.new-tab-header-menu, .new-tab-button-wrapper, .inline-new-tab-button-wrapper')) newTabMenuVisible = false
         isMouseDown = event.button
     }
 
@@ -3523,7 +3515,7 @@
                     </svg>
                 </button>
                 <div class="new-tab-header-menu menu-surface"
-                     class:visible={newTabMenuVisible}
+                     class:visible={newTabMenuVisible && newTabMenuInline}
                      style="left: {newTabMenuPosition.left}px;"
                      bind:this={inlineNewTabMenuElement}
                      onmouseenter={handleNewTabMenuMouseEnter}
@@ -3531,23 +3523,8 @@
                      role="menu"
                      tabindex="-1"
                      aria-label="New tab options">
-                    <span class="new-tab-header-menu-item menu-action" onmouseup={handleNewFromClipboard} role="menuitem" tabindex="0">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
-                        <span>New from clipboard</span>
-                    </span>
-                    <div class="new-tab-header-menu-item has-submenu menu-action" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
-                        <span>New tab in container…</span>
-                        <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
-                        <div class="new-tab-header-submenu menu-surface" role="menu">
-                            {#each partitions as partition}
-                                <span class="new-tab-header-submenu-item menu-action" onmouseup={() => handleNewTabInPartition(partition)} role="menuitem" tabindex="0">
-                                    <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
-                                    <span>{partition}</span>
-                                </span>
-                            {/each}
-                        </div>
-                    </div>
+                    <NewTabMenu active={newTabMenuVisible && newTabMenuInline} openVersion={newTabMenuOpenVersion} {partitions}
+                        onCreate={handleNewFromClipboard} onPartition={handleNewTabInPartition} />
                 </div>
             </div>
 
@@ -3726,30 +3703,15 @@
              </svg>
         </div>
         <div class="new-tab-header-menu fixed-menu menu-surface"
-             class:visible={newTabMenuVisible}
+             class:visible={newTabMenuVisible && !newTabMenuInline}
              bind:this={fixedNewTabMenuElement}
              onmouseenter={handleNewTabMenuMouseEnter}
              onmouseleave={handleNewTabMenuMouseLeave}
              role="menu"
              tabindex="-1"
              aria-label="New tab options">
-            <span class="new-tab-header-menu-item menu-action" onmouseup={handleNewFromClipboard} role="menuitem" tabindex="0">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
-                <span>New from clipboard</span>
-            </span>
-            <div class="new-tab-header-menu-item has-submenu menu-action" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="menu-item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
-                <span>New tab in container…</span>
-                <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
-                <div class="new-tab-header-submenu menu-surface" role="menu">
-                    {#each partitions as partition}
-                        <span class="new-tab-header-submenu-item menu-action" onmouseup={() => handleNewTabInPartition(partition)} role="menuitem" tabindex="0">
-                            <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
-                            <span>{partition}</span>
-                        </span>
-                    {/each}
-                </div>
-            </div>
+            <NewTabMenu active={newTabMenuVisible && !newTabMenuInline} openVersion={newTabMenuOpenVersion} {partitions}
+                onCreate={handleNewFromClipboard} onPartition={handleNewTabInPartition} />
         </div>
     </div>
 

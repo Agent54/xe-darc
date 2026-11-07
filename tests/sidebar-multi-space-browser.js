@@ -73,8 +73,6 @@ await withSidebarFixture('sidebar-multi-space', async ({ page }) => {
     await page.type('.tab-search-input', 'other tab')
     await page.click('.tab-search-clear')
     await expectActiveSpaceVisible('third', null)
-    await page.focus('.tab-search-input')
-    await page.keyboard.press('Escape')
 
     // A space containing only a newly created tab must reveal just as reliably.
     await page.evaluate(() => window.flushSync(() => { window.data.spaces.third.tabs = [] }))
@@ -90,7 +88,7 @@ await withSidebarFixture('sidebar-multi-space', async ({ page }) => {
     await page.evaluate(() => window.flushSync(() => { window.data.activateSpace('other') }))
     await expectActiveSpaceVisible('other', 'new-normal')
 
-    await page.evaluate(() => window.flushSync(() => { window.data.spaceMeta.spaceOrder.reverse() }))
+    await page.evaluate(() => window.flushSync(() => { window.data.spaceMeta.spaceOrder = ['third', 'space', 'other'] }))
     await expectActiveSpaceVisible('other', 'new-normal')
     await page.$eval('.tab-content-container', list => { list.scrollLeft = 0 })
     await page.evaluate(() => window.flushSync(() => { window.data.docs.outside.title = 'Updated title' }))

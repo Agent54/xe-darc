@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { parse } from 'svelte/compiler'
 import { detectUrl } from '../app/lib/utils.js'
+import { resolveNewTabInput } from '../app/lib/new-tab-input.js'
 
 Deno.test('URL detection adds HTTP to domains, www hosts and localhost', () => {
     const cases = [
@@ -52,8 +53,8 @@ const submit = parse(source).instance.content.body.find(node => node.type === 'F
 function submitInput(inputValue, settings = {}) {
     const navigations = []
     let prevented = false
-    const handler = new Function('inputValue', 'detectUrl', 'data', 'tab', 'localStorage', `${source.slice(submit.start, submit.end)}; return handleSubmit`)(
-        inputValue, detectUrl, { navigate: (...args) => navigations.push(args) }, { id: 'new-tab' }, { getItem: key => settings[key] },
+    const handler = new Function('inputValue', 'resolveNewTabInput', 'data', 'tab', `${source.slice(submit.start, submit.end)}; return handleSubmit`)(
+        inputValue, input => resolveNewTabInput(input, { getItem: key => settings[key] }), { navigate: (...args) => navigations.push(args) }, { id: 'new-tab' },
     )
     handler({ preventDefault() { prevented = true } })
     assert.equal(prevented, true)
@@ -72,4 +73,18 @@ Deno.test('new tab submission navigates detected addresses and keeps search sett
     assert.equal(search('k google.com').searchParams.get('q'), 'google.com')
     assert.equal(search('hello world', { defaultSearchEngine: 'kagi' }).origin, 'https://kagi.com')
     assert.equal(search('hello world', { defaultSearchEngine: 'custom', customSearchUrl: 'https://search.example/?q=' }).searchParams.get('q'), 'hello world')
+    assert.equal(search('hello world', { defaultSearchEngine: 'custom', customSearchUrl: 'invalid' }).origin, 'https://www.google.com')
+})
+
+Deno.test('clipboard input uses the same URL and search classification as the new-tab page', () => {
+    const settings = { getItem: () => null }
+    assert.equal(resolveNewTabInput(' \n ', settings), null)
+    for (const text of ['google.com', 'localhost:3000', '::1', 'about:blank']) {
+        assert.deepEqual(resolveNewTabInput(`  ${text}  `, settings), { text, url: detectUrl(text), isSearch: false })
+    }
+    for (const text of ['hello world', 'google', 'example..com', 'k google.com']) {
+        const input = resolveNewTabInput(text, settings)
+        assert.equal(input.isSearch, true)
+        assert.equal(input.url, submitInput(text)[0][1])
+    }
 })

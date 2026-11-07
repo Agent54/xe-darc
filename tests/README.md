@@ -15,7 +15,7 @@ The former `favicon-browser.js` scenarios now have independent entry points:
 | `sidebar-pins-browser.js` | Pin dragging, transfers, sidebar sections and unpinning | `--pins-only` |
 | `pin-modes-browser.js` | Pinned groups, manual pin order, Normal activation and Menu sizing/dismissal | |
 | `sidebar-scroll-browser.js` | Sticky New Tab, crowded pins and active-tab scrolling | `--sidebar-scroll-only` |
-| `sidebar-multi-space-browser.js` | Active-space scrolling when closing the full-width sidebar | |
+| `sidebar-multi-space-browser.js` | Space navigation, new-tab-only spaces, search and full-width closing | |
 | `tab-overrides-browser.js` | Custom titles, emoji, image icons and resets | `--tab-overrides-only` |
 | `tab-title-browser.js` | Shared URL fallback, reactive titles and internal New Tab titles across tab surfaces | |
 | `sidebar-hovercards-browser.js` | Hovercard gaps, responsive history, screenshots and metadata | |
