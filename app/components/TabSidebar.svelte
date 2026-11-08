@@ -1162,6 +1162,13 @@
                     if (row.top < bounds.top) innerList.scrollTop += row.top - bounds.top
                     else if (row.bottom > bounds.bottom) innerList.scrollTop += row.bottom - bounds.bottom
                 }
+
+
+                // FIXME: not smooth? activeTabElement.scrollIntoView({
+                    //                         behavior: 'smooth',
+                    //                         block: 'nearest'
+                    //                     })
+
                 const tabsList = activeTabElement.closest('.space-tabs-sections')
                 if (tabsList) {
                     const bounds = tabsList.getBoundingClientRect()
