@@ -8,8 +8,21 @@
     let { tab, isActive = false } = $props()
     
     let inputValue = $state('')
+    let detectedInput = $state(null)
     let mouseX = $state(0)
     let mouseY = $state(0)
+
+    $effect(() => {
+        const value = inputValue
+        detectedInput = null
+        if (!value.trim()) return
+
+        const timeout = setTimeout(() => {
+            detectedInput = resolveNewTabInput(value)
+        }, 150)
+
+        return () => clearTimeout(timeout)
+    })
     
     // AI completions with proper cancellation and tracking
     let completions = $state([])
@@ -610,11 +623,11 @@
             </form>
             
             <div class="action-buttons flex gap-3 justify-center mt-4">
-                <button class="action-btn search-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
+                <button class:detected={detectedInput?.isSearch === false} class="action-btn go-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
                     go
                 </button>
 
-                <button class="action-btn search-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
+                <button class:detected={detectedInput?.isSearch === true} class="action-btn search-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
                     search
                 </button>
                 <button class="action-btn ask-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
@@ -691,6 +704,12 @@
 </div>
 
 <style>
+    .action-btn.detected {
+        background-color: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.4);
+        color: white;
+    }
+
     /* .omnibar-input:focus + .input-accent {
         opacity: 1;
     } */
