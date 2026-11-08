@@ -81,9 +81,10 @@ the request controller; neither calls allow or deny on the event itself.
 See [Chromium's controller implementation](https://raw.githubusercontent.com/chromium/chromium/main/extensions/renderer/resources/guest_view/web_view/web_view_action_requests.js)
 and the [draft event definition](https://wicg.github.io/controlled-frame/#permissionrequest).
 
-Motion sensor availability checks only detect API presence. They must not call
-`DeviceOrientationEvent.requestPermission()` in the embedder. Motion sensors
-remain listed in Resources, with permission controls disabled until a guest
+The motion-sensor availability probe retains
+`DeviceOrientationEvent.requestPermission()` with a TODO to evaluate whether
+it is needed for window management or related handlers. Resources currently
+skips that probe and disables permission controls until a guest motion-sensor
 permission handler is implemented.
 
 Unanswered requests appear as cards at the top right of the current window.
@@ -106,7 +107,7 @@ Unknown requests, invalid or opaque origins, unsupported schema versions,
 and conflicting saved decisions cannot grant access. Revision conflicts are
 retried; an explicit new decision also removes conflicting revision leaves.
 Registry entries without enforcement have disabled permission controls.
-Availability checks never prompt. Mock is disabled with a “Not implemented yet”
+Other availability checks do not prompt. Mock is disabled with a “Not implemented yet”
 tooltip.
 
 Popups, including OAuth windows, use the ordinary guest lifecycle and retain

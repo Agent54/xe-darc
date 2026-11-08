@@ -64,14 +64,23 @@ function native(h, { type = 'geolocation', tabId = 'one', nested = false, cancel
     return actions
 }
 
-Deno.test('motion sensor availability never requests access in the embedder', async () => {
-    const sensor = { requestPermission() { throw new Error('Availability checks must not request permission') } }
-    const available = vm.runInNewContext(`(${resourceTypes['motion-sensors'].availability.toString()})()`, {
-        window: { DeviceOrientationEvent: sensor, DeviceMotionEvent: sensor }, DeviceOrientationEvent: sensor
-    })
-    assert.equal((await available).available, true)
-    const unavailable = vm.runInNewContext(`(${resourceTypes['motion-sensors'].availability.toString()})()`, { window: {} })
-    assert.equal((await unavailable).available, false)
+Deno.test('motion sensor availability handles the restored orientation permission probe', async () => {
+    const check = window => vm.runInNewContext(`(${resourceTypes['motion-sensors'].availability.toString()})()`, { window })
+    for (const answer of ['granted', 'denied', 'error']) {
+        let calls = 0
+        const sensor = { requestPermission() {
+            calls++
+            if (answer === 'error') {
+                throw new Error('Permission request failed')
+            }
+            return Promise.resolve(answer)
+        } }
+        const result = await check({ DeviceOrientationEvent: sensor })
+        assert.equal(result.available, answer === 'granted')
+        assert.equal(calls, 1)
+    }
+    assert.equal((await check({ DeviceMotionEvent: {} })).available, true)
+    assert.equal((await check({})).available, false)
 })
 
 Deno.test('pending permission notifications include previously seen requests and isolate the current window', () => {
