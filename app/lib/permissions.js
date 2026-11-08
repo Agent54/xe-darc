@@ -95,7 +95,7 @@ export function handleFramePermission(data, tabId, event, context) {
         request.deny()
         return
     }
-    // Legacy guests can defer the controller; newer guests must retry after a decision.
+    // Chromium's flat event supports deferral; draft-style nested events need a synchronous answer.
     const deferred = !event.permissionRequest && event.cancelable === true && typeof event.preventDefault === 'function'
     if (deferred) {
         event.preventDefault()
