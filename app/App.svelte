@@ -5,6 +5,7 @@
     import Frame from './components/Frame.svelte'
     import Resources from './components/ResourcesPanel.svelte'
     import PermissionToasts from './components/PermissionToasts.svelte'
+    import TabToasts from './components/TabToasts.svelte'
     import Settings from './components/Settings.svelte'
     import { openTabDevTools } from './lib/tab-devtools.js'
     import { closeButtonHistory } from './lib/close-button-history.js'
@@ -4802,6 +4803,7 @@
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
 <PermissionToasts visible={!openSidebars.has('resources')} {headerPartOfMain} onOpenResources={switchToResources} />
+<TabToasts {headerPartOfMain} />
 
 {#if openSidebars.size > 0}
     <div class="sidebar-container" 

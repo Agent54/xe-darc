@@ -55,14 +55,6 @@
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
     let closedTabsHideTimeout = null
-    let closedTabsPreviewUntil = $state(0)
-    let closedTabsPreviewNow = $state(0)
-    let closedTabsPreviewRetained = $state(false)
-    const recentClosedTabs = $derived(data.spaceMeta.closedTabs.filter(tab =>
-        tab.closedAt > closedTabsPreviewNow - 10_000 && tab.closedAt <= closedTabsPreviewNow
-    ))
-    const closedTabsPreviewVisible = $derived(closedTabsPreviewUntil > closedTabsPreviewNow && recentClosedTabs.length > 0)
-    const displayedClosedTabs = $derived(closedTabsPreviewRetained && !closedTabsHovered ? recentClosedTabs : data.spaceMeta.closedTabs)
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
@@ -280,7 +272,6 @@
             urlBarExpanded = false
             closedTabsHovered = false
             closedTabsHeaderHovered = false
-            closedTabsPreviewUntil = 0
             clearTimeout(menuCloseTimeout)
             clearTimeout(closedTabsHideTimeout)
             menuCloseTimeout = null
@@ -1232,37 +1223,6 @@
         }
     })
 
-    const closedTabsMountedAt = Date.now()
-    let previousClosedTabs = null
-    $effect(() => {
-        const closedTabs = new Map(data.spaceMeta.closedTabs.map(tab => [tab.id, tab.closedAt]))
-        const now = Date.now()
-        if (previousClosedTabs && [...closedTabs].some(([id, closedAt]) =>
-            closedAt >= closedTabsMountedAt && closedAt > now - 10_000 && closedAt <= now &&
-            previousClosedTabs.get(id) !== closedAt
-        )) {
-            closedTabsPreviewNow = now
-            closedTabsPreviewUntil = now + 3000
-            closedTabsPreviewRetained = true
-        }
-        previousClosedTabs = closedTabs
-    })
-
-    // Expire the preview and any rows that pass the ten-second cutoff while it is open.
-    $effect(() => {
-        if (!closedTabsPreviewVisible) return
-        const nextExpiry = Math.min(closedTabsPreviewUntil, ...recentClosedTabs.map(tab => tab.closedAt + 10_000))
-        const timeout = setTimeout(() => { closedTabsPreviewNow = Date.now() }, Math.max(1, nextExpiry - Date.now()))
-        return () => clearTimeout(timeout)
-    })
-
-    // Keep the filtered rows and offscreen-sidebar offset until the 200 ms fade finishes.
-    $effect(() => {
-        if (!closedTabsPreviewRetained || closedTabsPreviewVisible) return
-        const timeout = setTimeout(() => { closedTabsPreviewRetained = false }, 250)
-        return () => clearTimeout(timeout)
-    })
-    
     // Cleanup timeouts on component destroy
     $effect(() => {
         return () => {
@@ -1694,8 +1654,6 @@
 {/if}
 
 <div class="sidebar-box" 
-     class:closed-tabs-preview={closedTabsPreviewRetained}
-     class:closed-tabs-preview-closing={closedTabsPreviewRetained && !closedTabsPreviewVisible && !closedTabsHovered}
      class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || headerMenuOpen || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
@@ -2265,9 +2223,9 @@
                     <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
                     <span class="closed-tabs-count">{data.spaceMeta.closedTabs.length}</span>
                 </button>
-                <div class="closed-tabs-content" class:expanded={closedTabsHovered || closedTabsPreviewVisible}>
+                <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
-                        {#each displayedClosedTabs as tab (tab.id)}
+                        {#each data.spaceMeta.closedTabs as tab (tab.id)}
                             {#if tabMatchesSearch(tab)}
                                 <button class="closed-tab-item" data-tab-id={tab.id}
                                         onmousedown={() => data.restoreClosedTab(tab.id)}
@@ -4379,17 +4337,6 @@
         flex-direction: column;
         /* width: calc(100% - 17px); */
         flex-shrink: 0;
-    }
-
-    /* Reveal only the closed-tab menu when the rest of the sidebar is tucked away. */
-    .sidebar-box.closed-tabs-preview:not(:hover):not(.hovered):not(.visible):not(.resizing) .closed-tabs-section {
-        transform: translateX(calc(100% + 9px));
-        transition: opacity 200ms ease;
-    }
-
-    .sidebar-box.closed-tabs-preview.closed-tabs-preview-closing:not(:hover):not(.hovered):not(.visible):not(.resizing) .closed-tabs-section {
-        opacity: 0;
-        pointer-events: none;
     }
 
     :global(.sidebar-box.visible .closed-tabs-section)   {
