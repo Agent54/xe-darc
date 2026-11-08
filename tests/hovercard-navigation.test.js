@@ -28,12 +28,13 @@ function navigationHarness(tabId = 'tab', zenMode = false) {
     const clearTimeout = id => timers.delete(id)
     const actions = []
     const tab = { id: tabId }
+    let hovercardHovered = false
     let api
     const window = new EventTarget()
     window.innerWidth = 1200
     window.innerHeight = 800
     const data = { docs: { [tabId]: tab }, frames: { [tabId]: { frame: { back() { actions.push('back') }, forward() { actions.push('forward') } } } } }
-    api = new Function('data', 'window', 'CustomEvent', 'setTimeout', 'clearTimeout', 'focusModeEnabled', `
+    api = new Function('data', 'window', 'CustomEvent', 'setTimeout', 'clearTimeout', 'focusModeEnabled', 'isHovercardHovered', `
         let hoveredTab = null, navigationHovercardTabId = null, navigationHovercardTimeout = null
         let hovercardPreviewVisible = true
         let instantHovercardsMode = false, instantModeResetTimer = null, closeButtonHoveredDelayed = false
@@ -43,7 +44,9 @@ function navigationHarness(tabId = 'tab', zenMode = false) {
         let hovercardPosition = { x: 170, y: 40 }
         let isMouseDown = null, lastMouseActivityTime = 0, pendingBlurTimeout = null, controlledFrameHasFocus = false
         const tabButtons = {}, tabDrag = { active: false }
-        const document = { querySelector: () => ({ getBoundingClientRect: () => ({ left: 0, bottom: 40, width: 1200 }) }) }
+        const document = { querySelector: selector => selector === '.tab-hovercard:hover'
+            ? (isHovercardHovered() ? {} : null)
+            : ({ getBoundingClientRect: () => ({ left: 0, bottom: 40, width: 1200 }) }) }
         function startHovercardPositionCheck() {}
         function stopHovercardPositionCheck() {}
         ${handlers}
@@ -57,9 +60,10 @@ function navigationHarness(tabId = 'tab', zenMode = false) {
             get held() { return navigationHovercardTabId },
             expandUrlBar() { hovercardUrlBarExpanded = true }
         }
-    `)(data, window, CustomEvent, setTimeout, clearTimeout, zenMode)
+    `)(data, window, CustomEvent, setTimeout, clearTimeout, zenMode, () => hovercardHovered)
     return {
         api, actions, timers, window,
+        hoverMenu(hovered = true) { hovercardHovered = hovered },
         advance(ms) {
             const end = now + ms
             while (true) {
@@ -227,6 +231,23 @@ Deno.test('back and forward reveal the hovercard immediately for 800 ms', () => 
         h.api.closeHovercard()
         assert.equal(h.api.visible, 'tab')
         h.advance(1)
+        assert.equal(h.api.visible, null)
+    }
+})
+
+Deno.test('hovering navigation history keeps it open past the reveal timeout until the pointer leaves', () => {
+    for (const direction of ['back', 'forward']) {
+        const h = navigationHarness()
+        h.api.navigateTabHistory('tab', direction)
+        h.advance(400)
+        h.hoverMenu()
+        h.advance(2000)
+        assert.equal(h.api.visible, 'tab')
+        assert.equal(h.api.previewVisible, false)
+        assert.equal(h.api.held, null, 'the expired navigation hold must allow pointer-leave dismissal')
+        assert.equal(h.timers.size, 0)
+        h.hoverMenu(false)
+        h.api.closeHovercard()
         assert.equal(h.api.visible, null)
     }
 })
