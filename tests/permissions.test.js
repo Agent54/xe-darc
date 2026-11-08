@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import vm from 'node:vm'
+import resourceTypes from '../app/lib/resourceTypes.js'
 import { createPermissionStore, handleFramePermission, permissionDescriptor, permissionDocumentId, permissionScope, getPendingPermissionRequests } from '../app/lib/permissions.js'
 
 function harness(records = new Map(), instanceId = 'installation') {
@@ -34,14 +36,52 @@ function harness(records = new Map(), instanceId = 'installation') {
         failWrites() { failWrite = true }, conflictOnce() { conflicts = 1 } }
 }
 
-function native(h, { type = 'geolocation', tabId = 'one', nested = false, url = 'https://site.example/page', ...details } = {}) {
+function native(h, { type = 'geolocation', tabId = 'one', nested = false, cancelable = !nested, url = 'https://site.example/page', ...details } = {}) {
     const actions = []
-    const controller = { url, allow() { actions.push('allow') }, deny() { actions.push('deny') }, cancel() { actions.push('cancel') } }
-    const event = nested ? { permissionRequest: { permission: type, request: controller, ...details } }
-        : { permission: type, url, request: controller, cancelable: true, preventDefault() { actions.push('defer') }, ...details }
-    handleFramePermission(h.data, tabId, event, h.contexts.get(tabId))
+    const event = new Event('permissionrequest', { cancelable })
+    let dispatching = true, settled = false
+    function respond(receiver, action) {
+        if (receiver !== controller || settled || (!dispatching && !event.defaultPrevented)) {
+            actions.push('invalid-response')
+        }
+        settled = true
+        actions.push(action)
+    }
+    const controller = Object.freeze({ url, allow() { respond(this, 'allow') },
+        ...(nested ? { cancel() { respond(this, 'cancel') } } : { deny() { respond(this, 'deny') } }) })
+    Object.assign(event, nested ? { permissionRequest: Object.freeze({ permission: type, request: controller, ...details }) }
+        : { permission: type, url, request: controller, ...details })
+    event.preventDefault = function () {
+        Event.prototype.preventDefault.call(this)
+        actions.push('defer')
+    }
+    assert.equal(handleFramePermission(h.data, tabId, event, h.contexts.get(tabId)), undefined)
+    dispatching = false
+    if (!settled && !event.defaultPrevented) {
+        settled = true
+        actions.push('default-deny')
+    }
     return actions
 }
+
+Deno.test('motion sensor availability handles the restored orientation permission probe', async () => {
+    const check = window => vm.runInNewContext(`(${resourceTypes['motion-sensors'].availability.toString()})()`, { window })
+    for (const answer of ['granted', 'denied', 'error']) {
+        let calls = 0
+        const sensor = { requestPermission() {
+            calls++
+            if (answer === 'error') {
+                throw new Error('Permission request failed')
+            }
+            return Promise.resolve(answer)
+        } }
+        const result = await check({ DeviceOrientationEvent: sensor })
+        assert.equal(result.available, answer === 'granted')
+        assert.equal(calls, 1)
+    }
+    assert.equal((await check({ DeviceMotionEvent: {} })).available, true)
+    assert.equal((await check({})).available, false)
+})
 
 Deno.test('pending permission notifications include previously seen requests and isolate the current window', () => {
     const request = (requestId, status, windowId, created, unseen = true) => ({ requestId, status, windowId, created, unseen })
@@ -95,14 +135,59 @@ Deno.test('one-time approval resolves only one native request and is not saved',
 })
 
 Deno.test('synchronous event controllers get one frame-bound retry, consumed only once', async () => {
-    const h = harness()
-    await h.store.ready
-    assert.deepEqual(native(h, { nested: true }), ['deny'])
-    await h.store.resolve(h.resources()[0].requestId, 'allow', 'once')
-    assert.deepEqual(native(h, { nested: true, tabId: 'two' }), ['deny'])
-    assert.deepEqual(native(h, { nested: true }), ['allow'])
-    assert.deepEqual(native(h, { nested: true }), ['deny'])
-    h.store.cancelFrame(h.contexts.get('one').frame)
+    for (const shape of [{ nested: true }, { nested: true, cancelable: true }, { cancelable: false }]) {
+        const h = harness()
+        await h.store.ready
+        const denied = shape.nested ? 'cancel' : 'deny'
+        const first = native(h, shape)
+        assert.deepEqual(first, [denied])
+        await h.store.resolve(h.resources()[0].requestId, 'allow', 'once')
+        assert.deepEqual(first, [denied])
+        assert.deepEqual(native(h, { ...shape, tabId: 'two' }), [denied])
+        assert.deepEqual(native(h, shape), ['allow'])
+        assert.deepEqual(native(h, shape), [denied])
+        h.store.cancelFrame(h.contexts.get('one').frame)
+    }
+})
+
+Deno.test('cached answers resolve synchronously on the request controller in both event shapes', async () => {
+    for (const shape of [{}, { nested: true }, { cancelable: false }]) {
+        const h = harness()
+        await h.store.ready
+        await h.store.setDecision('geolocation', 'one', 'allow')
+        assert.deepEqual(native(h, shape), shape.nested || shape.cancelable === false ? ['allow'] : ['defer', 'allow'])
+        await h.store.setDecision('geolocation', 'one', 'deny')
+        const denied = shape.nested ? 'cancel' : 'deny'
+        assert.deepEqual(native(h, shape), shape.nested || shape.cancelable === false ? [denied] : ['defer', denied])
+        assert.equal(h.resources().length, 0)
+    }
+})
+
+Deno.test('saving or ignoring a synchronous request never calls its expired controller again', async () => {
+    for (const shape of [{ nested: true }, { cancelable: false }]) {
+        for (const answer of ['allow', 'deny', 'ignore']) {
+            const h = harness()
+            await h.store.ready
+            const actions = native(h, shape)
+            const denied = shape.nested ? 'cancel' : 'deny'
+            assert.deepEqual(actions, [denied])
+            await h.store.resolve(h.resources()[0].requestId, answer)
+            assert.deepEqual(actions, [denied])
+            assert.deepEqual(native(h, shape), [answer === 'allow' ? 'allow' : denied])
+            h.store.cancelFrame(h.contexts.get('one').frame)
+        }
+    }
+})
+
+Deno.test('unsupported and opaque-origin requests synchronously deny or cancel on their controller', async () => {
+    for (const shape of [{}, { nested: true }]) {
+        const h = harness()
+        await h.store.ready
+        const denied = shape.nested ? 'cancel' : 'deny'
+        assert.deepEqual(native(h, { ...shape, type: 'futurePermission' }), [denied])
+        assert.deepEqual(native(h, { ...shape, url: 'data:text/html,opaque' }), [denied])
+        assert.equal(h.resources().every(resource => !resource.supported), true)
+    }
 })
 
 Deno.test('one-time approval and dismissal target the selected request among repeated same-tab requests', async () => {

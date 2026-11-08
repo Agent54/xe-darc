@@ -166,6 +166,17 @@ export default {
             if (!window.DeviceOrientationEvent && !window.DeviceMotionEvent) {
                 return { available: false, error: 'Motion sensors not supported by browser' }
             }
+            // TODO: Evaluate whether requesting orientation access here is needed for window management or related handlers.
+            if (typeof window.DeviceOrientationEvent?.requestPermission === 'function') {
+                try {
+                    const permission = await window.DeviceOrientationEvent.requestPermission()
+                    if (permission !== 'granted') {
+                        return { available: false, error: 'Motion sensor permission denied by user' }
+                    }
+                } catch (e) {
+                    return { available: false, error: 'Unable to request motion sensor permission' }
+                }
+            }
             return { available: true, error: null }
         }
     },

@@ -70,6 +70,23 @@ resolves only the selected native request. For controllers that cannot be
 deferred, it arms one retry in that same frame and page for up to 60 seconds.
 Ignore dismisses the selected request without remembering a decision.
 
+The native event handler and `data.permissionRequest` are synchronous. Only
+saving a user's answer is asynchronous. Chromium's flat event exposes
+`event.request.allow()` / `event.request.deny()`; calling `preventDefault()`
+during dispatch keeps that controller available for a later user answer.
+Without deferral, an unanswered request is denied during dispatch and a
+later approval applies to a retry. The draft's nested form instead uses
+`event.permissionRequest.request.allow()` / `.cancel()`. Both paths retain
+the request controller; neither calls allow or deny on the event itself.
+See [Chromium's controller implementation](https://raw.githubusercontent.com/chromium/chromium/main/extensions/renderer/resources/guest_view/web_view/web_view_action_requests.js)
+and the [draft event definition](https://wicg.github.io/controlled-frame/#permissionrequest).
+
+The motion-sensor availability probe retains
+`DeviceOrientationEvent.requestPermission()` with a TODO to evaluate whether
+it is needed for window management or related handlers. Resources currently
+skips that probe and disables permission controls until a guest motion-sensor
+permission handler is implemented.
+
 Unanswered requests appear as cards at the top right of the current window.
 They use the same card component and actions as the Resources sidebar and
 remain until answered, ignored, or expired by the request handler. Clicking
@@ -90,7 +107,7 @@ Unknown requests, invalid or opaque origins, unsupported schema versions,
 and conflicting saved decisions cannot grant access. Revision conflicts are
 retried; an explicit new decision also removes conflicting revision leaves.
 Registry entries without enforcement have disabled permission controls.
-Availability checks never prompt. Mock is disabled with a “Not implemented yet”
+Other availability checks do not prompt. Mock is disabled with a “Not implemented yet”
 tooltip.
 
 Popups, including OAuth windows, use the ordinary guest lifecycle and retain
@@ -121,3 +138,6 @@ deno run --unstable-bare-node-builtins --allow-env --allow-read --allow-sys --al
 The browser fixture verifies PouchDB persistence, cross-window updates,
 the actual header/resource controls, and disabled Mock behavior in Chromium.
 It does not emulate a native IWA controlled-frame guest.
+The permission unit tests use separate frozen Chromium and draft controllers,
+real cancelable/noncancelable events, and dispatch-lifetime checks to catch late
+responses, repeated answers, incorrect receivers, and incorrect denial methods.
