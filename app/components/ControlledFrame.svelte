@@ -873,9 +873,9 @@ function setupContentScripts(frame) {
                 code: scopedGuestScript(frame, `
 const tabId = ${JSON.stringify(tab?.id || tabId)};
 
-${getFrameShortcutScript(tab?.id || tabId)}
-
 ${ipc}
+
+${getFrameShortcutScript(tab?.id || tabId)}
 
 ${select}
 
@@ -1647,14 +1647,18 @@ document.addEventListener('input', function(event) {
                     isCommandKeyDown = false
                     commandKeyPressed = false
                 }
-            } else if (message.startsWith('iwa:shortcut-help:')) {
+            } else if (message.startsWith('iwa:input-event:')) {
                 try {
-                    const detail = JSON.parse(message.slice('iwa:shortcut-help:'.length))
-                    if (detail.tabId === mytab.id) {
-                        window.dispatchEvent(new CustomEvent('darc-shortcut-help', { detail }))
+                    const detail = JSON.parse(message.slice('iwa:input-event:'.length))
+                    if (detail?.tabId !== mytab.id || !['keydown', 'keyup', 'pointerdown', 'auxclick', 'contextmenu', 'wheel', 'scroll', 'touchstart', 'touchmove', 'blur'].includes(detail.type)) {
+                        return
                     }
+                    if ((detail.type === 'keydown' || detail.type === 'keyup') && (typeof detail.key !== 'string' || !Number.isInteger(detail.pressedKeyCount) || detail.pressedKeyCount < 0)) {
+                        return
+                    }
+                    window.dispatchEvent(new CustomEvent('darc-controlled-frame-input', { detail }))
                 } catch (error) {
-                    console.warn('Invalid frame shortcut help message', error)
+                    console.warn('Invalid frame input event', error)
                 }
             } else if (message.startsWith('iwa:shortcut:')) {
                 try {

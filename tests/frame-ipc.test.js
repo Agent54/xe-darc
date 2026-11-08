@@ -19,6 +19,9 @@ function harness(subframe = false) {
     window.top = subframe ? {} : window
     const document = new EventTarget()
     const messages = []
+    const inputs = []
+    const shell = new EventTarget()
+    shell.addEventListener('darc-controlled-frame-input', event => inputs.push(event.detail))
     const rawMessages = []
     const transfers = []
     const guestPorts = []
@@ -33,12 +36,12 @@ function harness(subframe = false) {
         }
     }
     let focusCount = 0
-    new Function('frame', 'connectFrameIPC', 'readGuestMessage', `
+    new Function('frame', 'connectFrameIPC', 'readGuestMessage', 'window', `
         const tab = { id: 'tab' }, untrack = fn => fn()
         const onFrameFocus = () => frame.focus()
         ${source.slice(listener.start, listener.end)}
         setupMessageListener(frame)
-    `)(frame, connectFrameIPC, readGuestMessage)
+    `)(frame, connectFrameIPC, readGuestMessage, shell)
     frame.focus = () => { focusCount++ }
 
     new Function('window', 'document', 'globalThis', scopedGuestScript(frame, `const tabId = 'tab';\n${ipc}`, 'https://embedder.example'))(window, document, { console: {
@@ -50,7 +53,7 @@ function harness(subframe = false) {
     } })
 
     return {
-        window, document, frame, messages, transfers, guestPorts,
+        window, document, frame, messages, inputs, transfers, guestPorts,
         get secret() { return JSON.parse(rawMessages.find(message => message.startsWith('darc:bridge:')).slice('darc:bridge:'.length)).secret },
         get focusCount() { return focusCount },
         close() {
@@ -105,6 +108,63 @@ Deno.test('nested content scripts keep console events without starting a second 
         assert.equal(h.transfers.length, 0)
         h.window.dispatchEvent(new Event('focus'))
         assert.equal(h.focusCount, 1)
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('core keyboard events report key counts and modifiers without character keys', () => {
+    const h = harness(true)
+    try {
+        const key = (type, key, code, modifiers = {}) => h.window.dispatchEvent(Object.assign(new Event(type), { key, code, ...modifiers }))
+        key('keydown', 'a', 'KeyA')
+        key('keydown', 'b', 'KeyB')
+        key('keyup', 'a', 'KeyA')
+        key('keydown', 'Control', 'ControlLeft', { ctrlKey: true })
+        key('keyup', 'Control', 'ControlLeft')
+        key('keyup', 'b', 'KeyB')
+        assert.deepEqual(h.inputs.map(event => [event.type, event.key, event.pressedKeyCount, event.ctrlKey]), [
+            ['keydown', 'Unidentified', 1, false],
+            ['keydown', 'Unidentified', 2, false],
+            ['keyup', 'Unidentified', 1, false],
+            ['keydown', 'Control', 2, true],
+            ['keyup', 'Control', 1, false],
+            ['keyup', 'Unidentified', 0, false]
+        ])
+        assert.ok(h.inputs.every(event => !('code' in event) && !('event' in event)))
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('core interaction events retain their type and wheel deltas while synthetic input is ignored', () => {
+    const h = harness(true)
+    try {
+        h.window.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Meta', metaKey: true, synthetic: true }))
+        h.window.dispatchEvent(Object.assign(new Event('wheel'), { deltaX: 4, deltaY: -24, deltaMode: 0, synthetic: true }))
+        assert.deepEqual(h.inputs, [])
+        h.window.dispatchEvent(Object.assign(new Event('wheel'), { deltaX: 4, deltaY: -24, deltaMode: 0 }))
+        for (const type of ['pointerdown', 'auxclick', 'contextmenu', 'scroll', 'touchstart', 'touchmove']) {
+            h.window.dispatchEvent(new Event(type))
+        }
+        assert.deepEqual(h.inputs[0], { tabId: 'tab', type: 'wheel', deltaX: 4, deltaY: -24, deltaMode: 0 })
+        assert.deepEqual(h.inputs.map(event => event.type), ['wheel', 'pointerdown', 'auxclick', 'contextmenu', 'scroll', 'touchstart', 'touchmove'])
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('the input bridge rejects malformed keyboard events, unknown types and other tab IDs', () => {
+    const h = harness(true)
+    try {
+        for (const detail of [null, [], { tabId: 'other', type: 'wheel' }, { tabId: 'tab', type: 'cancel' },
+            { tabId: 'tab', type: 'keydown' }, { tabId: 'tab', type: 'keyup', key: 'Meta', pressedKeyCount: -1 }]) {
+            const message = 'iwa:input-event:' + JSON.stringify(detail)
+            new Function('globalThis', scopedGuestScript(h.frame, `console.log(${JSON.stringify(message)})`, 'https://embedder.example'))({ console: {
+                log(message) { h.frame.onconsolemessage({ message }) }
+            } })
+        }
+        assert.deepEqual(h.inputs, [])
     } finally {
         h.close()
     }

@@ -28,6 +28,55 @@ if (window === window.top) {
     console.log(`iwa:ipc-ready:${tabId}`)
 }
 
+const pressedInputKeys = new Map()
+
+function reportInputEvent(event) {
+    if (!event.isTrusted) {
+        return
+    }
+    const detail = { tabId, type: event.type }
+    if (event.type === 'keydown' || event.type === 'keyup') {
+        const key = event.code || event.key
+        if (event.type === 'keydown') {
+            pressedInputKeys.set(key, event.metaKey || event.ctrlKey)
+        } else {
+            pressedInputKeys.delete(key)
+            // macOS can omit letter keyup during Command combinations.
+            if ((event.key === 'Meta' || event.key === 'Control') && !event.metaKey && !event.ctrlKey) {
+                for (const [key, duringCommand] of pressedInputKeys) {
+                    if (duringCommand) {
+                        pressedInputKeys.delete(key)
+                    }
+                }
+            }
+        }
+        Object.assign(detail, {
+            // Character keys stay inside the guest document.
+            key: /^[A-Za-z][A-Za-z0-9]+$/.test(event.key) ? event.key : 'Unidentified',
+            repeat: !!event.repeat,
+            metaKey: !!event.metaKey,
+            ctrlKey: !!event.ctrlKey,
+            altKey: !!event.altKey,
+            shiftKey: !!event.shiftKey,
+            pressedKeyCount: pressedInputKeys.size
+        })
+    } else if (event.type === 'wheel') {
+        Object.assign(detail, { deltaX: event.deltaX, deltaY: event.deltaY, deltaMode: event.deltaMode })
+    } else if (event.type === 'scroll') {
+        const target = event.target === document ? document.scrollingElement : event.target
+        Object.assign(detail, { scrollLeft: target?.scrollLeft, scrollTop: target?.scrollTop })
+    } else if (event.type === 'blur') {
+        pressedInputKeys.clear()
+    } else {
+        Object.assign(detail, { button: event.button, pointerType: event.pointerType })
+    }
+    console.log('iwa:input-event:' + JSON.stringify(detail))
+}
+
+for (const type of ['keydown', 'keyup', 'pointerdown', 'auxclick', 'contextmenu', 'wheel', 'scroll', 'touchstart', 'touchmove', 'blur']) {
+    window.addEventListener(type, reportInputEvent, { capture: true, passive: true })
+}
+
 window.addEventListener('focus', () => { 
     // console.log('####### 🎯 [FOCUS] Frame window received focus event | tabId:', tabId);
     console.log('iwa:focus');

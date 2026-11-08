@@ -133,14 +133,14 @@ function shortcutHelpHarness() {
     })
     const shell = new EventTarget()
     const functions = parse(source).instance.content.body
-        .filter(node => node.type === 'FunctionDeclaration' && ['handleFrameShortcutHelp', 'handleFrameShortcut'].includes(node.id.name))
+        .filter(node => node.type === 'FunctionDeclaration' && ['handleFrameInput', 'handleFrameShortcut'].includes(node.id.name))
         .map(node => source.slice(node.start, node.end)).join('\n')
     const bridge = new Function('handleKeyDown', 'data', 'shortcutActionIds', 'runShortcut', `
         let shortcutHelpEscapeTabId = null
         ${functions}
-        return { handleFrameShortcutHelp, handleFrameShortcut }
+        return { handleFrameInput, handleFrameShortcut }
     `)(handler, { docs: { 'darc:tab:a': {}, 'darc:tab:b': {} } }, shortcutActionIds, id => calls.push(id))
-    shell.addEventListener('darc-shortcut-help', bridge.handleFrameShortcutHelp)
+    shell.addEventListener('darc-controlled-frame-input', bridge.handleFrameInput)
     shell.addEventListener('darc-shortcut', bridge.handleFrameShortcut)
     listenForShortcutHelpCancellation(shell, handler.cancelHelp)
     const guests = [contentClickBridge(shell, 'darc:tab:a'), contentClickBridge(shell, 'darc:tab:b', true)]
@@ -200,10 +200,10 @@ Deno.test('shell previews cancel guest holds and extra keys stay disqualifying a
     h.shell.dispatchEvent(new Event('darc-link-preview'))
     assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts'])
     const reportedKeys = h.guests.flatMap(guest => guest.messages)
-        .filter(message => message.startsWith('iwa:shortcut-help:'))
-        .map(message => JSON.parse(message.slice('iwa:shortcut-help:'.length)).event)
-        .filter(Boolean)
-    assert.ok(reportedKeys.every(event => ['Meta', 'Control', 'Escape', 'Other'].includes(event.key) && !('code' in event)))
+        .filter(message => message.startsWith('iwa:input-event:'))
+        .map(message => JSON.parse(message.slice('iwa:input-event:'.length)))
+        .filter(event => event.type === 'keydown' || event.type === 'keyup')
+    assert.ok(reportedKeys.every(event => ['Meta', 'Control', 'Escape', 'Unidentified'].includes(event.key) && !('code' in event)))
 })
 
 Deno.test('Escape from a guest dismisses help without also dismissing the underlying lightbox', () => {

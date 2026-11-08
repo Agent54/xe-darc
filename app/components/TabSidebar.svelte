@@ -150,7 +150,7 @@
     let hovercardHistoryReady = $state(false)
     let menuCloseTimeout = null
     let newTabMenuSpaceId = $state(null)
-    let newTabMenuOpenVersion = $state(0)
+    let newTabMenuRefreshCounter = $state(0)
     let newTabMenuCloseTimeout = null
     
     // Resize handle visibility - only enable after sidebar is fully shown
@@ -1539,7 +1539,7 @@
         clearTimeout(newTabMenuCloseTimeout)
         if (newTabMenuSpaceId === spaceId && !refresh) return
         newTabMenuSpaceId = spaceId
-        newTabMenuOpenVersion++
+        newTabMenuRefreshCounter++
     }
 
     async function handleNewFromClipboard(spaceId, url) {
@@ -2078,7 +2078,7 @@
                                         <span class="new-tab-more-button" class:menu-open={newTabMenuSpaceId === spaceId} role="group" aria-label="New tab options" onmouseenter={() => showNewTabMenu(spaceId)}>
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="down-icon"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
                                             <div class="new-tab-hover-menu menu-surface" class:visible={newTabMenuSpaceId === spaceId} role="menu" aria-label="New tab options">
-                                                <NewTabMenu active={newTabMenuSpaceId === spaceId} openVersion={newTabMenuOpenVersion} {partitions}
+                                                <NewTabMenu active={newTabMenuSpaceId === spaceId} refreshCounter={newTabMenuRefreshCounter} {partitions}
                                                     onCreate={(url) => handleNewFromClipboard(spaceId, url)}
                                                     onPartition={(partition) => handleNewTabInPartition(spaceId, partition)} />
                                             </div>
