@@ -709,6 +709,7 @@ const spaceMeta = $state({
     activeSpacesOrder: [], // Track order of active spaces for previous space switching
     spaceOrder: [],
     closedTabs: [],
+    recentTabMoves: [], // Session-only confirmations; never persisted with tab documents.
     activeTabId: null,
     get globalPins() { return getGlobalPins(Object.values(docs)) },
     config: {
@@ -2476,6 +2477,9 @@ const data = {
             const updates = planTabMove(spaces[sourceSpaceId]?.tabs || [], spaces[destSpaceId].tabs || [], tabId,
                 { beforeTabId, afterTabId, targetSpaceId: destSpaceId, targetGroupTabId, scope, activityMode, sidebar, placement, preservePins },
                 () => crypto.randomUUID(), { sourceGroup, targetGroup })
+            const movedTabs = updates.filter(update => update.spaceId && update.spaceId !== docs[update.id]?.spaceId)
+                .map(update => ({ ...docs[update.id], spaceId: update.spaceId }))
+            const movedGroupTitle = scope === 'group' ? sourceGroup?.title : null
             parkMovingFrames(updates, [sourceGroup, targetGroup])
             const saves = []
             if (updates.length && scope === 'group' && sourceGroup?.tabGroupId && targetGroup?.tabGroupId && sourceGroup.tabGroupId !== targetGroup.tabGroupId) {
@@ -2518,7 +2522,16 @@ const data = {
                 }
                 ensureSpaceHasTab(sourceSpaceId, { shouldFocus: sourceSpaceId === spaceMeta.activeSpace })
             }
-            return Promise.all(saves)
+            return Promise.all(saves).then(results => {
+                if (movedTabs.length) {
+                    const movedAt = Date.now()
+                    spaceMeta.recentTabMoves = [{
+                        id: crypto.randomUUID(), targetSpaceId: destSpaceId, tabs: movedTabs,
+                        title: movedGroupTitle, movedAt
+                    }, ...spaceMeta.recentTabMoves.filter(move => move.movedAt > movedAt - 10_000)].slice(0, 20)
+                }
+                return results
+            })
         }
 
         const sourceSpaceId = tabDoc.spaceId

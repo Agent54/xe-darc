@@ -1909,6 +1909,30 @@ Deno.test('cross-space group moves update both lists, persistence and the source
     assert.equal(data.spaceMeta.activeTabId, 'outside')
     assert.deepEqual(Array.from(data.getTabGroup('one', otherSpace).tabs, tab => tab.id), ['one', 'two'])
     assert.equal(writes.filter(write => write.spaceId === otherSpace).length, 2)
+    const [move] = data.spaceMeta.recentTabMoves
+    assert.equal(data.spaceMeta.recentTabMoves.length, 1, 'one group move produces one confirmation')
+    assert.equal(move.targetSpaceId, otherSpace)
+    assert.deepEqual(Array.from(move.tabs, tab => tab.id), ['one', 'two'])
+    assert.ok(move.title)
+    assert.ok(move.movedAt <= Date.now())
+})
+
+Deno.test('tab move confirmations only record successful cross-space transfers', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('one'), tab('outside'), tab('destination', otherSpace)], runtime: 'client' })
+    await refresh()
+    await data.moveTab('one', { beforeTabId: 'outside' })
+    await data.moveTab('one', { targetSpaceId: 'missing-space' })
+    assert.equal(data.spaceMeta.recentTabMoves.length, 0)
+    await data.moveTab('one', { targetSpaceId: otherSpace, placement: 'start', preservePins: true })
+    assert.equal(data.spaceMeta.recentTabMoves.length, 1)
+    const [move] = data.spaceMeta.recentTabMoves
+    assert.deepEqual(Array.from(move.tabs, tab => tab.id), ['one'])
+    assert.equal(move.title, null)
+    assert.equal(move.targetSpaceId, otherSpace)
+    assert.equal((await db.get('one')).movedAt, undefined, 'confirmation metadata must not enter persisted tab documents')
+    await refresh()
+    await data.moveTab('one', { targetSpaceId: otherSpace })
+    assert.equal(data.spaceMeta.recentTabMoves.length, 1, 'refreshing or dropping in the same space must not replay a confirmation')
 })
 
 Deno.test('Move to Space puts tabs and groups first in both manual and activity order', async () => {
