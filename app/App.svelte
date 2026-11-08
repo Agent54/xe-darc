@@ -1364,7 +1364,7 @@
             navigationHovercardTimeout = setTimeout(() => {
                 navigationHovercardTimeout = null
                 navigationHovercardTabId = null
-                if (hoveredTab?.id === tabId) closeHovercard()
+                if (hoveredTab?.id === tabId && !document.querySelector('.tab-hovercard:hover')) closeHovercard()
             }, 800)
             startHovercardPositionCheck()
         }
