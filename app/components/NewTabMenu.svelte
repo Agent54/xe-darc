@@ -1,14 +1,14 @@
 <script>
     import { resolveNewTabInput } from '../lib/new-tab-input.js'
 
-    let { active = false, openVersion = 0, partitions = [], onCreate, onPartition } = $props()
+    let { active = false, refreshCounter = 0, partitions = [], onCreate, onPartition } = $props()
     let clipboardInput = $state(null)
     let clipboardStatus = $state('Reading clipboard…')
     const preview = $derived(clipboardInput?.text.replace(/\s+/g, ' '))
 
     $effect(() => {
         if (!active) return
-        openVersion
+        refreshCounter
         let cancelled = false
         clipboardInput = null
         clipboardStatus = 'Reading clipboard…'

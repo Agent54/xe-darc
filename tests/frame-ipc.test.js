@@ -6,7 +6,7 @@ const source = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.
 const listener = parse(source).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'setupMessageListener')
 const ipc = Deno.readTextFileSync(new URL('../app/inject/ipc.js', import.meta.url))
 
-function harness(subframe = false) {
+function harness(subframe = false, timers = { setTimeout, clearTimeout }) {
     const window = new EventTarget()
     const addListener = window.addEventListener.bind(window)
     window.addEventListener = (type, listener, options) => addListener(type, event => listener(new Proxy(event, {
@@ -19,6 +19,9 @@ function harness(subframe = false) {
     window.top = subframe ? {} : window
     const document = new EventTarget()
     const messages = []
+    const inputs = []
+    const shell = new EventTarget()
+    shell.addEventListener('darc-controlled-frame-input', event => inputs.push(event.detail))
     const rawMessages = []
     const transfers = []
     const guestPorts = []
@@ -33,24 +36,24 @@ function harness(subframe = false) {
         }
     }
     let focusCount = 0
-    new Function('frame', 'connectFrameIPC', 'readGuestMessage', `
+    new Function('frame', 'connectFrameIPC', 'readGuestMessage', 'window', `
         const tab = { id: 'tab' }, untrack = fn => fn()
         const onFrameFocus = () => frame.focus()
         ${source.slice(listener.start, listener.end)}
         setupMessageListener(frame)
-    `)(frame, connectFrameIPC, readGuestMessage)
+    `)(frame, connectFrameIPC, readGuestMessage, shell)
     frame.focus = () => { focusCount++ }
 
-    new Function('window', 'document', 'globalThis', scopedGuestScript(frame, `const tabId = 'tab';\n${ipc}`, 'https://embedder.example'))(window, document, { console: {
+    new Function('window', 'document', 'globalThis', 'setTimeout', 'clearTimeout', scopedGuestScript(frame, `const tabId = 'tab';\n${ipc}`, 'https://embedder.example'))(window, document, { console: {
         log(message) {
             rawMessages.push(message)
             messages.push(readGuestMessage(frame, message) || message)
             frame.onconsolemessage({ message })
         }
-    } })
+    } }, timers.setTimeout, timers.clearTimeout)
 
     return {
-        window, document, frame, messages, transfers, guestPorts,
+        window, document, frame, messages, inputs, transfers, guestPorts,
         get secret() { return JSON.parse(rawMessages.find(message => message.startsWith('darc:bridge:')).slice('darc:bridge:'.length)).secret },
         get focusCount() { return focusCount },
         close() {
@@ -105,6 +108,113 @@ Deno.test('nested content scripts keep console events without starting a second 
         assert.equal(h.transfers.length, 0)
         h.window.dispatchEvent(new Event('focus'))
         assert.equal(h.focusCount, 1)
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('core keyboard events report key counts and modifiers without character keys', () => {
+    const h = harness(true)
+    try {
+        const key = (type, key, code, modifiers = {}) => h.window.dispatchEvent(Object.assign(new Event(type), { key, code, ...modifiers }))
+        key('keydown', 'a', 'KeyA')
+        key('keydown', 'b', 'KeyB')
+        key('keyup', 'a', 'KeyA')
+        key('keydown', 'Control', 'ControlLeft', { ctrlKey: true })
+        key('keyup', 'Control', 'ControlLeft')
+        key('keyup', 'b', 'KeyB')
+        assert.deepEqual(h.inputs.map(event => [event.type, event.key, event.pressedKeyCount, event.ctrlKey]), [
+            ['keydown', 'Unidentified', 1, false],
+            ['keydown', 'Unidentified', 2, false],
+            ['keyup', 'Unidentified', 1, false],
+            ['keydown', 'Control', 2, true],
+            ['keyup', 'Control', 1, false],
+            ['keyup', 'Unidentified', 0, false]
+        ])
+        assert.ok(h.inputs.every(event => !('code' in event) && !('event' in event)))
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('discrete interactions are forwarded and raw movement is ignored', () => {
+    const h = harness(true)
+    try {
+        h.window.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Meta', metaKey: true, synthetic: true }))
+        for (const type of ['mousemove', 'pointermove', 'touchmove']) {
+            h.window.dispatchEvent(new Event(type))
+        }
+        assert.deepEqual(h.inputs, [])
+        assert.deepEqual(h.messages, [])
+        for (const type of ['pointerdown', 'auxclick', 'contextmenu', 'touchstart']) {
+            h.window.dispatchEvent(new Event(type))
+        }
+        assert.deepEqual(h.inputs.map(event => event.type), ['pointerdown', 'auxclick', 'contextmenu', 'touchstart'])
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('wheel and scroll share one burst across short pauses and send only its boundaries', () => {
+    let now = 0
+    let nextTimer = 0
+    const scheduled = new Map()
+    const h = harness(true, {
+        setTimeout(callback, delay) {
+            const id = ++nextTimer
+            scheduled.set(id, { callback, at: now + delay })
+            return id
+        },
+        clearTimeout(id) { scheduled.delete(id) }
+    })
+    function advance(ms) {
+        now += ms
+        for (const [id, timer] of scheduled) {
+            if (timer.at <= now) {
+                scheduled.delete(id)
+                timer.callback()
+            }
+        }
+    }
+    try {
+        h.window.dispatchEvent(Object.assign(new Event('wheel'), { synthetic: true }))
+        assert.deepEqual(h.messages, [])
+        h.window.dispatchEvent(new Event('wheel'))
+        assert.equal(h.frame.activeScrolls, 1)
+        for (let i = 0; i < 10; i++) {
+            advance(200)
+            h.window.dispatchEvent(new Event(i % 2 ? 'wheel' : 'scroll'))
+        }
+        advance(299)
+        assert.deepEqual(h.inputs, [{ tabId: 'tab', type: 'scrollstart' }])
+        assert.equal(h.messages.length, 1)
+        advance(1)
+        assert.deepEqual(h.inputs, [{ tabId: 'tab', type: 'scrollstart' }, { tabId: 'tab', type: 'scrollend' }])
+        assert.equal(h.messages.length, 2)
+        assert.equal(h.frame.activeScrolls, 0)
+
+        h.window.dispatchEvent(new Event('scroll'))
+        h.window.dispatchEvent(new Event('pagehide'))
+        advance(300)
+        assert.deepEqual(h.inputs.map(event => event.type), ['scrollstart', 'scrollend', 'scrollstart', 'scrollend'])
+        assert.equal(h.frame.activeScrolls, 0)
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('the input bridge rejects malformed keyboard events, unknown types and other tab IDs', () => {
+    const h = harness(true)
+    try {
+        for (const detail of [null, [], { tabId: 'other', type: 'scrollstart' },
+            ...['cancel', 'wheel', 'scroll', 'mousemove', 'pointermove', 'touchmove'].map(type => ({ tabId: 'tab', type })),
+            { tabId: 'tab', type: 'keydown' }, { tabId: 'tab', type: 'keyup', key: 'Meta', pressedKeyCount: -1 }]) {
+            const message = 'iwa:input-event:' + JSON.stringify(detail)
+            new Function('globalThis', scopedGuestScript(h.frame, `console.log(${JSON.stringify(message)})`, 'https://embedder.example'))({ console: {
+                log(message) { h.frame.onconsolemessage({ message }) }
+            } })
+        }
+        assert.deepEqual(h.inputs, [])
     } finally {
         h.close()
     }

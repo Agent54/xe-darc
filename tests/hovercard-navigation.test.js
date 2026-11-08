@@ -127,23 +127,24 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
 function shortcutHelpHarness() {
     const calls = [], timers = new Map()
     let nextTimer = 0
+    const shell = new EventTarget()
+    const guests = [contentClickBridge(shell, 'darc:tab:a'), contentClickBridge(shell, 'darc:tab:b', true)]
     const handler = createShortcutHandler(() => null, id => calls.push(id), {
         schedule(callback) { const id = ++nextTimer; timers.set(id, callback); return id },
-        cancel(id) { timers.delete(id) }
+        cancel(id) { timers.delete(id) },
+        canStartHelp: () => !guests.some(guest => guest.frame.activeScrolls > 0)
     })
-    const shell = new EventTarget()
     const functions = parse(source).instance.content.body
-        .filter(node => node.type === 'FunctionDeclaration' && ['handleFrameShortcutHelp', 'handleFrameShortcut'].includes(node.id.name))
+        .filter(node => node.type === 'FunctionDeclaration' && ['handleFrameInput', 'handleFrameShortcut'].includes(node.id.name))
         .map(node => source.slice(node.start, node.end)).join('\n')
     const bridge = new Function('handleKeyDown', 'data', 'shortcutActionIds', 'runShortcut', `
         let shortcutHelpEscapeTabId = null
         ${functions}
-        return { handleFrameShortcutHelp, handleFrameShortcut }
+        return { handleFrameInput, handleFrameShortcut }
     `)(handler, { docs: { 'darc:tab:a': {}, 'darc:tab:b': {} } }, shortcutActionIds, id => calls.push(id))
-    shell.addEventListener('darc-shortcut-help', bridge.handleFrameShortcutHelp)
+    shell.addEventListener('darc-controlled-frame-input', bridge.handleFrameInput)
     shell.addEventListener('darc-shortcut', bridge.handleFrameShortcut)
     listenForShortcutHelpCancellation(shell, handler.cancelHelp)
-    const guests = [contentClickBridge(shell, 'darc:tab:a'), contentClickBridge(shell, 'darc:tab:b', true)]
     return {
         calls, timers, shell, guests,
         key(guest, type, key, modifiers = {}) {
@@ -159,7 +160,7 @@ function shortcutHelpHarness() {
 }
 
 Deno.test('guest clicks and scrolling abort the single shell help timer across nested documents until release', () => {
-    for (const type of ['pointerdown', 'click', 'auxclick', 'contextmenu', 'wheel', 'scroll', 'touchmove']) {
+    for (const type of ['pointerdown', 'click', 'auxclick', 'contextmenu', 'wheel', 'scroll', 'touchstart']) {
         const h = shortcutHelpHarness()
         const [first, nested] = h.guests
         h.key(first, 'keydown', 'Meta', { metaKey: true })
@@ -169,6 +170,7 @@ Deno.test('guest clicks and scrolling abort the single shell help timer across n
         h.expire()
         assert.deepEqual(h.calls, [], type)
         h.key(nested, 'keyup', 'Meta')
+        nested.contentWindow.dispatchEvent(new Event('pagehide'))
         h.key(nested, 'keydown', 'Control', { ctrlKey: true })
         h.expire()
         assert.deepEqual(h.calls, ['show-shortcuts'])
@@ -176,6 +178,21 @@ Deno.test('guest clicks and scrolling abort the single shell help timer across n
         assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts', 'finish-tab-switch'])
         assert.deepEqual(h.guests.flatMap(guest => guest.errors), [])
     }
+})
+
+Deno.test('a modifier pressed during a guest scroll stays disqualified after scrolling stops', () => {
+    const h = shortcutHelpHarness()
+    const [first, nested] = h.guests
+    nested.contentWindow.dispatchEvent(new Event('wheel'))
+    h.key(first, 'keydown', 'Meta', { metaKey: true })
+    assert.equal(h.timers.size, 0)
+    nested.contentWindow.dispatchEvent(new Event('pagehide'))
+    h.expire()
+    assert.deepEqual(h.calls, [])
+    h.key(first, 'keyup', 'Meta')
+    h.key(first, 'keydown', 'Meta', { metaKey: true })
+    h.expire()
+    assert.deepEqual(h.calls, ['show-shortcuts'])
 })
 
 Deno.test('shell previews cancel guest holds and extra keys stay disqualifying across documents', () => {
@@ -200,10 +217,10 @@ Deno.test('shell previews cancel guest holds and extra keys stay disqualifying a
     h.shell.dispatchEvent(new Event('darc-link-preview'))
     assert.deepEqual(h.calls, ['show-shortcuts', 'hide-shortcuts'])
     const reportedKeys = h.guests.flatMap(guest => guest.messages)
-        .filter(message => message.startsWith('iwa:shortcut-help:'))
-        .map(message => JSON.parse(message.slice('iwa:shortcut-help:'.length)).event)
-        .filter(Boolean)
-    assert.ok(reportedKeys.every(event => ['Meta', 'Control', 'Escape', 'Other'].includes(event.key) && !('code' in event)))
+        .filter(message => message.startsWith('iwa:input-event:'))
+        .map(message => JSON.parse(message.slice('iwa:input-event:'.length)))
+        .filter(event => event.type === 'keydown' || event.type === 'keyup')
+    assert.ok(reportedKeys.every(event => ['Meta', 'Control', 'Escape', 'Unidentified'].includes(event.key) && !('code' in event)))
 })
 
 Deno.test('Escape from a guest dismisses help without also dismissing the underlying lightbox', () => {

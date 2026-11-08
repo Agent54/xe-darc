@@ -873,9 +873,9 @@ function setupContentScripts(frame) {
                 code: scopedGuestScript(frame, `
 const tabId = ${JSON.stringify(tab?.id || tabId)};
 
-${getFrameShortcutScript(tab?.id || tabId)}
-
 ${ipc}
+
+${getFrameShortcutScript(tab?.id || tabId)}
 
 ${select}
 
@@ -968,7 +968,7 @@ function isTextInputElement(element) {
 // Global drag and drop event listeners for controlled frame content
 function setupDragDropListeners() {
     let dragEventCounter = 0;
-    
+
     function logDragDropEvent(eventType, event) {
         const eventData = {
             type: eventType,
@@ -1016,7 +1016,7 @@ function setupDragDropListeners() {
             logDragDropEvent('drag', event);
         }
     }, { capture: true });
-    
+
     // Dragenter - when dragged item enters a drop target
     document.addEventListener('dragenter', (event) => {
         logDragDropEvent('dragenter', event);
@@ -1026,7 +1026,7 @@ function setupDragDropListeners() {
     document.addEventListener('dragover', (event) => {
         logDragDropEvent('dragover', event);
     }, { capture: true });
-    
+
     // Dragleave - when dragged item leaves a drop target  
     document.addEventListener('dragleave', (event) => {
         logDragDropEvent('dragleave', event);
@@ -1624,6 +1624,7 @@ document.addEventListener('input', function(event) {
             }
             
             if (message === `iwa:ipc-ready:${mytab.id}`) {
+                frame.activeScrolls = 0
                 connectFrameIPC(frame, mytab.id)
             } else if (message.startsWith('[IPC]')) {
                 console.log(message, '| tabId:', mytab.id)
@@ -1647,14 +1648,23 @@ document.addEventListener('input', function(event) {
                     isCommandKeyDown = false
                     commandKeyPressed = false
                 }
-            } else if (message.startsWith('iwa:shortcut-help:')) {
+            } else if (message.startsWith('iwa:input-event:')) {
                 try {
-                    const detail = JSON.parse(message.slice('iwa:shortcut-help:'.length))
-                    if (detail.tabId === mytab.id) {
-                        window.dispatchEvent(new CustomEvent('darc-shortcut-help', { detail }))
+                    const detail = JSON.parse(message.slice('iwa:input-event:'.length))
+                    if (detail?.tabId !== mytab.id || !['keydown', 'keyup', 'pointerdown', 'auxclick', 'contextmenu', 'scrollstart', 'scrollend', 'touchstart', 'blur'].includes(detail.type)) {
+                        return
                     }
+                    if ((detail.type === 'keydown' || detail.type === 'keyup') && (typeof detail.key !== 'string' || !Number.isInteger(detail.pressedKeyCount) || detail.pressedKeyCount < 0)) {
+                        return
+                    }
+                    if (detail.type === 'scrollstart') {
+                        frame.activeScrolls = (frame.activeScrolls ?? 0) + 1
+                    } else if (detail.type === 'scrollend') {
+                        frame.activeScrolls = Math.max(0, (frame.activeScrolls ?? 0) - 1)
+                    }
+                    window.dispatchEvent(new CustomEvent('darc-controlled-frame-input', { detail }))
                 } catch (error) {
-                    console.warn('Invalid frame shortcut help message', error)
+                    console.warn('Invalid frame input event', error)
                 }
             } else if (message.startsWith('iwa:shortcut:')) {
                 try {

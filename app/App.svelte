@@ -250,7 +250,7 @@
     
     let newTabMenuVisible = $state(false)
     let newTabMenuInline = $state(false)
-    let newTabMenuOpenVersion = $state(0)
+    let newTabMenuRefreshCounter = $state(0)
     let newTabMenuHoverTimeout = null
     let newTabMenuLeaveTimeout = null
     let inlineNewTabMenuElement = $state(null)
@@ -853,7 +853,7 @@
         }
         newTabMenuVisible = true
         newTabMenuInline = isInline
-        newTabMenuOpenVersion++
+        newTabMenuRefreshCounter++
     }
 
     function handleNewTabButtonMouseEnter(isInline = false) {
@@ -973,30 +973,32 @@
         if (id !== 'previous-active-tab' && id !== 'finish-tab-switch' && id !== 'hide-shortcuts') tabHistorySwitcher.finish()
         return shortcutActions(id, event, sourceTabId)
     }
-    const handleKeyDown = createShortcutHandler(createShortcutMatcher(shortcuts, detectMacPlatform()), runShortcut)
+    const handleKeyDown = createShortcutHandler(createShortcutMatcher(shortcuts, detectMacPlatform()), runShortcut, {
+        canStartHelp: () => !Object.values(data.frames).some(entry => entry?.frame?.activeScrolls > 0)
+    })
     let shortcutHelpEscapeTabId = null
 
-    function handleFrameShortcutHelp(event) {
+    function handleFrameInput(event) {
         const detail = event.detail
-        if ((detail.type === 'keydown' || detail.type === 'keyup') && typeof detail.event?.key !== 'string') {
+        if ((detail.type === 'keydown' || detail.type === 'keyup') && typeof detail.key !== 'string') {
             return
         }
         if (detail.type === 'keydown') {
-            const wasVisible = handleKeyDown.helpKeydown(detail.event)
-            shortcutHelpEscapeTabId = wasVisible && detail.event.key === 'Escape' ? detail.tabId : null
+            const wasVisible = handleKeyDown.helpKeydown(detail)
+            shortcutHelpEscapeTabId = wasVisible && detail.key === 'Escape' ? detail.tabId : null
         } else if (detail.type === 'keyup') {
-            handleKeyDown.helpKeyup(detail.event)
-        } else if (detail.type === 'cancel') {
+            handleKeyDown.helpKeyup(detail)
+        } else if (detail.type !== 'scrollend') {
             handleKeyDown.cancelHelp()
         }
     }
 
     onMount(() => {
         const cleanup = listenForShortcutHelpCancellation(window, handleKeyDown.cancelHelp)
-        window.addEventListener('darc-shortcut-help', handleFrameShortcutHelp)
+        window.addEventListener('darc-controlled-frame-input', handleFrameInput)
         return () => {
             cleanup()
-            window.removeEventListener('darc-shortcut-help', handleFrameShortcutHelp)
+            window.removeEventListener('darc-controlled-frame-input', handleFrameInput)
         }
     })
 
@@ -3553,7 +3555,7 @@
                      role="menu"
                      tabindex="-1"
                      aria-label="New tab options">
-                    <NewTabMenu active={newTabMenuVisible && newTabMenuInline} openVersion={newTabMenuOpenVersion} {partitions}
+                    <NewTabMenu active={newTabMenuVisible && newTabMenuInline} refreshCounter={newTabMenuRefreshCounter} {partitions}
                         onCreate={handleNewFromClipboard} onPartition={handleNewTabInPartition} />
                 </div>
             </div>
@@ -3740,7 +3742,7 @@
              role="menu"
              tabindex="-1"
              aria-label="New tab options">
-            <NewTabMenu active={newTabMenuVisible && !newTabMenuInline} openVersion={newTabMenuOpenVersion} {partitions}
+            <NewTabMenu active={newTabMenuVisible && !newTabMenuInline} refreshCounter={newTabMenuRefreshCounter} {partitions}
                 onCreate={handleNewFromClipboard} onPartition={handleNewTabInPartition} />
         </div>
     </div>

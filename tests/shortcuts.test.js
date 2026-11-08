@@ -389,7 +389,9 @@ Deno.test('reopen skips deleted tabs and pin commands select the requested side'
 
 Deno.test('serialized frame matcher forwards once, preserves colon-containing IDs, and leaves plain Escape available', () => {
     const listeners = new Map(), messages = []
-    new Function('window', 'console', getFrameShortcutScript('darc:tab:frame'))(
+    const script = getFrameShortcutScript('darc:tab:frame')
+    assert.doesNotMatch(script, /shortcut-help|show-shortcuts|hide-shortcuts|cancelHelp|helpTimer/)
+    new Function('window', 'console', script)(
         { addEventListener(type, handler) { const list = listeners.get(type) || []; list.push(handler); listeners.set(type, list) } },
         { log(message) { if (message.startsWith('iwa:shortcut:')) messages.push(JSON.parse(message.slice('iwa:shortcut:'.length))) } }
     )
