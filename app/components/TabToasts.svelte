@@ -4,6 +4,7 @@
     import data from '../data.svelte.js'
     import { getTabTitle } from '../lib/tab-title.js'
     import Favicon from './Favicon.svelte'
+    import ToastCountdown from './ToastCountdown.svelte'
 
     let { headerPartOfMain = false } = $props()
     const mountedAt = Date.now()
@@ -30,6 +31,10 @@
         return [...sections].map(([spaceId, moves]) => ({ spaceId, moves }))
     })
     const visible = $derived(previewUntil > now && (recentMoves.length > 0 || recentClosedTabs.length > 0))
+    const hideAt = $derived(Math.min(previewUntil, Math.max(
+        ...recentClosedTabs.map(tab => tab.closedAt + 10_000),
+        ...recentMoves.map(move => move.movedAt + 10_000)
+    )))
 
     function reveal() {
         now = Date.now()
@@ -66,11 +71,8 @@
 
     $effect(() => {
         if (!visible || hovered || focused) return
-        const nextExpiry = Math.min(previewUntil,
-            ...recentClosedTabs.map(tab => tab.closedAt + 10_000),
-            ...recentMoves.map(move => move.movedAt + 10_000))
-        const timeout = setTimeout(() => { now = Date.now() }, Math.max(1, nextExpiry - Date.now()))
-        return () => clearTimeout(timeout)
+        const interval = setInterval(() => { now = Date.now() }, 50)
+        return () => clearInterval(interval)
     })
 
     onMount(() => {
@@ -95,6 +97,7 @@
         }}
         transition:fade={{ duration: reducedMotion ? 0 : 150 }}>
         <div class="tab-toast">
+            <ToastCountdown remaining={hideAt - now} duration={3000} />
             <button class="dismiss" aria-label="Dismiss tab notifications" title="Dismiss" onclick={dismiss}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" d="m6 6 12 12M6 18 18 6" /></svg>
             </button>
@@ -172,7 +175,7 @@
         padding-top: 10px;
     }
     h2 {
-        margin: 0 22px 8px 0;
+        margin: 0 44px 8px 0;
         color: rgb(255 255 255 / 75%);
         font-size: 13px;
         font-weight: 500;
@@ -202,7 +205,7 @@
     .tab-text { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .tab-count { flex-shrink: 0; color: rgb(255 255 255 / 45%); font-size: 10px; }
     .dismiss, .remove { display: flex; align-items: center; justify-content: center; border-radius: 3px; padding: 4px; }
-    .dismiss { position: absolute; top: 8px; right: 8px; }
+    .dismiss { position: absolute; top: 8px; right: 28px; }
     .closed-toast-row { display: flex; align-items: center; }
     .closed-toast-row .tab-toast-item { flex: 1; }
     .remove { flex-shrink: 0; opacity: 0; }
