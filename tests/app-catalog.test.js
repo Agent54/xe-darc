@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { jsonSchemaToType } from '@ark/json-schema'
-import { loadAppCatalog, parseCatalogService } from '../app/lib/app-catalog.js'
+import { loadAppCatalog, loadCatalogUpdates, parseCatalogService } from '../app/lib/app-catalog.js'
 
 const webApp = {
     id: 'sketch',
@@ -102,6 +102,8 @@ Deno.test('loads category files from a single GitHub snapshot and preserves chec
         assert.equal(apps[1].branch, 'int')
         assert.equal(apps[1].path, 'docker-compose.yaml')
         assert.equal(apps[1].checkoutPath, 'development/workspace')
+        assert.equal(apps[0].catalogRevision, 'sketch-1')
+        assert.equal(apps[1].catalogRevision, 'workspace-1')
         assert.equal(requests.length, 3)
         assert.ok(requests.every(request => request.options.cache === 'no-cache'))
         assert.equal(requests[1].options.headers.Accept, 'application/vnd.github.raw+json')
@@ -254,4 +256,120 @@ Deno.test('parser derives categories from folders and validates with the supplie
     assert.throws(() => parse({ ...dockerApp, path: '../compose.yaml' }, 'catalog/development/workspace.json'), /Invalid catalog service/)
     assert.throws(() => parse({ ...webApp, type: 'unknown' }), /Invalid catalog service/)
     assert.throws(() => parse({ ...webApp, category: 'ignored' }), /Invalid catalog service/)
+})
+
+Deno.test('update checks compare entry blobs by catalog ID and only fetch the tree', async () => {
+    const requests = []
+    await withFetch(url => {
+        requests.push(url)
+        return tree([
+            { type: 'blob', path: 'catalog/design/sketch.json', sha: 'new-sketch' },
+            { type: 'blob', path: 'catalog/moved/workspace.json', sha: 'same-workspace' },
+            { type: 'blob', path: 'catalog/design/uninstalled.json', sha: 'new-uninstalled' }
+        ], { sha: 'unrelated-snapshot-change' })
+    }, async () => {
+        const installed = [
+            { id: 'saved-sketch', catalogId: 'sketch', catalogRevision: 'old-sketch', name: 'Custom name' },
+            { id: 'saved-workspace', catalogId: 'workspace', catalogRevision: 'same-workspace' },
+            { id: 'deleted', catalogId: 'deleted', catalogRevision: 'old-deleted' },
+            { id: 'manual', name: 'Uninstalled', catalogRevision: 'old-uninstalled' },
+            { id: 'unknown', catalogId: 'uninstalled' }
+        ]
+        const original = structuredClone(installed)
+        assert.deepEqual(await loadCatalogUpdates(installed), {
+            'saved-sketch': { catalogId: 'sketch', installedRevision: 'old-sketch', catalogRevision: 'new-sketch' }
+        })
+        assert.deepEqual(installed, original)
+        assert.equal(requests.length, 1)
+        assert.ok(requests[0].endsWith('/git/trees/main?recursive=1'))
+    })
+})
+
+Deno.test('a loaded catalog can supply versions without another network request', async () => {
+    await withFetch(() => { throw new Error('Unexpected network request') }, async () => {
+        const app = { _id: 'saved', catalogId: 'sketch', catalogRevision: 'old' }
+        assert.deepEqual(await loadCatalogUpdates([app], { catalogApps: [{ id: 'sketch', catalogRevision: 'new' }] }), {
+            saved: { catalogId: 'sketch', installedRevision: 'old', catalogRevision: 'new' }
+        })
+        assert.deepEqual(await loadCatalogUpdates([], {}), {})
+        assert.deepEqual(await loadCatalogUpdates([{ id: 'manual' }]), {})
+    })
+})
+
+Deno.test('legacy apps recover their installed entry revision from the icon snapshot and cache it', async () => {
+    const snapshot = 'a'.repeat(40)
+    const requests = []
+    await withFetch(url => {
+        requests.push(url)
+        const old = url.includes(`/git/trees/${snapshot}?`)
+        return tree([
+            { type: 'blob', path: 'catalog/design/sketch.json', sha: old ? 'legacy-old-sketch' : 'legacy-new-sketch' },
+            { type: 'blob', path: 'catalog/development/workspace.json', sha: 'legacy-same-workspace' }
+        ])
+    }, async () => {
+        const iconUrl = `https://raw.githubusercontent.com/agent54/xe-appstore/main/assets/icon.png?v=${snapshot}`
+        const installed = [
+            { id: 'legacy-sketch', catalogId: 'sketch', iconUrl },
+            { id: 'legacy-workspace', catalogId: 'workspace', iconUrl }
+        ]
+        const updates = await loadCatalogUpdates(installed)
+        assert.deepEqual(Object.keys(updates), ['legacy-sketch'])
+        assert.equal(updates['legacy-sketch'].installedRevision, 'legacy-old-sketch')
+        await loadCatalogUpdates(installed)
+        assert.equal(requests.filter(url => url.includes(snapshot)).length, 1)
+        assert.equal(requests.filter(url => url.includes('/main?')).length, 2)
+    })
+})
+
+Deno.test('missing legacy snapshots do not guess versions or block other apps', async () => {
+    const snapshot = 'b'.repeat(40)
+    let requests = 0
+    await withFetch(() => {
+        requests++
+        return json({}, { status: 404 })
+    }, async () => {
+        const iconUrl = `https://raw.githubusercontent.com/agent54/xe-appstore/main/assets/icon.png?v=${snapshot}`
+        const updates = await loadCatalogUpdates([
+            { id: 'missing', catalogId: 'sketch', iconUrl },
+            { id: 'also-missing', catalogId: 'sketch', iconUrl },
+            { id: 'known', catalogId: 'sketch', catalogRevision: 'old' },
+            { id: 'external', catalogId: 'sketch', iconUrl: `https://example.com/icon.png?v=${snapshot}` }
+        ], { catalogApps: [{ id: 'sketch', catalogRevision: 'new' }] })
+        assert.deepEqual(Object.keys(updates), ['known'])
+        assert.equal(requests, 1)
+    })
+})
+
+Deno.test('failed and incomplete update checks report errors instead of returning a partial result', async () => {
+    const installed = [{ id: 'saved', catalogId: 'sketch', catalogRevision: 'old' }]
+    await withFetch(() => json({}, { status: 429 }), async () => {
+        await assert.rejects(loadCatalogUpdates(installed), /limiting catalog requests/)
+    })
+    await withFetch(() => tree([], { truncated: true }), async () => {
+        await assert.rejects(loadCatalogUpdates(installed), /incomplete app catalog/)
+    })
+    await withFetch(() => tree([
+        { type: 'blob', path: 'catalog/design/sketch.json', sha: 'one' },
+        { type: 'blob', path: 'catalog/tools/sketch.json', sha: 'two' }
+    ]), async () => {
+        await assert.rejects(loadCatalogUpdates(installed), /Duplicate app catalog ID/)
+    })
+})
+
+Deno.test('closing the view aborts a version check, including legacy snapshot requests', async () => {
+    for (const legacy of [false, true]) {
+        const controller = new AbortController()
+        await withFetch((_url, { signal }) => new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+            controller.abort()
+        }), async () => {
+            const app = legacy
+                ? { id: 'saved', catalogId: 'sketch', iconUrl: `https://raw.githubusercontent.com/agent54/xe-appstore/main/assets/icon.png?v=${'c'.repeat(40)}` }
+                : { id: 'saved', catalogId: 'sketch', catalogRevision: 'old' }
+            await assert.rejects(loadCatalogUpdates([app], {
+                signal: controller.signal,
+                ...(legacy ? { catalogApps: [{ id: 'sketch', catalogRevision: 'new' }] } : {})
+            }), { name: 'AbortError' })
+        })
+    }
 })

@@ -1,8 +1,9 @@
 <script>
     import { onMount } from 'svelte'
     import { loadAppCatalog } from '../lib/app-catalog.js'
+    import { afterPaintIdle } from '../lib/after-paint-idle.js'
 
-    let { show = false, installedApps = [], onAdd = () => {}, onClose = () => {} } = $props()
+    let { show = false, installedApps = [], updates = {}, onCatalogLoaded = () => {}, onAdd = () => {}, onClose = () => {} } = $props()
     
     let activeTab = $state('catalog')
     let appFormData = $state({
@@ -16,6 +17,7 @@
         url: '',
         // Repo tab specific
         catalogId: '',
+        catalogRevision: '',
         category: '',
         githubUrl: '',
         branch: 'main',
@@ -35,14 +37,24 @@
     let catalogState = $state('loading')
     let catalogError = $state('')
     let catalogController = null
+    let cancelCatalogLoad = null
 
     onMount(() => {
-        loadCatalog()
+        scheduleCatalogLoad()
         return () => {
+            cancelCatalogLoad?.()
             catalogController?.abort()
             submissionController?.abort()
         }
     })
+
+    function scheduleCatalogLoad() {
+        cancelCatalogLoad?.()
+        cancelCatalogLoad = afterPaintIdle(() => {
+            cancelCatalogLoad = null
+            loadCatalog()
+        })
+    }
 
     async function loadCatalog() {
         catalogController?.abort()
@@ -55,6 +67,7 @@
             if (catalogController === controller && !controller.signal.aborted) {
                 catalogApps = apps
                 catalogState = 'ready'
+                onCatalogLoaded(apps)
             }
         } catch (error) {
             if (catalogController === controller && !controller.signal.aborted) {
@@ -79,7 +92,7 @@
 
     function switchTab(tab) {
         if (tab === 'catalog' && activeTab !== 'catalog') {
-            loadCatalog()
+            scheduleCatalogLoad()
         }
         activeTab = tab
         submitError = ''
@@ -88,6 +101,7 @@
     function selectCatalogApp(app) {
         Object.assign(appFormData, {
             catalogId: app.id || '',
+            catalogRevision: app.catalogRevision || '',
             category: app.category || '',
             name: app.name || '',
             iconUrl: app.iconUrl || '',
@@ -150,6 +164,8 @@
     }
 
     function handleClose() {
+        cancelCatalogLoad?.()
+        cancelCatalogLoad = null
         catalogController?.abort()
         catalogController = null
         submissionController?.abort()
@@ -159,6 +175,7 @@
         // Reset form
         Object.assign(appFormData, {
             catalogId: '',
+            catalogRevision: '',
             category: '',
             name: '',
             iconUrl: '',
@@ -237,6 +254,7 @@
 
     const availableCatalogApps = $derived(catalogApps.filter(app => !isCatalogAppInstalled(app)))
     const installedCatalogApps = $derived(catalogApps.filter(isCatalogAppInstalled))
+    const appsWithUpdates = $derived(installedApps.filter(app => updates[app.id || app._id]))
     const catalogCategories = $derived([...new Set(availableCatalogApps.map(app => app.category))])
 
     function categoryName(category) {
@@ -327,6 +345,17 @@
                 {#if activeTab === 'catalog'}
                     <!-- Catalog Tab -->
                     <div class="space-y-6">
+                        {#if appsWithUpdates.length > 0}
+                            <section class="catalog-updates rounded-xl border border-emerald-300/20 bg-emerald-400/5 p-4" aria-labelledby="catalog-updates-title">
+                                <h3 id="catalog-updates-title" class="text-sm font-medium text-emerald-200" role="status">Updates available ({appsWithUpdates.length})</h3>
+                                <p class="mt-1 text-xs text-white/60">The catalog entries for these apps have changed.</p>
+                                <ul class="mt-3 flex flex-wrap gap-2" aria-label="Apps with updates available">
+                                    {#each appsWithUpdates as app (app.id || app._id)}
+                                        <li class="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/80">{app.name}</li>
+                                    {/each}
+                                </ul>
+                            </section>
+                        {/if}
                         <p class="text-sm text-white/70">Choose an app to configure before adding it.</p>
                         
                         {#if catalogState === 'loading'}
