@@ -4,6 +4,7 @@
     import EmojiPicker from './EmojiPicker.svelte'
     import TabActionButtons from './TabActionButtons.svelte'
     import { openTabDevTools } from '../lib/tab-devtools.js'
+    import { snoozeTime } from '../lib/pending-tabs.js'
     
     let {
         menu = { visible: false, x: 0, y: 0, tab: null, index: null },
@@ -26,6 +27,11 @@
     let moveSpaceOpen = $state(false)
     let moveSpaceTrigger = $state(null)
     let moveSpaceSubmenu = $state(null)
+    let snoozeMode = $state('relative')
+    let snoozeAmount = $state(1)
+    let snoozeUnit = $state('hours')
+    let snoozeDate = $state('')
+    let snoozeError = $state('')
     const isGroup = $derived(menu.tab?.type === 'tabgroup')
     const sourceSpaceId = $derived(menu.tab?.spaceId || data.docs[menu.tab?.id]?.spaceId)
     const targetTabs = $derived((isGroup ? menu.tab.tabs : menu.tab ? [menu.tab] : []).map(tab => data.docs[tab.id] || tab))
@@ -39,12 +45,13 @@
     const customName = $derived(isGroup ? menu.tab?.name : (data.docs[menu.tab?.id] || menu.tab)?.titleOverride)
     const customEmoji = $derived(isGroup ? menu.tab?.metadata?.emoji : (data.docs[menu.tab?.id] || menu.tab)?.emojiOverride)
     const customFavicon = $derived(isGroup ? menu.tab?.metadata?.favicon : (data.docs[menu.tab?.id] || menu.tab)?.faviconOverride)
-    const editorTitle = $derived(groupMenuView === 'rename' ? (isGroup ? 'Rename group' : 'Rename tab') : (isGroup ? 'Group icon' : 'Tab icon'))
+    const editorTitle = $derived(groupMenuView.startsWith('snooze') ? (isGroup ? 'Snooze group' : 'Snooze tab') : groupMenuView === 'rename' ? (isGroup ? 'Rename group' : 'Rename tab') : (isGroup ? 'Group icon' : 'Tab icon'))
 
     $effect(() => {
         if (menu.visible && menu.tab) {
             groupMenuView = 'menu'
             moveSpaceOpen = false
+            snoozeError = ''
         }
     })
     
@@ -87,6 +94,28 @@
         const tab = menu.tab
         onHide()
         return action(tab)
+    }
+
+    async function snooze(wakeAt, reason = 'snooze') {
+        snoozeError = ''
+        try {
+            await data.snoozeTab(targetTabs[0].id, wakeAt, { scope: isGroup ? 'group' : 'tab', reason })
+            onHide()
+        } catch (error) {
+            snoozeError = error.message
+        }
+    }
+
+    function saveCustomSnooze(event) {
+        event.preventDefault()
+        const units = { minutes: 60000, hours: 3600000, days: 86400000 }
+        const wakeAt = snoozeMode === 'absolute' ? new Date(snoozeDate).getTime()
+            : Number(snoozeAmount) > 0 ? Date.now() + Number(snoozeAmount) * units[snoozeUnit] : NaN
+        if (!Number.isFinite(wakeAt) || wakeAt <= Date.now()) {
+            snoozeError = 'Choose a future date or a positive duration.'
+            return
+        }
+        snooze(wakeAt)
     }
     
     function toggleCertificateMonitor(tab) {
@@ -361,7 +390,37 @@
             <button class="group-editor-back" type="button"
                     onmouseup={() => showGroupView('menu')}
                     onclick={(e) => { if (e.detail === 0) showGroupView('menu') }}>← {editorTitle}</button>
-            {#if groupMenuView === 'rename'}
+            {#if groupMenuView === 'snooze'}
+                {#each [['1h', '1 hour'], ['4h', '4 hours'], ['tomorrow', 'Tomorrow morning · 9:00'], ['week', 'Next week · 9:00']] as [option, label]}
+                    <button class="context-menu-item menu-action" type="button" onclick={() => snooze(snoozeTime(option))}>{label}</button>
+                {/each}
+                <button class="context-menu-item menu-action" type="button" onclick={() => showGroupView('snooze-custom')}>Custom…</button>
+                <div class="context-menu-separator menu-divider"></div>
+                <button class="context-menu-item menu-action" type="button" onclick={() => snooze(null, 'external')}>Wait for external action</button>
+                {#if snoozeError}<p class="snooze-error" role="alert">{snoozeError}</p>{/if}
+            {:else if groupMenuView === 'snooze-custom'}
+                <form class="group-name-form snooze-form" onsubmit={saveCustomSnooze}>
+                    <label for="snooze-mode">Wake up</label>
+                    <select id="snooze-mode" bind:value={snoozeMode}>
+                        <option value="relative">After a duration</option>
+                        <option value="absolute">At a date and time</option>
+                    </select>
+                    {#if snoozeMode === 'absolute'}
+                        <label for="snooze-date">Local date and time</label>
+                        <input id="snooze-date" type="datetime-local" bind:value={snoozeDate} required />
+                    {:else}
+                        <label for="snooze-amount">Duration</label>
+                        <div class="group-name-fields">
+                            <input id="snooze-amount" type="number" min="0.01" step="any" bind:value={snoozeAmount} required />
+                            <select aria-label="Duration unit" bind:value={snoozeUnit}>
+                                <option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option>
+                            </select>
+                        </div>
+                    {/if}
+                    {#if snoozeError}<p class="snooze-error" role="alert">{snoozeError}</p>{/if}
+                    <button class="context-menu-item menu-action" type="submit">Snooze {isGroup ? 'group' : 'tab'}</button>
+                </form>
+            {:else if groupMenuView === 'rename'}
                 <form class="group-name-form" onsubmit={saveGroupName}>
                     <label for="tab-group-name">{isGroup ? 'Group name' : 'Tab title'}</label>
                     <div class="group-name-fields">
@@ -403,6 +462,9 @@
                         onmouseup={bumpToTop}
                         onclick={(e) => { if (e.detail === 0) bumpToTop() }}>Bump to top</button>
             {/if}
+            <button class="context-menu-item menu-action" role="menuitem" type="button"
+                    onmouseup={() => showGroupView('snooze')}
+                    onclick={(e) => { if (e.detail === 0) showGroupView('snooze') }}>Snooze…</button>
             <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={() => showGroupView('rename')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>
@@ -706,6 +768,11 @@
 {/if}
 
 <style>
+    .snooze-form { width: min(310px, calc(100vw - 20px)); box-sizing: border-box; white-space: normal; }
+    .snooze-form select, .snooze-form input { min-width: 0; max-width: 100%; padding: 8px; border: 1px solid #ffffff1f; border-radius: 6px; background: #151515; color: #e5e5e5; font: inherit; color-scheme: dark; }
+    .snooze-form .group-name-fields input { flex: 1; width: 80px; }
+    .snooze-form :is(input, select):focus-visible { outline: 1px solid #a3a3a3; outline-offset: 1px; }
+    .snooze-error { margin: 8px 12px; color: #f0a7a7; font-size: 12px; white-space: normal; }
     .context-menu-item.move-space-menu {
         padding: 0;
     }

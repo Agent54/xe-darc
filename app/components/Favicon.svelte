@@ -2,6 +2,7 @@
     import { getTabTitle } from '../lib/tab-title.js'
     import SecurityIndicator from './SecurityIndicator.svelte'
     import data from '../data.svelte.js'
+    import Tooltip from './Tooltip.svelte'
     
     let { tab, security = null, showButton = true, size = 'normal' } = $props()
     let failedFaviconSrc = $state(null)
@@ -146,6 +147,16 @@
     {/if}
 {/snippet}
 
+{#snippet resumeIndicator()}
+    {#if currentTab?.resumedAt && !currentTab.archive}
+        <span class="favicon-resumed">
+            <Tooltip position="right" delay={250} text={`${currentTab.resumedReason === 'external' ? 'Returned from waiting for external action' : 'Returned from snooze'} on ${new Date(currentTab.resumedAt).toLocaleString()}`}>
+                <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="Returned from Pending"><path d="M12 2a6 6 0 0 0-6 6v4l-2 4h16l-2-4V8a6 6 0 0 0-6-6Zm-3 16a3 3 0 0 0 6 0H9Z" /></svg>
+            </Tooltip>
+        </span>
+    {/if}
+{/snippet}
+
 {#if showButton}
     <span 
         class="favicon-display" 
@@ -167,6 +178,7 @@
         {/if}
         {@render loadingIndicator()}
         {@render audioIndicator()}
+        {@render resumeIndicator()}
     </span>
 {:else}
     <span class="favicon-wrapper" class:small={size === 'small'}>
@@ -185,10 +197,13 @@
         {/if}
         {@render loadingIndicator()}
         {@render audioIndicator()}
+        {@render resumeIndicator()}
     </span>
 {/if}
 
 <style>
+    .favicon-resumed { position: absolute; right: 0; bottom: 0; display: flex; width: 10px; height: 10px; border-radius: 3px; background: #171717; color: #d6bb82; }
+    .favicon-resumed :global(svg) { width: 10px !important; height: 10px !important; }
     .favicon-display,
     .favicon-wrapper {
         position: relative;

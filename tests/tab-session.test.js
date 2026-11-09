@@ -5,6 +5,7 @@ import { getWindowSessionHints, getWindowSessionStartup, rememberWindowBounds, f
 import * as tabGroups from '../app/lib/tab-groups.js'
 import * as tabActivity from '../app/lib/tab-activity.js'
 import * as documentSort from '../app/lib/document-sort.js'
+import * as pendingTabs from '../app/lib/pending-tabs.js'
 import * as frameLifecycle from '../app/lib/frame-lifecycle.js'
 import * as permissionsModule from '../app/lib/permissions.js'
 import { scheduleBackgroundTabMetadata } from '../app/lib/background-tab-metadata.js'
@@ -235,6 +236,114 @@ function tab(id, spaceId = defaultSpace, extra = {}) {
     return { _id: id, _rev: '1-test', type: 'tab', spaceId, order: 1, url: 'https://example.com', ...extra }
 }
 
+Deno.test('snoozed groups survive restart and resume at the same manual position with newest activity', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('one', defaultSpace, { tabGroupId: 'research', tabGroupOrder: 0, order: 10 }),
+        tab('two', defaultSpace, { tabGroupId: 'research', tabGroupOrder: 1, order: 10 }),
+        tab('outside', defaultSpace, { order: 20 })
+    ], history: ['one'], runtime: 'client' })
+    await refresh()
+    const wakeAt = Date.now() + 3600000
+    await data.snoozeTab('one', wakeAt, { scope: 'group' })
+    assert.deepEqual(data.spaces[defaultSpace].tabs.map(tab => tab.id), ['outside'])
+    assert.deepEqual(data.spaceMeta.pendingTabs.map(tab => tab.id).sort(), ['one', 'two'])
+    assert.equal((await db.get('one')).pending.wakeAt, wakeAt)
+    assert.equal((await db.get('one')).pending.batchId, (await db.get('two')).pending.batchId)
+    const restarted = session({ tabs: await Promise.all(['one', 'two', 'outside'].map(id => db.get(id))), runtime: 'client' })
+    await restarted.refresh()
+    await restarted.data.refreshPendingTabs()
+    assert.deepEqual(restarted.data.spaces[defaultSpace].tabs.map(tab => tab.id), ['outside'])
+    assert.equal(restarted.data.spaceMeta.pendingTabs.length, 2)
+    await restarted.data.resumePendingTab('one', { activate: false })
+    await restarted.data.resumePendingTab('two', { activate: false })
+    assert.deepEqual(restarted.data.spaces[defaultSpace].tabs.map(tab => tab.id), ['one', 'two', 'outside'])
+    assert.equal(restarted.data.docs.one.order, 10)
+    assert.equal(restarted.data.docs.two.tabGroupOrder, 1)
+    assert.ok(restarted.data.docs.one.lastActivityAt > restarted.data.docs.outside.order)
+    assert.ok(restarted.data.docs.one.resumedAt)
+    assert.equal(restarted.data.docs.one.pending, null)
+})
+
+Deno.test('polling wakes persisted overdue tabs, retains external waits, and observes sync updates', async () => {
+    const { data, refresh, db, emitChange } = session({ tabs: [
+        tab('outside'),
+        tab('due', defaultSpace, { archive: 'deferred', pending: { batchId: 'due', wakeAt: Date.now() - 1000, reason: 'snooze' }, order: 10 }),
+        tab('wait', otherSpace, { archive: 'deferred', pending: { batchId: 'wait', wakeAt: null, reason: 'external' } })
+    ], runtime: 'client' })
+    await refresh()
+    await data.refreshPendingTabs()
+    assert.equal((await db.get('due')).archive, null)
+    assert.ok(data.spaces[defaultSpace].tabs.some(tab => tab.id === 'due'))
+    assert.deepEqual(data.spaceMeta.pendingTabs.map(tab => tab.id), ['wait'])
+    const incoming = { ...await db.get('outside'), archive: 'deferred', pending: { batchId: 'remote', wakeAt: Date.now() + 3600000 } }
+    await db.put(incoming)
+    await emitChange(incoming)
+    await data.refreshPendingTabs()
+    assert.ok(data.spaceMeta.pendingTabs.some(tab => tab.id === 'outside'))
+    await refresh(defaultSpace)
+    assert.ok(data.spaceMeta.pendingTabs.some(tab => tab.id === 'wait'), 'space refresh preserves waits from other spaces')
+})
+
+Deno.test('whole group closure persists one archive action and preserves group placement on restore', async () => {
+    const { data, refresh, db } = session({ tabs: [
+        tab('one', defaultSpace, { tabGroupId: 'group', order: 10 }),
+        tab('two', defaultSpace, { tabGroupId: 'group', order: 10 }), tab('outside', defaultSpace, { order: 20 })
+    ], runtime: 'client' })
+    await refresh()
+    await data.closeTabGroup('one')
+    const one = await db.get('one')
+    assert.ok(one.closedBatchId)
+    assert.equal(one.closedBatchId, (await db.get('two')).closedBatchId)
+    assert.equal(pendingTabs.getArchivedTabItems(data.spaceMeta.closedTabs).length, 1)
+    await data.restoreClosedItems(['one', 'two'])
+    assert.equal(data.getTabGroup('one').tabs.length, 2)
+    assert.equal((await db.get('one')).order, 10)
+})
+
+Deno.test('wake-up rechecks a synced extension and a conflicting revision without overwriting them', async () => {
+    for (const race of ['extend', 'conflict']) {
+        const { data, refresh, db } = session({ tabs: [tab('outside'), tab('pending', defaultSpace, {
+            archive: 'deferred', pending: { batchId: 'first', wakeAt: Date.now() + 3600000 }
+        })], runtime: 'client' })
+        await refresh()
+        await data.refreshPendingTabs()
+        const pending = await db.get('pending')
+        await db.put({ ...pending, pending: { ...pending.pending, wakeAt: Date.now() - 1000 } })
+        const get = db.get
+        const put = db.put
+        let attempted = false
+        if (race === 'extend') db.get = async id => {
+            const tab = await get(id)
+            if (id === 'pending') {
+                tab.pending.wakeAt = Date.now() + 14400000
+                await put(tab)
+            }
+            return tab
+        }
+        else db.put = async doc => {
+            if (doc._id === 'pending' && !doc.archive) { attempted = true; throw { status: 409 } }
+            return put(doc)
+        }
+        await data.refreshPendingTabs()
+        assert.equal((await get('pending')).archive, 'deferred')
+        assert.equal(data.docs.pending.archive, 'deferred')
+        if (race === 'conflict') assert.equal(attempted, true)
+    }
+})
+
+Deno.test('snoozing a global pin from another space selects a visible tab and preserves the pin on return', async () => {
+    const { data, refresh, db } = session({ tabs: [tab('outside'), tab('pin', otherSpace, { pinned: 'normal', pinScope: 'global' })], history: ['outside'], runtime: 'client' })
+    await refresh()
+    data.activate('pin')
+    await data.snoozeTab('pin', Date.now() + 3600000)
+    assert.equal(data.spaceMeta.activeSpace, defaultSpace)
+    assert.equal(data.spaceMeta.activeTabId, 'outside')
+    assert.equal(data.spaceMeta.globalPins.length, 0)
+    await data.resumePendingTab('pin', { activate: false })
+    assert.equal(data.spaceMeta.globalPins[0].id, 'pin')
+    assert.equal((await db.get('pin')).pinScope, 'global')
+})
+
 function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'window-1', storage = new Map(), delayedWindowId = false, runtime = 'server', frameEnvironment = {} }) {
     if (!storage.has(`activeSpaceId:${windowId}`)) {
         storage.set(`activeSpaceId:${windowId}`, activeSpace)
@@ -263,7 +372,10 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         find: async query => {
             queries.push(query)
             const result = records.filter(doc => {
-                return doc.archive !== 'deleted' && (typeof query.selector.spaceId !== 'string' || doc.spaceId === query.selector.spaceId)
+                return doc.archive !== 'deleted' &&
+                    (typeof query.selector.archive !== 'string' || doc.archive === query.selector.archive) &&
+                    (typeof query.selector.type !== 'string' || doc.type === query.selector.type) &&
+                    (typeof query.selector.spaceId !== 'string' || doc.spaceId === query.selector.spaceId)
             })
             return { docs: structuredClone(query.fields ? result.map(({ _id }) => ({ _id })) : result) }
         },
@@ -287,6 +399,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         ...tabGroups,
         ...tabActivity,
         ...documentSort,
+        ...pendingTabs,
         ...frameLifecycle,
         ...permissionsModule,
         scheduleBackgroundTabMetadata,
@@ -303,6 +416,8 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         crypto,
         console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')) } },
         setInterval() {},
+        setTimeout() {},
+        clearTimeout() {},
         ...frameEnvironment
     }
     // Svelte only proxies objects created in its own realm.
@@ -807,8 +922,8 @@ Deno.test('activation survives another restart and later partial refreshes prese
     restarted.data.activate('last')
     await restarted.refresh(otherSpace)
     assert.equal(restarted.data.spaceMeta.activeTabId, 'last')
-    assert.deepEqual(Array.from(restarted.queries[1].fields), ['_id'])
-    assert.equal(restarted.queries[1].selector.spaceId, otherSpace)
+    const partialQuery = restarted.queries.find(query => query.selector.spaceId === otherSpace)
+    assert.deepEqual(Array.from(partialQuery.fields), ['_id'])
 })
 
 Deno.test('each activation has transient scroll intent, including repeated selections and previous-tab navigation', async () => {
