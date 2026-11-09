@@ -9,6 +9,7 @@ import { pageContentScript } from './lib/page-content.js'
 import { scheduleBackgroundTabMetadata } from './lib/background-tab-metadata.js'
 import { getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
 import { withDocumentSort } from './lib/document-sort.js'
+import { createPendingScheduler, pendingPollInterval } from './lib/pending-tabs.js'
 import { getTabGroups, getSidebarItems, getTabGroup, getPinScope, getSidepins, getSpacePins, getGlobalPins, getSidebarPinnedTabs, nextPinOrder, tabGroupMetadataId, planTabMove, planTabUngroup, groupCanvasPosition, orderBetween } from './lib/tab-groups.js'
 // TODO: add user and session management
 // import indexeddb from 'pouchdb-adapter-indexeddb'
@@ -709,6 +710,7 @@ const spaceMeta = $state({
     activeSpacesOrder: [], // Track order of active spaces for previous space switching
     spaceOrder: [],
     closedTabs: [],
+    pendingTabs: [],
     recentTabMoves: [], // Session-only confirmations; never persisted with tab documents.
     activeTabId: null,
     get globalPins() { return getGlobalPins(Object.values(docs)) },
@@ -844,7 +846,6 @@ const refresh = throttle(async function (spaceId) {
         spaces[spaceId] ??= {}
         newSpaceTabs[spaceId] = []
     }
-    const closedTabs = []
 
     for (const refreshDoc of newDocs) {
         let doc
@@ -900,9 +901,6 @@ const refresh = throttle(async function (spaceId) {
 
             if (doc.archive) {
                 // console.log(doc)
-                if (!isDivider && !isShape && doc.archive === 'closed') {
-                    closedTabs.push(doc)
-                }
                 continue
             } else if (isDivider || isShape) {
                 newSpaceTabs[doc.spaceId].push(doc)
@@ -934,7 +932,11 @@ const refresh = throttle(async function (spaceId) {
         removedActiveTabId(spaceMeta.activeTabId)
     }
 
-    spaceMeta.closedTabs = closedTabs.sort((a, b) => b.modified - a.modified)
+    // Space-scoped refreshes must retain history and pending items from other spaces.
+    spaceMeta.closedTabs = Object.values(docs).filter(doc => doc.type === 'tab' && doc.archive === 'closed' && !doc._deleted)
+        .sort((a, b) => b.modified - a.modified)
+    spaceMeta.pendingTabs = Object.values(docs).filter(doc => doc.type === 'tab' && doc.archive === 'deferred' && !doc._deleted)
+        .sort((a, b) => b.modified - a.modified)
     spaceMeta.spaceOrder = Object.values(spaces).sort((a, b) => (a.order || 2) - (b.order || 2)).map(space => space._id)
     
     if (initialLoad) {
@@ -974,8 +976,10 @@ const refresh = throttle(async function (spaceId) {
         }
     }
 
+    const loaded = initialLoad
     initialLoad = false
     await ensureSpaceHasTab(spaceMeta.activeSpace, { shouldFocus: true })
+    if (loaded) pendingScheduler.refresh()
     // console.timeEnd('updt')
 }, 200)
 
@@ -1037,6 +1041,7 @@ live: true,
 }).on('change', async change => {
     lastLocalSeq = change.seq
     if (change.id.startsWith('_design/')) return
+    if (!initialLoad && change.doc.type === 'tab') pendingScheduler.refresh()
     if (permissionStore.ingest(change.doc)) {
         return
     }
@@ -1184,7 +1189,7 @@ function getPreviousActiveSpace() {
     return null
 }
 
-function closeTab (spaceId, tabId, { createReplacement = true } = {}) {
+function closeTab (spaceId, tabId, { createReplacement = true, batchId = null } = {}) {
     const tab = docs[tabId]
 
     if (!tab) {
@@ -1192,7 +1197,7 @@ function closeTab (spaceId, tabId, { createReplacement = true } = {}) {
     }
 
     const frame = frames[tabId]?.frame
-    const discard = (tab.url?.startsWith('about:newtab') || tab.url?.startsWith('about:blank')) &&
+    const discard = !batchId && (tab.url?.startsWith('about:newtab') || tab.url?.startsWith('about:blank')) &&
         !frame?.canGoBack?.() && !frame?.canGoForward?.()
 
     if (frames[tabId]) {
@@ -1259,9 +1264,13 @@ function closeTab (spaceId, tabId, { createReplacement = true } = {}) {
         ...(discard ? [] : [tab]),
         ...spaceMeta.closedTabs.filter(item => item.id !== tabId)
     ]
+    spaceMeta.pendingTabs = spaceMeta.pendingTabs.filter(item => item.id !== tabId)
     return queueDocumentUpdate(tabId, {
         closed: true, // legacy > make timestamp
         closedAt: Date.now(),
+        closedBatchId: batchId,
+        pending: null,
+        resumedAt: null,
         archive: discard ? 'deleted' : 'closed',
         ...(discard ? { deleted: true } : {}),
         modified: Date.now()
@@ -1509,6 +1518,71 @@ function parkMovingFrames(updates, groups = []) {
     })
 }
 
+async function resumePendingTab(tabId, { focus = false, expected = null } = {}) {
+    // Re-read and compare the revision so another instance can extend/cancel a snooze safely.
+    if (!expected) await documentUpdateSaveTasks.get(tabId)
+    if (desiredDocumentUpdates.has(tabId)) return false
+    let tab
+    try {
+        tab = await db.get(tabId)
+        if (desiredDocumentUpdates.has(tabId)) return false
+        if (tab.archive !== 'deferred' || !tab.pending || tab._deleted) return false
+        if (expected && (tab.pending.batchId !== expected.pending?.batchId ||
+            tab.pending.wakeAt !== expected.pending?.wakeAt || tab.pending.wakeAt > Date.now())) return false
+        const timestamp = Date.now()
+        const lastActivityAt = Math.max(timestamp, ...Object.values(docs)
+            .filter(doc => doc.type === 'tab' && !doc.archive).map(doc => getActivityTimestamp(doc))) + 1
+        tab = { ...tab, id: tab._id, archive: null, closed: false, pending: null,
+            resumedAt: timestamp, resumedReason: tab.pending.reason,
+            resumedScheduledAt: tab.pending.wakeAt, lastActivityAt, modified: timestamp }
+        const result = await putDocument(tab)
+        tab._rev = result.rev
+    } catch (error) {
+        if (error.status === 409 || error.status === 404) return false
+        throw error
+    }
+    docs[tabId] = tab
+    const space = spaces[tab.spaceId]
+    if (space) {
+        space.tabs = [...space.tabs.filter(member => member.id !== tabId), tab].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    }
+    spaceMeta.pendingTabs = spaceMeta.pendingTabs.filter(member => member.id !== tabId)
+    if (focus) {
+        activateSpace(tab.spaceId)
+        activate(tabId)
+    }
+    return true
+}
+
+const pendingScheduler = createPendingScheduler({
+    setTimer: (callback, delay) => setTimeout(callback, delay),
+    clearTimer: timer => clearTimeout(timer),
+    read: async () => {
+        if (initialLoad) return []
+        const pending = []
+        let page
+        do {
+            page = await db.find({ selector: { archive: 'deferred', type: 'tab' }, limit: 1000, skip: pending.length })
+            pending.push(...page.docs)
+        } while (page.docs.length === 1000)
+        for (const tab of pending) {
+            if (!desiredDocumentUpdates.has(tab._id)) docs[tab._id] = { ...tab, id: tab._id }
+        }
+        spaceMeta.pendingTabs = pending.map(tab => docs[tab._id] || tab)
+            .filter(tab => tab.archive === 'deferred' && !tab._deleted)
+        return spaceMeta.pendingTabs
+    },
+    wake: tab => resumePendingTab(tab.id, { expected: tab })
+})
+const pendingPoll = setInterval(() => { pendingScheduler.refresh() }, pendingPollInterval)
+const refreshPendingOnVisible = () => { if (document.visibilityState === 'visible') pendingScheduler.refresh() }
+document.addEventListener?.('visibilitychange', refreshPendingOnVisible)
+if (import.meta.hot) import.meta.hot.dispose(() => {
+    clearInterval(pendingPoll)
+    pendingScheduler.stop()
+    document.removeEventListener('visibilitychange', refreshPendingOnVisible)
+})
+
 const data = {
     origins,
     spaceMeta,
@@ -1615,7 +1689,8 @@ const data = {
     closeTabGroup: (tabId, spaceId = docs[tabId]?.spaceId) => {
         const group = data.getTabGroup(tabId, spaceId)
         if (!group) return Promise.resolve()
-        const closing = group.tabs.map(tab => closeTab(spaceId, tab.id, { createReplacement: false }))
+        const batchId = crypto.randomUUID()
+        const closing = group.tabs.map(tab => closeTab(spaceId, tab.id, { createReplacement: false, batchId }))
         const replacement = ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
         return Promise.all([...closing, replacement])
     },
@@ -1632,6 +1707,40 @@ const data = {
         return data.newTab(spaceId, { ...options, groupTabId: tabId })
     },
     loadSampleData,
+
+    snoozeTab: (tabId, wakeAt, { scope = 'tab', reason = 'snooze' } = {}) => {
+        const tab = docs[tabId]
+        if (!tab || tab.archive || (wakeAt !== null && (!Number.isFinite(wakeAt) || wakeAt <= Date.now()))) {
+            return Promise.reject(new Error('Choose a future time to snooze this tab.'))
+        }
+        const members = scope === 'group' ? data.getTabGroup(tabId, tab.spaceId)?.tabs || [tab] : [tab]
+        const batchId = crypto.randomUUID()
+        const createdAt = Date.now()
+        const ids = new Set(members.map(member => member.id))
+        const space = spaces[tab.spaceId]
+        const activeSpaceId = spaceMeta.activeSpace
+        const wasActive = ids.has(spaceMeta.activeTabId)
+        space.tabs = space.tabs.filter(member => !ids.has(member.id))
+        const saves = members.map(member => {
+            if (frames[member.id]) frames[member.id].frame = null
+            removedActiveTabId(member.id, tab.spaceId, wasActive && activeSpaceId === tab.spaceId && spaceMeta.activeTabId === member.id)
+            if (activeSpaceId !== tab.spaceId) removedActiveTabId(member.id, activeSpaceId, wasActive && spaceMeta.activeTabId === member.id)
+            return queueDocumentUpdate(member.id, {
+                // 'deferred' stays inside the existing archive index's live/history range.
+                archive: 'deferred', closed: false, closedBatchId: null, resumedAt: null,
+                pending: { batchId, createdAt, wakeAt, reason }, modified: createdAt
+            })
+        })
+        spaceMeta.pendingTabs = [...members, ...spaceMeta.pendingTabs.filter(member => !ids.has(member.id))]
+        const replacement = ensureSpaceHasTab(tab.spaceId, { shouldFocus: wasActive && activeSpaceId === tab.spaceId })
+        const activeReplacement = wasActive && activeSpaceId !== tab.spaceId ? ensureSpaceHasTab(activeSpaceId, { shouldFocus: true }) : null
+        return Promise.all([...saves, replacement, activeReplacement]).then(() => pendingScheduler.refresh())
+    },
+    resumePendingTab: (tabId, { activate: focus = true } = {}) => resumePendingTab(tabId, { focus }),
+    refreshPendingTabs: () => pendingScheduler.refresh(),
+    restoreClosedItems: async (tabIds) => {
+        for (const tabId of tabIds) await data.restoreClosedTab(tabId)
+    },
 
     restoreClosedTab: (tabId) => {
         const tab = docs[tabId]
@@ -1653,6 +1762,7 @@ const data = {
             // }) || []),
             closed: false,
             archive: null,
+            closedBatchId: null,
             modified: Date.now()
         })
 

@@ -41,6 +41,7 @@
     import { observeScrollEdges } from '../lib/scroll-edges.js'
     import { getSidebarPinnedItems } from '../lib/tab-groups.js'
     import { getActivitySidebarItems, getActivityGroupTabs } from '../lib/tab-activity.js'
+    import { getArchivedTabItems } from '../lib/pending-tabs.js'
     import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
     import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
     import { tabDrag, startTabDrag, startCreationDrag, setActivateRafId, didDragOccurred, onGroupExpand } from '../lib/tab-drag.svelte.js'
@@ -55,6 +56,10 @@
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
     let closedTabsHideTimeout = null
+    let pendingHoveredSpace = $state(null)
+    let pendingHideTimeout = null
+    const closedItems = $derived(getArchivedTabItems(data.spaceMeta.closedTabs, data.docs))
+    const pendingItems = $derived(getArchivedTabItems(data.spaceMeta.pendingTabs, data.docs))
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
@@ -125,7 +130,9 @@
     let hoveredGroupTarget = $state(null)
     let hovercardAnchor = $state(null)
     let hovercardHistoryBeside = $state(false)
-    const hoveredGroup = $derived(hoveredGroupTarget ? data.getTabGroup(hoveredGroupTarget.tabId, hoveredGroupTarget.spaceId) : null)
+    const hoveredGroup = $derived(hoveredGroupTarget?.archived
+        ? [...closedItems, ...pendingItems].find(item => item.id === hoveredGroupTarget.id)
+        : hoveredGroupTarget ? data.getTabGroup(hoveredGroupTarget.tabId, hoveredGroupTarget.spaceId) : null)
     const hovercardActivationTabId = $derived(hoveredGroup ? data.getGroupActiveTab(hoveredGroup, hoveredGroupTarget.spaceId)?.id : null)
     const hovercardTabs = $derived(hoveredGroupTarget ? getActivityGroupTabs(hoveredGroup?.tabs || [], data.docs, data.ui.tabActivityMode) : hoveredTab ? [hoveredTab] : [])
     let hoverTimeout = null
@@ -220,6 +227,7 @@
         
         if (data.getSpacePins(spaceId).some(tab => tabMatchesSearch(tab))) return true;
         if (space.tabs?.some(tab => tab.type === 'tab' && tabMatchesSearch(tab))) return true;
+        if ((data.spaceMeta.pendingTabs || []).some(tab => tab.spaceId === spaceId && tabMatchesSearch(tab))) return true;
         
         return false;
     }
@@ -227,7 +235,8 @@
     const hasAnySearchResults = $derived.by(() => {
         if (!tabSearchQuery) return true;
         return data.spaceMeta.spaceOrder.some(spaceId => spaceHasMatchingTabs(spaceId)) ||
-               data.spaceMeta.closedTabs.some(tab => tabMatchesSearch(tab));
+               data.spaceMeta.closedTabs.some(tab => tabMatchesSearch(tab)) ||
+               (data.spaceMeta.pendingTabs || []).some(tab => tabMatchesSearch(tab));
     });
     
     onMount(() => onGroupExpand(({ spaceId, tabGroupId }) => {
@@ -272,6 +281,8 @@
             urlBarExpanded = false
             closedTabsHovered = false
             closedTabsHeaderHovered = false
+            pendingHoveredSpace = null
+            clearTimeout(pendingHideTimeout)
             clearTimeout(menuCloseTimeout)
             clearTimeout(closedTabsHideTimeout)
             menuCloseTimeout = null
@@ -942,6 +953,9 @@
     }
     
     function handleClickOutside(event) {
+        if (event.key === 'Escape' || (!event.target.closest('.pending-tabs-section') && !event.target.closest('.tab-hovercard-sidebar'))) {
+            pendingHoveredSpace = null
+        }
         if (event.key === 'Escape' || !event.target.closest('.new-tab-button')) newTabMenuSpaceId = null
         if (openMenuId !== null && !event.target.closest('.space-menu')) {
             openMenuId = null
@@ -997,6 +1011,39 @@
             closedTabsHideTimeout = null
         }
         closedTabsHovered = true
+    }
+
+    function showPending(spaceId) {
+        if (tabDrag.active || tabDrag.pending) return
+        clearTimeout(pendingHideTimeout)
+        pendingHoveredSpace = spaceId
+    }
+
+    function hidePending() {
+        clearTimeout(pendingHideTimeout)
+        pendingHideTimeout = setTimeout(() => {
+            if (hoveredTab && (data.spaceMeta.pendingTabs || []).some(tab => tab.id === hoveredTab.id)) return
+            pendingHoveredSpace = null
+        }, 200)
+    }
+
+    async function restoreArchivedItem(item, pending) {
+        closeHovercard()
+        if (pending) {
+            for (const tab of item.tabs) await data.resumePendingTab(tab.id, { activate: false })
+            const restored = item.tabs.find(tab => !data.docs[tab.id]?.archive)
+            if (restored) activateTab(restored.id, item.spaceId)
+        } else if (item.tabs.length > 1) await data.restoreClosedItems(item.tabs.map(tab => tab.id))
+        else data.restoreClosedTab(item.tabs[0].id)
+    }
+
+    function removeArchivedItem(item, pending) {
+        closeHovercard()
+        const batchId = item.tabs.length > 1 ? crypto.randomUUID() : null
+        for (const tab of item.tabs) {
+            if (pending) data.closeTab(tab.spaceId, tab.id, { batchId })
+            else data.removeClosedTab(tab.id)
+        }
     }
     
     function handleClosedTabsMouseLeave() {
@@ -1226,6 +1273,7 @@
     // Cleanup timeouts on component destroy
     $effect(() => {
         return () => {
+            clearTimeout(pendingHideTimeout)
             if (closedTabsHideTimeout) {
                 clearTimeout(closedTabsHideTimeout)
             }
@@ -1267,7 +1315,7 @@
     }
 
     function getSidebarHoverTarget(element, fallbackTab = null) {
-        const row = element?.closest('.tab-item-container, .closed-tab-item, .pinned-tab, .app-tab')
+        const row = element?.closest('.tab-item-container, .closed-tab-item, .closed-tab-row, .pinned-tab, .app-tab')
         const header = element?.closest('.tab-group-wrapper > .tab-group')
         if (!row && header) {
             const wrapper = header.closest('.tab-group-wrapper')
@@ -1277,6 +1325,12 @@
             return { element: header, tab: data.getGroupActiveTab(group, spaceId), group: { tabId: group.tabs[0].id, spaceId, id: group.id }, tabs: group.tabs }
         }
         if (!row) return null
+        const archivedId = row.getAttribute('data-archived-id')
+        const archived = archivedId && [...closedItems, ...pendingItems].find(item => item.id === archivedId)
+        if (archived?.tabGroupId) return {
+            element: row, tab: archived.tabs[0], tabs: archived.tabs,
+            group: { id: archived.id, tabId: archived.tabs[0].id, spaceId: archived.spaceId, archived: true }
+        }
         const tabId = row.getAttribute('data-tab-id')
         const tab = fallbackTab || data.docs[tabId] || data.spaceMeta.closedTabs.find(tab => tab.id === tabId)
         return tab ? { element: row, tab, group: null, tabs: [tab] } : null
@@ -1294,7 +1348,7 @@
 
     function showSidebarHovercard(target) {
         if (tabDrag.active || isHorizontalScrolling || !target.element.isConnected) return
-        hovercardAnchor = target.group ? target.element.closest('.tab-group-wrapper') : target.element
+        hovercardAnchor = target.group && !target.group.archived ? target.element.closest('.tab-group-wrapper') : target.element
         hovercardHistoryBeside = canFitSidebarHovercardHistory(hovercardAnchor.getBoundingClientRect(), window.innerWidth)
         hovercardPosition = getSidebarHovercardPosition(
             hovercardAnchor.getBoundingClientRect(), target.group ? 336 : 328,
@@ -1310,13 +1364,16 @@
     }
 
     function activateHovercardTab(tab) {
+        if (tab.archive === 'deferred') { data.resumePendingTab(tab.id); return }
+        if (tab.archive === 'closed') { data.restoreClosedTab(tab.id); return }
         if (data.spaceMeta.activeSpace !== tab.spaceId) data.activateSpace(tab.spaceId)
         if (data.spaceMeta.activeTabId !== tab.id) data.activate(tab.id)
     }
 
     function closeHovercardTab(tab) {
         const remaining = hovercardTabs.filter(member => member.id !== tab.id)
-        data.closeTab(tab.spaceId, tab.id)
+        if (tab.archive === 'closed') data.removeClosedTab(tab.id)
+        else data.closeTab(tab.spaceId, tab.id)
         if (expandedHovercardHistoryTabId === tab.id) expandedHovercardHistoryTabId = null
         delete expandedHovercardTabs[tab.id]
         hovercardUrlBarExpanded = Object.values(expandedHovercardTabs).some(Boolean)
@@ -1645,6 +1702,36 @@
 
 </script>
 
+{#snippet archivedRows(items, pending = false)}
+    {#each items as item (item.id)}
+        {#if item.tabs.some(tabMatchesSearch) || (tabSearchQuery && item.title.toLowerCase().includes(tabSearchQuery.toLowerCase()))}
+            <div class="closed-tab-row" data-tab-id={item.tabs[0].id} data-archived-id={item.id}>
+                <button class="closed-tab-item" data-tab-id={item.tabs[0].id} data-archived-id={item.id}
+                        onclick={() => restoreArchivedItem(item, pending)}
+                        onmouseenter={(e) => handleTabMouseEnter(item.tabs[0], e)}
+                        onmouseleave={handleTabMouseLeave}>
+                    {#if item.tabGroupId}
+                        <TabGroupPreview group={item} />
+                        <span class="closed-tabs-count">{item.tabs.length}</span>
+                    {:else}
+                        <Favicon tab={item.tabs[0]} showButton={false} />
+                        <div class="tab-text">
+                            <span class="tab-title">{getTabTitle(data.docs[item.tabs[0].id] || item.tabs[0])}</span>
+                            <span class="tab-space">{pending ? (item.tabs[0].pending?.wakeAt ? new Date(item.tabs[0].pending.wakeAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Waiting for external action') : data.spaces[item.spaceId]?.name || 'Unknown Space'}</span>
+                        </div>
+                    {/if}
+                </button>
+                <button class="closed-tab-remove" type="button" aria-label={pending ? 'Close pending tabs' : 'Remove from recently closed'}
+                        title={pending ? 'Close pending tabs' : 'Remove from recently closed'}
+                        onclick={() => removeArchivedItem(item, pending)}
+                        use:closeButtonHistory={{ cardVisible: hoveredTab?.id === item.tabs[0].id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+                </button>
+            </div>
+        {/if}
+    {/each}
+{/snippet}
+
 <svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 {#if tabSidebarVisible}
@@ -1874,6 +1961,7 @@
                     <div class="tab-content-track" class:multi-space={multiSpaceMode}>
                         {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
                             {@const spacePins = data.getSpacePins(spaceId)}
+                            {@const spacePending = pendingItems.filter(item => item.spaceId === spaceId)}
                             {@const sidebarPins = getSidebarPinnedItems(data.spaces[spaceId]?.tabs, false, data.spaces[spaceId]?.activeTabsOrder?.map(entry => typeof entry === 'string' ? entry : entry.id), data.docs)}
                             {@const fixedSidebarPins = getSidebarPinnedItems(data.spaces[spaceId]?.tabs, true, data.spaces[spaceId]?.activeTabsOrder?.map(entry => typeof entry === 'string' ? entry : entry.id), data.docs)}
                             {#if spaceHasMatchingTabs(spaceId)}
@@ -2165,6 +2253,22 @@
                                         {/if}
                                     {/snippet}
                                 <div class="space-tabs-sections" onscroll={handleTabsListScroll}>
+                                    {#if spacePending.length}
+                                        <div class="closed-tabs-section pending-tabs-section" role="region" aria-label="Pending tabs"
+                                             onmouseenter={() => showPending(spaceId)} onmouseleave={hidePending}
+                                             onfocusin={() => showPending(spaceId)}
+                                             onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) hidePending() }}
+                                             ondblclick={(e) => e.stopPropagation()}>
+                                            <button class="closed-tabs-header" type="button" aria-expanded={pendingHoveredSpace === spaceId}
+                                                    onclick={() => showPending(spaceId)}>
+                                                <span class="closed-tabs-title">Pending</span>
+                                                <span class="closed-tabs-count">{spacePending.length}</span>
+                                            </button>
+                                            <div class="closed-tabs-content pending-tabs-content" class:expanded={pendingHoveredSpace === spaceId} inert={pendingHoveredSpace !== spaceId}>
+                                                <div class="closed-tabs-list">{@render archivedRows(spacePending, true)}</div>
+                                            </div>
+                                        </div>
+                                    {/if}
                                     {#if sidebarPins.length}
                                     <div class="sidebar-pinned-tabs" data-pin-scope="sidebar" data-pin-layout="rows"
                                          role="list" aria-label="Scrolling sidebar pins">
@@ -2221,30 +2325,11 @@
                         onclick={() => { data.clearClosedTabs(); handleClosedTabsMouseLeave() }}
                         aria-label="Clear all recently closed tabs">
                     <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
-                    <span class="closed-tabs-count">{data.spaceMeta.closedTabs.length}</span>
+                    <span class="closed-tabs-count">{closedItems.length}</span>
                 </button>
                 <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
-                        {#each data.spaceMeta.closedTabs as tab (tab.id)}
-                            {#if tabMatchesSearch(tab)}
-                                <button class="closed-tab-item" data-tab-id={tab.id}
-                                        onmousedown={() => data.restoreClosedTab(tab.id)}
-                                        onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                                        onmouseleave={handleTabMouseLeave}>
-                                    <Favicon {tab} showButton={false} />
-                                    <div class="tab-text">
-                                        <span class="tab-title">{getTabTitle(data.docs[tab.id] || tab)}</span>
-                                        <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
-                                    </div>
-                                    <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}
-                                         use:closeButtonHistory={{ cardVisible: !hoveredGroupTarget && hoveredTab?.id === tab.id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                                        </svg>
-                                    </div>
-                                </button>
-                            {/if}
-                        {/each}
+                        {@render archivedRows(closedItems)}
                     </div>
                 </div>
             </div>
@@ -2277,7 +2362,7 @@
             <TabHoverCard tab={previewTab} stacked={!!hoveredGroupTarget}
                         historyBeside={hovercardHistoryBeside}
                         active={hoveredGroupTarget ? previewTab.id === hovercardActivationTabId : undefined}
-                        onActivate={(tab) => activateTab(tab.id, tab.spaceId)}
+                        onActivate={activateHovercardTab}
                         bind:showHistory={
                             () => expandedHovercardHistoryTabId === previewTab.id,
                             (visible) => {
@@ -4326,6 +4411,21 @@
     }
     
     /* Recently Closed Tabs */
+    .closed-tab-row { display: flex; align-items: center; border-radius: 12px; }
+    .closed-tab-row .closed-tab-item { flex: 1; min-width: 0; }
+    .closed-tab-row:focus-within, .closed-tab-row:hover { background: rgba(255, 255, 255, 0.05); }
+    .closed-tab-row button:focus-visible { outline: 1px solid #a3a3a3; outline-offset: -2px; }
+    .closed-tabs-section.pending-tabs-section {
+        position: relative;
+        inset: auto;
+        width: auto;
+        margin: 4px 0 8px;
+        z-index: 12;
+    }
+    :global(.sidebar-box.visible) .closed-tabs-section.pending-tabs-section { width: auto; bottom: auto; }
+    .closed-tabs-content.pending-tabs-content { top: 100%; bottom: auto; border: 1px solid var(--menu-border); border-radius: 0 0 13px 13px; }
+    .closed-tabs-content.pending-tabs-content.expanded { transform: translateY(-4px); }
+    .pending-tabs-content .closed-tabs-list { max-height: min(360px, 45vh); padding: 8px; }
     .closed-tabs-section {
         position: absolute;
         bottom: 8px;
@@ -4532,7 +4632,8 @@
         max-width: 28px;
     }
 
-    .closed-tab-item:hover .closed-tab-remove {
+    .closed-tab-row:hover .closed-tab-remove,
+    .closed-tab-row:focus-within .closed-tab-remove {
         opacity: 1;
         width: 25px;
         padding: 0 4px;
