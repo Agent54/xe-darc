@@ -295,11 +295,11 @@
     }
     .resource-card.toast:hover { background: rgb(255 255 255 / 7%); border-color: rgb(255 255 255 / 16%); }
     .resource-card.toast.unseen { border-left: 2px solid rgb(59 130 246 / 60%); }
-    .toast .resource-header { padding-right: 22px; }
+    .toast .resource-header { padding-right: 44px; }
     .toast .resource-actions { flex-wrap: wrap; }
     .permission-card-open { position: absolute; inset: 0; z-index: 1; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
     .permission-card-open:focus-visible { outline: 2px solid #8ab4f8; outline-offset: -2px; }
-    .permission-card-dismiss { position: absolute; right: 8px; top: 8px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: #aaa; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.15s ease, background-color 0.15s ease; }
+    .permission-card-dismiss { position: absolute; right: 28px; top: 8px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: #aaa; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.15s ease, background-color 0.15s ease; }
     .resource-card:hover .permission-card-dismiss, .resource-card:focus-within .permission-card-dismiss { opacity: 1; pointer-events: auto; }
     .permission-card-dismiss:hover { background: rgb(255 255 255 / 12%); color: #fff; }
     @media (hover: none) { .permission-card-dismiss { opacity: 1; pointer-events: auto; } }
