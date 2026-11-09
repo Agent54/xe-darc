@@ -905,7 +905,7 @@ document.addEventListener('mouseover', function(event) {
         
         // Log anchor enter with details including position and screen coordinates
         // Use the link's right edge as the reference to avoid preview overlapping the cursor on long links
-        console.log('iwa:link-enter:' + tabId + ':' + JSON.stringify({
+        sendIPC('link-enter', {
             href: anchor.href || anchor.getAttribute('href') || '',
             target: anchor.target || anchor.getAttribute('target') || '',
             rel: anchor.rel || anchor.getAttribute('rel') || '',
@@ -928,12 +928,12 @@ document.addEventListener('mouseover', function(event) {
             },
             screenX: window.screenX || 0,
             screenY: window.screenY || 0
-        }));
+        });
     } else if (!anchor && currentHoveredAnchor) {
         // Left the anchor element
-        console.log('iwa:link-leave:' + tabId + ':' + JSON.stringify({
+        sendIPC('link-leave', {
             href: currentHoveredAnchor.href || currentHoveredAnchor.getAttribute('href') || ''
-        }));
+        });
         currentHoveredAnchor = null;
     }
 }, { capture: true, passive: true });
@@ -1616,15 +1616,30 @@ document.addEventListener('input', function(event) {
         //     }
         // })
 
-        frame.onconsolemessage = (event) => {
+        frame.onconsolemessage = (event) => handleGuestMessage(readGuestMessage(frame, event.message))
+        const handleIPCMessage = (type, payload) => {
+            if (type !== 'link-enter' && type !== 'link-leave') return
+            if (type === 'link-enter' && (typeof payload?.href !== 'string' || !payload.href)) return
+            if (linkPreviewTimeout) {
+                clearTimeout(linkPreviewTimeout)
+                linkPreviewTimeout = null
+            }
+            hoveredLink = type === 'link-enter' ? payload : null
+            if (hoveredLink) {
+                linkPreviewTimeout = setTimeout(() => {
+                    hoveredLink = null
+                    linkPreviewTimeout = null
+                }, 7000)
+            }
+        }
+        const handleGuestMessage = (message) => {
             // console.log('consolemessage', event)
-            const message = readGuestMessage(frame, event.message)
             if (message === null) {
                 return
             }
             
             if (message === `iwa:ipc-ready:${mytab.id}`) {
-                connectFrameIPC(frame, mytab.id)
+                connectFrameIPC(frame, mytab.id, handleIPCMessage)
             } else if (message.startsWith('[IPC]')) {
                 console.log(message, '| tabId:', mytab.id)
             } else if (message === 'iwa:focus') {
@@ -1681,19 +1696,7 @@ document.addEventListener('input', function(event) {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const linkData = JSON.parse(dataPayload)
                         
-                        if (linkData.href) {
-                            hoveredLink = linkData
-                            
-                            if (linkPreviewTimeout) {
-                                clearTimeout(linkPreviewTimeout)
-                                linkPreviewTimeout = null
-                            }
-
-                            linkPreviewTimeout = setTimeout(() => {
-                                hoveredLink = null
-                                linkPreviewTimeout = null
-                            }, 7000)
-                        }
+                        handleIPCMessage('link-enter', linkData)
                     } catch (error) {
                         console.error('Failed to parse link enter data:', error)
                     }
@@ -1712,12 +1715,7 @@ document.addEventListener('input', function(event) {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const linkData = JSON.parse(dataPayload)
                         
-                        hoveredLink = null
-
-                        if (linkPreviewTimeout) {
-                            clearTimeout(linkPreviewTimeout)
-                            linkPreviewTimeout = null
-                        }
+                        handleIPCMessage('link-leave', linkData)
                     } catch (error) {
                         console.error('Failed to parse link leave data:', error)
                     }
