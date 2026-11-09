@@ -448,16 +448,19 @@
     .url-bar-input {
         z-index: 2000;
         width: 100%;
-        color: white;
+        color: rgba(255, 255, 255, 0.95);
         font-size: 12px;
+        font-weight: 400;
+        line-height: 1.2;
         border: none;
         outline: none;
         background: transparent;
         padding: 8px 8px 8px 7px;
-        font-family: 'SF Mono', Consolas, monospace;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
     }
     
     .hovercard .url-bar-input {
         padding-left: 5px;
+        margin-top: -1px;
     }
 </style>
