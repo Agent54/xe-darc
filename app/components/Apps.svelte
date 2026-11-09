@@ -7,6 +7,8 @@
     import { composeContainer } from '../lib/compose-actions.js'
     import { appViewOptions, appTypeLabel, appTimestamp, appMatchesURL, appRuntime, arrangeApps } from '../lib/app-view.js'
     import { appSections, repositoryApps } from '../lib/app-records.js'
+    import { loadCatalogUpdates } from '../lib/app-catalog.js'
+    import { afterPaintIdle } from '../lib/after-paint-idle.js'
 
     let { onClose = () => {} } = $props()
 
@@ -26,6 +28,9 @@
     const openingApps = $state({})
     let hasComposeSnapshot = false
     let loadController = null
+    let catalogUpdates = $state({})
+    let updatesController = null
+    let cancelUpdateCheck = null
 
     let exampleApps = $state([
         { id: 'example-dashboard', name: 'Dashboard', iconUrl: '/embed-icons/observable.png', type: 'docker', partition: { name: 'Work', color: '#a3e635' } },
@@ -79,8 +84,35 @@
             // Storage may be unavailable or contain data from an older version.
         }
         refresh()
-        return () => loadController?.abort()
+        checkForUpdates()
+        return () => {
+            loadController?.abort()
+            cancelUpdateCheck?.()
+            updatesController?.abort()
+        }
     })
+
+    export function checkForUpdates(catalogApps) {
+        cancelUpdateCheck?.()
+        updatesController?.abort()
+        const controller = new AbortController()
+        updatesController = controller
+        cancelUpdateCheck = afterPaintIdle(async () => {
+            cancelUpdateCheck = null
+            try {
+                const updates = await loadCatalogUpdates(sections.saved, { signal: controller.signal, catalogApps })
+                if (updatesController === controller && !controller.signal.aborted) {
+                    catalogUpdates = updates
+                }
+            } catch {
+                // Keep known updates when a background check cannot reach GitHub.
+            } finally {
+                if (updatesController === controller) {
+                    updatesController = null
+                }
+            }
+        })
+    }
 
     function saveMetadata() {
         try {
@@ -149,6 +181,10 @@
     export function close() {
         loadController?.abort()
         loadController = null
+        cancelUpdateCheck?.()
+        cancelUpdateCheck = null
+        updatesController?.abort()
+        updatesController = null
         dismissOverlays()
     }
 
@@ -491,6 +527,9 @@
 {#snippet AppCard(app)}
     {@const defaultURL = app.endpoints?.[0]?.url || app.url}
     <article class="app-card relative w-52 min-h-44 rounded-xl border border-white/8 bg-black/20 hover:bg-white/8 hover:border-white/14 transition-colors px-3 pt-3 pb-2" oncontextmenu={(event) => openDockerMenu(event, app)} aria-busy={dockerAction?.appId === app.id || Boolean(openingApps[app.id])}>
+        {#if catalogUpdates[app.id]}
+            <span class="app-update-badge absolute right-2 top-2 z-20 rounded border border-emerald-300/30 bg-emerald-950 px-2 py-1 text-[10px] leading-none text-emerald-200" title="This app's catalog entry has changed" role="status">Update available</span>
+        {/if}
         {#if app.runtimeLabel}
             <button
                 type="button"
@@ -559,7 +598,7 @@
             {/if}
         </div>
 
-        <div class="app-card-actions absolute right-2 top-2 z-10 flex flex-col gap-1">
+        <div class="app-card-actions absolute right-2 z-10 flex flex-col gap-1 {catalogUpdates[app.id] ? 'top-9' : 'top-2'}">
             {#if app.project}
                 <button
                     type="button"
@@ -739,6 +778,8 @@
     <AddAppModal
         show={showAddAppModal}
         installedApps={sections.saved}
+        updates={catalogUpdates}
+        onCatalogLoaded={checkForUpdates}
         onAdd={addApp}
         onClose={() => showAddAppModal = false}
     />

@@ -5,6 +5,7 @@ const catalogAssets = 'https://raw.githubusercontent.com/agent54/xe-appstore/mai
 const servicePath = /^catalog\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([a-z0-9]+(?:-[a-z0-9]+)*)\.json$/
 const serviceCache = new Map()
 let cachedSchema = null
+const snapshotCache = new Map()
 
 export function parseCatalogService(service, path, revision, serviceType) {
     const match = path.match(servicePath)
@@ -56,13 +57,22 @@ async function catalogRequest(path, signal, raw = false) {
     }
 }
 
-export async function loadAppCatalog({ signal } = {}) {
-    const timeout = AbortSignal.timeout(20000)
-    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
-    const tree = await catalogRequest('/git/trees/main?recursive=1', requestSignal)
+async function loadCatalogTree(revision, signal) {
+    const tree = await catalogRequest(`/git/trees/${encodeURIComponent(revision)}?recursive=1`, signal)
     if (!Array.isArray(tree?.tree) || tree.truncated) {
         throw new Error('GitHub returned an incomplete app catalog.')
     }
+    return tree
+}
+
+function catalogSignal(signal) {
+    const timeout = AbortSignal.timeout(20000)
+    return signal ? AbortSignal.any([signal, timeout]) : timeout
+}
+
+export async function loadAppCatalog({ signal } = {}) {
+    const requestSignal = catalogSignal(signal)
+    const tree = await loadCatalogTree('main', requestSignal)
     const schemaEntry = tree.tree.find(entry => entry.type === 'blob' && entry.path === 'catalog.schema.json')
     if (!schemaEntry?.sha) {
         throw new Error('GitHub returned an app catalog without its schema.')
@@ -84,7 +94,10 @@ export async function loadAppCatalog({ signal } = {}) {
             if (!service) {
                 service = await catalogRequest(`/git/blobs/${encodeURIComponent(file.sha)}`, requestSignal, true)
             }
-            apps[index] = parseCatalogService(service, file.path, tree.sha, serviceType)
+            apps[index] = {
+                ...parseCatalogService(service, file.path, tree.sha, serviceType),
+                catalogRevision: file.sha
+            }
             serviceCache.set(file.sha, service)
         }
     }
@@ -104,4 +117,66 @@ export async function loadAppCatalog({ signal } = {}) {
         }
     }
     return apps.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name))
+}
+
+function catalogVersions(tree) {
+    const versions = new Map()
+    for (const entry of tree.tree) {
+        const match = entry.type === 'blob' && entry.path.match(servicePath)
+        if (match && entry.sha) {
+            if (versions.has(match[2])) {
+                throw new Error(`Duplicate app catalog ID: ${match[2]}`)
+            }
+            versions.set(match[2], entry.sha)
+        }
+    }
+    return versions
+}
+
+function installedSnapshot(app) {
+    if (!app.iconUrl?.startsWith(catalogAssets)) {
+        return null
+    }
+    const revision = new URL(app.iconUrl).searchParams.get('v')
+    return /^[a-f0-9]{40}$/.test(revision || '') ? revision : null
+}
+
+export async function loadCatalogUpdates(installedApps, { signal, catalogApps } = {}) {
+    const installed = installedApps.filter(app => app.catalogId)
+    if (!installed.length) {
+        return {}
+    }
+    const requestSignal = catalogSignal(signal)
+    const latest = catalogApps
+        ? new Map(catalogApps.map(app => [app.id, app.catalogRevision]))
+        : catalogVersions(await loadCatalogTree('main', requestSignal))
+    const updates = {}
+    const failedSnapshots = new Set()
+    for (const app of installed) {
+        requestSignal.throwIfAborted()
+        const revision = latest.get(app.catalogId)
+        if (!revision) {
+            continue
+        }
+        let installedRevision = app.catalogRevision
+        if (!installedRevision) {
+            const snapshot = installedSnapshot(app)
+            if (snapshot && !failedSnapshots.has(snapshot)) {
+                try {
+                    if (!snapshotCache.has(snapshot)) {
+                        snapshotCache.set(snapshot, catalogVersions(await loadCatalogTree(snapshot, requestSignal)))
+                    }
+                    installedRevision = snapshotCache.get(snapshot).get(app.catalogId)
+                } catch (error) {
+                    requestSignal.throwIfAborted()
+                    failedSnapshots.add(snapshot)
+                    continue
+                }
+            }
+        }
+        if (installedRevision && installedRevision !== revision) {
+            updates[app.id || app._id] = { catalogId: app.catalogId, installedRevision, catalogRevision: revision }
+        }
+    }
+    return updates
 }

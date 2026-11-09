@@ -54,7 +54,7 @@ function shellHarness() {
         let lastUsedViewMode = 'tile', backToDefault = false
         let focusModeEnabled = false, focusModeHovered = true, contentAreaScrimActive = true, hasLeftToggle = true
         let appsOverlayZenModeWasActive = false, appsOverlayHasOpened = false, showAppsOverlay = false
-        const appsView = { refresh() {}, close() {} }
+        const appsView = { refresh() {}, checkForUpdates() {}, close() {} }
         ${functions}
         return {
             selectViewMode, toggleViewMode, toggleAppsOverlay, toggleFocusMode,

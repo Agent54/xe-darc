@@ -2546,6 +2546,7 @@
         appsOverlayHasOpened = true
         showAppsOverlay = true
         appsView?.refresh()
+        appsView?.checkForUpdates()
         if (!focusModeEnabled) {
             toggleFocusMode()
         }

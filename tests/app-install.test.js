@@ -13,6 +13,7 @@ function submission(type, onAdd) {
             dataPartitions: ['current'], githubUrl: 'https://github.com/example/hello',
             pathType: 'compose', path: 'compose.yaml', githubToken: 'secret',
             branch: 'feature', checkoutPath: 'development/tools', openInMenu: true,
+            catalogId: 'hello', catalogRevision: 'installed-catalog-revision',
             startOnBrowserStart: true, iconUrl: 'https://hello.example/icon.png'
         }
         let submissionState = 'idle', submitError = '', submissionController = null
@@ -41,6 +42,7 @@ Deno.test('adding an app only submits its full configuration, waits for persiste
         assert.equal(payload.app.githubToken, 'secret')
         assert.equal(payload.app.branch, 'feature')
         assert.equal(payload.app.checkoutPath, 'development/tools')
+        assert.equal(payload.app.catalogRevision, 'installed-catalog-revision')
         assert.equal(payload.app.openInMenu, true)
         assert.equal(payload.app.startOnBrowserStart, true)
         assert.deepEqual(payload.app.dataPartitions, ['current'])
@@ -95,6 +97,8 @@ Deno.test('new apps persist as app documents in the shared data store without ta
         assert.equal(stored.spaceId, 'space')
         assert.equal(stored.archive, '')
         assert.equal(stored.githubToken, 'secret')
+        assert.equal(stored.catalogId, 'hello')
+        assert.equal(stored.catalogRevision, 'installed-catalog-revision')
         assert.equal(docs[stored._id]._rev, '1-saved')
         assert.equal(h.closes, 1)
     }
