@@ -45,14 +45,18 @@ export function releaseFrameIPC(frame) {
     frameSecrets.delete(frame)
 }
 
-export function connectFrameIPC(frame, tabId) {
+export function connectFrameIPC(frame, tabId, onMessage) {
     console.log('[IPC] Content script ready; opening channel:', tabId)
     frame.ipcPort?.close()
     const { port1, port2 } = new MessageChannel()
     frame.ipcPort = port1
 
     port1.onmessage = ({ data }) => {
-        if (frameSecrets.has(frame) && data?.secret === frameSecrets.get(frame) && data?.type === 'darc:ipc-hello' && data.message === 'Hello world') {
+        if (frame.ipcPort !== port1 || !frameSecrets.has(frame) || data?.secret !== frameSecrets.get(frame)) return
+        if (data.type === 'darc:ipc-event' && data.tabId === tabId && typeof data.event === 'string') {
+            onMessage?.(data.event, data.payload)
+        }
+        if (data?.secret === frameSecrets.get(frame) && data?.type === 'darc:ipc-hello' && data.message === 'Hello world') {
             console.log('[IPC] Hello world from tab content script:', tabId)
             port1.postMessage({ type: 'darc:ipc-reply', message: 'Hello world', secret: frameSecret(frame) })
         }

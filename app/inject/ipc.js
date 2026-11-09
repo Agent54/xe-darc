@@ -1,7 +1,26 @@
 // The guest has no embedder WindowProxy until the embedder sends a message.
 // Announce readiness first, then exchange the hello over a real MessagePort.
+let ipcPort = null
+const pendingIPCMessages = []
+function sendIPC(type, payload) {
+    if (window !== window.top) {
+        console.log('iwa:' + type + ':' + tabId + ':' + JSON.stringify(payload))
+    } else if (ipcPort) {
+        ipcPort.postMessage({ type: 'darc:ipc-event', secret: bridgeSecret, tabId, event: type, payload })
+    } else {
+        pendingIPCMessages.push({ type, payload })
+    }
+}
+
 if (window === window.top) {
-    let ipcPort = null
+    window.addEventListener('pageshow', event => {
+        if (!event.persisted) return
+        ipcPort?.close()
+        ipcPort = null
+        pendingIPCMessages.length = 0
+        currentHoveredAnchor = null
+        console.log(`iwa:ipc-ready:${tabId}`)
+    })
 
     window.addEventListener('message', event => {
         if (!event.isTrusted || event.origin !== embedderOrigin || event.data?.type !== 'darc:ipc-connect' || event.data.tabId !== tabId || ipcPort) {
@@ -23,6 +42,9 @@ if (window === window.top) {
             }
         }
         ipcPort.postMessage({ type: 'darc:ipc-hello', message: 'Hello world', secret: bridgeSecret })
+        for (const { type, payload } of pendingIPCMessages.splice(0)) {
+            sendIPC(type, payload)
+        }
     })
 
     console.log(`iwa:ipc-ready:${tabId}`)
