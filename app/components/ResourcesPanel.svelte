@@ -175,6 +175,9 @@
         {#if data.permissionState.error}
             <p role="alert">{data.permissionState.error}</p>
         {/if}
+        {#if data.permissionState.seenError}
+            <p role="alert">{data.permissionState.seenError}</p>
+        {/if}
 		<div class="resources-controls">
 			<div class="scope-control">
 				<label class="sr-only" for="resources-scope">Scope</label>

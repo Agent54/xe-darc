@@ -108,6 +108,13 @@ The close button appears on hover or keyboard focus and performs Ignore.
 While Resources is open, its cards replace the toasts; closing it shows any
 requests that are still unanswered, including requests already marked seen.
 
+Closing Resources acknowledges existing unseen requests across this instance's
+windows. Clicking anywhere on a permission card acknowledges its permission
+scope. Pending permissions are registered in PouchDB with `decision: null`
+and their own `seenAt` field. Windows apply timestamp changes through PouchDB's
+live feed. Opening Resources leaves badges visible, and marking them seen
+leaves pending requests actionable.
+
 The implemented descriptors are `open-tab`, `navigate-off-origin`,
 `geolocation`, `pointerLock`, `download`, `filesystem`, `fullscreen`, `hid`,
 `clipboardReadWrite`, `clipboardSanitizedWrite`, and `media` with a `camera`

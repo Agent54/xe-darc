@@ -12,6 +12,7 @@ const appSource = await readFile(`${root}app/App.svelte`, 'utf8')
 const sidebarHandler = parse(appSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'switchToSidebar')
 const promptFixture = compile(`
     <script>
+        import data from './app/data.svelte.js'
         import PermissionToasts from './app/components/PermissionToasts.svelte'
         import ResourcesPanel from './app/components/ResourcesPanel.svelte'
         let openSidebars = $state(new Set())
@@ -23,6 +24,7 @@ const promptFixture = compile(`
         window.sidebarWrites = 0
         window.promptFixture = {
             get sidebarOpen() { return openSidebars.has('resources') },
+            open() { switchToResources() },
             close() { openSidebars = new Set() }
         }
     </script>
@@ -41,12 +43,13 @@ const fixture = compileModule(`
     const docs = $state({ page: { id: 'page', type: 'tab', url: 'https://site.example/page' } })
     const frame = { reload() {} }
     const frames = { page: { frame } }
+    const windowId = new URL(location.href).searchParams.get('window') || 'window'
     const db = new PouchDB(new URL(location.href).searchParams.get('db'))
     const store = createPermissionStore({ db, permissions, rules, state, instanceId: 'browser-test',
-        putDocument: doc => db.put(withDocumentSort(doc)), getWindowId: () => 'window',
+        putDocument: doc => db.put(withDocumentSort(doc)), getWindowId: () => windowId,
         getContext: () => ({ url: docs.page.url, partition: 'persist:myapp', frame }) })
     const feed = db.changes({ live: true, since: 'now', include_docs: true, conflicts: true }).on('change', change => store.ingest(change.doc))
-    window.darcWindowId = 'window'
+    window.darcWindowId = windowId
     const data = {
         docs, frames, permissions, permissionRules: rules, permissionState: state,
         spaceMeta: { activeTabId: 'page' },
@@ -56,7 +59,8 @@ const fixture = compileModule(`
         permissionRequest: (id, input) => store.request(id, input),
         allowPermission: (id, lifetime) => store.resolve(id, 'allow', lifetime === 'always' ? 'persistent' : lifetime === 'until-app-close' ? 'session' : 'once'),
         denyPermission: id => store.resolve(id, 'deny'), ignorePermission: id => store.resolve(id, 'ignore'),
-        changePermission: resource => store.reset(resource), clearUnseenResourceFlags() {}, reloadCurrentTab() {},
+        changePermission: resource => store.reset(resource), clearUnseenResourceFlags: () => store.markSeen(),
+        markPermissionSeen: resource => store.markSeen(resource), reloadCurrentTab() {},
         navigate(id, url) { window.navigations.push({ id, url }) }
     }
     window.fixture = { data, store, db, feed }
@@ -139,7 +143,7 @@ try {
     }
     await choose('Open in new tab')
     await page.waitForFunction(() => window.promotions === 1)
-    const document = await page.evaluate(async () => (await window.fixture.db.allDocs({ include_docs: true })).rows[0].doc)
+    const document = await page.evaluate(async () => (await window.fixture.db.allDocs({ include_docs: true })).rows.find(row => row.doc.type === 'permission').doc)
     assert.equal(document.type, 'permission')
     assert.deepEqual(document.permission, { name: 'open-tab' })
     assert.equal(document.decision, 'allow')
@@ -229,6 +233,8 @@ try {
     await page.locator(`${toast('geolocation')} .permission-card-open`).click()
     await page.waitForFunction(() => window.promptFixture.sidebarOpen)
     assert.equal(await page.$('.permission-toasts'), null)
+    await page.waitForFunction(() => document.querySelector('.sidebar .resource-card[data-permission-type="geolocation"]:not(.unseen)'))
+    assert.equal(await page.$$('.sidebar .resource-card.unseen').then(cards => cards.length), 2)
     assert.deepEqual(await buttonStyle('.sidebar .resource-card[data-permission-type="geolocation"] .accept-btn.main'), toastButton)
     assert.equal(await page.evaluate(() => window.sidebarWrites), 1)
     await page.locator('[aria-label="Close Resources"]').click()
@@ -264,7 +270,7 @@ try {
     await page.locator(`${toast('pointerLock')} button::-p-text(Allow until closing this window)`).click()
     await page.waitForFunction(() => document.querySelector('.permission-toasts') === null)
     assert.equal(await page.evaluate(() => window.fixture.data.permissionDecision('pointerLock', 'page')), 'allow')
-    assert.equal(await page.evaluate(async () => (await window.fixture.db.allDocs({ include_docs: true })).rows.some(row => row.doc.permission?.name === 'pointerLock')), false)
+    assert.equal(await page.evaluate(async () => (await window.fixture.db.allDocs({ include_docs: true })).rows.find(row => row.doc.permission?.name === 'pointerLock').doc.decision), null)
 
     await page.evaluate(() => {
         for (let i = 0; i < 8; i++) {
@@ -321,9 +327,60 @@ try {
     await page.locator(`${toast('download')} .permission-card-open`).click()
     await page.waitForSelector('.sidebar .resource-card[data-permission-type="hid"]')
     assert.equal(await page.$eval('.sidebar .resource-card[data-permission-type="hid"] .accept-btn.main', button => button.disabled), false, 'hidden requests remain actionable in Resources')
+
+    const seenURL = new URL(url)
+    seenURL.searchParams.set('toasts', '1')
+    seenURL.searchParams.set('db', `permission-seen-test-${crypto.randomUUID()}`)
+    await page.goto(seenURL.href)
+    await page.waitForFunction(() => window.fixtureReady)
+    const seenPeer = await browser.newPage()
+    seenPeer.on('pageerror', error => errors.push(error.message))
+    const seenPeerURL = new URL(seenURL)
+    seenPeerURL.searchParams.set('window', 'other-window')
+    await seenPeer.goto(seenPeerURL.href)
+    await seenPeer.waitForFunction(() => window.fixtureReady, { polling: 100 })
+    const addRequest = (target, permission) => target.evaluate(permission => {
+        window.fixture.data.permissionRequest('page', { permission, url: 'https://site.example/page' })
+    }, permission)
+    await addRequest(page, 'geolocation')
+    await addRequest(seenPeer, 'geolocation')
+    await addRequest(seenPeer, 'fullscreen')
+    await page.waitForSelector('.resource-card.unseen')
+    await seenPeer.waitForSelector('.resource-card.unseen')
+    await page.bringToFront()
+    await page.evaluate(() => window.promptFixture.open())
+    await page.waitForFunction(() => window.promptFixture.sidebarOpen, { polling: 100 })
+    await page.waitForSelector('.sidebar .resource-card.unseen')
+    assert.equal(await seenPeer.$$('.resource-card.unseen').then(cards => cards.length), 2)
+    await page.waitForFunction(async () => (await window.fixture.db.allDocs()).total_rows === 2, { polling: 100 })
+    assert.ok(await page.evaluate(async () => (await window.fixture.db.allDocs({ include_docs: true })).rows.every(({ doc }) => doc.seenAt === null)))
+    await page.locator('.sidebar .resource-name').click()
+    await page.waitForFunction(() => document.querySelector('.resource-card.unseen') === null, { polling: 100 })
+    await seenPeer.waitForFunction(() => document.querySelector('.resource-card[data-permission-type="geolocation"]:not(.unseen)'), { polling: 100 })
+    assert.ok(await seenPeer.$('.resource-card[data-permission-type="fullscreen"].unseen'))
+    assert.equal(await seenPeer.evaluate(() => Object.values(window.fixture.data.permissions.fullscreen.origins)[0].requests[0].status), 'requested')
+    await page.locator('[aria-label="Close Resources"]').click()
+    await seenPeer.waitForFunction(() => document.querySelector('.resource-card[data-permission-type="fullscreen"]:not(.unseen)'), { polling: 100 })
+    const seenDocs = await page.evaluate(async () => (await window.fixture.db.allDocs({ include_docs: true })).rows.map(row => row.doc))
+    assert.equal(seenDocs.length, 2)
+    assert.ok(seenDocs.every(doc => doc.type === 'permission' && Number.isFinite(doc.seenAt) && doc.decision === null))
+    await addRequest(page, 'download')
+    await addRequest(seenPeer, 'hid')
+    await page.waitForSelector('.resource-card.unseen')
+    await seenPeer.waitForSelector('.resource-card.unseen')
+    await seenPeer.bringToFront()
+    await seenPeer.evaluate(() => window.promptFixture.open())
+    await seenPeer.waitForFunction(() => window.promptFixture.sidebarOpen, { polling: 100 })
+    await seenPeer.waitForSelector('.sidebar .resource-card[data-permission-type="hid"].unseen')
+    await seenPeer.locator('[aria-label="Close Resources"]').click()
+    await page.waitForFunction(() => document.querySelector('.resource-card.unseen') === null, { polling: 100 })
+    await seenPeer.waitForFunction(() => document.querySelector('.resource-card.unseen') === null, { polling: 100 })
+    assert.equal(await page.evaluate(() => Object.values(window.fixture.data.permissions.download.origins)[0].requests[0].status), 'requested')
+    await seenPeer.close()
     assert.deepEqual(errors, [])
     console.log('Chromium/PouchDB: header settings, cross-window updates, reset, restart persistence, conflict resolution, blocked unknown grants and disabled Mock tooltip pass')
     console.log('Permission toasts: all pending requests, identical sidebar actions, card opening, hover dismissal, permanent/session/once decisions, scroll-safe dropdowns and narrow layouts pass')
+    console.log('Permission seen badges: opening preserves markers, card clicks sync by permission, and closing Resources acknowledges existing requests across windows')
 } finally {
     await browser?.close()
     await new Promise(resolve => server.close(resolve))

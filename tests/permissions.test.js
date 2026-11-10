@@ -7,12 +7,15 @@ function harness(records = new Map(), instanceId = 'installation') {
     const permissions = {}, rules = {}, state = { status: 'loading', error: null }
     const contexts = new Map(['one', 'two'].map(id => [id, { url: 'https://site.example/page', partition: 'persist:myapp', frame: {} }]))
     const writes = [], revocations = []
+    const reads = { allDocs: 0, get: 0 }
     let failWrite = false, conflicts = 0
     const db = {
         async allDocs({ startkey, endkey }) {
+            reads.allDocs++
             return { rows: [...records.values()].filter(doc => !doc._deleted && doc._id >= startkey && doc._id <= endkey).map(doc => ({ doc: structuredClone(doc) })) }
         },
         async get(id) {
+            reads.get++
             const doc = records.get(id)
             if (!doc || doc._deleted) { throw { status: 404 } }
             return structuredClone(doc)
@@ -30,7 +33,7 @@ function harness(records = new Map(), instanceId = 'installation') {
     }
     const store = createPermissionStore({ db, putDocument: doc => db.put(doc), permissions, rules, state, instanceId,
         getWindowId: () => 'window', getContext: id => contexts.get(id), onRevoke: scope => revocations.push(scope) })
-    return { store, records, permissions, rules, state, contexts, writes, revocations,
+    return { store, records, permissions, rules, state, contexts, writes, revocations, reads,
         resources: () => Object.values(permissions).flatMap(type => Object.values(type.origins || {}).flatMap(entry => entry.requests)),
         data: { permissionRequest: (id, input, context) => store.request(id, input, context) },
         failWrites() { failWrite = true }, conflictOnce() { conflicts = 1 } }
@@ -96,6 +99,106 @@ Deno.test('pending permission notifications include previously seen requests and
     assert.deepEqual(getPendingPermissionRequests(permissions, 'current'), [later])
 })
 
+Deno.test('seen timestamps sync only the acknowledged permission and never answer requests', async () => {
+    const records = new Map()
+    const first = harness(records), second = harness(records), otherInstance = harness(records, 'other-installation')
+    await Promise.all([first.store.ready, second.store.ready, otherInstance.store.ready])
+    for (const h of [first, second, otherInstance]) {
+        h.store.request('one', { permission: 'geolocation', url: 'https://site.example/page' })
+    }
+    second.store.request('one', { permission: 'fullscreen', url: 'https://site.example/page' })
+    const reads = { ...first.reads }
+    assert.equal(await first.store.markSeen(first.resources()[0]), true)
+    assert.deepEqual(first.reads, reads)
+    const seen = records.get(first.resources()[0].ruleId)
+    assert.equal(seen.type, 'permission')
+    assert.equal(seen.decision, null)
+    assert.ok(Number.isFinite(seen.seenAt))
+    second.store.ingest(seen)
+    otherInstance.store.ingest(seen)
+    for (const h of [first, second]) {
+        assert.equal(h.resources()[0].unseen, false)
+        assert.equal(h.resources()[0].status, 'requested')
+        assert.equal(h.store.decision('geolocation', 'one'), 'ask')
+    }
+    assert.equal(otherInstance.resources()[0].unseen, true)
+    assert.equal(second.resources().at(-1).unseen, true)
+    assert.equal(await second.store.markSeen(), true)
+    assert.equal(second.resources().at(-1).unseen, false)
+    assert.ok([...records.values()].filter(doc => doc.instanceId === 'installation').every(doc => doc.type === 'permission' && Number.isFinite(doc.seenAt)))
+    assert.equal([...records.values()].find(doc => doc.instanceId === 'other-installation').seenAt, null)
+})
+
+Deno.test('a delayed acknowledgement cannot clear a newer request for the same permission', async () => {
+    const h = harness()
+    await h.store.ready
+    h.store.request('one', { permission: 'geolocation', url: 'https://site.example/page' })
+    const saving = h.store.markSeen()
+    h.store.request('two', { permission: 'geolocation', url: 'https://site.example/page' })
+    assert.equal(await saving, true)
+    assert.equal(h.resources()[0].unseen, false)
+    assert.equal(h.resources()[1].unseen, true)
+})
+
+Deno.test('closing Resources marks existing requests for different permissions across windows', async () => {
+    const records = new Map()
+    const first = harness(records), second = harness(records)
+    await Promise.all([first.store.ready, second.store.ready])
+    first.store.request('one', { permission: 'geolocation', url: 'https://site.example/page' })
+    second.store.request('one', { permission: 'fullscreen', url: 'https://site.example/page' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const otherId = second.resources()[0].ruleId
+    first.store.ingest(records.get(otherId))
+    const reads = { ...first.reads }
+    await first.store.markSeen()
+    assert.deepEqual(first.reads, reads)
+    second.store.ingest(records.get(otherId))
+    assert.equal(first.resources()[0].unseen, false)
+    assert.equal(second.resources()[0].unseen, false)
+    assert.equal(records.size, 2)
+})
+
+Deno.test('seen writes preserve session grants, saved decisions, and concurrent denial', async () => {
+    const h = harness()
+    await h.store.ready
+    const actions = native(h)
+    const resource = h.resources()[0]
+    await h.store.resolve(resource.requestId, 'allow', 'session')
+    await h.store.markSeen(resource)
+    assert.equal(h.store.decision('geolocation', 'one'), 'allow')
+    assert.deepEqual(actions, ['defer', 'allow'])
+    assert.equal(h.revocations.length, 0)
+    const seen = h.records.get(resource.ruleId).seenAt
+    const peer = harness(h.records)
+    await peer.store.ready
+    const results = await Promise.all([
+        h.store.markSeen(resource),
+        peer.store.setDecision('geolocation', 'one', 'deny')
+    ])
+    assert.deepEqual(results, [true, true])
+    const doc = h.records.get(resource.ruleId)
+    assert.equal(doc.decision, 'deny')
+    assert.ok(doc.seenAt >= seen)
+    h.store.ingest(doc)
+    assert.equal(h.store.decision('geolocation', 'one'), 'deny')
+    assert.equal(h.revocations.length, 1)
+})
+
+Deno.test('shared seen state retries conflicts and reports write failures without changing permissions', async () => {
+    const h = harness()
+    await h.store.ready
+    h.store.request('one', { permission: 'geolocation', url: 'https://site.example/page' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    h.conflictOnce()
+    assert.equal(await h.store.markSeen(), true)
+    assert.equal(h.state.seenError, null)
+    h.failWrites()
+    assert.equal(await h.store.markSeen(h.resources()[0]), false)
+    assert.match(h.state.seenError, /Could not save/)
+    assert.equal(h.state.status, 'ready')
+    assert.equal(h.store.decision('geolocation', 'one'), 'ask')
+})
+
 Deno.test('permanent grants and denials survive a new store; resets remove the saved rule', async () => {
     const h = harness()
     await h.store.ready
@@ -103,9 +206,11 @@ Deno.test('permanent grants and denials survive a new store; resets remove the s
     const resource = h.resources()[0]
     await h.store.resolve(resource.requestId, 'allow')
     assert.equal(h.store.decision('geolocation', 'one'), 'allow')
-    assert.equal(h.writes[0].type, 'permission')
-    assert.deepEqual(h.writes[0].permission, { name: 'geolocation' })
-    assert.equal('requests' in h.writes[0], false)
+    const saved = h.writes.at(-1)
+    assert.equal(saved.type, 'permission')
+    assert.deepEqual(saved.permission, { name: 'geolocation' })
+    assert.equal(saved.decision, 'allow')
+    assert.equal('requests' in saved, false)
     const reopened = harness(h.records)
     await reopened.store.ready
     assert.equal(reopened.store.decision('geolocation', 'one'), 'allow')
@@ -129,7 +234,7 @@ Deno.test('one-time approval resolves only one native request and is not saved',
     assert.deepEqual(first, ['defer', 'allow'])
     assert.deepEqual(second, ['defer'])
     assert.equal(h.store.decision('geolocation', 'one'), 'ask')
-    assert.equal(h.writes.length, 0)
+    assert.ok(h.writes.every(doc => doc.decision === null))
     h.store.cancelFrame(h.contexts.get('two').frame)
     assert.deepEqual(second, ['defer', 'deny'])
 })
@@ -211,7 +316,7 @@ Deno.test('temporary session grants are not restored after reopening', async () 
     const reopened = harness(h.records)
     await reopened.store.ready
     assert.equal(reopened.store.decision('geolocation', 'one'), 'ask')
-    assert.equal(h.writes.length, 0)
+    assert.ok(h.writes.every(doc => doc.decision === null))
 })
 
 Deno.test('settlement consumes the rule chosen for that request when another request has an exact one-time grant', async () => {
@@ -380,7 +485,7 @@ Deno.test('ignoring or cancelling a frame settles pending requests without a gra
         }
         assert.deepEqual(actions, ['defer', 'deny'])
         assert.equal(h.store.decision('geolocation', 'one'), 'ask')
-        assert.equal(h.writes.length, 0)
+        assert.ok(h.writes.every(doc => doc.decision === null))
     }
 })
 

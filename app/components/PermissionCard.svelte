@@ -136,10 +136,19 @@
             openAcceptDropdown = null
         }
     }
+
+    function acknowledgeCard() {
+        if (resource.ruleId || resource.unseen) {
+            void data.markPermissionSeen(resource)
+        }
+    }
     
 </script>
 
-<div class="resource-card {sectionId}" class:toast={!!onOpen} data-permission-type={resource.type} data-request-id={resource.requestId} class:unseen={resource.unseen}>
+<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events (The card also captures keyboard activation of its own controls.) -->
+<div class="resource-card {sectionId}" class:toast={!!onOpen} data-permission-type={resource.type} data-request-id={resource.requestId} class:unseen={resource.unseen}
+    onmousedowncapture={event => { if (event.button === 0) { acknowledgeCard() } }}
+    onclickcapture={event => { if (event.detail === 0) { acknowledgeCard() } }}>
     {#if onOpen}
         <button class="permission-card-open" aria-label={`Open ${resourceType.name} request in resources`} disabled={savingRequest !== null}
             onmousedown={onOpen} onclick={event => { if (event.detail === 0) { onOpen(event) } }}></button>

@@ -2451,18 +2451,8 @@ const data = {
         return result
     },
 
-    clearUnseenResourceFlags: () => {
-        for (const resourceKey of Object.keys(permissions)) {
-            for (const origin of Object.keys(permissions[resourceKey].origins || {})) {
-                const requests = permissions[resourceKey].origins[origin].requests || []
-                requests.forEach(request => {
-                    if (request.unseen) {
-                        request.unseen = false
-                    }
-                })
-            }
-        }
-    },
+    clearUnseenResourceFlags: () => permissionStore.markSeen(),
+    markPermissionSeen: resource => permissionStore.markSeen(resource),
 
     clearNeedsReloadFlags: () => {
         for (const resourceKey of Object.keys(permissions)) {

@@ -31,7 +31,7 @@ export function permissionType(descriptor) {
         return descriptor.capability
     }
     const canonical = permissionDescriptor(descriptor?.name)
-    return canonical?.name === descriptor?.name && !descriptor?.capability ? canonical.name : null
+    return canonical && canonical.name === descriptor?.name && !descriptor?.capability ? canonical.name : null
 }
 
 export function permissionOrigin(url) {
@@ -133,6 +133,9 @@ export function handleFramePermission(data, tabId, event, context) {
 
 export function createPermissionStore({ db, putDocument, permissions, rules, state, instanceId, getContext, getWindowId, onRevoke = () => {} }) {
     const prefix = `darc:permission:${encodeURIComponent(instanceId)}:`
+    const seenByPermission = new Map()
+    const permissionDocuments = new Map()
+    let lastEventAt = 0
     const transient = new Map()
     const activeGrants = new Map()
     const requests = new Map()
@@ -143,6 +146,9 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
     const revisions = new Map()
 
     function ingest(doc) {
+        if (doc?.type === 'permission-seen') {
+            return true
+        }
         if (!doc?._id?.startsWith('darc:permission:')) {
             return false
         }
@@ -163,15 +169,38 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         if (state.status !== 'error') {
             state.error = conflictingRules.size ? 'A saved permission has conflicting decisions. Choose a new decision or reset it.' : null
         }
-        const previous = transient.get(doc._id) || rules[doc._id] || activeGrants.get(doc._id)
-        delete rules[doc._id]
-        if (!doc._deleted && doc.type === 'permission' && doc.schemaVersion === 1 && doc.instanceId === instanceId &&
-            permissionType(doc.permission) && validDecision(doc.permission, doc.decision) && doc.lifetime === 'persistent' &&
+        const validDocument = !doc._deleted && doc.type === 'permission' && doc.schemaVersion === 1 && doc.instanceId === instanceId &&
+            permissionType(doc.permission) && doc.lifetime === 'persistent' &&
             !doc._conflicts?.length && permissionOrigin(doc.topLevelOrigin) === doc.topLevelOrigin &&
             permissionOrigin(doc.requestingOrigin) === doc.requestingOrigin && typeof doc.partition === 'string' &&
             (!mcpPermissionTypes.has(doc.permission.name) || (doc.subject?.kind === 'mcp' && typeof doc.subject.id === 'string' &&
                 doc.partition === `mcp:${doc.subject.id}` && ['all', 'space', 'tabgroup', 'tab'].includes(doc.target?.kind))) &&
-            permissionDocumentId(doc, doc.permission) === doc._id) {
+            permissionDocumentId(doc, doc.permission) === doc._id
+        if (validDocument) {
+            permissionDocuments.set(doc._id, doc)
+        } else {
+            permissionDocuments.delete(doc._id)
+        }
+        const oldRule = rules[doc._id]
+        if (validDocument && Number.isFinite(doc.seenAt) && doc.seenAt > (seenByPermission.get(doc._id) || 0)) {
+            seenByPermission.set(doc._id, doc.seenAt)
+            for (const { resource } of requests.values()) {
+                if (resource.ruleId === doc._id && resource.created <= doc.seenAt) {
+                    resource.unseen = false
+                }
+            }
+        }
+        // Seen-only revisions must not revoke or replace temporary grants.
+        if (validDocument && doc.decision === null && !oldRule) {
+            return true
+        }
+        if (validDocument && oldRule && oldRule.decision === doc.decision && oldRule.modified === doc.modified) {
+            rules[doc._id] = doc
+            return true
+        }
+        const previous = transient.get(doc._id) || oldRule || activeGrants.get(doc._id)
+        delete rules[doc._id]
+        if (validDocument && validDecision(doc.permission, doc.decision)) {
             rules[doc._id] = doc
         }
         transient.delete(doc._id)
@@ -188,13 +217,46 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
                 ingest(doc)
             }
         }
-    }).then(() => {
         state.status = 'ready'
     }).catch(error => {
         state.status = 'error'
         state.error = 'Could not load saved permission decisions.'
         console.error(state.error, error)
     })
+
+    function eventTime() {
+        lastEventAt = Math.max(performance.timeOrigin + performance.now(), lastEventAt + 0.001)
+        return lastEventAt
+    }
+
+    async function markSeen(selected) {
+        const seenAt = eventTime()
+        const resources = selected
+            ? [requests.get(selected.requestId)?.resource || selected]
+            : Array.from(requests.values(), ({ resource }) => resource).filter(resource => resource.unseen && resource.created <= seenAt)
+        const byPermission = new Map()
+        for (const resource of resources) {
+            if (resource.ruleId && resource.scope && resource.permission) {
+                byPermission.set(resource.ruleId, resource)
+            } else {
+                resource.unseen = false
+            }
+        }
+        if (!selected) {
+            if (state.status === 'loading') {
+                await ready
+            }
+            for (const [id, doc] of permissionDocuments) {
+                if (!byPermission.has(id) && doc.created <= seenAt) {
+                    byPermission.set(id, { scope: doc, permission: doc.permission })
+                }
+            }
+        }
+        const results = await Promise.allSettled([...byPermission.values()].map(resource => save(resource.scope, resource.permission, undefined, { seenAt })))
+        const failed = results.some(result => result.status === 'rejected')
+        state.seenError = failed ? 'Could not save when permissions were seen. Try again.' : null
+        return !failed
+    }
 
     function scopeFor(tabId, url, context = getContext(tabId)) {
         return permissionScope(instanceId, context, url || context?.url)
@@ -307,7 +369,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
                 requestId: crypto.randomUUID(), type, permission: descriptor, scope,
                 url: input.url || context?.url || 'about:blank', tabId, status: 'requested', supported: !!supported,
                 error: input.error || (!scope ? 'This origin cannot receive a remembered permission.' : !supported ? 'No permission handler is implemented.' : ''),
-                timestamp: Date.now(), created: Date.now(), instanceId, windowId: getWindowId(), unseen: true,
+                timestamp: Date.now(), created: eventTime(), instanceId, windowId: getWindowId(), unseen: true,
                 needsReload: !input.settle, explanation: input.explanation || '', requestType: 'foreground',
                 ruleId: scope && descriptor ? key : null,
                 ...(context.subject ? { subject: context.subject, target: context.target,
@@ -316,6 +378,11 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
             })
             const resource = entry.requests.at(-1)
             requests.set(resource.requestId, { resource, context })
+            if (resource.ruleId && !permissionDocuments.has(resource.ruleId) && !writes.has(resource.ruleId)) {
+                void save(scope, descriptor, undefined, { created: resource.created }).catch(() => {
+                    state.seenError = 'Could not register the permission request for other windows.'
+                })
+            }
             requestId = resource.requestId
             requestIds.push(requestId)
         }
@@ -338,17 +405,21 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         return { granted: false, pending: !!supported, requestId }
     }
 
-    function save(scope, permission, value) {
+    function save(scope, permission, value, { seenAt, created = Date.now() } = {}) {
         const id = permissionDocumentId(scope, permission)
+        const seenOnly = value === undefined
         const previous = writes.get(id) || Promise.resolve()
         const task = previous.catch(() => {}).then(async () => {
             for (let attempt = 0; attempt < 5; attempt++) {
-                let existing
-                try {
-                    existing = await db.get(id, { conflicts: true })
-                } catch (error) {
-                    if (error.status !== 404) {
-                        throw error
+                let existing = permissionDocuments.get(id)
+                if (!seenOnly || attempt > 0) {
+                    try {
+                        existing = await db.get(id, { conflicts: true })
+                    } catch (error) {
+                        if (error.status !== 404) {
+                            throw error
+                        }
+                        existing = undefined
                     }
                 }
                 if (value === null && !existing) {
@@ -361,20 +432,36 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
                     }
                     return
                 }
-                const doc = value === null ? { _id: id, _rev: existing._rev, _deleted: true } : {
-                    _id: id, ...(existing?._rev ? { _rev: existing._rev } : {}), type: 'permission', schemaVersion: 1,
-                    ...scope, permission, decision: value, lifetime: 'persistent',
-                    created: existing?.created || Date.now(), modified: Date.now(), sort: 0
+                if (seenOnly && seenAt === undefined && existing) {
+                    ingest(existing)
+                    return
                 }
+                if (seenOnly && scope._id === id && !existing) {
+                    return
+                }
+                if (seenOnly && (attempt === 0 ? conflictingRules.has(id) : existing?._conflicts?.length)) {
+                    throw new Error('Cannot mark a conflicting permission document seen.')
+                }
+                if (seenOnly && existing?.seenAt >= seenAt) {
+                    ingest(existing)
+                    return
+                }
+                const doc = value === null ? { _id: id, _rev: existing._rev, _deleted: true } : {
+                    ...scope,
+                    _id: id, ...(existing?._rev ? { _rev: existing._rev } : {}), type: 'permission', schemaVersion: 1,
+                    permission, decision: value ?? null, lifetime: 'persistent',
+                    created: existing?.created ?? created, modified: Date.now(), seenAt: existing?.seenAt ?? null, sort: 0
+                }
+                const update = seenOnly && seenAt !== undefined ? { ...(existing || doc), seenAt } : doc
                 try {
-                    const result = await putDocument(doc)
+                    const result = await putDocument(update)
                     if (existing?._conflicts?.length) {
                         const removed = await db.bulkDocs(existing._conflicts.map(rev => ({ _id: id, _rev: rev, _deleted: true })))
                         if (removed.some(item => item.error)) {
                             throw new Error('Could not resolve conflicting permission decisions.')
                         }
                     }
-                    ingest({ ...doc, _rev: result.rev })
+                    ingest({ ...update, _rev: result.rev })
                     return
                 } catch (error) {
                     if (error.status !== 409 || attempt === 4) {
@@ -525,5 +612,5 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         }
     }
 
-    return { ready, ingest, request, resolve, decision, setDecision, cancelFrame, cancelRequest, removeSubject, reset, prefix }
+    return { ready, ingest, request, resolve, decision, setDecision, cancelFrame, cancelRequest, removeSubject, reset, markSeen, prefix }
 }

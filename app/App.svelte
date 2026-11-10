@@ -2233,6 +2233,9 @@
 
     function switchToSidebar(targetSidebar) {
         if (!openSidebars.has(targetSidebar)) {
+            if (openSidebars.has('resources')) {
+                void data.clearUnseenResourceFlags()
+            }
             if (openSidebars.size > 0) {
                 isSwitchingSidebars = true
             }
@@ -2278,6 +2281,9 @@
         setTimeout(() => { isSwitchingSidebars = false }, 350)
         
         if (openSidebars.has(sidebarName)) {
+            if (sidebarName === 'resources') {
+                void data.clearUnseenResourceFlags()
+            }
             openSidebars.delete(sidebarName)
         } else {
             openSidebars.add(sidebarName)
