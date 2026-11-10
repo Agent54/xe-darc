@@ -214,6 +214,91 @@ Deno.test('temporary session grants are not restored after reopening', async () 
     assert.equal(h.writes.length, 0)
 })
 
+Deno.test('settlement consumes the rule chosen for that request when another request has an exact one-time grant', async () => {
+    const h = harness()
+    await h.store.ready
+    const permission = 'mcp-read-tabs'
+    const parentTarget = { kind: 'space', id: 'project' }
+    const context = {
+        url: 'https://mcp.example/', partition: 'mcp:connection', subject: { kind: 'mcp', id: 'connection' },
+        target: { kind: 'tab', spaceId: 'project', id: 'one' }, parents: [parentTarget]
+    }
+    h.contexts.set('one', context)
+    const scope = permissionScope('installation', { ...context, target: parentTarget })
+    const descriptor = permissionDescriptor(permission)
+    const id = permissionDocumentId(scope, descriptor)
+    const results = []
+    const first = h.store.request('one', { permission, settle: granted => {
+        results.push(['inherited', granted])
+        h.store.ingest({ _id: id, _rev: '2-deleted', _deleted: true })
+    } })
+    const second = h.store.request('one', { permission, settle: granted => results.push(['once', granted]) })
+    try {
+        h.store.ingest({ _id: id, _rev: '1-allow', type: 'permission', schemaVersion: 1,
+            ...scope, permission: descriptor, lifetime: 'persistent', decision: 'allow' })
+        await h.store.resolve(second.requestId, 'allow', 'once')
+        assert.deepEqual(results, [['inherited', true], ['once', true]])
+        assert.equal(h.store.decision(permission, 'one'), 'ask')
+    } finally {
+        h.store.cancelRequest(first.requestId)
+        h.store.cancelRequest(second.requestId)
+    }
+})
+
+Deno.test('revoking persistent, session, and consumed one-time grants notifies once for local and incoming changes', async () => {
+    for (const lifetime of ['persistent', 'session', 'once']) {
+        for (const action of ['deny', 'reset', 'incoming-deny', 'incoming-delete']) {
+            const h = harness()
+            await h.store.ready
+            const actions = native(h)
+            const resource = h.resources()[0]
+            await h.store.resolve(resource.requestId, 'allow', lifetime)
+            assert.deepEqual(actions, ['defer', 'allow'])
+            assert.equal(h.revocations.length, 0)
+            if (action === 'deny') {
+                await h.store.setDecision(resource.type, 'one', 'deny')
+            } else if (action === 'reset') {
+                await h.store.reset(resource)
+            } else {
+                const doc = { _id: resource.ruleId, _rev: '5-incoming',
+                    ...(action === 'incoming-delete' ? { _deleted: true } : {
+                        type: 'permission', schemaVersion: 1, ...resource.scope, permission: resource.permission,
+                        decision: 'deny', lifetime: 'persistent'
+                    }) }
+                h.store.ingest(doc)
+                h.store.ingest(doc)
+            }
+            assert.equal(h.revocations.length, 1, `${lifetime}: ${action}`)
+            assert.equal(h.revocations[0].topLevelOrigin, resource.scope.topLevelOrigin)
+            assert.deepEqual(h.revocations[0].permission, resource.permission)
+            assert.equal(h.store.decision(resource.type, 'one'), action.includes('deny') ? 'deny' : 'ask')
+        }
+    }
+})
+
+Deno.test('releasing one frame does not forget a consumed grant still in use by another frame', async () => {
+    const h = harness()
+    await h.store.ready
+    const first = native(h), second = native(h, { tabId: 'two' })
+    for (const resource of h.resources()) {
+        await h.store.resolve(resource.requestId, 'allow', 'once')
+    }
+    assert.deepEqual(first, ['defer', 'allow'])
+    assert.deepEqual(second, ['defer', 'allow'])
+    h.store.cancelFrame(h.contexts.get('two').frame)
+    await h.store.setDecision('geolocation', 'one', 'deny')
+    assert.equal(h.revocations.length, 1)
+})
+
+Deno.test('denying a pending request without a previous grant does not revoke unrelated access', async () => {
+    const h = harness()
+    await h.store.ready
+    const actions = native(h)
+    await h.store.resolve(h.resources()[0].requestId, 'deny')
+    assert.deepEqual(actions, ['defer', 'deny'])
+    assert.equal(h.revocations.length, 0)
+})
+
 Deno.test('same-tab navigation choices persist without becoming native permission grants', async () => {
     const h = harness()
     await h.store.ready

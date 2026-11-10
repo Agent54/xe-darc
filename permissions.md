@@ -76,6 +76,13 @@ resolves only the selected native request. For controllers that cannot be
 deferred, it arms one retry in that same frame and page for up to 60 seconds.
 Ignore dismisses the selected request without remembering a decision.
 
+Revocation is centralized in the store's document-ingestion path for both local
+and incoming changes. Live grants are tracked separately from remembered
+decisions so consuming an Allow once grant does not prevent its later
+revocation. Reset or denial reloads matching live pages and cancels their
+pending native controllers; releasing one frame preserves grants still in use
+by other frames. Popup and navigation policy changes do not reload pages.
+
 The native event handler and `data.permissionRequest` are synchronous. Only
 saving a user's answer is asynchronous. Chromium's flat event exposes
 `event.request.allow()` / `event.request.deny()`; calling `preventDefault()`

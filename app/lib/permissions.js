@@ -213,10 +213,10 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
             const temporary = transient.get(id)
             if (temporary?.lifetime === 'once') {
                 if ((!requestIds || requestIds.includes(temporary.requestId)) && temporary.tabId === tabId && temporary.frame === context?.frame && temporary.url === context?.url && temporary.expires > Date.now()) {
-                    return { id, decision: 'allow' }
+                    return { id, scope, permission: descriptor, decision: 'allow' }
                 }
             } else if (temporary || rules[id]) {
-                return { id, decision: (temporary || rules[id]).decision }
+                return { id, scope, permission: descriptor, decision: (temporary || rules[id]).decision }
             }
         }
         return null
@@ -226,13 +226,10 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         return decisionRecord(type, tabId, url, context)?.decision || 'ask'
     }
 
-    function consume(types, tabId, url, context) {
-        for (const type of types) {
-            const scope = scopeFor(tabId, url, context)
-            const permission = permissionDescriptor(type)
-            const id = decisionRecord(type, tabId, url, context)?.id || permissionDocumentId(scope, permission)
+    function consume(decisions, context) {
+        for (const { id, scope, permission } of decisions) {
             // Consuming an approval does not stop access already granted to a live page.
-            if (context?.frame && !navigationTypes.has(type)) {
+            if (context?.frame && !navigationTypes.has(permission.name)) {
                 const active = activeGrants.get(id) || { ...scope, permission, decision: 'allow', frames: new Set() }
                 active.frames.add(context.frame)
                 activeGrants.set(id, active)
@@ -248,13 +245,11 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
             const current = group.context.current ? group.context.current() : getContext(group.tabId)
             const valid = current?.frame === group.context.frame && current?.url === group.context.url &&
                 (current?.partition || 'persist:myapp') === (group.context.partition || 'persist:myapp')
-            const decisions = group.types.map(type => {
-                return decisionRecord(type, group.tabId, group.url, group.context, group.requestIds)?.decision || 'ask'
-            })
-            if (!valid || decisions.includes('deny') || decisions.every(value => value === 'allow')) {
-                const granted = valid && decisions.every(value => value === 'allow')
+            const decisions = group.types.map(type => decisionRecord(type, group.tabId, group.url, group.context, group.requestIds))
+            const granted = valid && decisions.every(record => record?.decision === 'allow')
+            if (!valid || decisions.some(record => record?.decision === 'deny') || granted) {
                 if (granted) {
-                    consume(group.types, group.tabId, group.url, group.context)
+                    consume(decisions, group.context)
                 }
                 group.settle(granted)
                 for (const id of group.requestIds) {
@@ -280,19 +275,18 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         const types = input.types || [input.permission]
         const supported = !input.error && scope && types.length && types.every(type => permissionDescriptor(type) &&
             (!mcpPermissionTypes.has(type) || (context.subject?.kind === 'mcp' && context.partition === `mcp:${context.subject.id}` && context.target)))
-        if (supported && types.every(type => decision(type, tabId, input.url, context) === 'allow')) {
-            consume(types, tabId, input.url, context)
+        const decisions = supported ? types.map(type => decisionRecord(type, tabId, input.url, context)) : []
+        if (supported && decisions.every(record => record?.decision === 'allow')) {
+            consume(decisions, context)
             return { granted: true }
         }
-        if (supported && types.some(type => decision(type, tabId, input.url, context) === 'deny')) {
+        if (decisions.some(record => record?.decision === 'deny')) {
             return { granted: false }
         }
         let requestId
         const requestIds = []
-        for (const type of supported ? types : [input.permission || 'unknown']) {
-            if (supported && decision(type, tabId, input.url, context) === 'allow') {
-                continue
-            }
+        const pendingTypes = supported ? types.filter((_, index) => decisions[index]?.decision !== 'allow') : [input.permission || 'unknown']
+        for (const type of pendingTypes) {
             const registryType = permissionDescriptor(type) ? type : 'unsupported'
             if (!Object.hasOwn(permissions, registryType)) {
                 permissions[registryType] = { name: registryType, icon: '', description: 'Unrecognized permission request' }

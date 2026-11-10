@@ -113,6 +113,50 @@ Deno.test('other deferrable permissions also resolve through the common handler'
     assert.deepEqual(request('https://example.com', 'geolocation'), ['defer', 'allow'])
 })
 
+Deno.test('revoking every grant lifetime reloads matching live pages and cancels their pending requests', async () => {
+    for (const lifetime of ['once', 'until-app-close', 'always']) {
+        for (const action of ['deny', 'reset']) {
+            const { data, request, resources } = await downloadSession()
+            const reloads = []
+            data.frames.page.frame.reload = () => reloads.push('page')
+            for (const [id, url, partition] of [
+                ['same', 'https://example.com/another', 'persist:myapp'],
+                ['other-origin', 'https://other.example/', 'persist:myapp'],
+                ['other-partition', 'https://example.com/', 'persist:other']
+            ]) {
+                data.docs[id] = { ...tab(id), url, partition }
+                data.frames[id] = { frame: { reload() { reloads.push(id) } } }
+            }
+            const granted = request('https://widget.example/request', 'geolocation')
+            const resource = resources()[0]
+            await data.allowPermission(resource.requestId, lifetime)
+            assert.deepEqual(granted, ['defer', 'allow'])
+            const pending = request()
+            if (action === 'deny') {
+                await data.setPermissionDecision('geolocation', 'page', 'deny', resource.url)
+            } else {
+                await data.changePermission(resource)
+            }
+            assert.deepEqual(reloads, ['page', 'same'], `${lifetime}: ${action}`)
+            assert.deepEqual(pending, ['defer', 'deny'])
+            assert.deepEqual(granted, ['defer', 'allow'])
+            assert.equal(data.permissionDecision('geolocation', 'page', resource.url), action === 'deny' ? 'deny' : 'ask')
+        }
+    }
+})
+
+Deno.test('revoking popup policy does not reload pages or cancel unrelated permission requests', async () => {
+    const { data, frame, request } = await downloadSession()
+    let reloads = 0
+    frame.reload = () => reloads++
+    await data.setPermissionDecision('open-tab', 'page', 'allow')
+    const pending = request()
+    await data.setPermissionDecision('open-tab', 'page', 'deny')
+    assert.equal(reloads, 0)
+    assert.deepEqual(pending, ['defer'])
+    data.cancelFramePermissions(frame)
+})
+
 const appTabState = Deno.readTextFileSync(new URL('../app/App.svelte', import.meta.url))
     .match(/^    let currentGroupTabId[\s\S]*?(?=    let unpinnedTabCount)/m)[0]
 const readTopTabsSource = compileModule(`${appTabState}\nexport function readTabs () { return unpinnedTabs }`, { generate: 'client' }).js.code
