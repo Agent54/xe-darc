@@ -312,6 +312,51 @@ Deno.test('changed pages and replaced frame instances cannot receive old approva
     }
 })
 
+Deno.test('pending requests retain their original URL and frame when a supplied context is mutated', async () => {
+    for (const change of ['url', 'frame', 'partition']) {
+        const h = harness()
+        await h.store.ready
+        const actions = native(h)
+        const resource = h.resources()[0]
+        const originalScope = structuredClone(resource.scope)
+        h.contexts.get('one')[change] = change === 'frame' ? {} : change === 'url' ? 'https://other.example/' : 'persist:other'
+        assert.equal(await h.store.resolve(resource.requestId, 'allow'), false)
+        assert.deepEqual(resource.scope, originalScope)
+        assert.equal(resource.url, 'https://site.example/page')
+        assert.equal(h.writes.length, 0)
+        await h.store.resolve(resource.requestId, 'ignore')
+        assert.deepEqual(actions, ['defer', 'deny'])
+    }
+})
+
+Deno.test('denying a request after navigation saves only the original requesting scope', async () => {
+    const h = harness()
+    await h.store.ready
+    const actions = native(h, { url: 'https://widget.example/request' })
+    const resource = h.resources()[0]
+    h.contexts.get('one').url = 'https://other.example/'
+    assert.equal(await h.store.resolve(resource.requestId, 'deny'), true)
+    assert.equal(h.writes[0].topLevelOrigin, 'https://site.example')
+    assert.equal(h.writes[0].requestingOrigin, 'https://widget.example')
+    assert.equal(h.store.decision('geolocation', 'one'), 'ask')
+    assert.deepEqual(actions, ['defer', 'deny'])
+})
+
+Deno.test('resetting a saved permission for a hidden site leaves the current site rule untouched', async () => {
+    const h = harness()
+    await h.store.ready
+    await h.store.setDecision('geolocation', 'one', 'allow', 'https://widget.example')
+    const rule = Object.values(h.rules)[0]
+    h.contexts.get('two').url = 'https://visible.example/'
+    await h.store.setDecision('geolocation', 'two', 'allow')
+    const visibleRuleId = Object.keys(h.rules).find(id => id !== rule._id)
+    await h.store.reset({ scope: rule, permission: rule.permission, type: 'geolocation', url: rule.requestingOrigin, tabId: 'two' })
+    assert.equal(h.rules[rule._id], undefined)
+    assert.equal(h.rules[visibleRuleId].decision, 'allow')
+    assert.equal(h.store.decision('geolocation', 'two'), 'allow')
+    assert.equal(h.resources().length, 0)
+})
+
 Deno.test('write failures never produce a durable grant; conflicts retry the intended decision', async () => {
     const h = harness()
     await h.store.ready

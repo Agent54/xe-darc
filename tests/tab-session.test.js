@@ -65,6 +65,19 @@ Deno.test('download approval resumes the native request for the page origin with
     assert.equal(await data.allowPermission(requests[0].requestId), false)
 })
 
+Deno.test('permission approval targets the requesting tab and origin after the active tab changes', async () => {
+    const { data, request, resources } = await downloadSession()
+    const actions = request('https://widget.example/request', 'geolocation')
+    data.docs.other = { ...tab('other'), url: 'https://visible.example/' }
+    data.frames.other = { frame: { reload() {} } }
+    data.spaceMeta.activeTabId = 'other'
+    assert.equal(await data.allowPermission(resources()[0].requestId, 'always'), true)
+    assert.deepEqual(actions, ['defer', 'allow'])
+    assert.equal(data.permissionDecision('geolocation', 'page', 'https://widget.example'), 'allow')
+    assert.equal(data.permissionDecision('geolocation', 'other', 'https://widget.example'), 'ask')
+    assert.equal(data.permissionDecision('geolocation', 'other'), 'ask')
+})
+
 Deno.test('denying or ignoring downloads settles their native requests', async () => {
     for (const action of ['denyPermission', 'ignorePermission']) {
         const { data, request, resources } = await downloadSession()

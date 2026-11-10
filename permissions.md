@@ -46,6 +46,12 @@ permission descriptor. Its deterministic ID encodes those fields.
 The instance ID identifies app storage, not the user or hardware; synced
 rules for another instance do not authorize this one.
 
+Pending requests snapshot their original URL, frame, and partition. Answering
+a card uses its request ID and stored scope, independently of the active tab.
+A live approval is rejected if its requesting tab has changed URL, frame, or
+partition. Denying or resetting a saved permission still targets the original
+scope even when another site is visible.
+
 ```json
 {
   "_id": "darc:permission:example-instance:persist%3Amyapp:https%3A%2F%2Fexample.com:https%3A%2F%2Fexample.com:media:camera",
