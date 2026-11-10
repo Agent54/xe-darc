@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { listComposeProjects } from '../app/lib/compose-api.js'
+import { checkoutRepository, listComposeProjects } from '../app/lib/compose-api.js'
 
 const deletedPath = '/Users/jan/Dev/xe/stacks/welcome-to-docker-compose/compose.yaml'
 const missingFile = `open ${deletedPath}: no such file or directory`
@@ -30,6 +30,21 @@ async function withCompose(respond, run) {
         globalThis.fetch = originalFetch
     }
 }
+
+Deno.test('repository checkout sends the repository URL, parent path and branch', async () => {
+    await withCompose((url, options) => {
+        assert.equal(url.pathname, '/v1.24/repos/checkout')
+        assert.equal(options.method, 'POST')
+        assert.deepEqual(JSON.parse(options.body), {
+            url: 'https://github.com/example/app.git', path: 'development', branch: 'main'
+        })
+        return Response.json({ path: 'development/app' }, { status: 201 })
+    }, async () => {
+        await checkoutRepository({
+            url: ' https://github.com/example/app.git ', path: 'development', branch: 'main'
+        })
+    })
+})
 
 Deno.test('a deleted Compose file does not break the overview or hide other apps', async () => {
     const web = container('web')

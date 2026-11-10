@@ -376,8 +376,7 @@
                     const checkout = await checkoutRepository({
                         url: app.githubUrl,
                         path: app.checkoutPath,
-                        branch: app.branch,
-                        token: app.githubToken
+                        branch: app.branch
                     })
                     appMetadata[app.id] = { ...appMetadata[app.id], repositoryPath: checkout.path, installedAt: Date.now() }
                     saveMetadata()

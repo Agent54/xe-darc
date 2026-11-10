@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { compile, parse } from 'svelte/compiler'
+import { repositoryApps } from '../app/lib/app-records.js'
 
 const source = Deno.readTextFileSync(new URL('../app/components/AddAppModal.svelte', import.meta.url))
 const submitHandler = parse(source).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'submitApp')
@@ -11,7 +12,7 @@ function submission(type, onAdd) {
         const appFormData = {
             name: 'Hello Docker', url: 'https://hello.example/', pinToAppPins: true,
             dataPartitions: ['current'], githubUrl: 'https://github.com/example/hello',
-            pathType: 'compose', path: 'compose.yaml', githubToken: 'secret',
+            pathType: 'compose', path: 'compose.yaml',
             branch: 'feature', checkoutPath: 'development/tools', openInMenu: true,
             catalogId: 'hello', catalogRevision: 'installed-catalog-revision',
             startOnBrowserStart: true, iconUrl: 'https://hello.example/icon.png'
@@ -39,7 +40,6 @@ Deno.test('adding an app only submits its full configuration, waits for persiste
         assert.equal(h.state.submissionState, 'submitting')
         assert.equal(payload.app.pinToAppPins, true)
         assert.equal(payload.type, type)
-        assert.equal(payload.app.githubToken, 'secret')
         assert.equal(payload.app.branch, 'feature')
         assert.equal(payload.app.checkoutPath, 'development/tools')
         assert.equal(payload.app.catalogRevision, 'installed-catalog-revision')
@@ -96,7 +96,6 @@ Deno.test('new apps persist as app documents in the shared data store without ta
         assert.equal(stored.appType, type)
         assert.equal(stored.spaceId, 'space')
         assert.equal(stored.archive, '')
-        assert.equal(stored.githubToken, 'secret')
         assert.equal(stored.catalogId, 'hello')
         assert.equal(stored.catalogRevision, 'installed-catalog-revision')
         assert.equal(docs[stored._id]._rev, '1-saved')
@@ -120,7 +119,6 @@ Deno.test('a failed app document write leaves the store unchanged and the form o
 
 const appsSource = Deno.readTextFileSync(new URL('../app/components/Apps.svelte', import.meta.url))
 const openHandler = parse(appsSource).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'openApp')
-import { repositoryApps } from '../app/lib/app-records.js'
 
 function opening({ localApps = [], installedApps = localApps, failCheckout = false, metadata = {} } = {}) {
     const calls = { checkouts: [], opened: [], refreshes: 0 }
@@ -140,14 +138,14 @@ function opening({ localApps = [], installedApps = localApps, failCheckout = fal
 
 const repository = {
     id: 'saved', appType: 'repo', name: 'Hello', githubUrl: 'https://github.com/example/hello.git',
-    checkoutPath: 'development/tools', branch: 'feature', githubToken: 'secret', pathType: 'compose', path: 'compose.yaml'
+    checkoutPath: 'development/tools', branch: 'feature', pathType: 'compose', path: 'compose.yaml'
 }
 const service = { id: 'web', configFiles: '/stacks/development/tools/hello/compose.yaml', endpoints: [{ url: 'https://web_hello.app.localhost' }] }
 
 Deno.test('opening an uninstalled repository checks out saved parameters and then opens the discovered app', async () => {
     const h = opening({ installedApps: [service] })
     await h.openApp(null, repository)
-    assert.deepEqual(h.calls.checkouts, [{ url: repository.githubUrl, path: repository.checkoutPath, branch: 'feature', token: 'secret' }])
+    assert.deepEqual(h.calls.checkouts, [{ url: repository.githubUrl, path: repository.checkoutPath, branch: 'feature' }])
     assert.equal(h.calls.opened[0][1], service.endpoints[0].url)
     assert.equal(h.metadata.saved.repositoryPath, '/stacks/development/tools/hello')
 })

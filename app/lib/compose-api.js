@@ -251,7 +251,7 @@ export async function listComposeProjects({ signal } = {}) {
     ))
 }
 
-export async function checkoutRepository({ url, path, branch, token, signal }) {
+export async function checkoutRepository({ url, path, branch, signal }) {
     const payload = { url: url.trim() }
     const checkoutPath = path?.trim()
     if (checkoutPath) {
@@ -260,10 +260,6 @@ export async function checkoutRepository({ url, path, branch, token, signal }) {
     if (branch?.trim()) {
         payload.branch = branch.trim()
     }
-    if (token?.trim()) {
-        payload.token = token.trim()
-    }
-
     const response = await composeFetch('/v1.24/repos/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

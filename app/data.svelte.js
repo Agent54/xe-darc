@@ -850,8 +850,8 @@ const refresh = throttle(async function (spaceId) {
     for (const refreshDoc of newDocs) {
         let doc
         if (initialLoad) {
-            docs[refreshDoc._id] = refreshDoc
-            doc = refreshDoc 
+            doc = refreshDoc
+            docs[refreshDoc._id] = doc
         } else {
             doc = docs[refreshDoc._id]
         }

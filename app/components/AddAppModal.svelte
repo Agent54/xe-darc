@@ -21,7 +21,6 @@
         category: '',
         githubUrl: '',
         branch: 'main',
-        githubToken: '',
         checkoutPath: '',
         pathType: 'compose',
         path: ''
@@ -108,7 +107,6 @@
             url: '',
             githubUrl: '',
             branch: app.branch || 'main',
-            githubToken: '',
             checkoutPath: app.checkoutPath || '',
             pathType: app.pathType || 'compose',
             path: app.path || ''
@@ -186,7 +184,6 @@
             url: '',
             githubUrl: '',
             branch: 'main',
-            githubToken: '',
             checkoutPath: '',
             pathType: 'compose',
             path: ''
@@ -492,17 +489,6 @@
                                     />
                                 </div>
 
-                                <div>
-                                    <label for="github-token" class="block text-sm font-medium text-white/70 mb-2">GitHub Token</label>
-                                    <input
-                                        id="github-token"
-                                        type="password"
-                                        bind:value={appFormData.githubToken}
-                                        placeholder="Optional for private repositories"
-                                        autocomplete="off"
-                                        class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-green-500 focus:bg-white/15"
-                                    />
-                                </div>
                             </div>
                             
                             <div class="space-y-4">
