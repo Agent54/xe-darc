@@ -91,12 +91,12 @@ Deno.test('tab readiness starts a real transferred MessagePort hello/reply along
         h.guestPorts[0].postMessage({ type: 'darc:ipc-hello', message: 'Hello world', secret: h.secret })
         await waitForReply(h, 2)
 
+        // A page restored from the back/forward cache opens a fresh channel.
         h.window.dispatchEvent(new Event('pagehide'))
         h.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }))
-        h.guestPorts[0].postMessage({ type: 'darc:ipc-hello', message: 'Hello world', secret: h.secret })
         await waitForReply(h, 3)
-        assert.equal(h.frame.ipcPort, originalPort)
-        assert.equal(h.transfers.length, 1)
+        assert.notEqual(h.frame.ipcPort, originalPort)
+        assert.equal(h.transfers.length, 2)
     } finally {
         h.close()
     }
@@ -215,6 +215,34 @@ Deno.test('synthetic embedder messages cannot steal the guest handshake', async 
     } finally {
         port1.close()
         port2.close()
+        h.close()
+    }
+})
+
+Deno.test('page listeners never see the embedder connection and the port never carries the secret', async () => {
+    const h = harness()
+    const seen = [], replies = []
+    try {
+        // A page can register a capturing listener, which runs before bubbling ones on the same target.
+        EventTarget.prototype.addEventListener.call(h.window, 'message', event => seen.push(event.data), true)
+        await Promise.resolve()
+        h.guestPorts[0].addEventListener('message', event => replies.push(event.data))
+        await waitForReply(h)
+        assert.deepEqual(seen, [])
+        assert.deepEqual(h.transfers[0].data, { type: 'darc:ipc-connect' })
+        assert.deepEqual(replies, [{ type: 'darc:ipc-reply', message: 'Hello world' }])
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('a page cannot force a reconnect with a synthetic bfcache restore', async () => {
+    const h = harness()
+    try {
+        await waitForReply(h)
+        h.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true, synthetic: true }))
+        assert.equal(h.transfers.length, 1)
+    } finally {
         h.close()
     }
 })

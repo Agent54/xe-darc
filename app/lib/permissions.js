@@ -217,6 +217,30 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         }
     }
 
+    // Every pending native request ends here: its controller is answered once, its
+    // unanswered cards close, and a one-time approval it did not use is dropped.
+    function closeGroup(group, granted, status = granted ? 'granted' : 'denied') {
+        clearTimeout(group.timer)
+        groups.delete(group)
+        group.settle(granted)
+        for (const id of group.requestIds) {
+            const resource = requests.get(id)?.resource
+            if (resource?.status === 'requested') {
+                resource.status = status
+                resource.unseen = false
+                resource.needsReload = false
+                if (rules[resource.ruleId]) {
+                    resource.lifetime = 'persistent'
+                }
+            }
+        }
+        for (const [id, value] of transient) {
+            if (value.lifetime === 'once' && group.requestIds.includes(value.requestId)) {
+                transient.delete(id)
+            }
+        }
+    }
+
     function settleGroups() {
         for (const group of groups) {
             const current = group.context.current?.() || getContext(group.tabId)
@@ -230,24 +254,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
                 return decision(type, group.tabId, group.url, group.context)
             })
             if (!valid || decisions.includes('deny') || decisions.every(value => value === 'allow')) {
-                const granted = valid && decisions.every(value => value === 'allow')
-                if (granted) {
-                    consume(group.types, group.tabId, group.url, group.context)
-                }
-                group.settle(granted)
-                for (const id of group.requestIds) {
-                    const resource = requests.get(id)?.resource
-                    if (resource?.status === 'requested') {
-                        resource.status = granted ? 'granted' : 'denied'
-                        resource.unseen = false
-                        resource.needsReload = false
-                        if (rules[resource.ruleId]) {
-                            resource.lifetime = 'persistent'
-                        }
-                    }
-                }
-                clearTimeout(group.timer)
-                groups.delete(group)
+                closeGroup(group, valid && decisions.every(value => value === 'allow'))
             }
         }
     }
@@ -302,16 +309,13 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         if (supported && input.settle) {
             const group = { tabId, types, url: input.url, context, settle: input.settle, requestIds }
             group.timer = setTimeout(() => {
-                input.settle(false)
                 for (const id of requestIds) {
                     const resource = requests.get(id)?.resource
                     if (resource?.status === 'requested') {
-                        resource.status = 'ignored'
-                        resource.unseen = false
                         resource.error = 'This request expired. Request access again.'
                     }
                 }
-                groups.delete(group)
+                closeGroup(group, false, 'ignored')
             }, 60000)
             groups.add(group)
         }
@@ -398,9 +402,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         if (value === 'ignore') {
             for (const group of groups) {
                 if (group.requestIds.includes(requestId)) {
-                    group.settle(false)
-                    clearTimeout(group.timer)
-                    groups.delete(group)
+                    closeGroup(group, false, 'ignored')
                 }
             }
         }
@@ -424,6 +426,11 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         if (resource.scope && resource.permission && permissionType(resource.permission)) {
             await save(resource.scope, resource.permission, null)
             transient.delete(permissionDocumentId(resource.scope, resource.permission))
+            for (const group of groups) {
+                if (group.requestIds.some(id => requests.get(id)?.resource.ruleId === resource.ruleId)) {
+                    closeGroup(group, false, 'ignored')
+                }
+            }
             for (const pending of requests.values()) {
                 if (pending.resource.ruleId === resource.ruleId) {
                     pending.resource.status = 'ignored'
@@ -439,11 +446,12 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
     }
 
     function cancelFrame(frame) {
+        if (!frame) {
+            return
+        }
         for (const group of groups) {
             if (group.context.frame === frame) {
-                group.settle(false)
-                clearTimeout(group.timer)
-                groups.delete(group)
+                closeGroup(group, false, 'ignored')
             }
         }
         for (const [id, value] of transient) {

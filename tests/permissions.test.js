@@ -356,3 +356,41 @@ Deno.test('delayed older changes cannot restore an allow after a denial or reset
     h.store.ingest(allowed)
     assert.equal(h.store.decision('geolocation', 'one'), 'ask')
 })
+
+Deno.test('an unused one-time approval ends with its request', async () => {
+    const h = harness()
+    await h.store.ready
+    const both = native(h, { type: 'media', mediaTypes: ['audio', 'video'] })
+    const [microphone, camera] = h.resources()
+    await h.store.resolve(camera.requestId, 'allow', 'once')
+    await h.store.resolve(microphone.requestId, 'ignore')
+    assert.deepEqual(both, ['defer', 'deny'])
+    assert.deepEqual(native(h, { type: 'media', mediaTypes: ['video'] }), ['defer'])
+    h.store.cancelFrame(h.contexts.get('one').frame)
+})
+
+Deno.test('dismissing or resetting one card ends the whole native request', async () => {
+    for (const action of ['ignore', 'reset']) {
+        const h = harness()
+        await h.store.ready
+        const both = native(h, { type: 'media', mediaTypes: ['audio', 'video'] })
+        const [microphone, camera] = h.resources()
+        if (action === 'ignore') {
+            await h.store.resolve(camera.requestId, 'ignore')
+        } else {
+            await h.store.reset(camera)
+        }
+        assert.deepEqual(both, ['defer', 'deny'])
+        assert.equal(microphone.status, 'ignored')
+        assert.equal(await h.store.resolve(microphone.requestId, 'allow', 'once'), false)
+    }
+})
+
+Deno.test('cancelling without a frame leaves requests of unloaded tabs alone', async () => {
+    const h = harness()
+    await h.store.ready
+    h.contexts.set('unloaded', { url: 'https://site.example/page', partition: 'persist:myapp' })
+    h.store.request('unloaded', { permission: 'geolocation', url: 'https://site.example/page' })
+    h.store.cancelFrame(undefined)
+    assert.equal(h.resources()[0].status, 'requested')
+})

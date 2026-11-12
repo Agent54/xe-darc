@@ -462,6 +462,10 @@
         if (!info.isTopLevel || !data.frames[tab.id]) {
             return
         }
+        // Requests are bound to the page that made them and cannot be answered after it changes.
+        if (data.frames[tab.id].committedUrl && data.frames[tab.id].committedUrl !== info.url) {
+            data.cancelFramePermissions(data.frames[tab.id].frame)
+        }
         data.frames[tab.id].committedUrl = info.url
         if (!data.isInternalPage(info.url)) {
             data.updateTab(tab.id, { lastLoadedAt: Date.now() })

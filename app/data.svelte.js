@@ -308,6 +308,8 @@ const spaces = $state({
 const activity = $state({})
 const resources = $state({})
 const frames = $state({})
+// A live guest keeps the partition it was created with, even if its tab is moved to another container.
+const guestPartition = tabId => frames[tabId]?.frame?.partition || docs[tabId]?.partition || 'persist:myapp'
 const permissionStore = createPermissionStore({
     db, putDocument, permissions, rules: permissionRules, state: permissionState,
     instanceId: window.darcInstanceId,
@@ -315,7 +317,7 @@ const permissionStore = createPermissionStore({
     getContext: tabId => {
         const tab = docs[tabId]
         const frame = frames[tabId]
-        return { url: frame?.committedUrl || tab?.url, partition: tab?.partition || 'persist:myapp', frame: frame?.frame }
+        return { url: frame?.committedUrl || tab?.url, partition: guestPartition(tabId), frame: frame?.frame }
     },
     onRevoke: (scope, permission) => {
         if (['open-tab', 'navigate-off-origin'].includes(permission?.name)) {
@@ -324,7 +326,7 @@ const permissionStore = createPermissionStore({
         for (const [tabId, frameData] of Object.entries(frames)) {
             const tab = docs[tabId]
             if (frameData.frame && permissionOrigin(frameData.committedUrl || tab?.url) === scope.topLevelOrigin &&
-                (tab?.partition || 'persist:myapp') === scope.partition) {
+                guestPartition(tabId) === scope.partition) {
                 permissionStore.cancelFrame(frameData.frame)
                 frameData.frame.reload()
             }

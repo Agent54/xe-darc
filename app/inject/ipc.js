@@ -14,7 +14,7 @@ function sendIPC(type, payload) {
 
 if (window === window.top) {
     window.addEventListener('pageshow', event => {
-        if (!event.persisted) return
+        if (!event.isTrusted || !event.persisted) return
         ipcPort?.close()
         ipcPort = null
         pendingIPCMessages.length = 0
@@ -22,8 +22,15 @@ if (window === window.top) {
         console.log(`iwa:ipc-ready:${tabId}`)
     })
 
+    // Capture first and always stop: page listeners must never see the embedder's message or its port.
     window.addEventListener('message', event => {
-        if (!event.isTrusted || event.origin !== embedderOrigin || event.data?.type !== 'darc:ipc-connect' || event.data.tabId !== tabId || ipcPort) {
+        if (!event.isTrusted || event.origin !== embedderOrigin || event.data?.type !== 'darc:ipc-connect') {
+            return
+        }
+
+        event.stopImmediatePropagation()
+
+        if (ipcPort) {
             return
         }
 
@@ -32,12 +39,11 @@ if (window === window.top) {
             return
         }
 
-        event.stopImmediatePropagation()
-
         console.log('[IPC] Content script received the MessagePort')
         ipcPort = event.ports[0]
+        // The secret only ever travels from this script to the embedder.
         ipcPort.onmessage = ({ data }) => {
-            if (data?.secret === bridgeSecret && data?.type === 'darc:ipc-reply' && data.message === 'Hello world') {
+            if (data?.type === 'darc:ipc-reply' && data.message === 'Hello world') {
                 console.log('[IPC] Hello world from parent (MessagePort round trip complete)')
             }
         }
@@ -45,7 +51,7 @@ if (window === window.top) {
         for (const { type, payload } of pendingIPCMessages.splice(0)) {
             sendIPC(type, payload)
         }
-    })
+    }, true)
 
     console.log(`iwa:ipc-ready:${tabId}`)
 }

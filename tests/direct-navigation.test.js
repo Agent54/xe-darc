@@ -12,6 +12,7 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
     const listeners = {}
     const opened = []
     const navigated = []
+    const cancelledPermissions = []
     let stopped = 0
     const frame = {
         src: 'https://original.example/',
@@ -40,6 +41,7 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
         spaceMeta: { activeSpace: 'space' },
         isPermissionGranted: () => policy === 'allow',
         permissionDecision: () => policy,
+        cancelFramePermissions: frame => cancelledPermissions.push(frame),
         getCurrentGroupTabId: () => 'current-group-tab',
         newTab: (space, options) => opened.push(options),
         navigate: (id, url) => navigated.push({ id, url }),
@@ -79,7 +81,7 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
         return { cancel: event.defaultPrevented || result?.cancel === true, prevented: event.defaultPrevented }
     }
     return {
-        ...api, data, tab, frame, opened, navigated, requestEvent,
+        ...api, data, tab, frame, opened, navigated, cancelledPermissions, requestEvent,
         get stopped() { return stopped },
         request: (url, options) => requestEvent('beforerequest', url, options),
         load(url, isTopLevel = true) { api.start(legacy ? { isTopLevel, url } : { loadInfo: { isTopLevel, url } }) },
@@ -286,6 +288,15 @@ Deno.test('same-document commits clear URL-bar intent and subframe commits canno
     assert.ok(h.tab.lastLoadedAt > 0)
     assert.equal(h.data.frames.page.directNavigation, null)
     assert.equal(h.request('https://other.example/').cancel, true)
+})
+
+Deno.test('pending permission requests end when their page changes but survive reloads and subframe commits', () => {
+    const h = navigationHarness()
+    h.commitUrl('https://subframe.example/', false)
+    h.commitUrl('https://original.example/')
+    assert.deepEqual(h.cancelledPermissions, [])
+    h.commitUrl('https://destination.example/')
+    assert.deepEqual(h.cancelledPermissions, [h.frame])
 })
 
 Deno.test('old completion and abort events cannot clear a newer URL-bar navigation', () => {

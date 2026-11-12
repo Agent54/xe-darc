@@ -56,14 +56,15 @@ export function connectFrameIPC(frame, tabId, onMessage) {
         if (data.type === 'darc:ipc-event' && data.tabId === tabId && typeof data.event === 'string') {
             onMessage?.(data.event, data.payload)
         }
-        if (data?.secret === frameSecrets.get(frame) && data?.type === 'darc:ipc-hello' && data.message === 'Hello world') {
+        if (data.type === 'darc:ipc-hello' && data.message === 'Hello world') {
             console.log('[IPC] Hello world from tab content script:', tabId)
-            port1.postMessage({ type: 'darc:ipc-reply', message: 'Hello world', secret: frameSecret(frame) })
+            port1.postMessage({ type: 'darc:ipc-reply', message: 'Hello world' })
         }
     }
 
     try {
-        frame.contentWindow.postMessage({ type: 'darc:ipc-connect', tabId }, '*', [port2])
+        // A page that intercepts this message or its port learns no secret and no tab ID.
+        frame.contentWindow.postMessage({ type: 'darc:ipc-connect' }, '*', [port2])
         console.log('[IPC] Connection message sent to tab:', tabId)
     } catch (error) {
         port1.close()

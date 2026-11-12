@@ -70,6 +70,14 @@ resolves only the selected native request. For controllers that cannot be
 deferred, it arms one retry in that same frame and page for up to 60 seconds.
 Ignore dismisses the selected request without remembering a decision.
 
+A pending native request ends in one place (`closeGroup`), which answers its
+controller once, closes its remaining cards, and drops a one-time approval it
+did not use. Ignoring or resetting one card of a camera-and-microphone request
+therefore ends the whole request. Pending requests also end when their frame is
+released or its top-level page commits a different URL. Scopes use the live
+guest's partition, which a frame keeps when its tab is moved to another
+container.
+
 The native event handler and `data.permissionRequest` are synchronous. Only
 saving a user's answer is asynchronous. Chromium's flat event exposes
 `event.request.allow()` / `event.request.deny()`; calling `preventDefault()`
@@ -122,9 +130,12 @@ lightboxes also honor denial.
 
 The guest console bridge uses a module-generated secret with a separate token
 per frame, held in the injected script's closure. Unsigned messages, messages
-from other frames, and messages from released frames are ignored. The IPC
-handshake validates trusted embedder messages and authenticates messages over
-the transferred port; its public connection message contains no secret.
+from other frames, and messages from released frames are ignored. The token
+only travels from the injected script to the embedder. The connection message
+and everything the embedder sends over the port are treated as visible to the
+page: they carry no token and no tab ID. The injected script still captures the
+connection message before page listeners and stops it, and the embedder accepts
+port messages only with the token.
 Privileged input forwarding ignores synthetic events. This is an interim
 guard while console commands move to the IPC layer.
 
