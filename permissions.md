@@ -70,6 +70,13 @@ resolves only the selected native request. For controllers that cannot be
 deferred, it arms one retry in that same frame and page for up to 60 seconds.
 Ignore dismisses the selected request without remembering a decision.
 
+Pending requests and unused one-time grants are cancelled on top-level navigation
+and commit, including reloads to the same URL. A combined media request reserves
+its one-time answers until all capabilities are answered; other requests cannot
+consume them. Ignoring, resetting, or expiring any part denies the whole native
+request. Saving an answer cannot revive a cancelled request, and permissions
+being saved are unavailable until the write and conflict cleanup finish.
+
 The native event handler and `data.permissionRequest` are synchronous. Only
 saving a user's answer is asynchronous. Chromium's flat event exposes
 `event.request.allow()` / `event.request.deny()`; calling `preventDefault()`
@@ -128,10 +135,16 @@ the transferred port; its public connection message contains no secret.
 Privileged input forwarding ignores synthetic events. This is an interim
 guard while console commands move to the IPC layer.
 
+Guest CSP, COOP, and COEP response headers are preserved. Request cancellation
+sets the modern interceptor's `cancel` field as well as supporting the legacy
+return value. Favicon lookups send only the encoded web origin, including when
+rendering older saved favicon URLs; page paths, credentials, and query tokens
+are not sent to the favicon service.
+
 Run the focused tests with:
 
 ```sh
-deno test --no-check --allow-read --allow-env tests/permissions.test.js tests/frame-ipc.test.js tests/direct-navigation.test.js tests/controlled-frame-cleanup.test.js tests/frame-lifecycle.test.js tests/hovercard-navigation.test.js tests/shortcuts.test.js tests/tab-activation-history.test.js
+deno test --no-check --allow-read --allow-env tests/permissions.test.js tests/permissions-reactivity.test.js tests/frame-ipc.test.js tests/direct-navigation.test.js tests/controlled-frame-cleanup.test.js tests/frame-lifecycle.test.js tests/hovercard-navigation.test.js tests/shortcuts.test.js tests/tab-activation-history.test.js tests/favicon.test.js
 deno run --unstable-bare-node-builtins --allow-env --allow-read --allow-sys --allow-write=./,/tmp --allow-ffi --allow-net --allow-run tests/permissions-browser.js
 ```
 

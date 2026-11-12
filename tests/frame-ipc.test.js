@@ -95,8 +95,8 @@ Deno.test('tab readiness starts a real transferred MessagePort hello/reply along
         h.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }))
         h.guestPorts[0].postMessage({ type: 'darc:ipc-hello', message: 'Hello world', secret: h.secret })
         await waitForReply(h, 3)
-        assert.equal(h.frame.ipcPort, originalPort)
-        assert.equal(h.transfers.length, 1)
+        assert.notEqual(h.frame.ipcPort, originalPort)
+        assert.equal(h.transfers.length, 2)
     } finally {
         h.close()
     }

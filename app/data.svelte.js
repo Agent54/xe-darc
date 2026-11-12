@@ -2162,7 +2162,7 @@ const data = {
             type: 'tab',
             created: Date.now(),
             spaceId,
-            favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64` : undefined,
+            favicon: url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(origin(url))}&size=64` : undefined,
             url: url || 'about:newtab',
             title: !url || url.startsWith('about:newtab') || url.startsWith('about:blank') ? title?.trim() || 'New Tab' : title,
             order: group ? group.order : isGroupMember && firstItem ? (firstItem.order ?? Date.now()) + 1 : Date.now(),

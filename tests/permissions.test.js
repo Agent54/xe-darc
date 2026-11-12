@@ -30,7 +30,7 @@ function harness(records = new Map(), instanceId = 'installation') {
     }
     const store = createPermissionStore({ db, putDocument: doc => db.put(doc), permissions, rules, state, instanceId,
         getWindowId: () => 'window', getContext: id => contexts.get(id), onRevoke: scope => revocations.push(scope) })
-    return { store, records, permissions, rules, state, contexts, writes, revocations,
+    return { store, db, records, permissions, rules, state, contexts, writes, revocations,
         resources: () => Object.values(permissions).flatMap(type => Object.values(type.origins || {}).flatMap(entry => entry.requests)),
         data: { permissionRequest: (id, input, context) => store.request(id, input, context) },
         failWrites() { failWrite = true }, conflictOnce() { conflicts = 1 } }
@@ -355,4 +355,157 @@ Deno.test('delayed older changes cannot restore an allow after a denial or reset
     await h.store.setDecision('geolocation', 'one', null)
     h.store.ingest(allowed)
     assert.equal(h.store.decision('geolocation', 'one'), 'ask')
+})
+
+Deno.test('a partial one-time media grant cannot be stolen by a new request', async () => {
+    const h = harness()
+    await h.store.ready
+    const both = native(h, { type: 'media', mediaTypes: ['audio', 'video'] })
+    const [microphone, camera] = h.resources()
+    await h.store.resolve(microphone.requestId, 'allow', 'once')
+    const competing = native(h, { type: 'media', mediaTypes: ['audio'] })
+    assert.deepEqual(competing, ['defer'])
+    await h.store.resolve(camera.requestId, 'allow', 'once')
+    assert.deepEqual(both, ['defer', 'allow'])
+    assert.deepEqual(competing, ['defer'])
+    h.store.cancelFrame(h.contexts.get('one').frame)
+})
+
+Deno.test('ignoring one media capability cancels the whole request and removes partial grants', async () => {
+    const h = harness()
+    await h.store.ready
+    const both = native(h, { type: 'media', mediaTypes: ['audio', 'video'] })
+    const [microphone, camera] = h.resources()
+    await h.store.resolve(microphone.requestId, 'allow', 'once')
+    await h.store.resolve(camera.requestId, 'ignore')
+    assert.deepEqual(both, ['defer', 'deny'])
+    assert.deepEqual(h.resources().map(resource => resource.status), ['ignored', 'ignored'])
+    assert.equal(h.store.decision('microphone', 'one'), 'ask')
+    assert.equal(await h.store.resolve(microphone.requestId, 'allow'), false)
+})
+
+Deno.test('request contexts are snapshots and stale supplied contexts cannot use cached grants', async () => {
+    for (const property of ['url', 'partition', 'frame']) {
+        const h = harness()
+        await h.store.ready
+        const actions = native(h)
+        const before = { ...h.contexts.get('one') }
+        h.contexts.get('one')[property] = property === 'frame' ? {} : 'https://changed.example/'
+        assert.equal(await h.store.resolve(h.resources()[0].requestId, 'allow'), false)
+        await h.store.resolve(h.resources()[0].requestId, 'ignore')
+        assert.deepEqual(actions, ['defer', 'deny'])
+        const scope = permissionScope('installation', before)
+        const permission = permissionDescriptor('geolocation')
+        h.store.ingest({ _id: permissionDocumentId(scope, permission), type: 'permission', schemaVersion: 1,
+            ...scope, permission, decision: 'allow', lifetime: 'persistent' })
+        assert.equal(h.store.request('one', { permission: 'geolocation', url: before.url }, before).granted, false)
+    }
+})
+
+Deno.test('a cancelled frame cannot be resurrected by an in-flight save or answered twice', async () => {
+    const h = harness()
+    await h.store.ready
+    const actions = native(h)
+    const resource = h.resources()[0]
+    const put = h.db.put
+    const started = Promise.withResolvers(), finish = Promise.withResolvers()
+    h.db.put = async doc => { started.resolve(); await finish.promise; return put(doc) }
+    const saving = h.store.resolve(resource.requestId, 'allow')
+    await started.promise
+    assert.equal(await h.store.resolve(resource.requestId, 'allow', 'session'), false)
+    h.store.cancelFrame(h.contexts.get('one').frame)
+    finish.resolve()
+    assert.equal(await saving, false)
+    assert.equal(resource.status, 'ignored')
+    assert.deepEqual(actions, ['defer', 'deny'])
+})
+
+Deno.test('a change-feed allow arriving before the save finishes cannot authorize access', async () => {
+    const h = harness()
+    await h.store.ready
+    const put = h.db.put
+    const started = Promise.withResolvers(), finish = Promise.withResolvers()
+    h.db.put = async doc => {
+        const result = await put(doc)
+        h.store.ingest({ ...doc, _rev: result.rev })
+        started.resolve()
+        await finish.promise
+        return result
+    }
+    const saving = h.store.setDecision('geolocation', 'one', 'allow')
+    await started.promise
+    assert.equal(h.store.decision('geolocation', 'one'), 'ask')
+    const actions = native(h)
+    assert.deepEqual(actions, ['defer'])
+    finish.resolve()
+    await saving
+    assert.deepEqual(actions, ['defer', 'allow'])
+})
+
+Deno.test('live saved decisions settle waiting native requests', async () => {
+    const h = harness()
+    await h.store.ready
+    const actions = native(h)
+    const other = harness(h.records)
+    await other.store.ready
+    await other.store.setDecision('geolocation', 'one', 'deny')
+    h.store.ingest(Object.values(other.rules)[0])
+    await Promise.resolve()
+    assert.deepEqual(actions, ['defer', 'deny'])
+})
+
+Deno.test('resetting a partial media request denies its native controller', async () => {
+    const h = harness()
+    await h.store.ready
+    const actions = native(h, { type: 'media', mediaTypes: ['audio', 'video'] })
+    const [microphone] = h.resources()
+    await h.store.resolve(microphone.requestId, 'allow', 'once')
+    await h.store.reset(microphone)
+    assert.deepEqual(actions, ['defer', 'deny'])
+    assert.equal(h.store.decision('microphone', 'one'), 'ask')
+})
+
+Deno.test('a synchronous one-time retry can join a deferred combined media request', async () => {
+    const h = harness()
+    await h.store.ready
+    native(h, { type: 'media', mediaTypes: ['audio'], nested: true })
+    await h.store.resolve(h.resources()[0].requestId, 'allow', 'once')
+    const combined = native(h, { type: 'media', mediaTypes: ['audio', 'video'] })
+    const camera = h.resources().find(resource => resource.type === 'camera')
+    await h.store.resolve(camera.requestId, 'allow', 'once')
+    assert.deepEqual(combined, ['defer', 'allow'])
+    assert.equal(h.store.decision('microphone', 'one'), 'ask')
+})
+
+Deno.test('reset and deny revoke access even after a one-time grant has been consumed', async () => {
+    for (const action of ['reset', 'deny']) {
+        const h = harness()
+        await h.store.ready
+        native(h)
+        const resource = h.resources()[0]
+        await h.store.resolve(resource.requestId, 'allow', 'once')
+        if (action === 'reset') {
+            await h.store.reset(resource)
+        } else {
+            await h.store.setDecision('geolocation', 'one', 'deny')
+        }
+        assert.equal(h.revocations.length, 1)
+    }
+})
+
+Deno.test('malformed media capability lists cannot fall back to a partial grant', async () => {
+    const h = harness()
+    await h.store.ready
+    await h.store.setDecision('microphone', 'one', 'allow')
+    for (const mediaTypes of [[], ['audio', 'unknown'], 'audio']) {
+        assert.deepEqual(native(h, { type: 'media', mediaTypes, audio: true }), ['deny'])
+    }
+})
+
+Deno.test('a settings action waiting for startup cannot grant the next page permission', async () => {
+    const h = harness()
+    const saving = h.store.setDecision('geolocation', 'one', 'allow')
+    h.contexts.get('one').url = 'https://other.example/'
+    assert.equal(await saving, false)
+    assert.equal(h.writes.length, 0)
 })

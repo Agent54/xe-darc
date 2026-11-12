@@ -166,3 +166,20 @@ Deno.test('link previews avoid favicon requests for non-web and malformed links'
         assert.match(html, /fallback-favicon|new-tab-icon/)
     }
 })
+
+Deno.test('saved favicon requests expose only an origin, including old unescaped query parameters', () => {
+    for (const url of ['https://user:password@example.com/private?token=secret&session=private#fragment',
+        encodeURIComponent('https://user:password@example.com/private?token=secret&session=private#fragment')]) {
+        const favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=${url}&size=64`
+        const html = lightboxFavicon({ id: 'private-favicon', url: 'https://example.com', favicon })
+        const src = html.match(/<img src="([^"]+)"/)[1].replaceAll('&amp;', '&')
+        assert.equal(new URL(src).searchParams.get('url'), 'https://example.com')
+        assert.doesNotMatch(src, /password|private|secret|session|fragment/)
+    }
+})
+
+Deno.test('a favicon URL containing viewBox remains an image rather than host HTML', () => {
+    const html = lightboxFavicon({ id: 'url-favicon', url: 'https://example.com', favicon: 'https://example.com/viewBox.svg?q=<svg onload="evil()">' })
+    assert.match(html, /<img/)
+    assert.doesNotMatch(html, /<svg onload=/)
+})

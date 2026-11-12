@@ -462,6 +462,9 @@
         if (!info.isTopLevel || !data.frames[tab.id]) {
             return
         }
+        data.cancelFramePermissions(data.frames[tab.id].frame)
+        isCommandKeyDown = false
+        commandKeyPressed = false
         data.frames[tab.id].committedUrl = info.url
         if (!data.isInternalPage(info.url)) {
             data.updateTab(tab.id, { lastLoadedAt: Date.now() })
@@ -546,6 +549,7 @@
             return
         }
 
+        data.cancelFramePermissions(data.frames[tab.id]?.frame)
         frameScreenshots.cancel(data.frames[tab.id]?.frame)
         hoveredLink = null
         instantlyCleanupGlobalPreview()
@@ -631,7 +635,7 @@
         
         // Don't set favicon for about: URLs - let Favicon.svelte handle it
         if (!frameUrl?.startsWith('about:')) {
-            tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${frameUrl}&size=64`
+            tab.favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(origin(frameUrl))}&size=64`
         } else {
             tab.favicon = null
         }
@@ -811,7 +815,7 @@
             return
         }
 
-        let favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=64`
+        let favicon = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(origin(url))}&size=64`
 
         try {
             let title = null
@@ -890,6 +894,7 @@ window.testit= true;
 let currentHoveredAnchor = null;
 
 document.addEventListener('mouseover', function(event) {
+    if (!event.isTrusted) return;
     // Find the closest anchor element in the event path
     const anchor = event.target.closest('a');
     
@@ -1194,17 +1199,6 @@ document.addEventListener('input', function(event) {
         // Filter to capture all URLs
         const allUrlsFilter = { urls: ['<all_urls>'] }
 
-        // Headers to strip from responses for security isolation
-        const headersToHandle = [
-            'cross-origin-embedder-policy',
-            'cross-origin-opener-policy',
-            'cross-origin-embedder-policy-report-only',
-            'cross-origin-opener-policy-report-only',
-        ]
-
-        // Get the app's own origin for CSP injection
-        const appOrigin = window.location.origin
-
         // monkey patch the old api back again to get it working in chrome 139+
         // todo: replace with single createWebRequestInterceptor interceptor object for all events if url patterns are the same 
 
@@ -1222,7 +1216,13 @@ document.addEventListener('input', function(event) {
                             includeRequestBody: options && options.includes('requestBody') 
                             // includeHeaders: options.includes('headers') // "none", "same-origin", or "cross-origin"
                         })
-                        interceptor.addEventListener(event.replace('on', '').toLowerCase(), callback)
+                        interceptor.addEventListener(event.replace('on', '').toLowerCase(), details => {
+                            const result = callback(details)
+                            if (result?.cancel) {
+                                details.cancel = true
+                                details.preventDefault?.()
+                            }
+                        })
                     }
                 } 
             }
@@ -1307,7 +1307,7 @@ document.addEventListener('input', function(event) {
                 || url.hostname.indexOf('appleid.cdn-apple.com') != -1
 
                 // hanlde special tracking for internal domains
-                || url.pathname.indexOf('/track') != -1 && (details.request.method == 'POST' || details.request.method == 'PUT')
+                || url.pathname.indexOf('/track') != -1 && ['POST', 'PUT'].includes(details.request?.method || details.method)
 
             if (block) {
                 if (details.preventDefault) {
@@ -1326,100 +1326,7 @@ document.addEventListener('input', function(event) {
             }
         }, allUrlsFilter, ['blocking', 'requestBody'])
 
-        // Helper function to parse and modify CSP directives
-        function enhanceCSPWithOrigin(cspValue, appOrigin) {
-            if (!cspValue || !appOrigin) return cspValue
-
-            // Parse CSP directives
-            const directives = cspValue.split(';').map(dir => dir.trim()).filter(dir => dir)
-            const enhancedDirectives = []
-
-            // Directives that should include the app origin
-            const directivesToEnhance = [
-                'default-src', 'script-src', 'style-src', 'img-src', 
-                'font-src', 'connect-src', 'media-src', 'child-src', 
-                'worker-src', 'frame-src'
-            ]
-
-            for (const directive of directives) {
-                const [name, ...sources] = directive.split(/\s+/)
-                const directiveName = name.toLowerCase()
-
-                if (directivesToEnhance.includes(directiveName)) {
-                    // Check if app origin is already present
-                    const sourcesStr = sources.join(' ')
-                    if (!sourcesStr.includes(appOrigin)) {
-                        // Add app origin to this directive
-                        enhancedDirectives.push(`${name} ${sources.join(' ')} ${appOrigin}`.trim())
-                    } else {
-                        // Already contains app origin, keep as is
-                        enhancedDirectives.push(directive)
-                    }
-                } else {
-                    // Keep directive as is
-                    enhancedDirectives.push(directive)
-                }
-            }
-
-            return enhancedDirectives.join('; ')
-        }
-
-        // Handle response headers - strip some security headers and enhance CSP with app origin
-        frame.request.onHeadersReceived.addListener((details) => {
-            if (!details.responseHeaders) return
-
-            const modifiedHeaders = []
-
-            // Process each header
-            for (const header of details.responseHeaders) {
-                const headerName = header.name.toLowerCase()
-                
-                if (headerName === 'content-security-policy') {
-                    // Enhance existing CSP with app origin
-                    const enhancedCSP = enhanceCSPWithOrigin(header.value, appOrigin)
-                    modifiedHeaders.push({
-                        name: header.name,
-                        value: enhancedCSP
-                    })
-                    // console.log('🔒 Enhanced CSP:', { original: header.value, enhanced: enhancedCSP })
-                } else if (headerName === 'content-security-policy-report-only') {
-                    // Enhance existing CSP report-only with app origin
-                    const enhancedCSP = enhanceCSPWithOrigin(header.value, appOrigin)
-                    modifiedHeaders.push({
-                        name: header.name,
-                        value: enhancedCSP
-                    })
-                    //console.log('🔒 Enhanced CSP Report-Only:', { original: header.value, enhanced: enhancedCSP })
-                } else if (headersToHandle.includes(headerName)) {
-                     // Strip these headers but don't add them to modifiedHeaders
-                     //console.log('🚫 Stripped header:', headerName)
-                 } else {
-                     // Keep other headers as is
-                     modifiedHeaders.push(header)
-                 }
-             }
-
-            // Add Cross-Origin policies that allow communication with app
-            modifiedHeaders.push({
-                name: 'Cross-Origin-Embedder-Policy',
-                value: 'unsafe-none'
-            })
-
-            modifiedHeaders.push({
-                name: 'Cross-Origin-Opener-Policy',
-                value: 'same-origin-allow-popups'
-            })
-
-            // console.log('🔒 Modified response headers for:', details.url, {
-            //     originalCount: details.responseHeaders.length,
-            //     modifiedCount: modifiedHeaders.length,
-            //     injectedOrigin: appOrigin
-            // })
-
-            return { 
-                responseHeaders: modifiedHeaders 
-            }
-        }, allUrlsFilter, ['blocking', 'responseHeaders'])
+        // Content scripts run in an isolated world; preserve the guest's CSP, COOP and COEP.
 
         frame.request.onAuthRequired.addListener((details) => {
             console.log('🔐 Auth Required:', {
@@ -2489,7 +2396,7 @@ document.addEventListener('input', function(event) {
                 tab={{
                     url: oauthPopup.url,
                     favicon: oauthPopup.url.startsWith('http')
-                        ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(oauthPopup.url)}&size=64`
+                        ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(origin(oauthPopup.url))}&size=64`
                         : null
                 }}
                 onNavigate={(url) => { oauthPopup.frame.src = url }}

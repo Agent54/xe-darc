@@ -60,11 +60,11 @@ export function normalizePermissionEvent(event, context) {
     let types = [type]
     let error = null
     if (type === 'media') {
+        types = []
         const mediaTypes = payload.mediaTypes || controller?.mediaTypes
         if (Array.isArray(mediaTypes) && mediaTypes.length && mediaTypes.every(value => ['audio', 'video', 'camera', 'microphone'].includes(value))) {
             types = [...new Set(mediaTypes.map(value => ['audio', 'microphone'].includes(value) ? 'microphone' : 'camera'))]
-        } else {
-            types = []
+        } else if (mediaTypes === undefined) {
             if (payload.audio === true || controller?.audio === true) {
                 types.push('microphone')
             }
@@ -116,12 +116,17 @@ export function handleFramePermission(data, tabId, event, context) {
             console.error('Could not resolve guest permission', error)
         }
     }
-    const result = data.permissionRequest(tabId, {
-        permission: request.type, types: request.types, url: request.url,
-        settle: deferred ? settle : null
-    }, context)
-    if (result.granted || !deferred || !result.pending) {
-        settle(result.granted)
+    try {
+        const result = data.permissionRequest(tabId, {
+            permission: request.type, types: request.types, url: request.url,
+            settle: deferred ? settle : null
+        }, context)
+        if (result.granted || !deferred || !result.pending) {
+            settle(result.granted)
+        }
+    } catch (error) {
+        settle(false)
+        console.error('Could not handle guest permission', error)
     }
 }
 
@@ -134,6 +139,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
     const changedDuringLoad = new Set()
     const conflictingRules = new Set()
     const revisions = new Map()
+    state.saving = {}
 
     function ingest(doc) {
         if (!doc?._id?.startsWith('darc:permission:')) {
@@ -166,9 +172,13 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
             rules[doc._id] = doc
         }
         transient.delete(doc._id)
-        if (previous?.decision === 'allow' && rules[doc._id]?.decision !== 'allow') {
-            onRevoke(previous, previous.permission)
+        const next = rules[doc._id]
+        if ((previous?.decision === 'allow' && next?.decision !== 'allow') ||
+            (next?.decision === 'deny' && previous?.decision !== 'deny')) {
+            const revoked = previous || next
+            onRevoke(revoked, revoked.permission)
         }
+        queueMicrotask(settleGroups)
         return true
     }
 
@@ -189,16 +199,27 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         return permissionScope(instanceId, context, url || context?.url)
     }
 
-    function decision(type, tabId, url, context = getContext(tabId)) {
+    function isCurrent(tabId, context) {
+        const current = context?.current ? context.current() : getContext(tabId)
+        return !!current && current.frame === context?.frame && current.url === context?.url &&
+            (current.partition || 'persist:myapp') === (context?.partition || 'persist:myapp')
+    }
+
+    function decision(type, tabId, url, context = getContext(tabId), requestIds = []) {
         const descriptor = permissionDescriptor(type)
         const scope = scopeFor(tabId, url, context)
         if (state.status !== 'ready' || !descriptor || !scope) {
             return 'ask'
         }
         const id = permissionDocumentId(scope, descriptor)
+        // A change-feed event may arrive before the save (including conflict cleanup) finishes.
+        if (state.saving[id]) {
+            return 'ask'
+        }
         const temporary = transient.get(id)
         if (temporary?.lifetime === 'once') {
-            if (temporary.tabId === tabId && temporary.frame === context?.frame && temporary.url === context?.url && temporary.expires > Date.now()) {
+            if ((!temporary.deferred || requestIds.includes(temporary.requestId)) &&
+                temporary.tabId === tabId && temporary.frame === context?.frame && temporary.url === context?.url && temporary.expires > Date.now()) {
                 return 'allow'
             }
         } else if (temporary) {
@@ -217,43 +238,55 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         }
     }
 
+    function finishGroup(group, granted, status = granted ? 'granted' : 'denied') {
+        // Remove before invoking native callbacks, which can re-enter cancellation.
+        groups.delete(group)
+        clearTimeout(group.timer)
+        for (const id of group.requestIds) {
+            const resource = requests.get(id)?.resource
+            if (!resource) {
+                continue
+            }
+            const temporary = transient.get(resource.ruleId)
+            if (temporary?.lifetime === 'once' && temporary.requestId === id) {
+                transient.delete(resource.ruleId)
+            }
+            resource.status = status
+            resource.unseen = false
+            resource.needsReload = false
+            if (rules[resource.ruleId]) {
+                resource.lifetime = 'persistent'
+            }
+        }
+        group.settle(granted)
+    }
+
     function settleGroups() {
         for (const group of groups) {
-            const current = group.context.current?.() || getContext(group.tabId)
-            const valid = current?.frame === group.context.frame && current?.url === group.context.url
+            const valid = isCurrent(group.tabId, group.context)
             const decisions = group.types.map(type => {
                 const scope = scopeFor(group.tabId, group.url, group.context)
                 const temporary = scope && transient.get(permissionDocumentId(scope, permissionDescriptor(type)))
                 if (temporary?.lifetime === 'once' && !group.requestIds.includes(temporary.requestId)) {
                     return 'ask'
                 }
-                return decision(type, group.tabId, group.url, group.context)
+                return decision(type, group.tabId, group.url, group.context, group.requestIds)
             })
             if (!valid || decisions.includes('deny') || decisions.every(value => value === 'allow')) {
                 const granted = valid && decisions.every(value => value === 'allow')
                 if (granted) {
                     consume(group.types, group.tabId, group.url, group.context)
                 }
-                group.settle(granted)
-                for (const id of group.requestIds) {
-                    const resource = requests.get(id)?.resource
-                    if (resource?.status === 'requested') {
-                        resource.status = granted ? 'granted' : 'denied'
-                        resource.unseen = false
-                        resource.needsReload = false
-                        if (rules[resource.ruleId]) {
-                            resource.lifetime = 'persistent'
-                        }
-                    }
-                }
-                clearTimeout(group.timer)
-                groups.delete(group)
+                finishGroup(group, granted)
             }
         }
     }
 
     function request(tabId, input, suppliedContext) {
-        const context = suppliedContext || getContext(tabId)
+        const context = { ...(suppliedContext || getContext(tabId)) }
+        if (!isCurrent(tabId, context)) {
+            return { granted: false }
+        }
         const scope = scopeFor(tabId, input.url, context)
         const types = input.types || [input.permission]
         const supported = !input.error && scope && types.length && types.every(type => permissionDescriptor(type))
@@ -268,6 +301,11 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         const requestIds = []
         for (const type of supported ? types : [input.permission || 'unknown']) {
             if (supported && decision(type, tabId, input.url, context) === 'allow') {
+                const temporary = transient.get(permissionDocumentId(scope, permissionDescriptor(type)))
+                if (input.settle && temporary?.lifetime === 'once') {
+                    temporary.deferred = true
+                    requestIds.push(temporary.requestId)
+                }
                 continue
             }
             const registryType = permissionDescriptor(type) ? type : 'unsupported'
@@ -302,16 +340,13 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         if (supported && input.settle) {
             const group = { tabId, types, url: input.url, context, settle: input.settle, requestIds }
             group.timer = setTimeout(() => {
-                input.settle(false)
+                finishGroup(group, false, 'ignored')
                 for (const id of requestIds) {
                     const resource = requests.get(id)?.resource
-                    if (resource?.status === 'requested') {
-                        resource.status = 'ignored'
-                        resource.unseen = false
+                    if (resource) {
                         resource.error = 'This request expired. Request access again.'
                     }
                 }
-                groups.delete(group)
             }, 60000)
             groups.add(group)
         }
@@ -332,12 +367,10 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
                     }
                 }
                 if (value === null && !existing) {
-                    const temporary = transient.get(id)
                     transient.delete(id)
                     delete rules[id]
-                    if (temporary?.decision === 'allow') {
-                        onRevoke(temporary, permission)
-                    }
+                    // A consumed one-time grant can still have an active native stream.
+                    onRevoke(scope, permission)
                     return
                 }
                 const doc = value === null ? { _id: id, _rev: existing._rev, _deleted: true } : {
@@ -363,29 +396,44 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
             }
         })
         writes.set(id, task)
-        task.finally(() => { if (writes.get(id) === task) { writes.delete(id) } }).catch(() => {})
+        state.saving[id] = true
+        task.finally(() => {
+            if (writes.get(id) === task) {
+                writes.delete(id)
+                delete state.saving[id]
+            }
+        }).catch(() => {})
         return task
     }
 
     async function resolve(requestId, value, lifetime = 'persistent') {
         const pending = requests.get(requestId)
         const resource = pending?.resource
-        if (!resource || resource.status !== 'requested' || !['allow', 'deny', 'ignore'].includes(value) ||
+        if (!resource || pending.resolving || resource.status !== 'requested' || !['allow', 'deny', 'ignore'].includes(value) ||
             !['persistent', 'session', 'once'].includes(lifetime) || (value === 'allow' && (!resource.supported || state.status !== 'ready'))) {
             return false
         }
-        const current = pending.context.current?.() || getContext(resource.tabId)
-        if (value === 'allow' && (current?.frame !== pending.context.frame || current?.url !== pending.context.url)) {
+        if (value === 'allow' && !isCurrent(resource.tabId, pending.context)) {
             resource.error = 'The requesting page has changed. Request access again.'
             return false
         }
         if (value !== 'ignore' && resource.scope && resource.permission) {
             const id = permissionDocumentId(resource.scope, resource.permission)
             if (lifetime === 'persistent' || value === 'deny') {
-                await save(resource.scope, resource.permission, value)
+                pending.resolving = true
+                try {
+                    await save(resource.scope, resource.permission, value)
+                } finally {
+                    pending.resolving = false
+                }
+                // Navigation, expiry or revocation can cancel the native request while saving.
+                if (resource.status !== 'requested' || !isCurrent(resource.tabId, pending.context)) {
+                    settleGroups()
+                    return false
+                }
             } else {
                 transient.set(id, { ...resource.scope, permission: resource.permission, decision: value, lifetime, tabId: resource.tabId,
-                    requestId, frame: pending.context.frame, url: pending.context.url, expires: Date.now() + 60000 })
+                    requestId, deferred: !resource.needsReload, frame: pending.context.frame, url: pending.context.url, expires: Date.now() + 60000 })
             }
         }
         resource.status = value === 'allow' ? 'granted' : value === 'deny' ? 'denied' : 'ignored'
@@ -398,9 +446,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         if (value === 'ignore') {
             for (const group of groups) {
                 if (group.requestIds.includes(requestId)) {
-                    group.settle(false)
-                    clearTimeout(group.timer)
-                    groups.delete(group)
+                    finishGroup(group, false, 'ignored')
                 }
             }
         }
@@ -409,10 +455,11 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
     }
 
     async function setDecision(type, tabId, value, url) {
+        const context = { ...getContext(tabId) }
         await ready
         const descriptor = permissionDescriptor(type)
-        const scope = scopeFor(tabId, url)
-        if (state.status !== 'ready' || !descriptor || !scope || (value !== null && !validDecision(descriptor, value))) {
+        const scope = scopeFor(tabId, url, context)
+        if (!isCurrent(tabId, context) || state.status !== 'ready' || !descriptor || !scope || (value !== null && !validDecision(descriptor, value))) {
             return false
         }
         await save(scope, descriptor, value)
@@ -422,6 +469,11 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
 
     async function reset(resource) {
         if (resource.scope && resource.permission && permissionType(resource.permission)) {
+            for (const group of groups) {
+                if (group.types.some(type => permissionDocumentId(scopeFor(group.tabId, group.url, group.context), permissionDescriptor(type)) === resource.ruleId)) {
+                    finishGroup(group, false, 'ignored')
+                }
+            }
             await save(resource.scope, resource.permission, null)
             transient.delete(permissionDocumentId(resource.scope, resource.permission))
             for (const pending of requests.values()) {
@@ -441,9 +493,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
     function cancelFrame(frame) {
         for (const group of groups) {
             if (group.context.frame === frame) {
-                group.settle(false)
-                clearTimeout(group.timer)
-                groups.delete(group)
+                finishGroup(group, false, 'ignored')
             }
         }
         for (const [id, value] of transient) {

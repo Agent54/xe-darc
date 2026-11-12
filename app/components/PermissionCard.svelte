@@ -178,7 +178,9 @@
     {#if resource.needsReload && (sectionId === 'used' || sectionId === 'blocked')}
         <div class="resource-reload-reminder">
             <div class="reload-message">
-                {#if sectionId === 'used'}
+                {#if sectionId === 'used' && resource.lifetime === 'once'}
+                    <span class="reload-text">Request access again on this page within 60 seconds. Reloading cancels this one-time approval.</span>
+                {:else if sectionId === 'used'}
                     <span class="reload-text">You might need to reload the page for changes to take effect</span>
                     <button class="reload-btn" onmousedown={() => data.reloadTab(resource.tabId)} title="Reload requesting page">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

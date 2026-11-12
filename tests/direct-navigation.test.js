@@ -12,6 +12,7 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
     const listeners = {}
     const opened = []
     const navigated = []
+    const cancelledPermissions = []
     let stopped = 0
     const frame = {
         src: 'https://original.example/',
@@ -40,6 +41,7 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
         spaceMeta: { activeSpace: 'space' },
         isPermissionGranted: () => policy === 'allow',
         permissionDecision: () => policy,
+        cancelFramePermissions: frame => cancelledPermissions.push(frame),
         getCurrentGroupTabId: () => 'current-group-tab',
         newTab: (space, options) => opened.push(options),
         navigate: (id, url) => navigated.push({ id, url }),
@@ -49,7 +51,7 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
     const noop = () => {}
     const api = new Function('data', 'tab', 'origin', 'window', 'console', 'setTimeout', `
         const tabId = tab.id
-        let hoveredLink = null, isCommandKeyDown = ${command}
+        let hoveredLink = null, isCommandKeyDown = ${command}, commandKeyPressed = ${command}
         const recentlyBlockedUrls = new Map(), BLOCK_DEDUP_TIMEOUT = 2000
         const instantlyCleanupGlobalPreview = () => {}, evaluateSecurityState = () => {}
         const showNetworkAccess = () => {}, showBlockedRequest = () => {}
@@ -75,11 +77,11 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
                 request: { url, id, type, method: 'GET' },
                 ...(extra.redirectUrl ? { response: { redirectURL: extra.redirectUrl } } : extra)
             })
-        const result = listeners[name](event)
-        return { cancel: event.defaultPrevented || result?.cancel === true, prevented: event.defaultPrevented }
+        const result = listeners[name]?.(event)
+        return { cancel: event.cancel === true || result?.cancel === true, prevented: event.defaultPrevented }
     }
     return {
-        ...api, data, tab, frame, opened, navigated, requestEvent,
+        ...api, data, tab, frame, opened, navigated, requestEvent, cancelledPermissions, listeners,
         get stopped() { return stopped },
         request: (url, options) => requestEvent('beforerequest', url, options),
         load(url, isTopLevel = true) { api.start(legacy ? { isTopLevel, url } : { loadInfo: { isTopLevel, url } }) },
@@ -330,4 +332,26 @@ Deno.test('main-request completion and errors clear only their matching direct n
         assert.equal(h.data.frames.page.directNavigation, null)
         assert.equal(h.request('https://other.example/', { id: 'next' }).cancel, true)
     }
+})
+
+Deno.test('top-level reloads and commits cancel permissions, including reloads to the same URL', () => {
+    const h = navigationHarness({ direct: false })
+    h.load(h.tab.url, false)
+    h.commitUrl(h.tab.url, false)
+    assert.deepEqual(h.cancelledPermissions, [])
+    h.load(h.tab.url)
+    h.commitUrl(h.tab.url)
+    assert.deepEqual(h.cancelledPermissions, [h.frame, h.frame])
+})
+
+Deno.test('guest response security policies are not rewritten', () => {
+    for (const legacy of [false, true]) {
+        const h = navigationHarness({ legacy })
+        assert.equal(h.listeners.headersreceived, undefined)
+    }
+})
+
+Deno.test('legacy requests with track paths do not throw before navigation enforcement', () => {
+    const h = navigationHarness({ legacy: true })
+    assert.equal(h.request('https://original.example/track', { type: 'xmlhttprequest', method: 'POST' }).cancel, true)
 })

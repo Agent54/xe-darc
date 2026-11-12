@@ -13,10 +13,18 @@
         try {
             const faviconUrl = new URL(favicon)
             if (faviconUrl.hostname.endsWith('.gstatic.com') && faviconUrl.pathname === '/faviconV2') {
-                faviconUrl.searchParams.set('drop_404_icon', 'true')
-                return faviconUrl.toString()
+                // Old saved favicons may contain private paths, credentials or tokens.
+                const site = new URL(faviconUrl.searchParams.get('url'))
+                if (!['http:', 'https:'].includes(site.protocol)) {
+                    return null
+                }
+                const requestedSize = faviconUrl.searchParams.get('size')
+                const size = ['16', '32', '64', '128'].includes(requestedSize) ? requestedSize : '64'
+                return `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(site.origin)}&size=${size}&drop_404_icon=true`
             }
-        } catch {}
+        } catch {
+            return null
+        }
 
         return favicon
     }
@@ -90,7 +98,7 @@
                 } catch {}
             }
             
-            if (favicon.startsWith('<svg') || favicon.includes('viewBox')) {
+            if (favicon.startsWith('<svg')) {
                 return { type: 'svg', markup: favicon }
             } else if (favicon.startsWith('http') || favicon.startsWith('data:')) {
                 const src = getFaviconSrc(favicon)
