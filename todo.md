@@ -3453,3 +3453,9 @@ sidebar width tripple width sidebar modes for content area reveal on hover or cl
 
 point and change message feature cdp
 
+fix spacial memory by adjusting zoom without breaks and subboxes like ff tab candy
+
+
+
+agent grouping as suggestoins
+
