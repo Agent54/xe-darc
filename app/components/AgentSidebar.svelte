@@ -6,8 +6,8 @@
     import { agent, agentState } from '../lib/agent.js'
     import { captureAgentContext } from '../lib/agent-context.js'
     import { readAcpSettings } from '../lib/acp-settings.js'
-    import { getModelConfig, modelAvatar } from '../lib/agent-models.js'
-    import { default_renderer, parser as createMarkdownParser, parser_write as writeMarkdownChunk, parser_end as endMarkdownStream } from 'streaming-markdown'
+    import { configValues, demoModels, getModelConfig, modelAvatar } from '../lib/agent-models.js'
+    import * as smd from 'streaming-markdown'
 
     let {
         onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods,
@@ -23,22 +23,55 @@
     let connectionError = $state('')
     let showAllHistory = $state(false)
     let input = $state(null)
+    let demoModel = $state(globalThis.localStorage?.getItem('agentDemoModel') || demoModels[1].value)
     const chat = $derived($agentState.conversations.find(item => item.id === $agentState.activeConversationId))
-    const isProcessing = $derived($agentState.processing)
+    const isProcessing = $derived($agentState.processing || !!chat?.messages.some(message => message.local && message.streaming))
     const queuePaused = $derived($agentState.queuePaused)
     const target = $derived(selectedTarget || (viewMode === 'canvas' ? 'current-space' : 'current-tab'))
     const selectedHistoryId = $derived($agentState.activeConversationId || 'current')
     const chatHistoryList = $derived($agentState.conversations)
     const modelConfig = $derived(getModelConfig(chat?.configOptions))
-    const selectedModel = $derived(modelConfig?.currentValue || 'agent')
-    const availableTargets = $derived([
-        { id: 'current-tab', name: `Current tab${currentTab ? ': ' + getTabTitle(currentTab) : ''}` },
-        { id: 'current-space', name: 'Current space' },
-        { id: 'all-spaces', name: 'All spaces' }
-    ])
+    const selectedModel = $derived(modelConfig?.currentValue || demoModel)
+	// Get available targets with actual names in brackets
+	let availableTargets = $derived.by(() => {
+		const currentTabTitle = currentTab ? getTabTitle(currentTab) : 'No active tab'
+		const currentSpaceName = data.spaceMeta.activeSpace
+			? data.spaces[data.spaceMeta.activeSpace]?.name || 'Unnamed Space'
+			: 'No active space'
+
+		return [
+			{
+				id: 'current-tab',
+				name: `Current Tab [${currentTabTitle}]`,
+				type: 'current-tab',
+				description: currentTab ? currentTab.url || 'No URL' : 'No active tab'
+			},
+			{
+				id: 'current-space',
+				name: `Current Space [${currentSpaceName}]`,
+				type: 'current-space',
+				description: data.spaceMeta.activeSpace
+					? `${data.spaces[data.spaceMeta.activeSpace]?.tabs?.filter(tab => tab.type === 'tab').length || 0} tabs`
+					: 'No active space'
+			},
+			{
+				id: 'all-spaces',
+				name: `All Spaces [${Object.keys(data.spaces).length} spaces]`,
+				type: 'all-spaces',
+				description: 'Access all workspaces'
+			}
+		]
+	})
     const messageQueue = $derived($agentState.queue.map(item => ({ ...item, userMessage: item.text, status: 'queued' })))
     const chatHistory = $derived.by(() => {
         const messages = (chat?.messages || []).map(message => {
+            if (message.role === 'approval') {
+                return { ...message, role: 'info-cards', cards: [{
+                    action: 'grant-permission', title: message.title, details: message.details,
+                    awaitingPermission: message.status === 'pending', status: message.status,
+                    approvalId: message.approvalId, options: message.options, result: message.content
+                }] }
+            }
             if (message.role !== 'tool') { return message }
             return { ...message, role: 'info-cards', cards: [{
                 action: ({ read: 'read-tab', search: 'web-search', execute: 'execute-js', edit: 'modify-content' })[message.kind] || 'tool-call',
@@ -48,24 +81,39 @@
                 result: message.content || (message.rawOutput ? JSON.stringify(message.rawOutput, null, 2) : '')
             }] }
         })
-        for (const approval of $agentState.approvals.filter(item => item.conversationId === chat?.id)) {
-            messages.push({ id: approval.id, role: 'info-cards', cards: [{
-                action: 'grant-permission', title: approval.title, details: approval.details,
-                awaitingPermission: true, needsPermission: true, status: 'pending',
-                approvalId: approval.id, options: approval.options
-            }] })
-        }
         return messages
     })
 
+	function initializeStreamingMarkdown(element) {
+		if (!element) return null
+
+		const renderer = smd.default_renderer(element)
+		const parser = smd.parser(renderer)
+
+		return { renderer, parser }
+	}
+
+	function writeMarkdownChunk(parser, chunk) {
+		if (parser) {
+			smd.parser_write(parser, chunk)
+		}
+	}
+
+	function endMarkdownStream(parser) {
+		if (parser) {
+			smd.parser_end(parser)
+		}
+	}
+
+    // Adapt ACP's accumulated message snapshots to the original incremental renderer.
     function streamingMarkdown(node, message) {
-        let parser = createMarkdownParser(default_renderer(node))
+        let { parser } = initializeStreamingMarkdown(node)
         let rendered = ''
         let ended = false
         function update(next) {
             if (!next.content.startsWith(rendered) || (ended && next.content !== rendered)) {
                 node.replaceChildren()
-                parser = createMarkdownParser(default_renderer(node))
+                parser = initializeStreamingMarkdown(node).parser
                 rendered = ''
                 ended = false
             }
@@ -120,11 +168,22 @@
         }
     }
 
-    function handleModelChange(event) { agent.setConfig(modelConfig.id, event.currentTarget.value) }
+    function handleModelChange(event) {
+        if (modelConfig) { agent.setConfig(modelConfig.id, event.currentTarget.value) }
+        else {
+            demoModel = event.currentTarget.value
+            localStorage.setItem('agentDemoModel', demoModel)
+        }
+    }
+    function addDemoExchange(prompt, reply) {
+        const choices = modelConfig ? configValues(modelConfig) : demoModels
+        return agent.addLocalExchange(prompt, { ...reply, model: selectedModel, modelName: choices.find(model => model.value === selectedModel)?.name })
+    }
     function handleHistoryChange(event) {
         const id = event.currentTarget.value
         if (id === 'show-all') { showAllHistory = true; event.currentTarget.value = selectedHistoryId }
-        else if (id !== 'current') { agent.selectConversation(id) }
+        else if (id === 'current') { clearHistory() }
+        else { agent.selectConversation(id) }
     }
     function clearHistory() {
         const id = agent.newConversation()
@@ -339,11 +398,11 @@
             }
         ]
 
-        agent.addLocalExchange('cards', { role: 'info-cards', cards: testCards })
+        addDemoExchange('cards', { role: 'info-cards', cards: testCards })
     }
 
     function showTestMessage() {
-        agent.addLocalExchange('test', { role: 'assistant', content: 'Hello world! This is a test response.' })
+        addDemoExchange('test', { role: 'assistant', content: 'Hello world! This is a test response.' })
     }
 
     function generateTestMarkdownDocumentForTest() {
@@ -476,7 +535,7 @@ The current system demonstrates strong performance and security characteristics.
 
     async function streamTestDocument(chunks) {
         const panel = input?.closest('.agent-panel')
-        agent.addLocalExchange('doc', { role: 'assistant-doc', chunks })
+        addDemoExchange('doc', { role: 'assistant-doc', chunks })
         await tick()
         const reply = Array.from(panel?.querySelectorAll('.assistant-doc') || []).at(-1)
         reply?.scrollIntoView({ block: 'center', inline: 'nearest' })
@@ -547,11 +606,11 @@ The current system demonstrates strong performance and security characteristics.
 					{/if}
 				</select>
 
-				<select class="agent-model-select" aria-label={modelConfig?.name || 'Agent model'} value={selectedModel} disabled={isProcessing || !modelConfig} onchange={handleModelChange}>
+				<select class="agent-model-select" aria-label={modelConfig?.name || 'Demo model'} value={selectedModel} disabled={isProcessing} onchange={handleModelChange}>
 					{#if modelConfig}
 						{@render configChoices(modelConfig.options)}
 					{:else}
-						<option value="agent">{$agentState.agentName || 'Agent model'}</option>
+						<optgroup label="Demo models">{@render configChoices(demoModels)}</optgroup>
 					{/if}
 				</select>
 			</div>
@@ -2428,7 +2487,8 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	/* Animate content as it appears during streaming */
-	.agent-markdown-streaming.streaming :global(*) {
+	/* Keep the animation rules stable when streaming ends so existing content does not fade again. */
+	.agent-markdown-streaming :global(*) {
 		animation: fadeInContent 0.4s ease-out;
 	}
 
@@ -2451,9 +2511,9 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	/* Animate text nodes as they appear */
-	.agent-markdown-streaming.streaming :global(span),
-	.agent-markdown-streaming.streaming :global(em),
-	.agent-markdown-streaming.streaming :global(strong) {
+	.agent-markdown-streaming :global(span),
+	.agent-markdown-streaming :global(em),
+	.agent-markdown-streaming :global(strong) {
 		animation: fadeInText 0.2s ease-out;
 	}
 

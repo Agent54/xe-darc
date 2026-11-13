@@ -4,6 +4,20 @@ const openaiIcon = `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
     </svg>`
 const agentIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 16.5h4.5m-4.5-6h.008v.008H9.75V10.5Zm4.5 0h.008v.008h-.008V10.5ZM12 3v3m-6 0h12a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3Z"/></svg>'
 
+// Preserve the original model appearances for local UI demos, without provider clients.
+export const demoModels = [
+    { value: 'claude-4-sonnet-20250514', name: 'Claude Sonnet' },
+    { value: 'claude-3-5-haiku-20241022', name: 'Claude Haiku' },
+    { value: 'claude-4-opus-20250514', name: 'Claude Opus' },
+    { value: 'openai-o3', name: 'OpenAI O3' },
+    { value: 'elevenlabs-mark', name: 'Mark (ElevenLabs)' },
+    { value: 'elevenlabs-dana', name: 'Dana (ElevenLabs)' },
+    { value: 'elevenlabs-river-slow', name: 'River Slow (ElevenLabs)' },
+    { value: 'elevenlabs-river-fast', name: 'River Fast (ElevenLabs)' },
+    { value: 'elevenlabs-river', name: 'River (ElevenLabs)' },
+    { value: 'elevenlabs-voice', name: 'ElevenLabs Voice' }
+]
+
 export function getModelConfig(options = []) {
     const selectors = options.filter(option => option.type === 'select')
     return selectors.find(option => option.category === 'model') || selectors.find(option => option.id === 'model')
@@ -14,6 +28,12 @@ export function configValues(option) {
 }
 
 export function modelAvatar(id, name) {
+    if (id?.startsWith('elevenlabs-')) {
+        const badges = { mark: 'M', dana: 'D', 'river-slow': 'Rs', 'river-fast': 'Rf', river: 'R' }
+        const voice = id.slice('elevenlabs-'.length)
+        const color = voice === 'mark' ? '#3b82f6' : voice === 'voice' ? 'white' : '#ec4899'
+        return { icon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 100 680 680" fill="${color}"><path d="M468 292H528V584H468V292Z"/><path d="M348 292H408V584H348V292Z"/></svg>`, badge: badges[voice] }
+    }
     const identity = `${id || ''} ${name || ''}`.toLowerCase()
     if (/\b(claude|anthropic)\b/.test(identity)) {
         const family = identity.match(/\b(sonnet|haiku|opus)\b/)?.[1]

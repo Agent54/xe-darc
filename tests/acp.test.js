@@ -205,6 +205,8 @@ async function run() {
         client.answer(client.state.approvals[0].id, 'opaque-allow-83')
         await permission
         assert.equal(host.calls.at(-1).result.outcome.optionId, 'opaque-allow-83')
+        assert.equal(chat().messages.find(message => message.role === 'approval').status, 'approved')
+        assert.equal(client.state.approvals.length, 0)
 
         const waiting = client.submit('wait', context)
         await until(() => host.prompts.at(-1) === 'wait')

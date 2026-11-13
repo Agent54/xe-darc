@@ -11,6 +11,7 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
     }
     const listeners = new Set()
     const pendingApprovals = new Map()
+    const localStreams = new Map()
     const sessionSetups = new WeakMap()
     let connection = null
     let connecting = null
@@ -57,6 +58,14 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
             return
         }
         pendingApprovals.delete(id)
+        const approval = state.approvals.find(item => item.id === id)
+        const chat = state.conversations.find(item => item.id === approval?.conversationId)
+        const message = chat?.messages.find(item => item.approvalId === id)
+        if (message) {
+            const option = approval.options.find(item => item.optionId === optionId)
+            message.status = !option ? 'cancelled' : option.kind.startsWith('allow_') ? 'approved' : 'denied'
+            message.content = option?.name || 'Cancelled'
+        }
         state.approvals = state.approvals.filter(item => item.id !== id)
         pending.cleanup()
         pending.resolve(optionId)
@@ -78,6 +87,10 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
             const abort = () => resolveApproval(id, null)
             pendingApprovals.set(id, { resolve, cleanup: () => signal?.removeEventListener('abort', abort) })
             state.approvals.push({ id, title, details, options, conversationId })
+            const chat = state.conversations.find(item => item.id === conversationId)
+            if (chat) {
+                addMessage(chat, 'approval', '', { approvalId: id, title, details, options, status: 'pending' })
+            }
             signal?.addEventListener('abort', abort, { once: true })
             publish()
         })
@@ -383,7 +396,11 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
     }
 
     function stop() {
-        state.queuePaused = true
+        if (state.processing || activeTurn) { state.queuePaused = true }
+        for (const stream of localStreams.values()) {
+            stream.cancelled = true
+            stream.reply.streaming = false
+        }
         cancelApprovals()
         const turn = activeTurn
         if (turn) {
@@ -440,12 +457,16 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
             const reply = addMessage(chat, role, content, { ...extra, local: true, streaming: !!chunks })
             publish()
             if (chunks) {
+                const stream = { reply, cancelled: false }
+                localStreams.set(reply.id, stream)
                 try {
                     for await (const chunk of chunks) {
+                        if (stream.cancelled) { break }
                         reply.content += chunk
                         publish()
                     }
                 } finally {
+                    localStreams.delete(reply.id)
                     // Streaming complete
                     reply.streaming = false
                     updateCurrentChatTimestamp(chat)

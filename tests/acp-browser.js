@@ -144,15 +144,71 @@ try {
 
     await page.evaluate(() => window.showAgent())
     await page.waitForSelector('textarea[aria-label="Message agent"]')
+    await page.select('select[aria-label="Demo model"]', 'elevenlabs-river-slow')
+    assert.equal(await page.evaluate(() => localStorage.getItem('agentDemoModel')), 'elevenlabs-river-slow')
+    // A stream must not fade already-visible content out again when it finishes.
+    await page.evaluate(() => {
+        window.nextMarkdown = Promise.withResolvers()
+        window.finishMarkdown = Promise.withResolvers()
+        window.markdownRun = window.agent.addLocalExchange('stream regression', {
+            role: 'assistant-doc',
+            chunks: (async function* () {
+                yield '# Stable heading\n\nFirst '
+                await window.nextMarkdown.promise
+                yield '**streamed** text\n'
+                await window.finishMarkdown.promise
+            })()
+        })
+    })
+    const stableHeading = await page.waitForSelector('.assistant-doc h1')
+    await page.waitForFunction(() => document.querySelector('.assistant-doc h1').getAnimations().length === 0)
+    await stableHeading.evaluate(node => {
+        window.headingRestarts = 0
+        node.addEventListener('animationstart', () => { window.headingRestarts++ })
+        window.nextMarkdown.resolve()
+    })
+    await page.waitForSelector('.assistant-doc strong')
+    assert.equal(await page.$eval('.assistant-doc strong', node => node.getAnimations({ subtree: true }).length > 0), true, 'New text should fade in')
+    await page.evaluate(async () => {
+        window.finishMarkdown.resolve()
+        await window.markdownRun
+        await new Promise(resolve => setTimeout(resolve, 100))
+    })
+    assert.equal(await page.evaluate(() => window.headingRestarts), 0, 'Completing a stream restarted the heading animation')
+    assert.equal(await stableHeading.evaluate(node => node.isConnected && getComputedStyle(node).opacity === '1'), true)
+    await page.evaluate(() => window.hideAgent())
+    await page.waitForFunction(() => !document.querySelector('.agent-panel'))
+    await page.evaluate(() => window.showAgent())
+    await page.waitForSelector('.assistant-doc h1')
+    assert.equal(await page.$eval('select[aria-label="Demo model"]', node => node.value), 'elevenlabs-river-slow')
+    await page.evaluate(() => {
+        window.releaseStoppedDemo = Promise.withResolvers()
+        window.stoppedDemo = window.agent.addLocalExchange('stop demo', {
+            role: 'assistant-doc', chunks: (async function* () {
+                yield 'Before stopping'
+                await window.releaseStoppedDemo.promise
+                yield ' SHOULD NOT APPEAR'
+            })()
+        })
+    })
+    await page.waitForSelector('.agent-markdown.streaming')
+    await page.click('button[aria-label="Stop Current Task"]')
+    await page.evaluate(async () => { window.releaseStoppedDemo.resolve(); await window.stoppedDemo })
+    assert.equal(await page.$('.agent-markdown.streaming'), null)
+    assert.equal(await page.evaluate(() => document.body.textContent.includes('SHOULD NOT APPEAR')), false)
+    await button('New')
+    assert.deepEqual(await page.$$eval('#agent-context-select option', nodes => nodes.map(node => node.textContent)), ['Current Tab [Test page]', 'Current Space [Unnamed Space]', 'All Spaces [1 spaces]'])
     await send('cards')
     await page.waitForSelector('.agent-info-card')
     assert.equal(await page.$$eval('.agent-info-card', cards => cards.length), 23)
     assert.equal(await page.$$eval('.agent-info-card.denied', cards => cards.length), 3)
     await send('test')
     await page.waitForFunction(() => document.querySelector('.assistant-chat .agent-markdown')?.textContent.includes('Hello world! This is a test response.'))
+    assert.equal(await page.$eval('.assistant-chat .agent-avatar-title-overlay', node => node.textContent.trim()), 'Rs')
     await send('doc')
     await waitForVisibleDemo('Comprehensive Analysis Report')
     const reportHeading = await page.$('.assistant-doc .agent-markdown.streaming h1')
+    await page.waitForFunction(() => document.querySelector('.assistant-doc .agent-markdown.streaming h1').getAnimations({ subtree: true }).length === 0)
     await Deno.mkdir(`${root}.cache/acp`, { recursive: true })
     await page.screenshot({ path: `${root}.cache/acp/demo-markdown-streaming.png` })
     await page.waitForSelector('.assistant-doc .agent-markdown.streaming table')
@@ -163,7 +219,10 @@ try {
     await waitForVisibleDemo('Test Document')
     await page.waitForFunction(() => document.querySelectorAll('.assistant-doc .agent-markdown:not(.streaming) pre code').length === 2)
     assert.equal(host.headers.length, 0)
-    await button('New')
+    const previousConversation = await page.evaluate(() => window.agentState.activeConversationId)
+    await page.select('select[aria-label="Conversation"]', 'current')
+    await page.waitForFunction(id => window.agentState.activeConversationId !== id, {}, previousConversation)
+    assert.equal(await page.$('.agent-markdown-message'), null)
     await page.evaluate(() => window.showSettings())
     await page.waitForSelector('input[aria-label="ACP endpoint"]')
     await page.type('input[aria-label="ACP endpoint"]', host.endpoint)
@@ -212,6 +271,7 @@ try {
     assert.match(await page.$eval(`${openaiAvatar} path`, path => path.getAttribute('d')), /^M22\.282/)
     assert.match(await page.$eval('.agent-chat-message-time', node => node.textContent), /\d/)
     await Deno.mkdir(`${root}.cache/acp`, { recursive: true })
+    await page.waitForFunction(() => [...document.querySelectorAll('.agent-markdown-message')].every(node => node.getAnimations({ subtree: true }).length === 0))
     await page.screenshot({ path: `${root}.cache/acp/restored-controls.png`, fullPage: true })
     await page.hover('.agent-markdown-message')
     await clickInTranscript('button[aria-label="Good response"]')
@@ -233,6 +293,8 @@ try {
     await button('Proceed')
     await page.waitForFunction(() => !window.agentState.processing)
     assert.equal(host.calls.at(-1).result.outcome.optionId, 'opaque-allow-83')
+    assert.match(await page.$eval('.agent-approval', node => node.textContent), /Proceed/)
+    assert.equal(await page.$('.agent-approval button'), null, 'Resolved approval stays in history without live buttons')
     const claudeAvatar = '.assistant-chat .agent-avatar[title="Claude Haiku"]'
     assert.match(await page.$eval(`${claudeAvatar} path`, path => path.getAttribute('d')), /^m4\.714/)
     assert.equal(await page.$eval(`${claudeAvatar} .agent-avatar-title-overlay`, node => node.textContent.trim()), 'H')
