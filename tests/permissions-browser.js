@@ -59,7 +59,8 @@ const fixture = compileModule(`
         permissionRequest: (id, input) => store.request(id, input),
         allowPermission: (id, lifetime) => store.resolve(id, 'allow', lifetime === 'always' ? 'persistent' : lifetime === 'until-app-close' ? 'session' : 'once'),
         denyPermission: id => store.resolve(id, 'deny'), ignorePermission: id => store.resolve(id, 'ignore'),
-        changePermission: resource => store.reset(resource), clearUnseenResourceFlags: () => store.markSeen(),
+        changePermission: resource => store.reset(resource), setResourcePermission: (resource, value) => store.setResourceDecision(resource, value),
+        clearUnseenResourceFlags: () => store.markSeen(),
         markPermissionSeen: resource => store.markSeen(resource), reloadCurrentTab() {},
         navigate(id, url) { window.navigations.push({ id, url }) }
     }
@@ -211,11 +212,14 @@ try {
         for (const permission of ['geolocation', 'microphone', 'download']) {
             window.fixture.data.permissionRequest('page', { permission, url: 'https://site.example/page' })
         }
+        window.fixture.data.permissionRequest('page', { permission: 'download', url: 'https://site.example/another-page' })
     })
     await page.waitForFunction(() => document.querySelectorAll('.permission-toasts .resource-card').length === 3)
     assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false)
     assert.equal(await page.evaluate(() => window.sidebarWrites), 0)
     const toast = type => `.permission-toasts .resource-card[data-permission-type="${type}"]`
+    assert.equal(await page.$eval(`${toast('download')} .resource-origin`, origin => origin.textContent), 'https://site.example')
+    assert.match(await page.$eval(`${toast('download')} .resource-status`, status => status.textContent), /2 requests/)
     const buttonStyle = async selector => page.$eval(selector, button => {
         const style = getComputedStyle(button)
         return { font: style.font, color: style.color, background: style.backgroundColor, padding: style.padding, radius: style.borderRadius }
@@ -256,9 +260,33 @@ try {
     await page.locator(toast('download')).hover()
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.permission-card-dismiss')).opacity === '1')
     await page.locator(`${toast('download')} .permission-card-dismiss`).click()
+    await page.waitForFunction(() => document.querySelector('.permission-toasts .resource-card[data-permission-type="download"] .resource-status').textContent.trim() === 'requested')
+    await page.locator(`${toast('download')} .accept-btn.main`).click()
     await page.waitForFunction(() => document.querySelector('.permission-toasts') === null)
     assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false)
     assert.equal(await page.evaluate(() => Object.values(window.fixture.data.permissions.download.origins)[0].requests[0].status), 'ignored')
+    await page.evaluate(() => window.promptFixture.open())
+    const downloadCard = '.sidebar .resource-card[data-permission-type="download"]'
+    await page.waitForSelector(downloadCard)
+    assert.equal(await page.$$eval(downloadCard, cards => cards.length), 1)
+    const downloadId = await page.$eval(downloadCard, card => card.dataset.permissionId)
+    await page.locator(downloadCard).hover()
+    await page.locator(`${downloadCard} .change-btn-inline`).click()
+    await page.mouse.move(0, 0)
+    await page.waitForSelector(`${downloadCard}.editing .permission-editor`)
+    assert.equal(await page.$eval(`${downloadCard} .change-btn-inline`, button => button.getAttribute('aria-expanded')), 'true')
+    await page.locator(`${downloadCard} .permission-editor button::-p-text(Deny)`).click()
+    await page.waitForSelector(`${downloadCard}.blocked`)
+    assert.equal(await page.$eval(downloadCard, card => card.dataset.permissionId), downloadId)
+    assert.equal(await page.$eval(`${downloadCard} .resource-origin`, origin => origin.textContent), 'https://site.example')
+    await page.locator(downloadCard).hover()
+    await page.locator(`${downloadCard} .change-btn`).click()
+    await page.mouse.move(0, 0)
+    await page.waitForFunction(selector => {
+        const button = document.querySelector(selector)
+        return button?.getAttribute('aria-expanded') === 'true' && getComputedStyle(button).opacity === '1'
+    }, {}, `${downloadCard} .change-btn`)
+    await page.locator('[aria-label="Close Resources"]').click()
 
     await page.evaluate(() => window.fixture.data.permissionRequest('page', { permission: 'clipboardReadWrite', url: 'https://site.example/page' }))
     await page.locator(`${toast('clipboardReadWrite')} .accept-btn.dropdown`).click()

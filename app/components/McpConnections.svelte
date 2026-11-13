@@ -76,7 +76,7 @@
             <details class="mcp-connection-permissions" open={permissions.some(resource => resource.status === 'requested')}>
                 <summary>Access history and permissions ({permissions.length})</summary>
                 {#if !permissions.length}<p>No permissions granted. Access requests will appear here and in Resources.</p>{/if}
-                {#each permissions as resource (resource.requestId)}
+                {#each permissions as resource (resource.ruleId || resource.requestId)}
                     <PermissionCard {resource} sectionId={resource.status === 'requested' ? 'requested' : resource.status === 'denied' ? 'blocked' : 'used'} />
                 {/each}
             </details>

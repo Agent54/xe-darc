@@ -9,7 +9,7 @@
     import Settings from './components/Settings.svelte'
     import { openTabDevTools } from './lib/tab-devtools.js'
     import { closeButtonHistory } from './lib/close-button-history.js'
-    import { getPendingPermissionRequests } from './lib/permissions.js'
+    import { getPendingPermissionRequests, groupPermissionCards } from './lib/permissions.js'
     import resourceTypes from './lib/resourceTypes.js'
     import UserMods from './components/UserMods.svelte'
     import Activity from './components/Activity.svelte'
@@ -346,7 +346,7 @@
         .filter(page => page.blocked > 0)
         .map(page => `${getTabTitle(page.tab)}: ${page.blocked} blocked`)]
         .join('\n'))
-    const permissionRequestTooltip = $derived(['Permission requests', ...getPendingPermissionRequests(data.permissions, window.darcWindowId)
+    const permissionRequestTooltip = $derived(['Permission requests', ...groupPermissionCards(getPendingPermissionRequests(data.permissions, window.darcWindowId))
         .map(request => `${getTabTitle(data.docs[request.tabId]) || request.origin || request.url}: ${resourceTypes[request.type]?.name || request.type}`)]
         .join('\n'))
     let globalTabComplete = $state(true)

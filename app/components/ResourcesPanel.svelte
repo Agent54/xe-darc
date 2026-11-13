@@ -1,7 +1,7 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
     import resourceTypes from '../lib/resourceTypes.js'
-    import { permissionType, permissionOrigin } from '../lib/permissions.js'
+    import { permissionCardResources, permissionOrigin } from '../lib/permissions.js'
     import PermissionCard from './PermissionCard.svelte'
 	import data from '../data.svelte'
     // FIXME: use app global click outside scrim handler
@@ -122,33 +122,19 @@
         const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
         const currentOrigin = permissionOrigin(currentUrl)
         const currentPartition = data.docs[data.spaceMeta.activeTabId]?.partition || 'persist:myapp'
-        const history = Object.values(data.permissions).flatMap(permission => Object.values(permission.origins || {}).flatMap(entry => entry.requests || []))
-        const represented = new Set(history.filter(request => request.status !== 'ignored').map(request => request.ruleId))
-        const saved = Object.values(data.permissionRules).filter(rule => !represented.has(rule._id)).map(rule => ({
-            requestId: rule._id, ruleId: rule._id, type: permissionType(rule.permission), permission: rule.permission,
-            scope: rule, url: rule.requestingOrigin, tabId: data.spaceMeta.activeTabId,
-            status: rule.decision === 'deny' ? 'denied' : 'granted', decision: rule.decision, supported: true,
-            lifetime: 'persistent', timestamp: rule.modified, instanceId: rule.instanceId,
-            ...(rule.subject ? { subject: rule.subject, target: rule.target } : {})
-        }))
-        for (const resource of [...history, ...saved]) {
-            if (resource.status === 'requested' && resource.windowId === window.darcWindowId) {
-                requested.push(resource)
-                usedResourceTypes.add(resource.type)
-                continue
+        const cards = permissionCardResources(data.permissions, data.permissionRules, resource => {
+            if (resource.status === 'requested') {
+                return resource.windowId === window.darcWindowId
             }
-            const matches = scope === 'mcp' ? !!resource.scope?.subject : scope === 'origin'
+            return scope === 'mcp' ? !!resource.scope?.subject : scope === 'origin'
                 ? resource.scope?.topLevelOrigin === currentOrigin && resource.scope?.partition === currentPartition
                 : scope === 'window' ? resource.windowId === window.darcWindowId : true
-            if (!matches) {
-                continue
-            }
-            const rule = data.permissionRules[resource.ruleId]
-            const status = resource.status !== 'requested' && rule ? rule.decision === 'deny' ? 'denied' : 'granted'
-                : resource.lifetime === 'persistent' && resource.ruleId && !rule ? 'ignored' : resource.status
-            const section = status === 'granted' ? used : status === 'denied' ? blocked : status === 'ignored' ? archived : null
+        }, data.spaceMeta.activeTabId)
+        const byStatus = { requested, granted: used, denied: blocked, ignored: archived }
+        for (const resource of cards) {
+            const section = byStatus[resource.status]
             if (section) {
-                section.push({ ...resource, status, decision: rule?.decision || resource.decision })
+                section.push(resource)
                 usedResourceTypes.add(resource.type)
             }
         }
@@ -201,7 +187,7 @@
                     </button>
                     {#if !collapsedSections[section.id]}
                         <div class="resource-cards">
-                            {#each resourceData[section.id] as resource}
+                            {#each resourceData[section.id] as resource (resource.ruleId || resource.requestId || resource.id)}
                                 <PermissionCard {resource} sectionId={section.id} />
                             {/each}
                         </div>

@@ -318,7 +318,7 @@ const permissionStore = createPermissionStore({
         return { url: frame?.committedUrl || tab?.url, partition: tab?.partition || 'persist:myapp', frame: frame?.frame }
     },
     onRevoke: (scope, permission) => {
-        if (['open-tab', 'navigate-off-origin'].includes(permission?.name) || permission?.name?.startsWith('mcp-')) {
+        if (['download', 'open-tab', 'navigate-off-origin'].includes(permission?.name) || permission?.name?.startsWith('mcp-')) {
             return
         }
         for (const [tabId, frameData] of Object.entries(frames)) {
@@ -2550,6 +2550,7 @@ const data = {
     denyPermission: requestId => permissionStore.resolve(requestId, 'deny'),
     ignorePermission: requestId => permissionStore.resolve(requestId, 'ignore'),
     changePermission: resource => permissionStore.reset(resource),
+    setResourcePermission: (resource, decision) => permissionStore.setResourceDecision(resource, decision),
     isPermissionGranted: (type, url, tabId = spaceMeta.activeTabId) => permissionStore.decision(type, tabId, url) === 'allow',
     isPermissionMocked: () => false,
 

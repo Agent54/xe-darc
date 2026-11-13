@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import resourceTypes from '../app/lib/resourceTypes.js'
-import { createPermissionStore, handleFramePermission, permissionDescriptor, permissionDocumentId, permissionScope, getPendingPermissionRequests } from '../app/lib/permissions.js'
+import { createPermissionStore, handleFramePermission, permissionDescriptor, permissionDocumentId, permissionScope, getPendingPermissionRequests, permissionCardResources } from '../app/lib/permissions.js'
 
 function harness(records = new Map(), instanceId = 'installation') {
     const permissions = {}, rules = {}, state = { status: 'loading', error: null }
@@ -471,6 +471,39 @@ Deno.test('downloads scope approval to the initiating site and resume their cont
     assert.deepEqual(actions, ['defer', 'allow'])
     assert.equal(resource.needsReload, false)
     assert.deepEqual(native(h, { type: 'download', url: 'https://cdn.example/file.zip' }), ['defer', 'allow'])
+})
+
+Deno.test('downloads share a card and document across repeated requests and changes of decision', async () => {
+    const h = harness()
+    await h.store.ready
+    const cards = () => permissionCardResources(h.permissions, h.rules, () => true)
+    const first = native(h, { type: 'download', url: 'blob:https://site.example/file' })
+    h.contexts.get('two').url = 'https://site.example/other-page'
+    const second = native(h, { type: 'download', tabId: 'two', url: 'https://cdn.example/file.zip' })
+    const [card] = cards()
+    assert.equal(cards().length, 1)
+    assert.equal(card.pendingCount, 2)
+    await h.store.resolve(card.requestId, 'allow', 'once')
+    assert.deepEqual(first, ['defer', 'allow'])
+    assert.deepEqual(second, ['defer'])
+    assert.equal(cards().length, 1)
+    assert.equal(cards()[0].ruleId, card.ruleId)
+    await h.store.resolve(cards()[0].requestId, 'allow')
+    assert.deepEqual(second, ['defer', 'allow'])
+    const created = h.records.get(card.ruleId).created
+    await h.store.setResourceDecision(cards()[0], null)
+    assert.equal(h.records.get(card.ruleId).decision, null)
+    assert.equal(h.records.get(card.ruleId).created, created)
+    const retry = native(h, { type: 'download', nested: true })
+    const request = native(h, { type: 'download', tabId: 'two' })
+    assert.deepEqual(retry, ['cancel'])
+    assert.equal(cards().length, 1)
+    await h.store.resolve(cards()[0].requestId, 'deny')
+    assert.deepEqual(request, ['defer', 'deny'])
+    assert.equal(cards().length, 1)
+    assert.equal(cards()[0].status, 'denied')
+    assert.equal(h.records.size, 1)
+    assert.equal(h.records.get(card.ruleId).created, created)
 })
 
 Deno.test('ignoring or cancelling a frame settles pending requests without a grant', async () => {

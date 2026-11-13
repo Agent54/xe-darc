@@ -3,12 +3,19 @@
     import Tooltip from './Tooltip.svelte'
     import data from '../data.svelte.js'
     import { onMount } from 'svelte'
-    import { permissionTargetKey } from '../lib/permissions.js'
+    import { permissionOrigin, permissionTargetKey } from '../lib/permissions.js'
 
     let { resource, sectionId = 'requested', onResolved = () => {}, onOpen = null, dismissible = false } = $props()
     const unknownPermissionIcon = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519a3 3 0 1 1 5.242 2.962c-.8.64-1.621 1.24-1.621 2.269v.75m-1.5 3h.008v.008H12V16.5Z" /></svg>'
     const knownType = $derived(Object.hasOwn(resourceTypes, resource.type) ? resourceTypes[resource.type] : null)
     const resourceType = $derived(knownType?.icon ? knownType : { name: knownType?.name || resource.type || 'Unknown permission', icon: unknownPermissionIcon, description: knownType?.description || 'Permission requested by this page' })
+    const requestingOrigin = $derived(resource.scope?.requestingOrigin || permissionOrigin(resource.url))
+    const decisionOptions = $derived([
+        { value: 'allow', label: 'Allow' },
+        ...(['open-tab', 'navigate-off-origin'].includes(resource.type) ? [{ value: 'same-tab', label: 'Same tab' }] : []),
+        { value: 'deny', label: 'Deny' },
+        { value: null, label: 'Ask' }
+    ])
 
     // Track which accept dropdown is open
     let openAcceptDropdown = $state(null)
@@ -16,6 +23,7 @@
     let actionError = $state('')
     let acceptDropdown = $state(null)
     let chosenTarget = $state('')
+    let editing = $state(false)
 
     onMount(() => {
         window.addEventListener('mousedown', handleMouseDownOutside, true)
@@ -108,12 +116,24 @@
         }
     }
 
-    async function changeResource(resource) {
+    function changeResource() {
         actionError = ''
+        editing = !editing
+    }
+
+    async function saveDecision(value) {
+        actionError = ''
+        savingRequest = resource.requestId
         try {
-            await data.changePermission(resource)
+            if (await data.setResourcePermission(resource, value)) {
+                editing = false
+            } else {
+                actionError = 'This permission can no longer be changed.'
+            }
         } catch (error) {
-            actionError = 'Could not reset the permission decision. Try again.'
+            actionError = 'Could not save the permission decision. Try again.'
+        } finally {
+            savingRequest = null
         }
     }
     
@@ -146,7 +166,8 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events (The card also captures keyboard activation of its own controls.) -->
-<div class="resource-card {sectionId}" class:toast={!!onOpen} data-permission-type={resource.type} data-request-id={resource.requestId} class:unseen={resource.unseen}
+<div class="resource-card {sectionId}" class:toast={!!onOpen} class:editing class:unseen={resource.unseen}
+    data-permission-type={resource.type} data-request-id={resource.requestId} data-permission-id={resource.ruleId}
     onmousedowncapture={event => { if (event.button === 0) { acknowledgeCard() } }}
     onclickcapture={event => { if (event.detail === 0) { acknowledgeCard() } }}>
     {#if onOpen}
@@ -163,6 +184,12 @@
         <span class="resource-icon">{@html resourceType.icon}</span>
         <div class="resource-info">
             <h4 class="resource-name">{resourceType.name}</h4>
+            {#if requestingOrigin}
+                <p class="resource-origin">{requestingOrigin}</p>
+                {#if resource.scope?.topLevelOrigin && resource.scope.topLevelOrigin !== requestingOrigin}
+                    <p class="resource-origin">On {resource.scope.topLevelOrigin}</p>
+                {/if}
+            {/if}
             <p class="resource-description">{resourceType.description}</p>
         </div>
         {#if resource.unseen}
@@ -185,6 +212,7 @@
             <span class="status-indicator"></span>
             <span class="status-text">{resource.status}</span>
             {#if resource.decision === 'same-tab'}<span> · Same tab</span>{/if}
+            {#if resource.pendingCount > 1}<span> · {resource.pendingCount} requests</span>{/if}
         </div>
         <div class="resource-last-used">
             <span class="last-used-label">Last used:</span>
@@ -201,21 +229,25 @@
         <div class="resource-reload-reminder">
             <div class="reload-message">
                 {#if sectionId === 'used'}
-                    <span class="reload-text">You might need to reload the page for changes to take effect</span>
-                    <button class="reload-btn" onmousedown={() => data.reloadTab(resource.tabId)} title="Reload requesting page">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                            <path d="M21 3v5h-5"/>
-                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                            <path d="M3 21v-5h5"/>
-                        </svg>
-                        Reload
-                    </button>
+                    {#if resource.type === 'download'}
+                        <span class="reload-text">Try the download again.</span>
+                    {:else}
+                        <span class="reload-text">You might need to reload the page for changes to take effect</span>
+                        <button class="reload-btn" onmousedown={() => data.reloadTab(resource.tabId)} title="Reload requesting page">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                                <path d="M21 3v5h-5"/>
+                                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                                <path d="M3 21v-5h5"/>
+                            </svg>
+                            Reload
+                        </button>
+                    {/if}
                 {:else if sectionId === 'blocked'}
                     <span class="reload-text">New requests will use this decision.</span>
                 {/if}
             </div>
-            <button class="change-btn-inline" disabled={!data.permissionSupported(resource.type)} onmousedown={() => changeResource(resource)} title="Change permission decision">
+            <button class="change-btn-inline" aria-expanded={editing} disabled={!resource.scope || !data.permissionSupported(resource.type)} onmousedown={changeResource} onclick={event => { if (event.detail === 0) { changeResource() } }} title="Change permission decision">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
                     <path d="M21 3v5h-5"/>
@@ -243,8 +275,8 @@
                 </svg>
                 Change
             </button>
-        {:else}
-            <button class="change-btn" disabled={!data.permissionSupported(resource.type)} onmousedown={() => changeResource(resource)} title="Change permission decision">
+        {:else if !resource.needsReload || (sectionId !== 'used' && sectionId !== 'blocked')}
+            <button class="change-btn" aria-expanded={editing} disabled={!resource.scope || !data.permissionSupported(resource.type)} onmousedown={changeResource} onclick={event => { if (event.detail === 0) { changeResource() } }} title="Change permission decision">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
                     <path d="M21 3v5h-5"/>
@@ -255,16 +287,22 @@
             </button>
         {/if}
     {/if}
+    {#if editing && sectionId !== 'requested'}
+        <div class="resource-actions permission-editor" role="group" aria-label="Change permission decision">
+            {#each decisionOptions as option (option.label)}
+                <button class="action-btn" aria-pressed={(resource.decision ?? null) === option.value} disabled={savingRequest !== null}
+                    onmousedown={() => saveDecision(option.value)} onclick={event => { if (event.detail === 0) { saveDecision(option.value) } }}>{option.label}</button>
+            {/each}
+        </div>
+    {/if}
     {#if sectionId === 'requested'}
         <div class="resource-request-info">
-            <div class="requester-info">
-                <span class="requester-label">Origin:</span>
-                <span class="requester-name">{new URL(resource.url).origin}</span>
-            </div>
-            <div class="requester-info">
-                <span class="requester-label">Requested by:</span>
-                <span class="requester-name">{resource.requester || new URL(resource.url).origin}</span>
-            </div>
+            {#if resource.requester || !requestingOrigin}
+                <div class="requester-info">
+                    <span class="requester-label">Requested by:</span>
+                    <span class="requester-name">{resource.requester || 'Unknown origin'}</span>
+                </div>
+            {/if}
             <div class="request-type-info">
                 <span class="request-type-label">Access type:</span>
                 <span class="request-type-value {resource.requestType}">
@@ -346,6 +384,18 @@
         border-left: 2px solid rgba(59, 130, 246, 0.6);
     }
 
+    .resource-card.editing {
+        background: rgb(255 255 255 / 7%);
+        border-radius: 6px;
+    }
+
+    .permission-editor .action-btn[aria-pressed='true'],
+    .change-btn[aria-expanded='true'],
+    .change-btn-inline[aria-expanded='true'] {
+        background: rgb(255 255 255 / 12%);
+        color: rgb(255 255 255 / 90%);
+    }
+
     .resource-header {
         display: flex;
         align-items: flex-start;
@@ -394,6 +444,13 @@
         font-weight: 400;
     }
 
+    .resource-origin {
+        margin: 0 0 3px;
+        color: rgb(255 255 255 / 65%);
+        font-size: 11px;
+        overflow-wrap: anywhere;
+    }
+
     .resource-details {
         display: flex;
         flex-direction: column;
@@ -416,7 +473,7 @@
         margin-top: -1px;
     }
 
-    .active .status-indicator {
+    .active .status-indicator, .granted .status-indicator {
         background-color: #16a34a;
     }
 
@@ -855,7 +912,9 @@
         opacity: 0;
     }
 
-    .resource-card:hover .change-btn {
+    .resource-card:hover .change-btn,
+    .resource-card:focus-within .change-btn,
+    .resource-card.editing .change-btn {
         opacity: 1;
     }
 
