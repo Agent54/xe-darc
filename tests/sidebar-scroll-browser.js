@@ -85,12 +85,9 @@ await withSidebarFixture('sidebar-scroll', async ({ page }) => {
     assert.equal(await buttonVisible(), true, 'New Tab stays visible even at the bottom of the list')
     for (const tabId of ['normal-59', 'group-tail-5']) {
         for (const clearMethod of ['button', 'Escape', 'Backspace']) {
-            await page.evaluate(() => window.flushSync(() => { window.data.activate('outside') }))
+            await page.evaluate(tabId => window.flushSync(() => { window.data.activate(tabId) }), tabId)
             await page.click('.search-toggle-tab')
             await page.type('.tab-search-input', tabId)
-            await page.click(`.tab-item-container[data-tab-id="${tabId}"] .tab-item-main`)
-            await page.waitForFunction(tabId => window.data.spaceMeta.activeTabId === tabId, {}, tabId)
-            await new Promise(resolve => setTimeout(resolve, 100))
             if (clearMethod === 'button') {
                 await page.click('.tab-search-clear')
             } else {
@@ -116,6 +113,51 @@ await withSidebarFixture('sidebar-scroll', async ({ page }) => {
             }
         }
     }
+
+    await page.click('.search-toggle-tab')
+    await page.type('.tab-search-input', 'normal-')
+    const searchPane = '.tab-content-container.searching'
+    assert.equal(await page.$eval(searchPane, pane => {
+        const results = pane.querySelector('.space-tabs-sections')
+        const row = pane.querySelector('[data-tab-id="normal-0"]')
+        return pane.scrollHeight > pane.clientHeight && results.scrollHeight <= results.clientHeight + 1 &&
+            row.getBoundingClientRect().width >= pane.clientWidth - 14
+    }), true, 'results must use the full sidebar width and scroll in the outer pane')
+    await page.click('[data-tab-id="normal-0"] .tab-item-main')
+    await page.waitForSelector('.tab-search-input', { hidden: true })
+    assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), 'normal-0')
+
+    const group = '[data-tab-group-id="group"]'
+    await page.$eval(`${group} .tab-group-toggle`, button => button.click())
+    assert.equal(await page.$eval(group, element => element.classList.contains('expanded')), false)
+    await page.evaluate(() => window.flushSync(() => {
+        window.data.docs['darc:tabgroup_group'] = { name: 'Research' }
+    }))
+    await page.click('.search-toggle-tab')
+    await page.type('.tab-search-input', 'group-tail-5')
+    const groupRows = () => page.$$eval(`${group}.expanded .tab-group-content .tab-item-container`, rows => rows.map(row => row.dataset.tabId))
+    assert.deepEqual(await groupRows(), ['group-tail-5'], 'a member match must expand its group and filter the other members')
+    await page.keyboard.press('Escape')
+    assert.equal(await page.$eval(group, element => element.classList.contains('expanded')), false)
+
+    await page.click('.search-toggle-tab')
+    await page.type('.tab-search-input', 'Research')
+    assert.equal((await groupRows()).length, 8, 'a group name match must show its members')
+    await page.keyboard.press('Escape')
+    await page.click('.search-toggle-tab')
+    await page.type('.tab-search-input', 'group-tail-5')
+    await page.focus(`${group} [data-tab-id="group-tail-5"] .tab-item-main`)
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.tab-search-input', { hidden: true })
+    assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), 'group-tail-5')
+    assert.equal((await groupRows()).length, 8, 'selecting a grouped result reveals the active member in the full group')
+
+    await page.click('.search-toggle-tab')
+    await page.type('.tab-search-input', 'group-tail-5')
+    await page.click(`${group} [data-tab-id="group-tail-5"] .tab-item-main`)
+    await page.waitForSelector('.tab-search-input', { hidden: true })
+    assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), 'group-tail-5', 'selecting the active result keeps it active')
+
     await page.evaluate(() => window.flushSync(() => {
         const data = window.data
         const tab = { ...data.docs.outside, id: 'other-space-tab', title: 'other-space-tab', spaceId: 'other' }
@@ -126,9 +168,8 @@ await withSidebarFixture('sidebar-scroll', async ({ page }) => {
     await page.click('.search-toggle-tab')
     await page.type('.tab-search-input', 'other-space-tab')
     await page.click('[data-tab-id="other-space-tab"] .tab-item-main')
-    await page.waitForFunction(() => window.data.spaceMeta.activeTabId === 'other-space-tab')
-    await new Promise(resolve => setTimeout(resolve, 100))
-    await page.click('.tab-search-clear')
+    await page.waitForSelector('.tab-search-input', { hidden: true })
+    assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), 'other-space-tab')
     await page.waitForFunction(() => {
         const row = document.querySelector('[data-tab-id="other-space-tab"]').getBoundingClientRect()
         const bounds = document.querySelector('.tab-content-container').getBoundingClientRect()

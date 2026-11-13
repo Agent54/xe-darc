@@ -211,6 +211,11 @@
     let tabSearchQuery = $state('')
     let isSearchModeActive = $state(false)
     let searchInputRef = $state(null)
+
+    function closeTabSearch() {
+        tabSearchQuery = ''
+        isSearchModeActive = false
+    }
     
     function tabMatchesSearch(tab) {
         if (!tabSearchQuery) return true;
@@ -219,7 +224,11 @@
         const url = (data.docs[tab.id]?.url || tab.url || '').toLowerCase();
         return title.includes(query) || url.includes(query);
     }
-    
+
+    function groupNameMatchesSearch(item) {
+        return !!(tabSearchQuery && item.name?.toLowerCase().includes(tabSearchQuery.toLowerCase()))
+    }
+
     function spaceHasMatchingTabs(spaceId) {
         if (!tabSearchQuery) return true;
         const space = data.spaces[spaceId];
@@ -228,6 +237,9 @@
         if (data.getSpacePins(spaceId).some(tab => tabMatchesSearch(tab))) return true;
         if (space.tabs?.some(tab => tab.type === 'tab' && tabMatchesSearch(tab))) return true;
         if ((data.spaceMeta.pendingTabs || []).some(tab => tab.spaceId === spaceId && tabMatchesSearch(tab))) return true;
+        if (data.getSidebarItems(spaceId).some(groupNameMatchesSearch)) return true
+        if (getSidebarPinnedItems(space.tabs, false, [], data.docs).some(groupNameMatchesSearch)) return true
+        if (getSidebarPinnedItems(space.tabs, true, [], data.docs).some(groupNameMatchesSearch)) return true
         
         return false;
     }
@@ -840,7 +852,7 @@
         }
     }
 
-    function activateTab(tabId, spaceId) {
+    function activateTab(tabId, spaceId, expansionId = null) {
         // Close multi-space mode when switching tabs, but not during drag
         if (multiSpaceMode && !tabDrag.active && !tabDrag.pending) {
             exitMultiSpaceMode()
@@ -849,13 +861,20 @@
         data.activateSpace(spaceId)
         const tab = data.docs[tabId]
         if (tab?.pinned === 'menu') return
+        const selectingSearchResult = isSearchModeActive
+        if (selectingSearchResult) {
+            if (expansionId) {
+                tabGroupExpansion[expansionId] = true
+            }
+            closeTabSearch()
+        }
         if (tab?.pinned) {
             onRevealPinnedTab(tabId)
         }
         
-        // Clicking the active pin reveals it; normal tabs return to the previous tab.
+        // Clicking the active pin reveals it; normal tabs return to the previous tab outside search.
         if (tabId === data.spaceMeta.activeTabId) {
-            if (tab?.pinned) {
+            if (tab?.pinned || selectingSearchResult) {
                 return
             }
             data.previous()
@@ -884,8 +903,8 @@
     let hoveredSpaceInMultiMode = $state(null)
 
     function handleTabScroll(event) {
-        if (!tabListRef || event.target !== tabListRef) return
-        if (!tabSearchQuery && !multiSpaceMode) revealSpaceTitles()
+        if (!tabListRef || event.target !== tabListRef || (tabSearchQuery && !multiSpaceMode)) return
+        if (!multiSpaceMode) revealSpaceTitles()
         markHorizontalScrolling()
         
         const scrollLeft = tabListRef.scrollLeft
@@ -1033,8 +1052,11 @@
             for (const tab of item.tabs) await data.resumePendingTab(tab.id, { activate: false })
             const restored = item.tabs.find(tab => !data.docs[tab.id]?.archive)
             if (restored) activateTab(restored.id, item.spaceId)
-        } else if (item.tabs.length > 1) await data.restoreClosedItems(item.tabs.map(tab => tab.id))
-        else data.restoreClosedTab(item.tabs[0].id)
+        } else {
+            closeTabSearch()
+            if (item.tabs.length > 1) await data.restoreClosedItems(item.tabs.map(tab => tab.id))
+            else data.restoreClosedTab(item.tabs[0].id)
+        }
     }
 
     function removeArchivedItem(item, pending) {
@@ -1364,6 +1386,7 @@
     }
 
     function activateHovercardTab(tab) {
+        closeTabSearch()
         if (tab.archive === 'deferred') { data.resumePendingTab(tab.id); return }
         if (tab.archive === 'closed') { data.restoreClosedTab(tab.id); return }
         if (data.spaceMeta.activeSpace !== tab.spaceId) data.activateSpace(tab.spaceId)
@@ -1820,8 +1843,8 @@
                         <svg class="tab-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
                         </svg>
-                        <input type="text" class="tab-search-input" aria-label="Search tabs" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) isSearchModeActive = false }} onkeydown={(e) => { if (e.key === 'Escape') { tabSearchQuery = ''; isSearchModeActive = false; searchInputRef?.blur(); } }} />
-                        <button class="tab-search-clear" onmousedown={() => { tabSearchQuery = ''; isSearchModeActive = false; }} aria-label="Close search">
+                        <input type="text" class="tab-search-input" aria-label="Search tabs" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) closeTabSearch() }} onkeydown={(e) => { if (e.key === 'Escape') closeTabSearch() }} />
+                        <button class="tab-search-clear" onmousedown={closeTabSearch} onclick={(e) => { if (e.detail === 0) closeTabSearch() }} aria-label="Close search">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                 <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                             </svg>
@@ -2149,7 +2172,7 @@
                                 </div>
                                 
                                 </div>
-                                   {#snippet sidebarTab(tab, i, groupActivationTarget = false)}
+                                    {#snippet sidebarTab(tab, i, groupActivationTarget = false, expansionId = null)}
                                         {#if tab.type === 'divider'}
                                             {#if !tabSearchQuery}
                                                 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -2176,14 +2199,25 @@
                                                 </div>
                                             {/if}
                                         {:else if tab.type === 'tab'}
-                                            {#if tabMatchesSearch(tab)}
                                                 <div class="tab-item-container" class:group-activation-target={groupActivationTarget} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id} data-tab-id={tab.id}
                                                      role="listitem"
                                                      onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                      onmouseleave={handleTabMouseLeave}
                                                      oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                    <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive && !multiSpaceMode) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
-                                                        onclick={(e) => { if (e.button === 0 && !didDragOccurred()) { if (multiSpaceMode) { activateTab(tab.id, spaceId) } else if (tabDrag.wasAlreadyActive) { activateTab(tab.id, spaceId) } } }}>
+                                                    <button class="tab-item-main" onmousedown={(e) => {
+                                                            if (e.button === 0) {
+                                                                const wasActive = tab.id === data.spaceMeta.activeTabId
+                                                                startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive)
+                                                                if (!wasActive && !multiSpaceMode && !tabSearchQuery) {
+                                                                    setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150))
+                                                                }
+                                                            }
+                                                        }}
+                                                        onclick={(e) => {
+                                                            if (e.detail === 0 || (e.button === 0 && !didDragOccurred() && (tabSearchQuery || multiSpaceMode || tabDrag.wasAlreadyActive))) {
+                                                                activateTab(tab.id, spaceId, expansionId)
+                                                            }
+                                                        }}>
                                                         <Favicon {tab} showButton={false} />
                                                         <span class="tab-title">{getTabTitle(data.docs[tab.id] || tab)}</span>
                                                     </button>
@@ -2196,21 +2230,21 @@
                                                             </svg>
                                                         </button>
                                                 </div>
-                                            {/if}
                                         {/if}
                                     {/snippet}
                                     {#snippet sidebarItem(item, i, pinnedSection = false)}
+                                        {@const matchingTabs = !tabSearchQuery || groupNameMatchesSearch(item) ? item.tabs : item.tabs?.filter(tabMatchesSearch)}
                                         {#if item.type === 'divider'}
                                             {@render sidebarTab(item, i)}
-                                        {:else if item.tabs.some(tabMatchesSearch)}
+                                        {:else if matchingTabs?.length}
                                             {#if !item.tabGroupId}
                                                 {@render sidebarTab(item.tabs[0], i)}
                                             {:else}
                                                 {@const expansionId = `${spaceId}:${item.id}`}
-                                                {@const expanded = tabGroupExpansion[expansionId] ?? allGroupsExpanded}
+                                                {@const expanded = !!tabSearchQuery || (tabGroupExpansion[expansionId] ?? allGroupsExpanded)}
                                                 {@const active = item.tabs.some(tab => tab.id === data.spaceMeta.activeTabId)}
-                                                {@const activationTab = data.getGroupActiveTab(item, spaceId)}
-                                                {@const sidebarGroupTabs = getActivityGroupTabs(item.tabs, data.docs, !pinnedSection && data.ui.tabActivityMode)}
+                                                {@const activationTab = data.getGroupActiveTab({ tabs: matchingTabs }, spaceId)}
+                                                {@const sidebarGroupTabs = getActivityGroupTabs(matchingTabs, data.docs, !pinnedSection && data.ui.tabActivityMode)}
                                                 {@const recentEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                                                 {@const spaceActive = spaceId !== data.spaceMeta.activeSpace && item.tabs.some(tab => tab.id === (typeof recentEntry === 'string' ? recentEntry : recentEntry?.id))}
                                                 <div class="tab-group-wrapper" class:expanded class:active class:custom-group-height={tabGroupMaxHeight > defaultTabGroupMaxHeight} class:group-resizing={groupResize?.groupId === expansionId} style:--tab-group-max-height="{tabGroupMaxHeight}px" class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
@@ -2222,22 +2256,24 @@
                                                         <button class="tab-group-main"
                                                             aria-label={item.title}
                                                             onmousedown={(e) => { if (e.button === 0) { startTabDrag(item.tabs[0].id, e.currentTarget.closest('.tab-group-wrapper'), 'sidebar', spaceId, e, false, null, 'group') } }}
-                                                            onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred())) { activateTab(activationTab.id, spaceId) } }}
-                                                            ondblclick={(e) => { if (e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(activationTab.id); handleTabGroupToggle(expansionId, expanded) } }}>
+                                                            onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred())) { activateTab(activationTab.id, spaceId, expansionId) } }}
+                                                            ondblclick={(e) => { if (!tabSearchQuery && e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(activationTab.id); handleTabGroupToggle(expansionId, expanded) } }}>
                                                             <TabGroupPreview group={{ ...item, tabs: sidebarGroupTabs }} groupId={expansionId} activeTabId={activationTab.id} preview={groupPreview} active={active || spaceActive} disabled={tabDrag.active || tabDrag.pending} />
                                                         </button>
-                                                        <span class="tab-group-count">{item.tabs.length}</span>
+                                                        <span class="tab-group-count">{matchingTabs.length}</span>
+                                                        {#if !tabSearchQuery}
                                                         <button class="tab-group-toggle" aria-label="{expanded ? 'Collapse' : 'Expand'} {item.title}" aria-expanded={expanded}
                                                             onclick={(e) => { if (e.detail === 0) { handleTabGroupToggle(expansionId, expanded) } }}
                                                             onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); handleTabGroupToggle(expansionId, expanded) } }}>
                                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6" /></svg>
                                                         </button>
+                                                        {/if}
                                                     </div>
                                                     {#if expanded || tabGroupExpansion[expansionId] !== undefined}
                                                         <div class="tab-group-scroll" hidden={!expanded}>
-                                                            <div class="tab-group-content" data-group-tab-id={item.tabs[0].id} use:observeScrollEdges={item.tabs.length}>
+                                                            <div class="tab-group-content" data-group-tab-id={item.tabs[0].id} use:observeScrollEdges={matchingTabs.length}>
                                                                 {#each sidebarGroupTabs as tab (tab.id)}
-                                                                    {@render sidebarTab(tab, i, tab.id === activationTab.id)}
+                                                                    {@render sidebarTab(tab, i, tab.id === activationTab.id, expansionId)}
                                                                 {/each}
                                                             </div>
                                                             <button class="tab-group-resize" type="button" aria-label="Resize expanded tab groups" title="Drag to resize tab groups"
@@ -2282,7 +2318,7 @@
                                     <div class="tabs-list-container">
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list">
-                                    {#each getActivitySidebarItems(data.getSidebarItems(spaceId).filter(item => item.type !== 'divider' || !tabSearchQuery), data.docs, data.ui.tabActivityMode, tabMatchesSearch) as item, i (item.id)}
+                                    {#each getActivitySidebarItems(data.getSidebarItems(spaceId), data.docs, data.ui.tabActivityMode) as item, i (item.id)}
                                         {@render sidebarItem(item, i)}
                                     {/each}
 
@@ -3270,7 +3306,7 @@
         pointer-events: none;
         overflow: hidden;
     }
-    
+
     .tab-content-container::-webkit-scrollbar {
         display: none;
     }
@@ -3305,7 +3341,6 @@
     
     .tab-content-container.searching:not(.multi-space) .space-content {
         height: auto;
-        max-height: calc(36px * 5 + 8px * 4 + 40px); /* 5 tabs + gaps + header */
     }
     
     .tab-content-track.multi-space {
@@ -3669,6 +3704,7 @@
     .tab-content-container.horizontal-scrolling .space-tabs-sections {
         overflow-y: hidden;
     }
+
     
     .tabs-list::-webkit-scrollbar {
         width: 6px;
@@ -4400,8 +4436,8 @@
         transform: rotate(0deg);
     }
     
-    .tab-group:hover .tab-group-count,
-    .tab-group:has(:focus-visible) .tab-group-count {
+    .tab-group:has(.tab-group-toggle):hover .tab-group-count,
+    .tab-group:has(.tab-group-toggle):has(:focus-visible) .tab-group-count {
         opacity: 0;
     }
     
@@ -4791,8 +4827,7 @@
         gap: 8px;
         overflow-y: auto;
         overscroll-behavior: contain;
-        scrollbar-width: thin;
-        scrollbar-color: #ffffff33 transparent;
+        scrollbar-width: none;
         filter: drop-shadow(0 20px 20px rgb(0 0 0 / 55%)) drop-shadow(0 8px 8px rgb(0 0 0 / 30%));
     }
 
