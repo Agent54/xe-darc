@@ -1,5 +1,9 @@
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 import { AcpServer } from "@agentclientprotocol/sdk/experimental/server";
+import { connectProxy } from "./bridge.ts";
+import { createMcpGateway } from "./mcp-gateway.ts";
+
+const gateway = createMcpGateway("https://localhost:7331");
 
 // Add a custom Darc origin with: deno task start isolated-app://your-app-id
 const origins = new Set([
@@ -22,13 +26,11 @@ const acp = new AcpServer({
         stderr: "inherit",
       }).spawn();
       const stdio = ndJsonStream(child.stdin, child.stdout);
-      const abort = new AbortController();
       let stopping = false;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       const stop = () => {
         if (stopping) return;
         stopping = true;
-        abort.abort();
         try {
           child.kill("SIGTERM");
           killTimer = setTimeout(() => {
@@ -39,14 +41,9 @@ const acp = new AcpServer({
         } catch { /* Already exited. */ }
       };
       // Forward raw ACP messages in both directions, including permission replies.
-      const incoming = stream.readable.pipeTo(stdio.writable, {
-        signal: abort.signal,
-      });
-      const outgoing = stdio.readable.pipeTo(stream.writable, {
-        signal: abort.signal,
-      });
-      void incoming.then(stop, stop);
-      void outgoing.then(stop, stop);
+      // The bridge only adapts browser MCP declarations for HTTP-only agents.
+      const proxy = connectProxy(stream, stdio, gateway);
+      void proxy.closed.then(stop, stop);
       const exited = child.status.then((status) => {
         const expected = stopping;
         stop();
@@ -58,7 +55,7 @@ const acp = new AcpServer({
         }
       });
       return {
-        closed: Promise.allSettled([incoming, outgoing, exited]).then(() => {}),
+        closed: Promise.allSettled([proxy.closed, exited]).then(() => {}),
       };
     },
   }),
@@ -80,7 +77,7 @@ const server = Deno.serve(
     if (!["127.0.0.1", "localhost"].includes(url.hostname)) {
       return new Response("Invalid host", { status: 403 });
     }
-    if (url.pathname !== "/acp") {
+    if (url.pathname !== "/acp" && !url.pathname.startsWith("/mcp/")) {
       return new Response("Not found", {
         status: 404,
       });
@@ -94,8 +91,8 @@ const server = Deno.serve(
       "Access-Control-Allow-Credentials": "true",
       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers":
-        "Content-Type, Authorization, Acp-Connection-Id, Acp-Session-Id",
-      "Access-Control-Expose-Headers": "Acp-Connection-Id, Acp-Session-Id",
+        "Content-Type, Authorization, Acp-Connection-Id, Acp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name",
+      "Access-Control-Expose-Headers": "Acp-Connection-Id, Acp-Session-Id, MCP-Protocol-Version",
       "Vary": "Origin",
     });
     if (origin) headers.set("Access-Control-Allow-Origin", origin);
@@ -107,7 +104,7 @@ const server = Deno.serve(
     }
     let response: Response;
     try {
-      response = await acp.handleRequest(request);
+      response = url.pathname === "/acp" ? await acp.handleRequest(request) : await gateway.fetch(request);
     } catch (error) {
       console.error(error);
       response = new Response("ACP proxy error; see terminal", { status: 502 });

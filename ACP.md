@@ -40,34 +40,29 @@ to the transcript and do not resend or modify an ACP agent's conversation.
 
 ## Browser MCP connections
 
-Run the workerd services with `pnpm dev:services` (the `dev:cdp` command remains
-available). The Vite `/mcp` proxy forwards to this worker on port 8787. The worker
-keeps the separate CDP routes and stores MCP connection registrations in Durable
-Objects. Use a persistent workerd deployment if endpoints must survive restarts.
-
 In Settings → MCP connections, choose **Add new MCP connection**, enter a short
 title and identifying description, and create the connection. It receives a unique
-HTTP endpoint. Each connection starts with no browser permissions. Copy that
-endpoint into an agent's ordinary HTTP MCP configuration, or select it in Darc's
-ACP Agent connection settings. An ACP agent only needs to support HTTP MCP servers;
-the draft MCP-over-ACP transport is no longer used.
+identity and starts with no browser permissions. Select that identity in Agent
+connection settings. Darc registers its browser tools using MCP-over-ACP on the
+same ACP connection as the conversation. The owning window executes the tools;
+there is no browser WebSocket bridge or workerd dependency for this transport.
+Existing connection identities and permission scopes are retained on upgrade.
 
-The workerd server origin defaults to the current HTTP(S) app origin, or
-`https://localhost:5194` for an isolated web app. Change it under Workerd server
-before creating a connection when serving elsewhere. New origins must be reachable
-from both the browser and agent. The owning Darc window maintains a private
-WebSocket bridge to the worker; browser data and permission decisions stay in Darc.
-Closing that window makes tool execution unavailable until it reconnects.
+The agent must advertise `mcpCapabilities.acp`. For agents that only advertise
+HTTP MCP, use the [local ACP proxy](acp-proxy/README.md). It exposes a temporary,
+bearer-protected `/mcp/<id>` endpoint and passes that HTTP declaration to the agent.
+Tool calls travel back over ACP to the same browser executor and permission store.
+The proxy supports both the `2026-07-28` protocol and the older initialization
+handshake through the MCP SDK's stateless compatibility mode. Native MCP-over-ACP
+agents pass through unchanged. Agents supporting neither transport cannot use
+browser tools through this proxy.
 
-The MCP endpoint uses the current `2026-07-28` protocol revision over stateless
-Streamable HTTP, served by `@modelcontextprotocol/server` `2.4.0`. Each request
-carries its protocol version, client identity, and capabilities in `params._meta`,
-plus the required `MCP-Protocol-Version`, `Mcp-Method`, and applicable `Mcp-Name`
-headers. Clients may call `server/discover` or invoke tools directly without an
-initialization handshake or session ID. The older 2025 handshake is rejected.
-It needs no tool-client bearer token.
-Browser control credentials are separate, kept locally, and excluded from exports.
-Removing a connection revokes its endpoint, pending requests, and remembered grants.
+The HTTP endpoint and its credential last only for that ACP connection and are
+not saved or copied into browser settings. Removing a browser connection cancels
+its pending requests and removes its remembered grants. Disconnecting ACP cancels
+pending requests and removes the proxy's temporary endpoints; saved browser grants
+remain available for a deliberate reconnect. Old workerd MCP endpoints are no
+longer connected to this browser client. CDP services remain separate.
 
 Tools:
 
@@ -93,11 +88,11 @@ the action/target scope. More specific decisions take precedence over broader
 ones. Scoped grants never cross connection identities. The Settings connection
 entry also shows its requests and grants.
 
-Agent identification from request headers and advertised MCP client information
-is displayed where available. It is self-reported information and never controls
+Agent identification from ACP and advertised MCP client information is displayed
+where available. It is self-reported information and never controls
 permission ownership. Page reads are revalidated after approval; closed, moved,
 or navigated tabs cannot receive a stale approval. Cancelling a request or losing
-the bridge cancels outstanding prompts. Completed actions are not undone.
+the ACP connection cancels outstanding prompts. Completed actions are not undone.
 
 ## Sessions and recovery
 

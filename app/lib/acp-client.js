@@ -3,7 +3,7 @@ import { createHttpStream } from '@agentclientprotocol/sdk/experimental/http-cli
 import { readAcpModelPreference, saveAcpModelPreference, validateAcpSettings } from './acp-settings.js'
 import { configValues, getModelConfig } from './agent-models.js'
 
-export function createAgentClient({ getSettings, getMcpServers = () => [], modelStorage, createStream = createHttpStream, setupTimeout = 15000, cancelTimeout = 5000 }) {
+export function createAgentClient({ getSettings, createBrowserServer, modelStorage, createStream = createHttpStream, setupTimeout = 15000, cancelTimeout = 5000 }) {
     const state = {
         status: 'disconnected', error: '', agentName: '',
         conversations: [], activeConversationId: null, queue: [], queuePaused: false,
@@ -13,6 +13,9 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
     const pendingApprovals = new Map()
     const localStreams = new Map()
     const sessionSetups = new WeakMap()
+    const browserServers = new Map()
+    const provider = new acp.McpOverAcpProvider()
+    let agentInfo = null
     let connection = null
     let connecting = null
     let capabilities = {}
@@ -179,11 +182,24 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
         }
     }
 
+    function releaseBrowserServer(chat) {
+        const server = browserServers.get(chat)
+        if (!server) { return }
+        browserServers.delete(chat)
+        server.binding.dispose().catch(() => {})
+        server.backend.close().catch(() => {})
+    }
+
+    function releaseBrowserServers() {
+        for (const chat of browserServers.keys()) { releaseBrowserServer(chat) }
+    }
+
     function disconnect(reason = '') {
         generation++
         const peer = connection
         connection = null
         connecting = null
+        releaseBrowserServers()
         cancelApprovals()
         if (activeTurn) {
             activeTurn.cancelled = true
@@ -209,6 +225,7 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
         publish()
         const work = async () => {
             const app = acp.client({ name: 'darc', version: '0.4.5' })
+                .onRequest(acp.methods.client.mcp.message, provider.handleRequest)
                 .onNotification(acp.methods.client.session.update, ({ params }) => handleUpdate(params))
                 .onRequest(acp.methods.client.session.requestPermission, async ({ params, signal }) => {
                     const chat = state.conversations.find(item => item.sessionId === params.sessionId)
@@ -230,6 +247,7 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
                     return
                 }
                 connection = null
+                releaseBrowserServers()
                 state.status = 'disconnected'
                 state.queuePaused = true
                 cancelApprovals()
@@ -249,6 +267,7 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
                 }
                 capabilities = result.agentCapabilities || {}
                 state.agentName = result.agentInfo?.title || result.agentInfo?.name || 'ACP agent'
+                agentInfo = result.agentInfo
                 state.status = 'connected'
                 publish()
                 return peer
@@ -293,12 +312,22 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
         if (pending?.peer === peer) {
             return pending.promise
         }
-        const declarations = getMcpServers(settings)
+        const declarations = []
         const identity = `${settings.endpoint}\n${settings.cwd}\n${settings.mcpConnectionId || ''}`
         if (chat.sessionId && (chat.endpoint !== identity || !capabilities.loadSession)) {
             throw new Error('This conversation cannot be resumed by this endpoint. Start a new conversation.')
         }
-        if (declarations.length && !capabilities.mcpCapabilities?.http) { throw new Error('This agent does not support HTTP MCP servers. Choose another agent or remove its MCP connection.') }
+        if (settings.mcpConnectionId) {
+            if (!capabilities.mcpCapabilities?.acp || !createBrowserServer) {
+                throw new Error('Browser tools require MCP-over-ACP. Connect through the ACP proxy for HTTP-only agents.')
+            }
+            releaseBrowserServer(chat)
+            const backend = createBrowserServer(settings, agentInfo)
+            const binding = provider.registerServer(peer.agent, { name: backend.name, handler: backend.handler })
+            browserServers.set(chat, { backend, binding })
+            backend.signal?.addEventListener('abort', () => releaseBrowserServer(chat), { once: true })
+            declarations.push(binding.declaration)
+        }
         const isNewSession = !chat.sessionId
         const endpoint = settings.endpoint
         chat.loading = !isNewSession
@@ -321,6 +350,9 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
             }
             chat.generation = generation
             publish()
+        }).catch(error => {
+            releaseBrowserServer(chat)
+            throw error
         }).finally(() => {
             if (sessionSetups.get(chat) === setup) {
                 sessionSetups.delete(chat)
@@ -404,6 +436,7 @@ export function createAgentClient({ getSettings, getMcpServers = () => [], model
         cancelApprovals()
         const turn = activeTurn
         if (turn) {
+            browserServers.get(turn.chat)?.backend.cancelPending?.()
             turn.cancelled = true
             if (turn.chat.sessionId && connection) {
                 connection.agent.notify(acp.methods.agent.session.cancel, { sessionId: turn.chat.sessionId }).catch(error => disconnect(error.message))

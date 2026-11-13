@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import * as acp from '@agentclientprotocol/sdk/unstable'
 import { AcpServer } from '@agentclientprotocol/sdk/experimental/server'
 import { createAgentClient } from '../app/lib/acp-client.js'
+import { createBrowserServer } from '../app/lib/acp-browser-server.js'
 import { captureAgentContext } from '../app/lib/agent-context.js'
 import { pageContentScript } from '../app/lib/page-content.js'
 import { clearProviderSettings, readAcpModelPreference, readAcpSettings, saveAcpSettings, exportableStorage, validateAcpSettings } from '../app/lib/acp-settings.js'
@@ -43,7 +44,7 @@ export async function until(predicate, message = 'Condition timed out') {
     }
 }
 
-export async function mockEndpoint({ httpMcp = true, loadSession = true, afterFirstChunk, afterDocumentChunk } = {}) {
+export async function mockEndpoint({ acpMcp = true, loadSession = true, afterFirstChunk, afterDocumentChunk } = {}) {
     const sessions = new Map()
     const sessionConfigs = new Map()
     const prompts = []
@@ -65,9 +66,13 @@ export async function mockEndpoint({ httpMcp = true, loadSession = true, afterFi
             assert(!params.clientCapabilities.fs?.writeTextFile)
             assert(!params.clientCapabilities.terminal)
             assert.deepEqual(params.clientCapabilities.session.configOptions.boolean, {})
-            return { protocolVersion: 1, agentCapabilities: { loadSession, mcpCapabilities: { http: httpMcp } }, agentInfo: { name: 'Mock agent', version: '1' } }
+            return { protocolVersion: 1, agentCapabilities: { loadSession, mcpCapabilities: { acp: acpMcp } }, agentInfo: { name: 'Mock agent', version: '1' } }
         })
-        .onRequest(acp.methods.agent.session.new, ({ params, client }) => {
+        .onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
+            for (const server of params.mcpServers.filter(server => server.type === 'acp')) {
+                const tools = await new acp.McpOverAcpCaller().request(client, server.serverId, 'tools/list')
+                assert.equal(tools.result.tools.length, 9)
+            }
             const sessionId = crypto.randomUUID()
             sessions.set(sessionId, params)
             sessionConfigs.set(sessionId, config)
@@ -173,8 +178,8 @@ async function run() {
 
     const host = await mockEndpoint()
     const clientOptions = {
-        getSettings: () => ({ endpoint: host.endpoint, cwd: '/project', token: 'connection-secret' }),
-        getMcpServers: () => [{ type: 'http', name: 'darc', url: 'https://darc.example/mcp/identity', headers: [] }],
+        getSettings: () => ({ endpoint: host.endpoint, cwd: '/project', token: 'connection-secret', mcpConnectionId: 'identity' }),
+        createBrowserServer: () => createBrowserServer({ connection: { name: 'darc', reportAgent() {}, close() {}, execute() { throw new Error('Unexpected tool call') } } }),
         modelStorage: local,
         setupTimeout: 2000, cancelTimeout: 100
     }
@@ -193,7 +198,7 @@ async function run() {
         assert.equal(chat().plan[0].status, 'completed')
         assert(host.headers.every(header => header.auth === 'Bearer connection-secret'))
         assert.equal([...host.sessions.values()][0].cwd, '/project')
-        assert.equal([...host.sessions.values()][0].mcpServers[0].type, 'http')
+        assert.equal([...host.sessions.values()][0].mcpServers[0].type, 'acp')
         assert.equal(chat().configOptions[0].currentValue, 'fast')
         await client.setConfig('model', 'deep')
         assert.equal(chat().configOptions[0].currentValue, 'deep')
@@ -249,7 +254,7 @@ async function run() {
         await host.close()
     }
 
-    const limited = await mockEndpoint({ httpMcp: false, loadSession: false })
+    const limited = await mockEndpoint({ acpMcp: false, loadSession: false })
     const legacy = memoryStorage({ selectedModel: 'deep' })
     const limitedClient = createAgentClient({ getSettings: () => ({ endpoint: limited.endpoint, cwd: '/', token: '' }), modelStorage: legacy })
     try {
@@ -266,7 +271,7 @@ async function run() {
         limitedClient.disconnect()
         await limited.close()
     }
-    console.log('ACP HTTP, HTTP MCP declarations, permissions, queue, cancellation, settings, and reconnect tests passed')
+    console.log('ACP HTTP, MCP-over-ACP discovery, permissions, queue, cancellation, settings, and reconnect tests passed')
 }
 
 if (import.meta.main) {

@@ -52,11 +52,35 @@ deno task smoke "Reply exactly ACP_PROXY_OK. Do not use tools."
 ```
 
 The official SDK's `AcpServer` handles ACP HTTP routing. Each ACP connection
-launches `opencode acp`; its newline-delimited stdio messages are piped through
-the SDK unchanged. DELETE or server shutdown terminates that child. OpenCode
+launches `opencode acp`; requests, notifications, cancellation, and permission
+replies are forwarded through the SDK. DELETE or server shutdown terminates that child. OpenCode
 inherits your environment and uses its existing provider configuration/login.
 Session recovery across child restarts depends on OpenCode's persistence.
 
+## Browser MCP compatibility
+
+Create an MCP connection in Darc and select it in Agent connection settings.
+Darc supplies its browser tools over ACP. When the agent advertises native
+MCP-over-ACP support, the proxy forwards that declaration and its traffic unchanged.
+When the agent advertises only HTTP MCP, the proxy substitutes a temporary
+`https://localhost:7331/mcp/<id>` endpoint with a random bearer credential. The
+agent receives both automatically; no separate MCP configuration is needed.
+
+HTTP tool calls are forwarded to Darc over the existing ACP connection. Tool
+schemas, execution, scoped permission prompts, remembered grants, and revocation
+continue to use Darc's existing implementation. The proxy grants no browser access.
+It accepts both current MCP requests and older initialization-based clients using
+the MCP SDK's stateless compatibility mode. Agents with neither HTTP nor native
+ACP MCP support cannot receive these browser tools.
+
+Endpoints and credentials are isolated per ACP connection and browser server.
+Closing the ACP connection removes them and cancels outstanding requests. Removing
+the browser connection in Darc revokes tool execution and its saved permissions.
+HTTP requests require the supplied bearer token and use the same host/origin checks
+as `/acp`. These endpoints are local to the process and do not survive a restart.
+
 This is a local, unauthenticated HTTPS demo bound to loopback. Deno handles TLS
-directly. For remote deployment, add authentication and WebSocket support.
+directly. The ACP endpoint itself is unauthenticated; MCP compatibility endpoints
+require their individual bearer credentials. For remote deployment, add ACP
+authentication and WebSocket support.
 Browser local-network restrictions still apply.

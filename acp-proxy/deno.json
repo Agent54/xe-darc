@@ -1,6 +1,8 @@
 {
   "imports": {
-    "@agentclientprotocol/sdk": "npm:@agentclientprotocol/sdk@2.4.0"
+    "@agentclientprotocol/sdk": "npm:@agentclientprotocol/sdk@2.4.0",
+    "@modelcontextprotocol/server": "npm:@modelcontextprotocol/server@2.4.0",
+    "arktype": "npm:arktype@2.2.5"
   },
   "tasks": {
     "start": "deno run --allow-net=127.0.0.1:7331 --allow-read=../certs/localhost.crt,../certs/device.key --allow-run=opencode main.ts",

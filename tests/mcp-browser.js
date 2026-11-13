@@ -5,19 +5,14 @@ import puppeteer from 'puppeteer'
 
 const require = createRequire(import.meta.url)
 const { build } = createRequire(require.resolve('vite'))('esbuild')
-const { Miniflare } = createRequire(require.resolve('wrangler'))('miniflare')
 const root = new URL('../', import.meta.url).pathname
 const output = `${root}.cache/mcp-ui`
 await Deno.mkdir(`${output}/tmp`, { recursive: true })
 Deno.env.set('TMPDIR', `${output}/tmp`)
-await build({ entryPoints: [`${root}workerd/worker.ts`], bundle: true, platform: 'browser', format: 'esm', outfile: `${output}/worker.js` })
-const worker = new Miniflare({ modules: true, scriptPath: `${output}/worker.js`, compatibilityDate: '2025-05-07',
-    compatibilityFlags: ['nodejs_compat', 'nodejs_compat_populate_process_env'], durableObjects: { MCP_CONNECTIONS: { className: 'McpConnection', useSQLite: true } } })
 let browser
 let server
 
 try {
-    const workerOrigin = (await worker.ready).origin
     const dataCode = compileModule(`
         import { createPermissionStore, permissionDescriptor } from './app/lib/permissions.js'
         import { getTabGroups } from './app/lib/tab-groups.js'
@@ -42,6 +37,7 @@ try {
             allowPermission:(id,lifetime,target)=>store.resolve(id,'allow',lifetime==='always'?'persistent':lifetime==='until-app-close'?'session':'once',target),
             denyPermission:id=>store.resolve(id,'deny'),ignorePermission:id=>store.resolve(id,'ignore'),
             changePermission:resource=>store.reset(resource),cancelPermissionRequest:id=>store.cancelRequest(id),removeMcpPermissions:id=>store.removeSubject(id),
+            markPermissionSeen:resource=>store.markSeen(resource),
             getTabGroups:spaceId=>getTabGroups(Object.values(docs).filter(tab=>tab.spaceId===spaceId)),
             async readPage(id,options){this.reads.push({id,options});return 'Real content for '+id},
             async newTab(spaceId,options){const tab={id:'new-'+this.created.length,type:'tab',spaceId,...options};this.created.push(tab);docs[tab.id]=tab;return tab},
@@ -63,6 +59,29 @@ try {
             import Fixture from 'fixture'
             import data from 'fixture-data'
             import { mcp, mcpState } from './app/lib/mcp-service.js'
+            import * as acp from '@agentclientprotocol/sdk/unstable'
+            import { createBrowserServer } from './app/lib/acp-browser-server.js'
+            const runtimes = new Map()
+            window.closeMcp = () => {
+                for (const runtime of runtimes.values()) { runtime.peer.close(); runtime.remote.close(); runtime.backend.close() }
+                runtimes.clear()
+            }
+            window.mcpCall = async (id, name, args) => {
+                let runtime = runtimes.get(id)
+                if (!runtime) {
+                    const a = new TransformStream(), b = new TransformStream()
+                    const provider = new acp.McpOverAcpProvider()
+                    const caller = new acp.McpOverAcpCaller({ clientInfo: { name: 'Pi reported', version: 'test' } })
+                    const peer = acp.client().onRequest(acp.methods.client.mcp.message, provider.handleRequest).connect({ readable: a.readable, writable: b.writable })
+                    const remote = acp.agent().onNotification(acp.methods.agent.mcp.message, caller.handleNotification).connect({ readable: b.readable, writable: a.writable })
+                    const backend = createBrowserServer({ connection: mcp.openAcp(id, { name: 'Pi reported' }) })
+                    const binding = provider.registerServer(peer.agent, { name: backend.name, handler: backend.handler })
+                    backend.signal.addEventListener('abort', () => binding.dispose(), { once: true })
+                    runtime = { peer, remote, backend, binding, caller }
+                    runtimes.set(id, runtime)
+                }
+                return runtime.caller.request(runtime.remote.client, runtime.binding.serverId, 'tools/call', { name, arguments: args })
+            }
             window.mcp = mcp; window.mcpData = data
             mcpState.subscribe(state => {window.mcpState=state})
             mcp.start()
@@ -85,11 +104,10 @@ try {
     await page.setViewport({ width: 1000, height: 950 })
     const errors = []
     page.on('pageerror', error => { errors.push(error.message); console.error(error.message) })
-    await page.evaluateOnNewDocument(origin => {
+    await page.evaluateOnNewDocument(() => {
         localStorage.clear()
-        localStorage.setItem('mcpServerUrl', origin)
         window.darcWindowId = 'window'
-    }, workerOrigin)
+    })
     await page.goto(`http://127.0.0.1:${server.addr.port}`, { waitUntil: 'networkidle0' })
     const clickText = async (selector, text) => {
         const buttons = await page.$$(selector)
@@ -103,18 +121,13 @@ try {
         await page.type('input[aria-label="New MCP connection title"]', title)
         await page.type('textarea[aria-label="New MCP connection description"]', `${title} development agent`)
         await clickText('button', 'Create connection')
-        await page.waitForFunction(title => window.mcpState.connections.some(entry => entry.title === title && entry.status === 'connected'), {}, title)
+        await page.waitForFunction(title => window.mcpState.connections.some(entry => entry.title === title && entry.status === 'ready'), {}, title)
         return page.evaluate(title => window.mcpState.connections.find(entry => entry.title === title), title)
     }
     const first = await add('Pi project')
     const second = await add('Other agent')
     assert.notEqual(first.endpoint, second.endpoint)
-    let requestId = 0
-    const rpc = async (connection, name, args = {}) => {
-        const response = await fetch(connection.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2026-07-28', 'Mcp-Method': 'tools/call', 'Mcp-Name': name, 'X-Agent-Name': 'Pi reported', 'User-Agent': 'Pi MCP integration test' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++requestId, method: 'tools/call', params: { name, arguments: args, _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientInfo': { name: 'Pi UI test', version: '1' }, 'io.modelcontextprotocol/clientCapabilities': {} } } }) })
-        const body = await response.text()
-        return response.headers.get('Content-Type')?.includes('text/event-stream') ? body.split('\n').filter(line => line.startsWith('data:')).map(line => JSON.parse(line.slice(5))).find(message => message.result || message.error) : JSON.parse(body)
-    }
+    const rpc = (connection, name, args = {}) => page.evaluate(({ id, name, args }) => window.mcpCall(id, name, args), { id: connection.id, name, args })
     const firstSelector = `[data-mcp-connection-id="${first.id}"]`
     const secondSelector = `[data-mcp-connection-id="${second.id}"]`
     const listing = rpc(first, 'listSpaces')
@@ -138,17 +151,15 @@ try {
     assert.equal(JSON.parse((await created).result.content[0].text).tabId, 'new-0')
     await page.waitForFunction(() => window.mcpState.connections.every(entry => entry.agent))
     await page.evaluate(() => window.mcp.stop())
-    await page.waitForFunction(() => window.mcpState.connections.every(entry => entry.status === 'offline'))
-    await page.evaluate(() => window.mcp.start())
-    await page.waitForFunction(() => window.mcpState.connections.every(entry => entry.status === 'connected'))
+    await page.waitForFunction(() => window.mcpState.connections.every(entry => entry.status === 'ready'))
+    await page.evaluate(() => { window.closeMcp(); window.mcp.start() })
     await page.screenshot({ path: `${output}/connections.png`, fullPage: true })
     assert.deepEqual(errors, [])
     await clickText(`${secondSelector} button`, 'Remove')
     await page.waitForFunction(id => !window.mcpState.connections.some(entry => entry.id === id), {}, second.id)
     await page.evaluate(() => window.mcp.stop())
-    console.log('MCP Settings, unique live endpoints, reported identity, existing permission prompts, scoped reads, isolation, HTML creation, and removal passed')
+    console.log('MCP-over-ACP Settings, connection identities, existing permission prompts, scoped reads, isolation, HTML creation, and removal passed')
 } finally {
     await browser?.close()
     await server?.shutdown()
-    await worker.dispose()
 }

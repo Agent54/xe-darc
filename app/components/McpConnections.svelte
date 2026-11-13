@@ -10,7 +10,6 @@
     let editing = $state(null)
     let busy = $state(null)
     let error = $state('')
-    let serverUrl = $state(mcp.state.base)
     let copied = $state(null)
 
     async function perform(id, action) {
@@ -30,13 +29,13 @@
     }
 
     async function copy(entry) {
-        try { await navigator.clipboard.writeText(entry.endpoint); copied = entry.id } catch { error = 'Could not copy the endpoint' }
+        try { await navigator.clipboard.writeText(entry.id); copied = entry.id } catch { error = 'Could not copy the connection ID' }
     }
 </script>
 
 <section class="mcp-connections" aria-labelledby="mcp-connections-title">
     <h3 id="mcp-connections-title">MCP connections</h3>
-    <p>Each connection has a unique endpoint and starts with no permissions. Browser access uses the same permission prompts as tabs.</p>
+    <p>Each connection has its own identity and starts with no permissions. Select it in Agent connection settings to share browser tools through ACP. Browser access uses the same permission prompts as tabs.</p>
     <button onmousedown={() => { adding = !adding }}>Add new MCP connection</button>
     {#if adding}
         <form class="mcp-connection-form" onsubmit={add}>
@@ -50,9 +49,9 @@
         <article class="mcp-connection-entry" data-mcp-connection-id={entry.id}>
             <div class="mcp-connection-heading"><h4>{entry.title}</h4><span>{entry.status === 'other-window' ? 'Another window' : entry.status}</span></div>
             <p>{entry.description}</p>
-            <label>Unique MCP endpoint<input aria-label={`MCP endpoint for ${entry.title}`} value={entry.endpoint} readonly /></label>
+            <label>Connection ID<input aria-label={`MCP connection ID for ${entry.title}`} value={entry.id} readonly /></label>
             <div class="mcp-connection-actions">
-                <button onmousedown={() => copy(entry)}>{copied === entry.id ? 'Copied' : 'Copy endpoint'}</button>
+                <button onmousedown={() => copy(entry)}>{copied === entry.id ? 'Copied' : 'Copy connection ID'}</button>
                 <button onmousedown={() => { editing = { id: entry.id, title: entry.title, description: entry.description } }}>Edit</button>
                 <button onclick={() => perform(entry.id, () => mcp.remove(entry.id))} disabled={busy === entry.id}>Remove</button>
             </div>
@@ -72,7 +71,7 @@
                     {#each Object.entries(entry.agent.headers || {}) as [header, value]}<p><strong>{header}:</strong> {value}</p>{/each}
                     {#if entry.agent.clientInfo}<p>Advertised MCP client: {entry.agent.clientInfo.name} {entry.agent.clientInfo.version}</p>{/if}
                 </details>
-            {:else}<p>No agent has contacted this endpoint yet.</p>{/if}
+            {:else}<p>No agent has used this connection yet.</p>{/if}
             {#if entry.error}<p role="status">{entry.error}</p>{/if}
             <details class="mcp-connection-permissions" open={permissions.some(resource => resource.status === 'requested')}>
                 <summary>Access history and permissions ({permissions.length})</summary>
@@ -83,11 +82,6 @@
             </details>
         </article>
     {/each}
-    <details class="mcp-server-settings"><summary>Workerd server</summary>
-        <label>Server origin<input aria-label="MCP workerd origin" type="url" bind:value={serverUrl} /></label>
-        <button onmousedown={() => { try { mcp.setBase(serverUrl); error = '' } catch (failure) { error = failure.message } }}>Save server origin</button>
-        <p>Used for new connections. Existing endpoints keep their server origin.</p>
-    </details>
     {#if error}<p role="alert">{error}</p>{/if}
 </section>
 
