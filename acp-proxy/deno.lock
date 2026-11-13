@@ -1,0 +1,66 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:@agentclientprotocol/sdk@2.4.0": "2.4.0_@modelcontextprotocol+server@2.4.0",
+    "npm:@modelcontextprotocol/server@2.4.0": "2.4.0",
+    "npm:arktype@2.2.5": "2.2.5"
+  },
+  "npm": {
+    "@agentclientprotocol/sdk@2.4.0_@modelcontextprotocol+server@2.4.0": {
+      "integrity": "sha512-7qJ8nnyj7WesC5ve185ioTpB2/svQoeGV4HA4nLEhgDUrcmBe54/08VcXc/oL4p14tDbxxECZzdYmUYQ+4l+Wg==",
+      "dependencies": [
+        "@modelcontextprotocol/server",
+        "zod"
+      ],
+      "optionalPeers": [
+        "@modelcontextprotocol/server"
+      ]
+    },
+    "@ark/schema@0.56.4": {
+      "integrity": "sha512-nd4OqaWdKZJeGF5zNmZysDQO7NyyJ1ycl4S7i16Hj1VxqL+x72Z66lOn7ErpsoMUZtCtslAMHMjqJhuQSxciyw==",
+      "dependencies": [
+        "@ark/util"
+      ]
+    },
+    "@ark/util@0.56.4": {
+      "integrity": "sha512-KKqwGSia44cvuuDY70jGfbiUdG2E8F2cM4npdqvJ22S5a0LknlwG6nIrfQG1nF8fzxpzP30098wp0a8ASs0prQ=="
+    },
+    "@modelcontextprotocol/core@2.4.0": {
+      "integrity": "sha512-z8QBKqdfXLPzkLQuG4xp8hrVEMm1PZ1IgxMN2sMbJiFiAKOWXnAzogXn2W4aqIBlP1ea6U5yiqVquvUNM1Cj6Q==",
+      "dependencies": [
+        "zod"
+      ]
+    },
+    "@modelcontextprotocol/server@2.4.0": {
+      "integrity": "sha512-rgR9yxSaAJ+bcsi/XroT/S2AfPiIWloXAnrdfYSCms9ivVju0ishu/wW0J21Ho6+ZOR1r7RyeRbjiRuF87ix5Q==",
+      "dependencies": [
+        "@modelcontextprotocol/core",
+        "zod"
+      ]
+    },
+    "arkregex@0.0.10": {
+      "integrity": "sha512-+iDWBYBjH8w7wqEv8VY4loBwRldFxX84KNwKbobH3FJPay/18XI9sTesmXYpKyIrgbC5z/s16+vSJYHCC9FEvQ==",
+      "dependencies": [
+        "@ark/util"
+      ]
+    },
+    "arktype@2.2.5": {
+      "integrity": "sha512-c9oqY1eBab2LceqvpWX50xae2HB8P/nJPxRhuhPVf5lEDi3WQpf7WQflJFMsyCiA3NGh6zENOlse30gWBzlwDg==",
+      "dependencies": [
+        "@ark/schema",
+        "@ark/util",
+        "arkregex"
+      ]
+    },
+    "zod@4.6.7": {
+      "integrity": "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:@agentclientprotocol/sdk@2.4.0",
+      "npm:@modelcontextprotocol/server@2.4.0",
+      "npm:arktype@2.2.5"
+    ]
+  }
+}

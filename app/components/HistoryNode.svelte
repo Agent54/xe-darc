@@ -1,4 +1,5 @@
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
     import { Handle, Position } from '@xyflow/svelte'
     import Favicon from './Favicon.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
@@ -46,7 +47,7 @@
             <Favicon tab={entry} showButton={false} />
         {/if}
         <div class="node-text">
-            <div class="node-title" title={entry.title || 'Untitled'}>{entry.title || 'Untitled'}</div>
+            <div class="node-title" title={getTabTitle(entry)}>{getTabTitle(entry)}</div>
             <div class="node-url" title={entry.url}><UrlRenderer url={entry.url} variant="compact" /></div>
         </div>
     </div>

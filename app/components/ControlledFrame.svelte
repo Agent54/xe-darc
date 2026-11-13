@@ -6,10 +6,16 @@
     import NetworkErrorPage from './NetworkErrorPage.svelte'
     import NewTab from './NewTab.svelte'
     import TabHistory from './TabHistory.svelte'
+    import LightboxHeader from './LightboxHeader.svelte'
     import { origin } from '../lib/utils.js'
     import { generateDiff, throttle } from '../lib/utils.js'
     import select from '../inject/select-patch.js?raw'
     import ipc from '../inject/ipc.js?raw'
+    import { connectFrameIPC, scopedGuestScript, readGuestMessage, releaseFrameIPC } from '../lib/frame-ipc.js'
+    import { handleFramePermission } from '../lib/permissions.js'
+    import { getFrameShortcutScript } from '../lib/shortcuts.js'
+    import { isLiveFrameTab, registerFrameWrapper, releasedFrames } from '../lib/frame-lifecycle.js'
+    import { frameScreenshots } from '../lib/frame-screenshot.js'
     import contextMenu from '../inject/context-menu.js?raw'
     import zoomControl from '../inject/zoom-control.js?raw'
 
@@ -40,6 +46,12 @@
     let viewMode = $derived(data.ui.viewMode)
 
     let linkPreviewTimeout = null
+
+    function dismissLinkPreview() {
+        clearTimeout(linkPreviewTimeout)
+        linkPreviewTimeout = null
+        hoveredLink = null
+    }
     let anchor = $state(null)
 
     // let usedUrl = $state('')
@@ -48,7 +60,7 @@
     let isCommandKeyDown = $state(false)
 
     // OAuth popup state
-    let oauthPopup = $state(null) // { url, width, height, parentTab, event }
+    let oauthPopup = $state(null) // { url, width, height, expanded, parentTab, event, frame }
 
     // Track recently blocked off-origin URLs to prevent duplicate tab creation
     // Both onBeforeRequest and handleLoadStart may fire for the same navigation
@@ -86,7 +98,7 @@
     function shouldUseLightboxForNewTab(originUrl, forceNewTab = false) {
         if (forceNewTab) return false
         const tabOrigin = origin(originUrl)
-        if (data.isPermissionGranted('open-tab', tabOrigin)) {
+        if (data.isPermissionGranted('open-tab', tabOrigin, tabId)) {
             return false
         }
         return true
@@ -101,18 +113,37 @@
     function shouldUseLightboxForOffOrigin(originUrl, forceNewTab = false) {
         if (forceNewTab) return false
         const tabOrigin = origin(originUrl)
-        if (data.isPermissionGranted('navigate-off-origin', tabOrigin)) {
+        if (data.isPermissionGranted('navigate-off-origin', tabOrigin, tabId) || data.isPermissionGranted('open-tab', tabOrigin, tabId)) {
             return false
         }
         return true
     }
 
+    function shouldNavigateInSameTab(originUrl, forceNewTab = false) {
+        if (forceNewTab) {
+            return false
+        }
+        const tabOrigin = origin(originUrl)
+        const decisions = ['open-tab', 'navigate-off-origin'].map(type => data.permissionDecision(type, tabId, tabOrigin))
+        return !decisions.includes('deny') && decisions.includes('same-tab')
+    }
+
     // LED indicator functions - directly set timestamps in data store
     function showNetworkAccess() {
+        const frame = data.frames[tabId]
+        if (frame) {
+            frame.requestActivity ??= { allowed: 0, blocked: 0 }
+            frame.requestActivity.allowed += 1
+        }
         data.ledIndicators.networkAccess = Date.now()
     }
 
     function showBlockedRequest() {
+        const frame = data.frames[tabId]
+        if (frame) {
+            frame.requestActivity ??= { allowed: 0, blocked: 0 }
+            frame.requestActivity.blocked += 1
+        }
         data.ledIndicators.blockedRequest = Date.now()
     }
 
@@ -214,7 +245,7 @@
 
     // Check if the current URL is about:newtab
     function isNewTabUrl(url) {
-        return url?.startsWith('about:newtab') || url?.startsWith('about:blank')
+        return url?.startsWith('about:newtab') || (!data.frames[tabId]?.nativeGuest && url?.startsWith('about:blank'))
     }
     
     // Check if the current URL is about:tabhistory
@@ -223,27 +254,11 @@
     }
 
     function handlePermissionRequest(tabId, event) {
-        const { granted } = data.permissionRequest(tabId, event)
-        // FIXME: permission requests only work sync?
-        // requestedResources.push({
-        //     permission: event.permission,
-        //     url: event.url,
-        //     tabId: tabId,
-        //     timestamp: new Date().toISOString(),
-        //     id: event.permission,
-        //     lastUsed: 'now',
-        //     status: 'Request'
-        // })
-
-        //  event.cancel()
-
-        if (granted) {
-            event.request.allow()
-        } else {
-            event.request.deny()
-        }
-        // event.request.deny()
-        //    return granted ? event.request.allow() : event.request.deny()
+        const frame = event.currentTarget || data.frames[tabId]?.frame
+        handleFramePermission(data, tabId, event, {
+            url: data.frames[tabId]?.committedUrl || data.docs[tabId]?.url,
+            partition: frame?.partition || data.docs[tabId]?.partition || 'persist:myapp', frame
+        })
     }
 
     // Check if an error code represents a certificate issue
@@ -409,10 +424,56 @@
         console.log(eventName, $state.snapshot(tab), event)
     }
     function handleAudioStateChanged (tab, event) {
-        tab.audioPlaying = event.audible
+        const currentTab = data.docs[tab.id]
+        if (currentTab) {
+            currentTab.audioPlaying = event.audible
+        }
+    }
+
+    function isDirectNavigation(url, requestId = null) {
+        const navigation = data.frames[tab.id]?.directNavigation
+        if (!navigation || !url || !navigation.urls.includes(url.split('#')[0])) {
+            return false
+        }
+        if (requestId !== null && navigation.requestId !== null && navigation.requestId !== requestId) {
+            return false
+        }
+        if (requestId !== null) {
+            navigation.requestId = requestId
+        }
+        return true
+    }
+
+    function handleLoadRedirect(tab, event) {
+        const info = event.loadRedirectInfo || event
+        if (info.isTopLevel === false) {
+            return
+        }
+        const oldUrl = info.oldUrl || event.request?.url || event.url
+        const newUrl = info.newUrl || event.response?.redirectURL || event.redirectUrl
+        const requestId = event.request?.id ?? event.requestId ?? null
+        if (newUrl && isDirectNavigation(oldUrl, requestId)) {
+            data.frames[tab.id].directNavigation.urls.push(newUrl.split('#')[0])
+        }
+    }
+
+    function handleLoadCommit(tab, event) {
+        const info = event.loadInfo || event
+        if (!info.isTopLevel || !data.frames[tab.id]) {
+            return
+        }
+        data.frames[tab.id].committedUrl = info.url
+        if (!data.isInternalPage(info.url)) {
+            data.updateTab(tab.id, { lastLoadedAt: Date.now() })
+        }
+        if (isDirectNavigation(info.url)) {
+            data.frames[tab.id].directNavigation = null
+        }
+        updateTabMeta(tab)
     }
 
     function handleLoadAbort(tab, event) {
+        event = event.loadAbortInfo || event
         if (!event.isTopLevel) {
             return
         }
@@ -420,6 +481,10 @@
         console.log('🚨 onloadabort', event)
         if (!tab) {
             return
+        }
+
+        if (isDirectNavigation(event.url)) {
+            data.frames[tab.id].directNavigation = null
         }
 
         // Load failed, stop loading immediately
@@ -436,72 +501,6 @@
                 const errorCode = event.reason.replace('net::', '')
                 setNetworkError(tab, errorCode, event.url || tab.url)
             }
-        }
-    }
-
-    async function captureTabScreenshot(tab) {
-        let frame = null
-        if (!frame) {
-            frame = data.frames[tab.id]?.frame
-        }
-        if (!frame) {
-            console.log('Frame not found for tab:', tab.id)
-            return
-        }
-
-        if (typeof frame.captureVisibleRegion !== 'function') {
-            return
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 1000))
-
-        try {
-            let screenshot = null
-            
-            // Check if frame is ready and loaded
-            // const isFrameReady = () => {
-            //     return frame.src && 
-            //            !frame.src.includes('about:blank') && 
-            //            frame.contentWindow !== null
-            // }
-            
-            // Wait for frame to be ready if needed
-            // if (!isFrameReady()) {
-            //     console.log('Frame not ready for screenshot, waiting...')
-            //     await new Promise(resolve => setTimeout(resolve, 1000))
-            //     if (!isFrameReady()) {
-            //         console.log('Frame still not ready, skipping screenshot')
-            //         return null
-            //     }
-            // }
-            
-            // Retry mechanism for flaky captures
-            // for (let attempt = 1; attempt <= 3; attempt++) {
-                try {
-                    // console.log(`Screenshot attempt ${attempt} for tab ${tab.id}`)
-                    screenshot = await frame.captureVisibleRegion({
-                        format: 'png',
-                        quality: 80
-                    })
-                    // if (screenshot) {
-                    //     console.log(`Screenshot successful on attempt ${attempt}`)
-                    //     // break
-                    // }
-                } catch (captureError) {
-                    console.log(`Capture failed:`, captureError)
-                    // if (attempt < 3) {
-                    //     // Wait before retry, increasing delay each time
-                    //     await new Promise(resolve => setTimeout(resolve, attempt * 500))
-                    // }
-                }
-            // }
-            
-            if (screenshot) {
-                // tab.screenshot = screenshot
-                await data.updateTab(tab.id, { screenshot })
-            }
-        } catch (err) {
-            console.log('Error capturing screenshot:', err)
         }
     }
 
@@ -542,10 +541,12 @@
     // }
 
     function handleLoadStart(tab, event) {
+        event = event.loadInfo || event
         if (!event.isTopLevel) {
             return
         }
 
+        frameScreenshots.cancel(data.frames[tab.id]?.frame)
         hoveredLink = null
         instantlyCleanupGlobalPreview()
         data.frames[tab.id].loading = true
@@ -558,13 +559,14 @@
 
         // Fallback off-origin blocking in loadstart (main blocking is in onBeforeRequest)
         // This catches edge cases where the request handler didn't fire
-        if (event?.url && tab.url) {
-            const currentOrigin = origin(tab.url)
+        if (event?.url && tab.url && !isDirectNavigation(event.url)) {
+            const currentTabUrl = data.frames[tab.id]?.committedUrl || tab.url
+            const currentOrigin = origin(currentTabUrl)
             const targetOrigin = origin(event.url)
             
             // Skip origin check for about: pages and same-origin navigation
             if (event.isTopLevel && currentOrigin !== 'about' && currentOrigin !== 'unknown' && 
-                targetOrigin !== currentOrigin && targetOrigin !== 'about') {
+                targetOrigin !== currentOrigin && targetOrigin !== 'about' && !shouldNavigateInSameTab(currentTabUrl, isCommandKeyDown)) {
                 
                 // Check if already blocked by onBeforeRequest (deduplication)
                 if (wasRecentlyBlocked(event.url)) {
@@ -587,13 +589,18 @@
                 // Create new tab/lightbox for off-origin navigation
                 // Command+click always opens in new tab (not lightbox), in background
                 // Otherwise check if origin has 'navigate-off-origin' permission
-                const useLightbox = shouldUseLightboxForOffOrigin(tab.url, isCommandKeyDown)
+                const useLightbox = shouldUseLightboxForOffOrigin(currentTabUrl, isCommandKeyDown)
                 const shouldFocus = !isCommandKeyDown
+                if (data.permissionDecision('open-tab', tab.id, currentOrigin) === 'deny' ||
+                    data.permissionDecision('navigate-off-origin', tab.id, currentOrigin) === 'deny') {
+                    return
+                }
                 
                 data.newTab(data.spaceMeta.activeSpace, {
                     url: event.url,
                     title: '',
                     opener: tab.id,
+                    groupTabId: isCommandKeyDown ? data.getCurrentGroupTabId() : undefined,
                     lightbox: useLightbox,
                     shouldFocus
                 })     
@@ -604,7 +611,6 @@
         }
 
         evaluateSecurityState(tab)
-        updateTabMeta(tab)
     }
 
     function handleLoadStop(tab) {
@@ -613,7 +619,6 @@
         if (!data.frames[tab.id]) return
         const wasLoading = data.frames[tab.id].loading
         data.frames[tab.id].loading = false
-        data.frames[tab.id].initialLoad = true
         
         const originValue = origin(tab.url)
         const currentNetworkErr = data.origins[originValue]?.networkError
@@ -622,7 +627,7 @@
         // console.log(`handleLoadStop called for`, {tab, e, currentNetworkErr})
 
         // Get actual URL from frame if available (more reliable than tab.url during navigation)
-        const frameUrl = data.frames[tab.id]?.frame?.src || tab.url
+        const frameUrl = data.frames[tab.id]?.committedUrl || data.frames[tab.id]?.frame?.src || tab.url
         
         // Don't set favicon for about: URLs - let Favicon.svelte handle it
         if (!frameUrl?.startsWith('about:')) {
@@ -663,25 +668,20 @@
         // Update title and capture screenshot after page loads (only if successful)
         updateTabMeta(tab)
         
-        // Queue screenshot capture during idle time to avoid blocking UI
-        if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(() => {
-                captureTabScreenshot(tab)
-            }, { timeout: 5000 })
-        } else {
-            // Fallback for browsers without requestIdleCallback
-            setTimeout(() => captureTabScreenshot(tab), 1000)
-        }
+        frameScreenshots.schedule(data, tab.id)
     }
 
     function handleNewWindow(tab, e) {
+        const nativeEvent = e
+        e = e.newWindow || e
         // Check for modifier keys in the event
         // windowOpenDisposition can be: "new_foreground_tab", "new_background_tab", "new_popup", "new_window"
         // Cmd+click typically sets this to "new_background_tab"
-        const hasModifierKey = isCommandKeyDown || e.windowOpenDisposition === 'new_background_tab'
+        const hasModifierKey = isCommandKeyDown
         console.log('New window request:', e, 'isCommandKeyDown:', isCommandKeyDown, 'hasModifierKey:', hasModifierKey)
         
         // Check if this looks like an OAuth popup based on URL patterns or window features
+        /* OAuth presentation no longer bypasses the normal guest lifecycle.
         const isOAuthPopup = e.targetUrl && (
             // Generic OAuth patterns
             e.targetUrl.includes('oauth') || 
@@ -708,32 +708,42 @@
             (e.name && (e.name.includes('oauth') || e.name.includes('auth') || e.name.includes('login')))
         )
 
-        if (isOAuthPopup) {
-            handleOAuthPopup(tab, e)
-        } else {
-            const currentOrigin = origin(tab.url)
-            
-            // Command+click always opens in new tab (not lightbox), in background
-            // hasModifierKey is set above based on isCommandKeyDown or windowOpenDisposition
-            const forceNewTab = hasModifierKey
-            
-            // Check if origin has permission to open tabs
-            const hasOpenTabPermission = data.isPermissionGranted('open-tab', currentOrigin)
-            
-            // Use lightbox if: not command+click AND (permission not granted or permission is mocked)
-            const useLightbox = !forceNewTab && !hasOpenTabPermission
-            
-            // Command+click opens in background, otherwise use window disposition
-            const shouldFocus = forceNewTab ? false : e.windowOpenDisposition !== "new_background_tab"
-            
-            data.newTab(data.spaceMeta.activeSpace, {
-                url: e.targetUrl,
-                title: e.title,
-                opener: tab.id,
-                lightbox: useLightbox,
-                shouldFocus
-            })         
+        */
+
+        const currentTab = data.docs[tab.id] || tab
+        const currentOrigin = origin(data.frames[tab.id]?.committedUrl || currentTab.url)
+        const decision = data.permissionDecision('open-tab', tab.id, currentOrigin)
+        if (decision === 'deny') {
+            e.window?.discard?.()
+            return
         }
+        if (decision === 'same-tab' && !hasModifierKey) {
+            e.window?.discard?.()
+            if (e.targetUrl && origin(e.targetUrl) !== currentOrigin &&
+                data.permissionDecision('navigate-off-origin', tab.id, currentOrigin) === 'deny') {
+                return
+            }
+            data.navigate(tab.id, e.targetUrl || 'about:blank')
+            return
+        }
+        if (!nativeEvent.newWindow && nativeEvent.cancelable === true && typeof nativeEvent.preventDefault === 'function') {
+            nativeEvent.preventDefault()
+        }
+
+        // Command+click always opens in new tab (not lightbox), in background
+        const forceNewTab = hasModifierKey
+        const hasOpenTabPermission = data.isPermissionGranted('open-tab', currentOrigin, tab.id)
+        const useLightbox = !forceNewTab && !hasOpenTabPermission
+        const shouldFocus = forceNewTab ? false : e.windowOpenDisposition !== 'new_background_tab'
+        data.newTab(currentTab.spaceId || data.spaceMeta.activeSpace, {
+            url: e.targetUrl || 'about:blank',
+            title: e.title,
+            opener: tab.id,
+            groupTabId: forceNewTab ? data.getCurrentGroupTabId(currentTab.spaceId) : undefined,
+            lightbox: useLightbox,
+            shouldFocus,
+            guestWindow: e.window
+        })
     }
 
     // Handle OAuth popup windows with proper window.opener support
@@ -741,7 +751,7 @@
         console.log('Creating OAuth popup for:', e.targetUrl)
         
         // Create the popup frame immediately
-        const popupFrame = document.createElement('controlledframe')
+        const popupFrame = createControlledFrame()
         popupFrame.classList.add('oauth-popup-frame')
         popupFrame.partition = parentTab.partition || 'persist:myapp'
         popupFrame.src = e.targetUrl
@@ -756,6 +766,7 @@
         popupFrame.onconsolemessage = (event) => handleOAuthPopupEvent('consolemessage', popupFrame, event)
         popupFrame.onloadstart = (event) => handleOAuthPopupEvent('loadstart', popupFrame, event)
         popupFrame.onloadstop = (event) => handleOAuthPopupEvent('loadstop', popupFrame, event)
+        popupFrame.onloadcommit = (event) => handleOAuthPopupEvent('loadcommit', popupFrame, event)
         popupFrame.onloadabort = (event) => handleOAuthPopupEvent('loadabort', popupFrame, event)
         popupFrame.onexit = (event) => handleOAuthPopupEvent('exit', popupFrame, event)
         popupFrame.onclose = (event) => handleOAuthPopupEvent('close', popupFrame, event)
@@ -774,6 +785,7 @@
             url: e.targetUrl,
             width: e.initialWidth || 500,
             height: e.initialHeight || 600,
+            expanded: false,
             parentTab,
             event: e,
             frame: popupFrame
@@ -782,6 +794,7 @@
 
     async function updateTabMeta(tab) {
         if (isNewTabUrl(tab?.url) || isTabHistoryUrl(tab?.url)) return
+        if (data.frames[tab.id]?.directNavigation) return
         
         let frame = null
         if (!frame) {
@@ -789,7 +802,8 @@
         }
         if (!frame) return
 
-        let url = frame.src || tab.url
+        let url = data.frames[tab.id]?.committedUrl || frame.src || tab.url
+        const requestedUrl = data.docs[tab.id]?.url
 
         // For about: URLs, clear favicon but preserve existing title
         if (url.startsWith('about:')) {
@@ -827,6 +841,9 @@
             }
 
             // console.log('updateTabMeta', {favicon, title, url})
+            if (data.frames[tab.id]?.frame !== frame || (data.frames[tab.id]?.committedUrl || frame.src) !== url || data.docs[tab.id]?.url !== requestedUrl) {
+                return
+            }
             data.updateTab(tab.id, { favicon, title, url })
         } catch (err) {
             console.log('Error updating tab meta:', err, tab)
@@ -835,6 +852,7 @@
 
 // Content script for window focus/blur handling
 function setupContentScripts(frame) {        
+        const currentTabId = tab?.id || tabId
         // First try a simple test script to verify content script injection works
         const systemInjections = [
             {
@@ -852,10 +870,12 @@ function setupContentScripts(frame) {
             name: 'system-script',
             urlPatterns: ['http://*/*', 'https://*/*'], // '<all_urls>', 
             js: {
-                code: `
-const tabId = '${tab?.id || tabId}';
+                code: scopedGuestScript(frame, `
+const tabId = ${JSON.stringify(tab?.id || tabId)};
 
 ${ipc}
+
+${getFrameShortcutScript(tab?.id || tabId)}
 
 ${select}
 
@@ -885,7 +905,7 @@ document.addEventListener('mouseover', function(event) {
         
         // Log anchor enter with details including position and screen coordinates
         // Use the link's right edge as the reference to avoid preview overlapping the cursor on long links
-        console.log('iwa:link-enter:' + tabId + ':' + JSON.stringify({
+        sendIPC('link-enter', {
             href: anchor.href || anchor.getAttribute('href') || '',
             target: anchor.target || anchor.getAttribute('target') || '',
             rel: anchor.rel || anchor.getAttribute('rel') || '',
@@ -908,12 +928,12 @@ document.addEventListener('mouseover', function(event) {
             },
             screenX: window.screenX || 0,
             screenY: window.screenY || 0
-        }));
+        });
     } else if (!anchor && currentHoveredAnchor) {
         // Left the anchor element
-        console.log('iwa:link-leave:' + tabId + ':' + JSON.stringify({
+        sendIPC('link-leave', {
             href: currentHoveredAnchor.href || currentHoveredAnchor.getAttribute('href') || ''
-        }));
+        });
         currentHoveredAnchor = null;
     }
 }, { capture: true, passive: true });
@@ -948,7 +968,7 @@ function isTextInputElement(element) {
 // Global drag and drop event listeners for controlled frame content
 function setupDragDropListeners() {
     let dragEventCounter = 0;
-    
+
     function logDragDropEvent(eventType, event) {
         const eventData = {
             type: eventType,
@@ -996,7 +1016,7 @@ function setupDragDropListeners() {
             logDragDropEvent('drag', event);
         }
     }, { capture: true });
-    
+
     // Dragenter - when dragged item enters a drop target
     document.addEventListener('dragenter', (event) => {
         logDragDropEvent('dragenter', event);
@@ -1006,7 +1026,7 @@ function setupDragDropListeners() {
     document.addEventListener('dragover', (event) => {
         logDragDropEvent('dragover', event);
     }, { capture: true });
-    
+
     // Dragleave - when dragged item leaves a drop target  
     document.addEventListener('dragleave', (event) => {
         logDragDropEvent('dragleave', event);
@@ -1106,9 +1126,9 @@ document.addEventListener('input', function(event) {
     
     inputDebounceTimeouts.set(elementId, timeoutId);
 }, { capture: true, passive: true });
-`,
+`),
             },
-            runAt: 'document-end',
+            runAt: 'document-start',
             allFrames: true,
             matchAboutBlank: true
         }]
@@ -1135,15 +1155,28 @@ document.addEventListener('input', function(event) {
         ]
 
         if (!frame.addContentScripts) {
-            frame.src = untrack(() => tab.url)
+            if (data.frames[currentTabId]?.guestWindow) {
+                data.frames[currentTabId].guestWindow.attach(frame)
+                delete data.frames[currentTabId].guestWindow
+            } else {
+                frame.src = untrack(() => tab.url)
+            }
         } else {
             frame.addContentScripts([...systemInjections, ...userInjections]).then((res) => {
-            console.log('####### 💉 [INJECT] Successful script injection | tabId:', tab?.id || tabId, '| res:', res)
+                if (releasedFrames.has(frame) || data.frames[currentTabId]?.frame !== frame) return
+                const currentTab = data.docs[currentTabId]
+                if (!isLiveFrameTab(currentTab)) return
+                console.log('####### 💉 [INJECT] Successful script injection | tabId:', tab?.id || tabId, '| res:', res)
 
-            frame.src  = untrack(() => tab.url)
+                if (data.frames[currentTabId]?.guestWindow) {
+                    data.frames[currentTabId].guestWindow.attach(frame)
+                    delete data.frames[currentTabId].guestWindow
+                } else {
+                    frame.src = currentTab.url
+                }
             
-            // Now add the focus/blur script
-            // return frame.addContentScripts([contentScript])
+                // Now add the focus/blur script
+                // return frame.addContentScripts([contentScript])
             }).catch((err) => {
                 console.error('❌ inject error:', err)
             })
@@ -1198,18 +1231,19 @@ document.addEventListener('input', function(event) {
         // Log all request events with full details
         frame.request.onBeforeRequest.addListener((details) => {
             const url = new URL(details.url || details.request.url)
-            const requestType = details.type || details.request?.type
+            const requestType = (details.request?.type || details.type)?.replaceAll('_', '-')
+            const requestId = details.request?.id ?? details.requestId ?? null
             
             // Block off-origin main_frame navigations BEFORE they start (more reliable than frame.stop())
-            if (requestType === 'main_frame') {
-                const currentTabUrl = tab?.url
+            if (requestType === 'main-frame' && !isDirectNavigation(url.href, requestId)) {
+                const currentTabUrl = data.frames[tab.id]?.committedUrl || tab?.url
                 if (currentTabUrl) {
                     const currentOrigin = origin(currentTabUrl)
                     const targetOrigin = origin(url.href)
                     
                     // Skip origin check for about: pages and same-origin navigation
                     if (currentOrigin !== 'about' && currentOrigin !== 'unknown' && 
-                        targetOrigin !== currentOrigin && targetOrigin !== 'about') {
+                        targetOrigin !== currentOrigin && targetOrigin !== 'about' && !shouldNavigateInSameTab(currentTabUrl, isCommandKeyDown)) {
                         
                         // Deduplicate: check if this URL was already blocked recently
                         if (wasRecentlyBlocked(url.href)) {
@@ -1233,11 +1267,17 @@ document.addEventListener('input', function(event) {
                         // Otherwise check if origin has 'navigate-off-origin' permission
                         const useLightbox = shouldUseLightboxForOffOrigin(currentTabUrl, isCommandKeyDown)
                         const shouldFocus = !isCommandKeyDown
+                        if (data.permissionDecision('open-tab', tab.id, currentOrigin) === 'deny' ||
+                            data.permissionDecision('navigate-off-origin', tab.id, currentOrigin) === 'deny') {
+                            showBlockedRequest()
+                            return { cancel: true }
+                        }
                         
                         data.newTab(data.spaceMeta.activeSpace, {
                             url: url.href,
                             title: '',
                             opener: tab.id,
+                            groupTabId: isCommandKeyDown ? data.getCurrentGroupTabId() : undefined,
                             lightbox: useLightbox,
                             shouldFocus
                         })
@@ -1277,6 +1317,9 @@ document.addEventListener('input', function(event) {
                 showBlockedRequest()
                 return { cancel: true }
             } else {
+                if (requestType === 'main-frame' && data.frames[tabId]) {
+                    data.frames[tabId].requestActivity = { allowed: 0, blocked: 0 }
+                }
                 // Show green LED for allowed network access
                 showNetworkAccess()
                 return { cancel: false }
@@ -1390,6 +1433,10 @@ document.addEventListener('input', function(event) {
         }, allUrlsFilter)
 
         frame.request.onBeforeRedirect.addListener((details) => {
+            const requestType = (details.request?.type || details.type)?.replaceAll('_', '-')
+            if (requestType === 'main-frame') {
+                handleLoadRedirect(tab, details)
+            }
             console.log('🔄 Redirect:', {
                 requestId: details.requestId,
                 url: details.url,
@@ -1411,6 +1458,11 @@ document.addEventListener('input', function(event) {
         // }, allUrlsFilter)
 
         frame.request.onCompleted.addListener((details) => {
+            const requestId = details.request?.id ?? details.requestId ?? null
+            const requestType = (details.request?.type || details.type)?.replaceAll('_', '-')
+            if (requestType === 'main-frame' && requestId !== null && isDirectNavigation(details.request?.url || details.url, requestId)) {
+                data.frames[tab.id].directNavigation = null
+            }
             // console.log('✅ Request Completed:', {
             //     requestId: details.requestId,
             //     url: details.url,
@@ -1421,6 +1473,11 @@ document.addEventListener('input', function(event) {
         }, allUrlsFilter)
 
         frame.request.onErrorOccurred.addListener((details) => {
+            const requestId = details.request?.id ?? details.requestId ?? null
+            const requestType = (details.request?.type || details.type)?.replaceAll('_', '-')
+            if (requestType === 'main-frame' && requestId !== null && isDirectNavigation(details.request?.url || details.url, requestId)) {
+                data.frames[tab.id].directNavigation = null
+            }
             // details.error !== 'net::ERR_BLOCKED_BY_ORB' &&
             if (details.error !== 'net::ERR_BLOCKED_BY_CLIENT') {
                     console.error('❌ Request Error:', {
@@ -1559,11 +1616,34 @@ document.addEventListener('input', function(event) {
         //     }
         // })
 
-        frame.onconsolemessage = (event) => {
+        frame.onconsolemessage = (event) => handleGuestMessage(readGuestMessage(frame, event.message))
+        const handleIPCMessage = (type, payload) => {
+            if (type !== 'link-enter' && type !== 'link-leave') return
+            if (type === 'link-enter' && (typeof payload?.href !== 'string' || !payload.href)) return
+            if (linkPreviewTimeout) {
+                clearTimeout(linkPreviewTimeout)
+                linkPreviewTimeout = null
+            }
+            hoveredLink = type === 'link-enter' ? payload : null
+            if (hoveredLink) {
+                linkPreviewTimeout = setTimeout(() => {
+                    hoveredLink = null
+                    linkPreviewTimeout = null
+                }, 7000)
+            }
+        }
+        const handleGuestMessage = (message) => {
             // console.log('consolemessage', event)
-            const message = event.message
+            if (message === null) {
+                return
+            }
             
-            if (message === 'iwa:focus') {
+            if (message === `iwa:ipc-ready:${mytab.id}`) {
+                frame.activeScrolls = 0
+                connectFrameIPC(frame, mytab.id, handleIPCMessage)
+            } else if (message.startsWith('[IPC]')) {
+                console.log(message, '| tabId:', mytab.id)
+            } else if (message === 'iwa:focus') {
                 // console.log('####### 🎯 [FOCUS-RECV] Received iwa:focus from inside frame | tabId:', tab?.id || tabId)
                 onFrameFocus(tab?.id || tabId)
             } else if (message === 'iwa:blur') {
@@ -1583,52 +1663,31 @@ document.addEventListener('input', function(event) {
                     isCommandKeyDown = false
                     commandKeyPressed = false
                 }
-            } else if (message.startsWith('iwa:close-tab:')) {
-                // Extract tab ID from message - handle colons in tab ID
-                const tabId = message.substring('iwa:close-tab:'.length)
-                console.log(`Controlled frame ${tabId} requested tab close`)
-                
-                // Dispatch custom event to app shell to close this tab
-                window.dispatchEvent(new CustomEvent('darc-close-tab-from-frame', {
-                    detail: { 
-                        tabId: tabId,
-                        sourceFrame: `tab_${tabId}`
+            } else if (message.startsWith('iwa:input-event:')) {
+                try {
+                    const detail = JSON.parse(message.slice('iwa:input-event:'.length))
+                    if (detail?.tabId !== mytab.id || !['keydown', 'keyup', 'pointerdown', 'auxclick', 'contextmenu', 'scrollstart', 'scrollend', 'touchstart', 'blur'].includes(detail.type)) {
+                        return
                     }
-                })) 
-            } else if (message.startsWith('iwa:new-tab:')) {
-                // Extract tab ID from message - handle colons in tab ID
-                const tabId = message.substring('iwa:new-tab:'.length)
-                console.log(`Controlled frame ${tabId} requested new tab`)
-                
-                // Dispatch custom event to app shell to open new tab
-                window.dispatchEvent(new CustomEvent('darc-new-tab-from-frame', {
-                    detail: { 
-                        tabId: tabId,
-                        sourceFrame: `tab_${mytab.id}`
+                    if ((detail.type === 'keydown' || detail.type === 'keyup') && (typeof detail.key !== 'string' || !Number.isInteger(detail.pressedKeyCount) || detail.pressedKeyCount < 0)) {
+                        return
                     }
-                }))
-            } else if (message.startsWith('iwa:reload-tab:')) {
-                // Extract tab ID from message - handle colons in tab ID
-                const tabId = message.substring('iwa:reload-tab:'.length)
-                
-                // Dispatch custom event to app shell to reload this tab
-                window.dispatchEvent(new CustomEvent('darc-reload-tab-from-frame', {
-                    detail: { 
-                        tabId: tabId,
-                        sourceFrame: `tab_${mytab.id}`
+                    if (detail.type === 'scrollstart') {
+                        frame.activeScrolls = (frame.activeScrolls ?? 0) + 1
+                    } else if (detail.type === 'scrollend') {
+                        frame.activeScrolls = Math.max(0, (frame.activeScrolls ?? 0) - 1)
                     }
-                }))
-            } else if (message.startsWith('iwa:key:')) {
-                // Generic key event from frame - format: iwa:key:{keyName}:{tabId}
-                const parts = message.split(':')
-                const keyName = parts[2]
-                window.dispatchEvent(new CustomEvent('darc-key-from-frame', {
-                    detail: { 
-                        key: keyName,
-                        tabId: mytab.id,
-                        sourceFrame: `tab_${mytab.id}`
-                    }
-                }))
+                    window.dispatchEvent(new CustomEvent('darc-controlled-frame-input', { detail }))
+                } catch (error) {
+                    console.warn('Invalid frame input event', error)
+                }
+            } else if (message.startsWith('iwa:shortcut:')) {
+                try {
+                    const detail = JSON.parse(message.slice('iwa:shortcut:'.length))
+                    if (detail.tabId === mytab.id) window.dispatchEvent(new CustomEvent('darc-shortcut', { detail }))
+                } catch (error) {
+                    console.warn('Invalid frame shortcut message', error)
+                }
             } else if (message.startsWith('iwa:link-enter:')) {
                 const prefix = 'iwa:link-enter:'
                 const remainingMessage = message.substring(prefix.length)
@@ -1643,19 +1702,7 @@ document.addEventListener('input', function(event) {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const linkData = JSON.parse(dataPayload)
                         
-                        if (linkData.href) {
-                            hoveredLink = linkData
-                            
-                            if (linkPreviewTimeout) {
-                                clearTimeout(linkPreviewTimeout)
-                                linkPreviewTimeout = null
-                            }
-
-                            linkPreviewTimeout = setTimeout(() => {
-                                hoveredLink = null
-                                linkPreviewTimeout = null
-                            }, 7000)
-                        }
+                        handleIPCMessage('link-enter', linkData)
                     } catch (error) {
                         console.error('Failed to parse link enter data:', error)
                     }
@@ -1674,12 +1721,7 @@ document.addEventListener('input', function(event) {
                         const dataPayload = remainingMessage.substring(tabIdPattern.length)
                         const linkData = JSON.parse(dataPayload)
                         
-                        hoveredLink = null
-
-                        if (linkPreviewTimeout) {
-                            clearTimeout(linkPreviewTimeout)
-                            linkPreviewTimeout = null
-                        }
+                        handleIPCMessage('link-leave', linkData)
                     } catch (error) {
                         console.error('Failed to parse link leave data:', error)
                     }
@@ -1717,6 +1759,14 @@ document.addEventListener('input', function(event) {
                 if (tabIdIndex === 0) {
                     const tabId = mytab.id
                     const zoomDirection = remainingMessage.substring(tabIdPattern.length)
+
+                    const zoomTab = data.docs[tabId]
+                    if (zoomTab?.lightbox && !zoomTab.archive && (zoomDirection === 'in' || zoomDirection === 'out')) {
+                        data.promoteLightboxToTab(tabId, zoomTab.opener, zoomDirection === 'in'
+                            ? { closeParent: true }
+                            : { toPreview: true })
+                        return
+                    }
                     
                     const gridViewOpen = viewMode === 'tile'
                     
@@ -1904,6 +1954,18 @@ document.addEventListener('input', function(event) {
                         console.error('Failed to parse additional drag/drop data:', error)
                     }
                 }
+            } else if (message.startsWith('iwa:click:')) {
+                const prefix = `iwa:click:${mytab.id}:`
+                if (!message.startsWith(prefix)) return
+                try {
+                    const clickData = JSON.parse(message.substring(prefix.length))
+                    if (!clickData || typeof clickData !== 'object' || Array.isArray(clickData)) return
+                    window.dispatchEvent(new CustomEvent('darc-controlled-frame-click', {
+                        detail: { ...clickData, tabId: mytab.id, sourceFrame: `tab_${mytab.id}` }
+                    }))
+                } catch (error) {
+                    console.error('Failed to parse controlled frame click:', error)
+                }
             } else if (message.startsWith('iwa:mousedown:')) {
                 // Handle mousedown from controlled frame - handle colons in tab ID
                 // Format: iwa:mousedown:${tabId}:${button}:${mod}
@@ -2011,75 +2073,96 @@ document.addEventListener('input', function(event) {
     }
 
     // user initiated clear data options clearData(options, types)
-    let attached = false
     let frameWrapper = $state(null)
-    let retry = $state(0)
-    $effect(async () => {
-        if (retry > 10) {
-            console.error('retry error')
-            return
-        }
-        
-        // IMPORTANT: Read reactive dependencies BEFORE await to ensure they are tracked
-        // In Svelte 5 async effects, only reads before the first await trigger re-runs
+    let frameRegistration = null
+    $effect(() => {
+        // Wrapper and anchor readiness must trigger attachment as well as URL changes.
         const currentTabUrl = tab?.url
-        const currentTabId = tab?.id
         const currentTab = tab
+        const permissionsReady = data.permissionState.status === 'ready'
         const isInternalPage = isNewTabUrl(currentTabUrl) || isTabHistoryUrl(currentTabUrl)
         
-        await tick()
-
-        if (!anchor || !frameWrapper) { 
+        const wrapper = frameWrapper
+        const frameAnchor = anchor
+        if (!frameAnchor || !wrapper?.isConnected || !currentTab || (!isInternalPage && !permissionsReady)) {
             return
         }
 
+        let cancelled = false
+        const spaceId = currentTab.spaceId
+        tick().then(() => {
+            if (cancelled || !wrapper.isConnected || frameAnchor.parentNode !== wrapper) {
+                return
+            }
+            untrack(() => {
+                const latestTab = data.docs[currentTab.id]
+                if (!isLiveFrameTab(latestTab) || latestTab.spaceId !== spaceId ||
+                    latestTab.url !== currentTabUrl || tabId !== currentTab.id) {
+                    return
+                }
+                mountControlledFrame(latestTab, isInternalPage, wrapper, frameAnchor)
+            })
+        })
+        return () => { cancelled = true }
+    })
+
+    function mountControlledFrame(currentTab, isInternalPage, wrapper, frameAnchor) {
+        const currentTabId = currentTab.id
         let controlledFrame = data.frames[currentTabId]?.frame
 
         // If transitioning from newtab to real URL, create frame if needed
-        const framesObj = untrack(() => $state.snapshot(data.frames[tabId]))
-        if (!framesObj) {
-            // console.log('resetting frame!!!!!')
-            data.frames[tabId] = {}
+        const framesObj = data.frames[currentTabId] ??= {}
+        if (!frameRegistration?.owns() || frameRegistration.frameData !== framesObj ||
+            frameRegistration.wrapper !== wrapper || frameRegistration.anchor !== frameAnchor) {
+            if (frameRegistration?.owns() && frameRegistration.frameData !== framesObj) {
+                const previousFrame = frameRegistration.frameData.frame
+                if (previousFrame?.parentNode === frameRegistration.wrapper) {
+                    frameScreenshots.cancel(previousFrame)
+                    document.getElementById('backgroundFrames').moveBefore(previousFrame, document.getElementById('anchorFrame'))
+                }
+            }
+            frameRegistration?.destroy()
+            frameRegistration = registerFrameWrapper(data, currentTabId, wrapper, frameAnchor, setupMessageListener)
+            detached = false
         }
-        data.frames[tabId].wrapper = frameWrapper
 
-        let addNode = false
         if (!controlledFrame && currentTab && !isInternalPage) {
-            controlledFrame = document.createElement('controlledframe')
-            const mytab = untrack(() => tab)
+            controlledFrame = createControlledFrame()
+            const mytab = currentTab
 
-            data.frames[tabId].frame = controlledFrame
-            data.frames[tabId].pendingLoad = false
-            addNode = true
+            framesObj.frame = controlledFrame
+            framesObj.pendingLoad = false
+            framesObj.directNavigation = { urls: [mytab.url.split('#')[0]], requestId: null }
 
             controlledFrame.classList.add('frame-instance')
 
-            controlledFrame.partition = tab.partition || 'persist:myapp'
+            controlledFrame.partition = mytab.partition || 'persist:myapp'
 
             controlledFrame.onnewwindow = e => handleNewWindow(mytab, e)
             controlledFrame.onaudiostatechanged = throttle(e => handleAudioStateChanged(mytab, e), 500, {leading: false})
             
             // fired when navigation (including reloads and traversals) starts, for every navigable of the embedded document, but not same document navigation.
-            // IMPORTANT: leading: true is required to block off-origin navigation before it completes
-            controlledFrame.onloadstart = throttle( e => handleLoadStart(mytab, e), 500, {leading: true})
+            // Navigation policy must run before metadata can advance to the destination.
+            controlledFrame.onloadstart = e => handleLoadStart(mytab, e)
             
             // fired when navigation has been completed.
             // controlledFrame.onloadcommit =  throttle(e => handleLoadCommit(mytab, e), 500, {leading: false})
+            controlledFrame.onloadcommit = e => handleLoadCommit(mytab, e)
             
             // fired when all pending navigations finish(either commit or abort). If a new navigation starts after, loadstop may fire again.
-            controlledFrame.onloadstop = throttle(e => handleLoadStop(mytab, e), 500, {leading: false})
+            controlledFrame.onloadstop = e => handleLoadStop(mytab, e)
 
              // fired when the Window associated with embedded navigable fires a load event.
             // controlledFrame.oncontentload =  throttle(e => handleContentLoad(mytab, e), 500, {leading: false})
 
             // fired when navigation has exited before completion.
-            controlledFrame.onloadabort =  throttle(e => handleLoadAbort(mytab, e), 500, {leading: false})
+            controlledFrame.onloadabort = e => handleLoadAbort(mytab, e)
 
             controlledFrame.onclose = e => handleEvent('onclose', mytab, e)
             controlledFrame.oncontentresize = e => handleEvent('oncontentresize',mytab, e)
             controlledFrame.ondialog = e => handleEvent('ondialog',mytab, e)
             controlledFrame.onexit = e => handleEvent('onexit',mytab, e)
-            controlledFrame.onloadredirect = e => handleEvent('onloadredirect',mytab, e)
+            controlledFrame.onloadredirect = e => handleLoadRedirect(mytab, e)
             // controlledFrame.onloadredirect= (e) => { 
             //     console.log(onloadredirect', e)
             //     //         handleEvent('onloadredirect',tab, e)
@@ -2090,7 +2173,7 @@ document.addEventListener('input', function(event) {
             //     //         // }
             //     //         return false
             // }
-            controlledFrame.onpermissionrequest = e => handlePermissionRequest(tabId, e)
+            controlledFrame.onpermissionrequest = e => handlePermissionRequest(currentTabId, e)
             controlledFrame.onresize = e => handleEvent('onresize',mytab, e)
             controlledFrame.onresponsive = e => handleEvent('onresponsive',mytab, e)  
             controlledFrame.onsizechanged = e => handleEvent('onsizechanged',mytab, e)
@@ -2108,39 +2191,22 @@ document.addEventListener('input', function(event) {
         }
         //  console.log('controlledFrame', controlledFrame, { attached, tab.url, addNode })
        
-        if (addNode) {
-            frameWrapper.insertBefore(controlledFrame, anchor)
-            attached = true
-        }
-
-        if (!attached && controlledFrame && anchor) {
-            try {
-                setupMessageListener(controlledFrame)
-                frameWrapper.moveBefore(controlledFrame, anchor)
-                attached = true
-
-                if (data.frames[tabId]?.promoted) {
-                    data.frames[tabId].promoted = false
-                }
-            } catch (err) {
-                console.error('Error attaching ControlledFrame:', err)
-                tab?.id && delete data.frames[tab.id]
-                setTimeout(() => {
-                    retry = retry + 1
-                }, 10)
-            }
-        }
-    })
+        frameRegistration.attach()
+    }
 
     let detached = false
     onDestroy(async () => {
         await tick()
         // console.log('------------------', $state.snapshot(data.frames[tab.id].forceHibernated))
-        if (tab?.id && !detached && !data.frames[tab.id]?.forceHibernated && !data.frames[tab.id]?.promoting) {
-            delete data.frames[tab.id]
-        }
-        if (tab?.id && data.frames[tab.id]?.promoting) {
-            data.frames[tab.id].promoting = false
+        if (frameRegistration?.owns()) {
+            const frameData = frameRegistration.frameData
+            frameScreenshots.cancel(frameData.frame)
+            if (!detached && !frameData.forceHibernated && !frameData.promoting) {
+                delete data.frames[tabId]
+            } else {
+                frameRegistration.destroy()
+                frameData.promoting = false
+            }
         }
         
         if (linkPreviewTimeout) {
@@ -2149,20 +2215,64 @@ document.addEventListener('input', function(event) {
         }
     })
     
-    function detach () {
+    function createControlledFrame() {
+        const frame = document.createElement('controlledframe')
+        const remove = frame.remove.bind(frame)
+        // Hibernation can remove a parked frame after its wrapper has unmounted.
+        frame.remove = () => {
+            releaseControlledFrame(frame)
+            remove()
+        }
+        return frame
+    }
+
+    function releaseControlledFrame(frame) {
+        releasedFrames.add(frame)
+        data.cancelFramePermissions(frame)
+        frameScreenshots.cancel(frame)
+        releaseFrameIPC(frame)
+        // Keep the final navigation out of tab metadata and cancel queued callbacks.
+        for (const event of [
+            'newwindow', 'audiostatechanged', 'loadstart', 'loadstop', 'loadabort', 'loadcommit',
+            'close', 'contentresize', 'dialog', 'exit', 'loadredirect',
+            'permissionrequest', 'resize', 'responsive', 'sizechanged',
+            'unresponsive', 'consolemessage'
+        ]) {
+            frame[`on${event}`]?.cancel?.()
+            frame[`on${event}`] = null
+        }
+        // Release the guest page before its element leaves the DOM.
+        frame.src = 'about:blank'
+    }
+
+    function detach (node) {
+        const instance = node.querySelector('controlledframe')
+        if (instance && (!tab?._id || instance !== data.frames[tabId]?.frame)) {
+            releaseControlledFrame(instance)
+        }
+
         if (!tab?._id) {
-            tab?.id && delete data.frames[tab.id]
+            if (frameRegistration?.owns()) {
+                delete data.frames[tabId]
+            }
             return {
                 duration: 0
             }
         }
         
+        if (!frameRegistration?.owns()) {
+            return { duration: 0 }
+        }
+
         let controlledFrame = data.frames[tab.id]?.frame
 
         if (controlledFrame) {
+            frameScreenshots.cancel(controlledFrame)
             const backgroundFrames = document.getElementById('backgroundFrames')
             const anchorFrame = document.getElementById('anchorFrame')
-            backgroundFrames.moveBefore(controlledFrame, anchorFrame)
+            if (controlledFrame.parentNode === node) {
+                backgroundFrames.moveBefore(controlledFrame, anchorFrame)
+            }
             detached = true
         }
 
@@ -2181,6 +2291,7 @@ document.addEventListener('input', function(event) {
         if (oauthPopup?.frame) {
             try {
                 if (oauthPopup.frame.parentNode) {
+                    releaseControlledFrame(oauthPopup.frame)
                     oauthPopup.frame.parentNode.removeChild(oauthPopup.frame)
                 }
             } catch (error) {
@@ -2192,12 +2303,16 @@ document.addEventListener('input', function(event) {
     }
 
     function handleOAuthPopupEvent(eventType, popupFrame, event) {
-        if (!oauthPopup) return
+        if (oauthPopup?.frame !== popupFrame) return
 
         const { parentTab } = oauthPopup
         const parentFrame = data.frames[parentTab.id]?.frame
         
         switch (eventType) {
+            case 'loadcommit':
+                if (event.isTopLevel && event.url) oauthPopup.url = event.url
+                break
+
             case 'consolemessage':
                 const message = event.message
                 
@@ -2328,6 +2443,7 @@ document.addEventListener('input', function(event) {
         return {
             destroy() {
                 if (frame && frame.parentNode) {
+                    releaseControlledFrame(frame)
                     frame.parentNode.removeChild(frame)
                 }
             }
@@ -2354,7 +2470,7 @@ document.addEventListener('input', function(event) {
     })
 </script>
 
-<svelte:window onkeydown={handleOAuthKeydown} />
+<svelte:window onkeydown={handleOAuthKeydown} ondarc-dismiss-overlays={dismissLinkPreview} />
 {#key tab?.partition || 'default'}
     {#if oauthPopup}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -2367,10 +2483,26 @@ document.addEventListener('input', function(event) {
 
         <div 
             class="oauth-popup-frame-container"
+            class:expanded={oauthPopup.expanded}
             style="width: {oauthPopup.width}px; height: {oauthPopup.height}px;"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sign in"
+            tabindex="-1"
             transition:fade={{duration: 300, delay: 100}}
-            use:appendPopupFrame={oauthPopup.frame}
-        ></div>
+        >
+            <LightboxHeader
+                tab={{
+                    url: oauthPopup.url,
+                    favicon: oauthPopup.url.startsWith('http')
+                        ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(oauthPopup.url)}&size=64`
+                        : null
+                }}
+                onNavigate={(url) => { oauthPopup.frame.src = url }}
+                onExpandLightbox={oauthPopup.expanded ? null : () => { oauthPopup.expanded = true }}
+            />
+            <div class="oauth-popup-content" use:appendPopupFrame={oauthPopup.frame}></div>
+        </div>
     {/if}
 
     <div
@@ -2404,7 +2536,12 @@ document.addEventListener('input', function(event) {
 
         <div class="hidden" bind:this={anchor}></div>
 
-        {#if currentCertificateError}
+        {#if data.permissionState.status === 'error'}
+            <div class="permission-load-error" role="alert">
+                <p>Permission settings could not be loaded.</p>
+                <button onmousedown={() => window.location.reload()}>Reload Darc</button>
+            </div>
+        {:else if currentCertificateError}
             <SSLErrorPage
                 {tab}
                 certificateError={currentCertificateError}
@@ -2554,18 +2691,33 @@ loading="eager"
         z-index: 10000;
         border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 12px;
-        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        max-width: calc(100vw - 32px);
+        max-height: calc(100vh - 32px);
         box-shadow: 
             0 25px 50px rgba(0, 0, 0, 0.6),
             0 0 0 1px rgba(255, 255, 255, 0.1);
         background: #0a0a0a;
     }
 
-    .oauth-popup-frame-container :global(.oauth-popup-frame) {
+    .oauth-popup-frame-container.expanded {
+        width: calc(100vw - 80px) !important;
+        height: calc(100vh - 80px) !important;
+    }
+
+    .oauth-popup-content {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        border-radius: 0 0 12px 12px;
+    }
+
+    .oauth-popup-content :global(.oauth-popup-frame) {
         width: 100%;
         height: 100%;
         display: block;
         border: none;
-        border-radius: 12px;
+        border-radius: 0 0 12px 12px;
     }
 </style>

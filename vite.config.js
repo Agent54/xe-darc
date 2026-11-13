@@ -162,9 +162,24 @@ if (process.env.NODE_ENV === 'production') {
 
 console.log('Vite config loaded - Server port: 5194, DevTools proxy port: 9226');
 
+const iwaManifest = JSON.parse(
+  fs.readFileSync(
+    new URL('./public/.well-known/manifest.webmanifest', import.meta.url),
+    'utf-8'
+  )
+)
+const iwaVersion = iwaManifest.version
+
+if (typeof iwaVersion !== 'string' || iwaVersion.length === 0) {
+  throw new Error('IWA manifest is missing a version')
+}
+
 export default defineConfig({
   plugins,
-  define: { globals: 'window' },
+  define: {
+    globals: 'window',
+    __IWA_VERSION__: JSON.stringify(iwaVersion)
+  },
   handleHotUpdate({ file }) {
     console.log({file})
     if (file.endsWith('.md') || file.startWith('.')) {
@@ -183,10 +198,9 @@ export default defineConfig({
       origin: '*' // /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/ 
     },
     proxy: {
-      '/agents': {
-        target: 'ws://localhost:8787',
+      '/mcp': {
+        target: 'http://localhost:8787',
         ws: true,
-        rewriteWsOrigin: true,
       },
       '/devtools-api': {
         target: `http://${process.env.container === 'true' ? 'host.docker.internal' : '127.0.0.1'}:9226`,
@@ -224,7 +238,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
-        agent_app: './agent_app.html',
         service_worker: './service-worker.js'
         // web_request_test: './web_request_test.html',
         // tldraw_webview: './tldraw_webview.html'

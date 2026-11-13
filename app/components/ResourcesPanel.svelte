@@ -1,6 +1,8 @@
 <script>
     import RightSidebar from './RightSidebar.svelte'
     import resourceTypes from '../lib/resourceTypes.js'
+    import { permissionCardResources, permissionOrigin } from '../lib/permissions.js'
+    import PermissionCard from './PermissionCard.svelte'
 	import data from '../data.svelte'
     // FIXME: use app global click outside scrim handler
     // filter: current page's resources/ all resources
@@ -15,7 +17,6 @@
         switchToAgent,
         switchToDevTools,
         devModeEnabled = false,
-        autoOpened = false,
     } = $props()
 
     // Clear unseen flags when sidebar is closed
@@ -29,6 +30,7 @@
 		{ id: 'window', label: 'Current window' },
 		{ id: 'instance', label: 'Current instance' },
         { id: 'origin', label: 'Current origin' },
+        { id: 'mcp', label: 'MCP connections' },
 	]
 	let scope = $state(localStorage.getItem('resourcesScope') || 'origin')
 	$effect(() => {
@@ -74,99 +76,6 @@
     let hasCheckedAvailability = $state(false)
     let isCheckingAvailability = $state(false)
     
-    // Track which accept dropdown is open
-    let openAcceptDropdown = $state(null)
-    
-    // Resource action handlers
-    function acceptResource(resourceId, permission = 'once', event = null) {
-        if (event) {
-            event.stopPropagation()
-            event.preventDefault()
-        }
-        
-        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
-        if (!currentUrl) {
-            console.warn('No current URL found for permission request')
-            return
-        }
-        
-        const origin = new URL(currentUrl).origin
-        const success = data.allowPermission(resourceId, origin, permission)
-        
-        if (success) {
-            console.log('Accept resource:', resourceId, 'with permission:', permission, 'for origin:', origin)
-        } else {
-            console.warn('Failed to accept resource:', resourceId)
-        }
-        
-        openAcceptDropdown = null
-    }
-    
-    function denyResource(resourceId) {
-        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
-        if (!currentUrl) {
-            console.warn('No current URL found for permission request')
-            return
-        }
-        
-        const origin = new URL(currentUrl).origin
-        const success = data.denyPermission(resourceId, origin)
-        
-        if (success) {
-            console.log('Deny resource:', resourceId, 'for origin:', origin)
-            if (autoOpened) {
-                onClose()
-            }
-        } else {
-            console.warn('Failed to deny resource:', resourceId)
-        }
-    }
-    
-    function mockResource(resourceId) {
-        console.log('Mock resource:', resourceId)
-        // TODO: Implement actual mocking logic
-    }
-    
-    function ignoreResource(resourceId) {
-        const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
-        if (!currentUrl) {
-            console.warn('No current URL found for permission request')
-            return
-        }
-        
-        const origin = new URL(currentUrl).origin
-        const success = data.ignorePermission(resourceId, origin)
-        
-        if (success) {
-            console.log('Ignore resource:', resourceId, 'for origin:', origin)
-            if (autoOpened) {
-                onClose()
-            }
-        } else {
-            console.warn('Failed to ignore resource:', resourceId)
-        }
-    }
-    
-    
-    function toggleAcceptDropdown(resourceId, event) {
-        event.stopPropagation()
-        event.preventDefault()
-        openAcceptDropdown = openAcceptDropdown === resourceId ? null : resourceId
-    }
-    
-    // Close dropdown when clicking outside
-    function handleClickOutside(event) {
-        if (!event.target.closest('.accept-dropdown')) {
-            openAcceptDropdown = null
-        }
-    }
-    
-    function handleMouseDownOutside(event) {
-        if (!event.target.closest('.accept-dropdown')) {
-            openAcceptDropdown = null
-        }
-    }
-    
     // Test each resource type for availability
     async function checkResourceAvailability() {
         if (hasCheckedAvailability || isCheckingAvailability) return
@@ -175,13 +84,15 @@
         const newUnused = []
         for (const resourceType in resourceTypes) {
             try {
-                const result = await resourceTypes[resourceType].availability()
+                const implemented = data.permissionSupported(resourceType)
+                const result = implemented ? await resourceTypes[resourceType].availability() : { available: false, error: 'Not implemented' }
                 newUnused.push({
                     id: resourceType,
                     type: resourceType,
                     lastUsed: 'Never',
                     status: result.available ? 'Available' : 'Unavailable',
-                    error: result.error
+                    error: result.error,
+                    supported: implemented
                 })
             } catch (e) {
                 newUnused.push({
@@ -209,49 +120,31 @@
         const usedResourceTypes = new Set()
 
         const currentUrl = data.docs[data.spaceMeta.activeTabId]?.url
-        if (!currentUrl && scope === 'origin') {
-            return {
-                requested,
-                used,
-                mocked,
-                blocked,
-                unused: unused.filter(unusedResource => !usedResourceTypes.has(unusedResource.type)),
-                archived
+        const currentOrigin = permissionOrigin(currentUrl)
+        const currentPartition = data.docs[data.spaceMeta.activeTabId]?.partition || 'persist:myapp'
+        const cards = permissionCardResources(data.permissions, data.permissionRules, resource => {
+            if (resource.status === 'requested') {
+                return resource.windowId === window.darcWindowId
+            }
+            return scope === 'mcp' ? !!resource.scope?.subject : scope === 'origin'
+                ? resource.scope?.topLevelOrigin === currentOrigin && resource.scope?.partition === currentPartition
+                : scope === 'window' ? resource.windowId === window.darcWindowId : true
+        }, data.spaceMeta.activeTabId)
+        const byStatus = { requested, granted: used, denied: blocked, ignored: archived }
+        for (const resource of cards) {
+            const section = byStatus[resource.status]
+            if (section) {
+                section.push(resource)
+                usedResourceTypes.add(resource.type)
             }
         }
-        const origin = new URL(currentUrl).origin // scope === 'origin' ? origin(tab.url) : null
-
-        Object.entries(data.permissions).forEach(([resourceType, permission]) => {
-            if (scope === 'origin') {
-                const request = permission.origins?.[origin]?.requests?.at(-1)
-                if (request?.status === 'requested') {
-                    requested.push(request)
-                    usedResourceTypes.add(resourceType)
-                } else if (request?.status === 'granted') {
-                    used.push(request)
-                    usedResourceTypes.add(resourceType)
-                } else if (request?.status === 'denied') {
-                    blocked.push(request)
-                    usedResourceTypes.add(resourceType)
-                } else if (request?.status === 'mocked') {
-                    mocked.push(request)
-                    usedResourceTypes.add(resourceType)
-                } else if (request?.status === 'ignored') {
-                    archived.push(request)
-                    usedResourceTypes.add(resourceType)
-                }
-            } else {
-                console.warn('permission scopes other than origin not implemented')
-                return
-            }
-        })
 
         return {
             requested,
             used,
             mocked,
             blocked,
-            unused: unused.filter(unusedResource => !usedResourceTypes.has(unusedResource.type)),
+            unused: unused.filter(unusedResource => !resourceTypes[unusedResource.type]?.mcp && !usedResourceTypes.has(unusedResource.type)),
             archived
         }
 
@@ -263,10 +156,14 @@
     })
 </script>
 
-<svelte:window onclick={handleClickOutside} onmousedown={handleMouseDownOutside} />
-
 <RightSidebar title="Resources" onClose={handleClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
+        {#if data.permissionState.error}
+            <p role="alert">{data.permissionState.error}</p>
+        {/if}
+        {#if data.permissionState.seenError}
+            <p role="alert">{data.permissionState.seenError}</p>
+        {/if}
 		<div class="resources-controls">
 			<div class="scope-control">
 				<label class="sr-only" for="resources-scope">Scope</label>
@@ -290,139 +187,8 @@
                     </button>
                     {#if !collapsedSections[section.id]}
                         <div class="resource-cards">
-                            {#each resourceData[section.id] as resource (resource.id)}
-                                {@const resourceType = resourceTypes[resource.type] || { name: resource.type, icon: '❓', description: 'Unknown resource type' }}
-                                <div class="resource-card" class:unseen={resource.unseen}>
-                                    <div class="resource-header">
-                                        <span class="resource-icon">{@html resourceType.icon}</span>
-                                        <div class="resource-info">
-                                            <h4 class="resource-name">{resourceType.name}</h4>
-                                            <p class="resource-description">{resourceType.description}</p>
-                                        </div>
-                                        {#if resource.unseen}
-                                            <div class="unseen-indicator" title="New request"></div>
-                                        {/if}
-                                    </div>
-                                    <div class="resource-details">
-                                        <div class="resource-status {resource.status.toLowerCase().replace(' ', '-')}">
-                                            <span class="status-indicator"></span>
-                                            <span class="status-text">{resource.status}</span>
-                                        </div>
-                                        <div class="resource-last-used">
-                                            <span class="last-used-label">Last used:</span>
-                                            <span class="last-used-time">{resource.timestamp ? new Date(resource.timestamp).toLocaleString('de-DE') : 'Never'}</span>
-                                        </div>
-                                        {#if resource.mockValue}
-                                            <div class="resource-mock-value">
-                                                <span class="mock-value-label">Mock value:</span>
-                                                <span class="mock-value-text">{resource.mockValue}</span>
-                                            </div>
-                                        {/if}
-                                    </div>
-                                    {#if resource.needsReload && (section.id === 'used' || section.id === 'blocked')}
-                                        <div class="resource-reload-reminder">
-                                            <div class="reload-message">
-                                                {#if section.id === 'used'}
-                                                    <span class="reload-text">You might need to reload the page for changes to take effect</span>
-                                                    <button class="reload-btn" onmousedown={() => data.reloadCurrentTab()} title="Reload page">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                                                            <path d="M21 3v5h-5"/>
-                                                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                                                            <path d="M3 21v-5h5"/>
-                                                        </svg>
-                                                        Reload
-                                                    </button>
-                                                {:else if section.id === 'blocked'}
-                                                    <span class="reload-text">Changes might require restarting Darc</span>
-                                                    <button class="reload-btn" onmousedown={() => console.log('Restart Darc - to be implemented')} title="Restart Darc">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                                                        </svg>
-                                                        Restart Darc
-                                                    </button>
-                                                {/if}
-                                            </div>
-                                            <button class="change-btn-inline" onmousedown={() => data.changePermission(resource.type, new URL(data.docs[data.spaceMeta.activeTabId]?.url).origin)} title="Change permission decision">
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                                                    <path d="M21 3v5h-5"/>
-                                                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                                                    <path d="M3 21v-5h5"/>
-                                                </svg>
-                                                Change
-                                            </button>
-                                        </div>
-                                    {/if}
-                                    {#if section.id !== 'requested'}
-                                        {#if section.id === 'unused'}
-                                            <button class="change-btn" onmousedown={() => data.permissionRequest(data.spaceMeta.activeTabId, {
-                                                permission: resource.type,
-                                                url: data.docs[data.spaceMeta.activeTabId]?.url,
-                                                requester: 'User (proactive)',
-                                                explanation: 'User-initiated proactive permission request',
-                                                requestType: 'always'
-                                            })} title="Request permission proactively">
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                                                    <path d="M21 3v5h-5"/>
-                                                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                                                    <path d="M3 21v-5h5"/>
-                                                </svg>
-                                                Change
-                                            </button>
-                                        {:else}
-                                            <button class="change-btn" onmousedown={() => data.changePermission(resource.type, new URL(data.docs[data.spaceMeta.activeTabId]?.url).origin)} title="Change permission decision">
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                                                    <path d="M21 3v5h-5"/>
-                                                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                                                    <path d="M3 21v-5h5"/>
-                                                </svg>
-                                                Change
-                                            </button>
-                                        {/if}
-                                    {/if}
-                                    {#if section.id === 'requested'}
-                                        <div class="resource-request-info">
-                                            <div class="requester-info">
-                                                <span class="requester-label">Requested by:</span>
-                                                <span class="requester-name">{resource.requester || new URL(resource.url).origin}</span>
-                                            </div>
-                                            <div class="request-type-info">
-                                                <span class="request-type-label">Access type:</span>
-                                                <span class="request-type-value {resource.requestType}">
-                                                    {resource.requestType === 'foreground' ? 'Foreground only' : 
-                                                     resource.requestType === 'background' ? 'Background only' : 
-                                                     resource.requestType === 'both' ? 'Foreground and background' : 
-                                                     resource.requestType}
-                                                </span>
-                                            </div>
-                                            <div class="explanation-info">
-                                                <span class="explanation-text">{resource.explanation}</span>
-                                            </div>
-                                        </div>
-                                        <div class="resource-actions">
-                                            <div class="accept-dropdown">
-                                                <button class="accept-btn main" onmousedown={() => acceptResource(resource.type)}>Allow</button>
-                                                <button class="accept-btn dropdown" aria-label="Accept options" onmousedown={(event) => toggleAcceptDropdown(resource.type, event)}>
-                                                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                                                        <path d="M2 3L4 5L6 3" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
-                                                    </svg>
-                                                </button>
-                                                {#if openAcceptDropdown === resource.type}
-                                                    <div class="dropdown-menu" role="menu" tabindex="-1" onmousedown={(event) => { event.stopPropagation(); event.preventDefault(); }} onkeydown={(event) => event.stopPropagation()}>
-                                                        <button onmouseup={(event) => acceptResource(resource.type, 'always', event)}>Always allow (default)</button>
-                                                        <button onmouseup={(event) => acceptResource(resource.type, 'until-app-close', event)}>Allow until closing app</button>
-                                                    </div>
-                                                {/if}
-                                            </div>
-                                            <button class="action-btn deny" onmousedown={() => denyResource(resource.type)}>Deny</button>
-                                            <button class="action-btn mock" onmousedown={() => mockResource(resource.type)}>Mock</button>
-                                            <button class="action-btn ignore" onmousedown={() => ignoreResource(resource.type)}>Ignore</button>
-                                        </div>
-                                    {/if}
-                                </div>
+                            {#each resourceData[section.id] as resource (resource.ruleId || resource.requestId || resource.id)}
+                                <PermissionCard {resource} sectionId={section.id} />
                             {/each}
                         </div>
                     {/if}
@@ -560,165 +326,6 @@
         gap: 6px;
     }
 
-    .resource-card {
-        position: relative;
-        padding-bottom: 30px; /* Make room for change button */
-    }
-
-    .resource-card.unseen {
-        border-left: 2px solid rgba(59, 130, 246, 0.6);
-    }
-
-    .resource-header {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        margin-bottom: 6px;
-        position: relative;
-    }
-
-    .unseen-indicator {
-        width: 8px;
-        height: 8px;
-        background-color: #3b82f6;
-        border-radius: 50%;
-        flex-shrink: 0;
-        margin-top: 2px;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-    }
-
-    .resource-icon {
-        font-size: 18px;
-        flex-shrink: 0;
-        line-height: 1;
-        margin-top: 1px;
-    }
-
-    .resource-info {
-        flex: 1;
-        min-width: 0;
-    }
-
-    .resource-name {
-        font-size: 13px;
-        font-weight: 500;
-        margin: 0 0 2px 0;
-        color: rgba(255, 255, 255, 0.75);
-        line-height: 1.2;
-    }
-
-    .resource-description {
-        font-size: 11px;
-        color: rgba(255, 255, 255, 0.4);
-        line-height: 1.3;
-        margin: 0;
-        font-family: 'Inter', sans-serif;
-        font-weight: 400;
-    }
-
-    .resource-details {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-        margin-top: 6px;
-    }
-
-    .resource-status {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        font-size: 10px;
-    }
-
-    .status-indicator {
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        margin-top: -1px;
-    }
-
-    .active .status-indicator {
-        background-color: #16a34a;
-    }
-
-    .requested .status-indicator {
-        background-color: #eab308;
-    }
-
-    .available .status-indicator {
-        background-color: #6b7280;
-    }
-
-    .unused .available .status-indicator {
-        background-color: #16a34a;
-        opacity: 0.6;
-    }
-
-    .unused .unavailable .status-indicator {
-        background-color: #eab308;
-    }
-
-    .mocked .status-indicator {
-        background-color: #8b5cf6;
-    }
-
-    .not-checked .status-indicator {
-        background-color: #6b7280;
-        opacity: 0.4;
-    }
-
-    .checking .status-indicator {
-        background-color: #eab308;
-        opacity: 0.6;
-    }
-
-    .blocked .status-indicator {
-        background-color: #ef4444;
-    }
-
-    .archived .status-indicator {
-        background-color: #3b82f6;
-    }
-
-    .status-text {
-        color: rgba(255, 255, 255, 0.35);
-        font-weight: 400;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-    }
-
-    .resource-last-used {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        font-size: 10px;
-    }
-
-    .last-used-label {
-        color: rgba(255, 255, 255, 0.35);
-    }
-
-    .last-used-time {
-        color: rgba(255, 255, 255, 0.55);
-    }
-
-    .resource-mock-value {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        font-size: 10px;
-    }
-
-    .mock-value-label {
-        color: rgba(255, 255, 255, 0.35);
-    }
-
-    .mock-value-text {
-        color: rgba(139, 92, 246, 0.8);
-        font-weight: 500;
-    }
-
     .empty-state {
         display: flex;
         flex-direction: column;
@@ -752,364 +359,4 @@
     }
 
     /* Resource Request Info */
-    .resource-request-info {
-        margin-top: 8px;
-        margin-bottom: 6px;
-        padding: 8px 0;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .requester-info {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        margin-bottom: 4px;
-    }
-
-    .requester-label {
-        font-size: 10px;
-        color: rgba(255, 255, 255, 0.35);
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-    }
-
-    .requester-name {
-        font-size: 10px;
-        color: rgba(255, 255, 255, 0.6);
-        font-weight: 500;
-    }
-
-    .request-type-info {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        margin-bottom: 4px;
-    }
-
-    .request-type-label {
-        font-size: 10px;
-        color: rgba(255, 255, 255, 0.35);
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-    }
-
-    .request-type-value {
-        font-size: 10px;
-        font-weight: 500;
-    }
-
-    .request-type-value.foreground {
-        color: rgba(34, 197, 94, 0.8);
-    }
-
-    .request-type-value.background {
-        color: rgba(251, 191, 36, 0.8);
-    }
-
-    .request-type-value.both {
-        color: rgba(168, 85, 247, 0.8);
-    }
-
-    .explanation-info {
-        margin-top: 2px;
-    }
-
-    .explanation-text {
-        font-size: 11px;
-        color: rgba(255, 255, 255, 0.5);
-        line-height: 1.3;
-        font-style: italic;
-    }
-
-    /* Resource Actions */
-    .resource-actions {
-        display: flex;
-        gap: 4px;
-        margin-top: 8px;
-        width: 100%;
-    }
-
-    .accept-dropdown {
-        position: relative;
-        display: flex;
-        flex: 1;
-    }
-
-    .accept-btn {
-        background: rgba(34, 197, 94, 0.15);
-        color: rgba(34, 197, 94, 1);
-        border: none;
-        font-size: 10px;
-        font-weight: 500;
-        padding: 6px 8px 5px 8px;
-        cursor: pointer;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        transition: background-color 0.15s ease, color 0.15s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        line-height: 1;
-        box-sizing: border-box;
-        outline: 0;
-        margin: 0;
-        flex: 1;
-    }
-
-    .accept-btn.main {
-        border-radius: 3px 0 0 3px;
-    }
-
-    .accept-btn.dropdown {
-        border-radius: 0 3px 3px 0;
-        border-left: 1px solid rgba(34, 197, 94, 0.3);
-        padding: 6px 6px 5px 6px;
-        flex: 0 0 auto;
-    }
-
-    .accept-btn:hover,
-    .accept-btn:focus {
-        background: rgba(34, 197, 94, 0.22);
-        color: rgba(34, 197, 94, 1);
-    }
-
-    .dropdown-menu {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        background: rgba(0, 0, 0, 0.9);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 4px;
-        min-width: 120px;
-        z-index: 10;
-        margin-top: 2px;
-        box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.95), 0 12px 24px -6px rgba(0, 0, 0, 0.9), 0 8px 16px -4px rgba(0, 0, 0, 0.85), 0 4px 8px -2px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.15);
-    }
-
-    .dropdown-menu button {
-        display: block;
-        width: 100%;
-        background: none;
-        border: none;
-        color: #fff;
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: -0.008em;
-        line-height: 1;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: antialiased;
-        padding: 8px 14px;
-        text-align: left;
-        cursor: pointer;
-        transition: background-color 0.15s ease;
-        white-space: nowrap;
-    }
-
-    .dropdown-menu button:hover {
-        background: rgba(255, 255, 255, 0.1);
-    }
-
-    .dropdown-menu button:first-child {
-        border-radius: 4px 4px 0 0;
-    }
-
-    .dropdown-menu button:last-child {
-        border-radius: 0 0 4px 4px;
-    }
-
-    .action-btn {
-        background: rgba(75, 85, 99, 0.15);
-        color: rgba(255, 255, 255, 0.75);
-        border: none;
-        border-radius: 3px;
-        font-size: 10px;
-        font-weight: 500;
-        padding: 6px 8px 5px 8px;
-        cursor: pointer;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        transition: background-color 0.15s ease, color 0.15s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        line-height: 1;
-        box-sizing: border-box;
-        outline: 0;
-        margin: 0;
-        flex: 1;
-    }
-
-    .action-btn:hover,
-    .action-btn:focus {
-        background: rgba(75, 85, 99, 0.22);
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    .action-btn.deny {
-        background: rgba(239, 68, 68, 0.15);
-        color: rgba(239, 68, 68, 1);
-    }
-
-    .action-btn.deny:hover,
-    .action-btn.deny:focus {
-        background: rgba(239, 68, 68, 0.22);
-        color: rgba(239, 68, 68, 1);
-    }
-
-    .action-btn.mock {
-        background: rgba(139, 92, 246, 0.15);
-        color: rgba(139, 92, 246, 1);
-    }
-
-    .action-btn.mock:hover,
-    .action-btn.mock:focus {
-        background: rgba(139, 92, 246, 0.22);
-        color: rgba(139, 92, 246, 1);
-    }
-
-    .action-btn.ignore {
-        background: rgba(107, 114, 128, 0.15);
-        color: rgba(107, 114, 128, 1);
-    }
-
-    .action-btn.ignore:hover,
-    .action-btn.ignore:focus {
-        background: rgba(107, 114, 128, 0.22);
-        color: rgba(107, 114, 128, 1);
-    }
-
-    /* Resource Reload Reminder */
-    .resource-reload-reminder {
-        margin-top: 8px;
-        padding: 6px 8px;
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 4px;
-    }
-
-    /* Hide change button when reload reminder is visible */
-    .resource-reload-reminder ~ .change-btn {
-        display: none;
-    }
-
-    .change-btn-inline {
-        margin-top: 6px;
-        margin-left: auto;
-        background: rgba(255, 255, 255, 0.06);
-        color: rgba(255, 255, 255, 0.6);
-        border: none;
-        border-radius: 3px;
-        font-size: 9px;
-        font-weight: 500;
-        padding: 4px 6px;
-        cursor: pointer;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        transition: background-color 0.15s ease, color 0.15s ease;
-        display: flex;
-        align-items: center;
-        gap: 3px;
-        line-height: 1;
-        box-sizing: border-box;
-        outline: 0;
-        flex-shrink: 0;
-    }
-
-    .change-btn-inline:hover,
-    .change-btn-inline:focus {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.8);
-    }
-
-    .change-btn-inline svg {
-        width: 10px;
-        height: 10px;
-    }
-
-    .reload-message {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-    }
-
-    .reload-text {
-        font-size: 10px;
-        color: rgba(255, 255, 255, 0.4);
-        line-height: 1.3;
-        flex: 1;
-    }
-
-    .reload-btn {
-        background: rgba(255, 255, 255, 0.06);
-        color: rgba(255, 255, 255, 0.6);
-        border: none;
-        border-radius: 3px;
-        font-size: 9px;
-        font-weight: 500;
-        padding: 4px 6px;
-        cursor: pointer;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        transition: background-color 0.15s ease, color 0.15s ease;
-        display: flex;
-        align-items: center;
-        gap: 3px;
-        line-height: 1;
-        box-sizing: border-box;
-        outline: 0;
-        margin: 0;
-        flex-shrink: 0;
-    }
-
-    .reload-btn:hover,
-    .reload-btn:focus {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.8);
-    }
-
-    .reload-btn svg {
-        width: 10px;
-        height: 10px;
-    }
-    .change-btn {
-        position: absolute;
-        bottom: 6px;
-        right: 6px;
-        background: rgba(255, 255, 255, 0.06);
-        color: rgba(255, 255, 255, 0.6);
-        border: none;
-        border-radius: 3px;
-        font-size: 10px;
-        font-weight: 500;
-        padding: 4px 6px;
-        cursor: pointer;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        transition: background-color 0.15s ease, color 0.15s ease, opacity 0.2s ease;
-        display: flex;
-        align-items: center;
-        gap: 3px;
-        line-height: 1;
-        box-sizing: border-box;
-        outline: 0;
-        margin: 0;
-        opacity: 0;
-    }
-
-    .resource-card:hover .change-btn {
-        opacity: 1;
-    }
-
-    .change-btn:hover,
-    .change-btn:focus {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.8);
-    }
-
-    .change-btn svg {
-        width: 10px;
-        height: 10px;
-    }
 </style>

@@ -1,6 +1,10 @@
 <script>
+  import { getTabTitle } from '../lib/tab-title.js'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
+  import GridTabStack from './GridTabStack.svelte'
+  import TabHoverCard from './TabHoverCard.svelte'
+  import { getTabActivationHistory } from '../lib/tab-activation-history.js'
   import data from '../data.svelte.js'
   import { colors as spaceColors } from '../lib/utils.js'
   import { onMount } from 'svelte'
@@ -15,24 +19,24 @@
     tabSidebarWidth = 0,
     spaceTaken = 0,
     onSpaceSwitch = () => {},
-    onZenModeChange = () => {},
-    initialZenModeWasActive = false
+    historySwitch = null
   } = $props()
 
-  let activeView = $state(localStorage.getItem('gridActiveView') || 'tabs')
-  let spaceScope = $state(localStorage.getItem('gridSpaceScope') || 'current')
-  let zenModeWasActiveOnOpen = $state(false)
+  let savedActiveView = $state(localStorage.getItem('gridActiveView') || 'tabs')
+  let activeView = $derived(historySwitch ? 'history' : savedActiveView)
+  let windowWidth = $state(window.innerWidth)
+  let historyContainer = $state(null)
+  let spaceScope = $state('current')
+  let spacesContainer = $state(null)
   let gridWindowId = $state(window.darcWindowId || '')
   let gridInstanceId = $state(window.darcInstanceId || '')
-
   function setActiveView(view) {
-    activeView = view
+    savedActiveView = view
     localStorage.setItem('gridActiveView', view)
   }
 
   function toggleSpaceScope() {
     spaceScope = spaceScope === 'current' ? 'all' : 'current'
-    localStorage.setItem('gridSpaceScope', spaceScope)
   }
 
   function getGridCollapsedSpacesStorageKey(windowId = gridWindowId || window.darcWindowId) {
@@ -82,7 +86,7 @@
   // Track collapsed spaces
   let collapsedSpaces = $state(new Set())
   
-  // On mount: enable zen mode (if not already), and ensure current space is expanded
+  // Ensure the current space is expanded when opening the overview.
   onMount(() => {
     gridInstanceId = window.darcInstanceId || ''
     gridWindowId = window.darcWindowId || ''
@@ -96,21 +100,6 @@
         }
       })
       .catch(() => {})
-
-    // Store whether zen mode was active when opening
-    zenModeWasActiveOnOpen = initialZenModeWasActive
-    
-    // Enable zen mode when opening grid view
-    if (!initialZenModeWasActive) {
-      onZenModeChange(true)
-    }
-    
-    // Cleanup: disable zen mode on close (only if it wasn't active before)
-    return () => {
-      if (!zenModeWasActiveOnOpen) {
-        onZenModeChange(false)
-      }
-    }
   })
 
   function toggleSpaceCollapsed(spaceId) {
@@ -128,6 +117,12 @@
   let gridRenamingSpaceId = $state(null)
   let gridRenameInputValue = $state('')
   let gridRenameInputRef = $state(null)
+
+  function dismissOverlays() {
+    gridContextMenuId = null
+    gridColorPickerSpaceId = null
+    gridRenamingSpaceId = null
+  }
 
   function handleSpaceHeaderContext(e, id) {
     e.preventDefault()
@@ -183,6 +178,23 @@
   let spaceOrder = $derived(data.spaceMeta.spaceOrder || [])
   let activeSpaceId = $derived(data.spaceMeta.activeSpace)
   let activeTabId = $derived(data.spaceMeta.activeTabId)
+  let activationHistory = $derived.by(() => {
+    if (historySwitch) return historySwitch.entries
+    if (spaceScope === 'current') return getTabActivationHistory(data)
+    return spaceOrder.flatMap(id => getTabActivationHistory(data, id))
+      .sort((a, b) => b.activatedAt - a.activatedAt)
+  })
+
+  $effect(() => {
+    const container = historyContainer
+    const index = historySwitch?.index
+    const width = windowWidth
+    if (!container || index == null) return
+    const frame = requestAnimationFrame(() => {
+      container.querySelector(`[data-history-index="${index}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+    })
+    return () => cancelAnimationFrame(frame)
+  })
   
   // Pre-compute spaces data with filtered tabs to avoid reactive lookups in template
   let spacesData = $derived.by(() => {
@@ -190,21 +202,45 @@
     for (const id of spaceOrder) {
       const space = data.spaces[id]
       if (space) {
-        const tabs = space.tabs || []
+        const pins = data.getSpacePins(id)
+        const groups = data.getTabGroups(id)
         result[id] = {
           ...space,
-          leftPinnedTabs: tabs.filter(tab => tab.pinned === true || tab.pinned === 'left'),
-          rightPinnedTabs: tabs.filter(tab => tab.pinned === 'right'),
-          unpinnedTabs: tabs.filter(tab => !tab.pinned)
+          leftPinnedTabs: pins.filter(tab => tab.pinned === true || tab.pinned === 'left'),
+          rightPinnedTabs: pins.filter(tab => tab.pinned === 'right'),
+          tabGroups: groups,
+          memberTabs: groups.flatMap(group => group.tabs)
         }
       }
     }
     return result
   })
 
-  let displayedSpaceOrder = $derived(
-    spaceScope === 'current' ? spaceOrder.filter(id => id === activeSpaceId) : spaceOrder
-  )
+  // Open on the active space, while leaving its neighbors available to swipe to.
+  // Native snapping keeps the browsed space aligned when the viewport resizes.
+  $effect(() => {
+    const container = spacesContainer
+    const currentSpaceId = activeSpaceId
+    const order = spaceOrder.join(',')
+    if (!container || spaceScope !== 'current' || !order) return
+
+    const frame = requestAnimationFrame(() => {
+      const section = [...container.children].find(node => node.dataset.spaceId === currentSpaceId)
+      if (section) container.scrollTo({ left: section.offsetLeft, behavior: 'instant' })
+    })
+    return () => cancelAnimationFrame(frame)
+  })
+
+  function handleSpacesKeydown(event) {
+    if (spaceScope !== 'current' || event.target !== event.currentTarget) return
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+
+    event.preventDefault()
+    const container = event.currentTarget
+    const direction = event.key === 'ArrowRight' ? 1 : -1
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
+    container.scrollBy({ left: direction * (container.clientWidth + 20), behavior })
+  }
   
   // Handle new tab creation in specific space
   function handleNewTabInSpace(spaceId) {
@@ -257,7 +293,7 @@
       const zoomDirection = event.deltaY < 0 ? 'in' : 'out'
       
       if (zoomDirection === 'in') {
-        console.log(`🔍 [GRID-VIEW] Zoom in detected on tab ${tab.title || 'Untitled'} - activating tab`)
+        console.log(`🔍 [GRID-VIEW] Zoom in detected on tab ${getTabTitle(tab)} - activating tab`)
         // Activate the tab and switch to default view
         if (tab.id !== data.spaceMeta.activeTabId) {
           onTabActivate(tab, index)
@@ -279,17 +315,19 @@
     // Interactive elements: clicking these should NOT close the grid view
     const isInteractiveElement = (
       target.closest('.grid-frame') ||
+      target.closest('.grid-tab-group') ||
       target.closest('.new-tab-button') ||
       target.closest('.grid-view-tab') ||
       target.closest('.grid-scope-toggle') ||
       target.closest('.grid-collapse-btn') ||
       target.closest('.grid-empty-view') ||
+      target.closest('.activation-history') ||
       target.closest('.grid-context-menu') ||
       target.closest('.grid-menu-scrim') ||
       target.closest('.grid-color-picker-dropdown') ||
       target.closest('.grid-rename-overlay') ||
       target.closest('.grid-instance-meta') ||
-      target.closest('.space-group-left')
+      target.closest('.space-group-header')
     )
     
     if (gridContextMenuId || gridColorPickerSpaceId || gridRenamingSpaceId) return
@@ -298,6 +336,8 @@
     onViewModeChange({fromTileMode: true})
   }
 </script>
+
+<svelte:window ondarc-dismiss-overlays={dismissOverlays} bind:innerWidth={windowWidth} />
 
 <div 
   class="grid-view"
@@ -311,20 +351,20 @@
 >
   <div class="grid-top-bar">
     <div class="grid-view-tabs" role="tablist">
-      <button class="grid-view-tab" class:active={activeView === 'tabs'} onmousedown={() => setActiveView('tabs')} role="tab">
+      <button class="grid-view-tab" class:active={activeView === 'tabs'} aria-selected={activeView === 'tabs'} onclick={() => setActiveView('tabs')} role="tab" disabled={!!historySwitch}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="grid-tab-icon"><path d="M2 4.5A2.5 2.5 0 0 1 4.5 2h3.879a2.5 2.5 0 0 1 1.767.732l.732.732A1.5 1.5 0 0 0 11.94 4H15.5A2.5 2.5 0 0 1 18 6.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 2 14.5v-10Z"/></svg>
         Tabs
       </button>
-      <button class="grid-view-tab" class:active={activeView === 'history'} onmousedown={() => setActiveView('history')} role="tab">
+      <button class="grid-view-tab" class:active={activeView === 'history'} aria-selected={activeView === 'history'} onclick={() => setActiveView('history')} role="tab">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="grid-tab-icon"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd"/></svg>
         History
       </button>
-      <button class="grid-view-tab" class:active={activeView === 'resources'} onmousedown={() => setActiveView('resources')} role="tab">
+      <button class="grid-view-tab" class:active={activeView === 'resources'} aria-selected={activeView === 'resources'} onclick={() => setActiveView('resources')} role="tab" disabled={!!historySwitch}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="grid-tab-icon"><path d="M10 1a6 6 0 0 0-3.815 10.631C7.237 12.5 8 13.443 8 14.456v.644a.75.75 0 0 0 .75.75h2.5a.75.75 0 0 0 .75-.75v-.644c0-1.013.762-1.957 1.815-2.825A6 6 0 0 0 10 1ZM8.863 17.414a.75.75 0 0 0-.226 1.483 9.066 9.066 0 0 0 2.726 0 .75.75 0 0 0-.226-1.483 7.563 7.563 0 0 1-2.274 0Z"/></svg>
         Resources
       </button>
     </div>
-    <button class="grid-scope-toggle" class:active={spaceScope === 'all'} onmousedown={toggleSpaceScope}>
+    <button class="grid-scope-toggle" class:active={spaceScope === 'all'} onclick={toggleSpaceScope} aria-pressed={spaceScope === 'all'} disabled={!!historySwitch}>
       <span class="grid-scope-track"><span class="grid-scope-thumb"></span></span>
       <span class="grid-scope-label">All Spaces</span>
     </button>
@@ -342,12 +382,12 @@
   {#if gridContextMenuId}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="grid-menu-scrim" onmousedown={(e) => { e.stopPropagation(); gridContextMenuId = null; }}></div>
-    <div class="grid-context-menu" style="top: {gridContextMenuPosition.y}px; left: {gridContextMenuPosition.x}px;">
-      <button class="grid-context-item" onmouseup={() => handleGridContextAction('rename', gridContextMenuId)} role="menuitem">Rename</button>
-      <button class="grid-context-item" onmouseup={() => handleGridContextAction('change-icon', gridContextMenuId)} role="menuitem">Change icon</button>
-      <button class="grid-context-item" onmouseup={() => handleGridContextAction('change-color', gridContextMenuId)} role="menuitem">Change color</button>
-      <button class="grid-context-item" onmouseup={() => handleGridContextAction('container', gridContextMenuId)} role="menuitem">Container</button>
-      <button class="grid-context-item delete" onmouseup={() => handleGridContextAction('delete', gridContextMenuId)} role="menuitem">Delete</button>
+    <div class="grid-context-menu menu-surface" style="top: {gridContextMenuPosition.y}px; left: {gridContextMenuPosition.x}px;">
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('rename', gridContextMenuId)} role="menuitem">Rename</button>
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('change-icon', gridContextMenuId)} role="menuitem">Change icon</button>
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('change-color', gridContextMenuId)} role="menuitem">Change color</button>
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('container', gridContextMenuId)} role="menuitem">Container</button>
+      <button class="grid-context-item menu-action" onmouseup={() => handleGridContextAction('delete', gridContextMenuId)} role="menuitem">Delete</button>
     </div>
   {/if}
   {#if gridRenamingSpaceId}
@@ -376,7 +416,7 @@
   {/if}
   
   {#if activeView === 'tabs'}
-    <div class="spaces-vertical-container">
+    <div class="spaces-vertical-container" class:paged={spaceScope === 'current'}>
       <div class="grid-instance-meta" title="Per-window and per-instance identifiers">
         <div class="grid-instance-meta-pill" title={`Window ID: ${gridWindowId || 'pending assignment'}`}>
           <span class="grid-instance-meta-label">Window ID</span>
@@ -387,28 +427,32 @@
           <span class="grid-instance-meta-value">{gridInstanceId || 'missing'}</span>
         </div>
       </div>
-      <div class="spaces-content">
-      {#each displayedSpaceOrder as spaceId (spaceId)}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions (Scrollable region supports keyboard space navigation.) -->
+      <div class="spaces-content" bind:this={spacesContainer} onkeydown={handleSpacesKeydown} role="region" aria-label="Spaces" tabindex="0">
+      {#each spaceOrder as spaceId (spaceId)}
         {@const space = spacesData[spaceId]}
-        {@const tabs = space?.unpinnedTabs || []}
+        {@const tabs = space?.memberTabs || []}
+        {@const groups = space?.tabGroups || []}
         {@const leftPins = space?.leftPinnedTabs || []}
         {@const rightPins = space?.rightPinnedTabs || []}
         {@const isCollapsed = collapsedSpaces.has(spaceId)}
         {@const tabCount = leftPins.length + tabs.length + rightPins.length}
-        <div class="space-section">
-          {#if spaceScope === 'all'}
+        <div class="space-section" data-space-id={spaceId}>
+          <div class="space-section-content">
             <button
               class="space-group-header"
-              class:collapsed={isCollapsed}
+              class:collapsed={isCollapsed && spaceScope === 'all'}
               class:active={spaceId === activeSpaceId}
               style="--space-color: {space?.color || '#5b5b5b'}"
               data-space-id={spaceId}
-              onmousedown={(e) => { if (e.button === 0 && e.target.closest('.space-group-left')) toggleSpaceCollapsed(spaceId) }}
+              onclick={(e) => { if (spaceScope === 'all' && (e.detail === 0 || e.target.closest('.space-group-left'))) toggleSpaceCollapsed(spaceId) }}
               oncontextmenu={(e) => handleSpaceHeaderContext(e, spaceId)}
               type="button"
             >
               <span class="space-group-left">
-                <svg class="collapse-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+                {#if spaceScope === 'all'}
+                  <svg class="collapse-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+                {/if}
                 {#if space?.glyph}
                   <span class="space-group-glyph" style="color: {space.color || '#5b5b5b'}" aria-hidden="true">{@html space.glyph}</span>
                 {:else}
@@ -419,7 +463,6 @@
               </span>
               <span class="space-group-line"></span>
             </button>
-          {/if}
           {#if !isCollapsed || spaceScope === 'current'}
             {#if tabCount === 0}
               <div class="empty-space">
@@ -449,38 +492,47 @@
                     <div class="tab-header">
                       <div class="tab-info clickable"
                            onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                           tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}">
+                           tabindex="0" role="button" aria-label="Activate {getTabTitle(tab)}">
                         <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
                         <div class="tab-favicon"><Favicon url={tab.url} /></div>
-                        <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                        <div class="header-tab-title">{getTabTitle(tab)}</div>
                       </div>
                     </div>
                     <div 
                       class="frame-screenshot clickable" 
                       onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
                       onwheel={(e) => handleFrameWheel(e, tab, index)}
-                      tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}"
+                      tabindex="0" role="button" aria-label="Activate {getTabTitle(tab)}"
                     >
                       {#if tab.screenshot}
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
                       {:else}
                         <div class="no-screenshot">
                           <div class="favicon-container"><Favicon url={tab.url} /></div>
-                          <div class="tab-title">{tab.title || 'Untitled'}</div>
+                          <div class="tab-title">{getTabTitle(tab)}</div>
                         </div>
                       {/if}
                     </div>
                   </div>
                 {/each}
-                {#each tabs as tab, index (tab.id)}
+                {#each groups as group (group.id)}
                   {@const firstActiveHistoryEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
                   {@const firstActiveTabId = typeof firstActiveHistoryEntry === 'string' ? firstActiveHistoryEntry : firstActiveHistoryEntry?.id}
+                  {#if group.tabGroupId}
+                    <GridTabStack {group} {activeTabId}
+                      inline={spaceScope === 'current'}
+                      spaceActiveTabId={spaceId !== activeSpaceId ? firstActiveTabId : null}
+                      defaultTabId={data.getGroupActiveTab(group, spaceId)?.id}
+                      onActivate={(tab, index) => handleFrameClick(tab, index, spaceId)}
+                      onClose={(event, tab, index) => handleCloseTab(event, tab, index, spaceId)}
+                      onWheel={handleFrameWheel} />
+                  {:else}
+                    {#each group.tabs as tab, index (tab.id)}
                   {@const isSpaceActiveTab = spaceId !== activeSpaceId && tab.id === firstActiveTabId}
                   <div 
                     class="grid-frame"
                     class:active={tab.id === activeTabId}
                     class:space-active-tab={isSpaceActiveTab}
-                    class:pinned-last={index === tabs.length - 1 && rightPins.length > 0}
                   >
                     <div class="tab-header">
                       <div class="tab-info clickable"
@@ -488,16 +540,16 @@
                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
                            tabindex="0"
                            role="button"
-                           aria-label="Activate {tab.title || 'Untitled'}">
+                           aria-label="Activate {getTabTitle(tab)}">
                         <div class="tab-favicon">
                           <Favicon url={tab.url} />
                         </div>
-                        <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                        <div class="header-tab-title">{getTabTitle(tab)}</div>
                       </div>
                       <button 
                         class="close-button"
                         onmousedown={(e) => handleCloseTab(e, tab, index, spaceId)}
-                        aria-label="Close {tab.title || 'Untitled'}"
+                        aria-label="Close {getTabTitle(tab)}"
                         type="button"
                       >×</button>
                     </div>
@@ -509,7 +561,7 @@
                       onwheel={(e) => handleFrameWheel(e, tab, index)}
                       tabindex="0"
                       role="button"
-                      aria-label="Activate {tab.title || 'Untitled'}"
+                      aria-label="Activate {getTabTitle(tab)}"
                     >
                       {#if tab.screenshot}
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
@@ -518,11 +570,13 @@
                           <div class="favicon-container">
                             <Favicon url={tab.url} />
                           </div>
-                          <div class="tab-title">{tab.title || 'Untitled'}</div>
+                          <div class="tab-title">{getTabTitle(tab)}</div>
                         </div>
                       {/if}
                     </div>
                   </div>
+                {/each}
+                  {/if}
                 {/each}
                 {#each rightPins as tab, index (tab.id)}
                   <div 
@@ -532,24 +586,24 @@
                     <div class="tab-header">
                       <div class="tab-info clickable"
                            onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
-                           tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}">
+                           tabindex="0" role="button" aria-label="Activate {getTabTitle(tab)}">
                         <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
                         <div class="tab-favicon"><Favicon url={tab.url} /></div>
-                        <div class="header-tab-title">{tab.title || 'Untitled'}</div>
+                        <div class="header-tab-title">{getTabTitle(tab)}</div>
                       </div>
                     </div>
                     <div 
                       class="frame-screenshot clickable" 
                       onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
                       onwheel={(e) => handleFrameWheel(e, tab, index)}
-                      tabindex="0" role="button" aria-label="Activate {tab.title || 'Untitled'}"
+                      tabindex="0" role="button" aria-label="Activate {getTabTitle(tab)}"
                     >
                       {#if tab.screenshot}
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="Tab preview" lazy={true} fadeIn={true} />
                       {:else}
                         <div class="no-screenshot">
                           <div class="favicon-container"><Favicon url={tab.url} /></div>
-                          <div class="tab-title">{tab.title || 'Untitled'}</div>
+                          <div class="tab-title">{getTabTitle(tab)}</div>
                         </div>
                       {/if}
                     </div>
@@ -569,17 +623,36 @@
               </div>
             {/if}
           {/if}
+          </div>
         </div>
       {/each}
       </div>
     </div>
   {:else if activeView === 'history'}
-    <div class="grid-empty-view">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="grid-empty-icon">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-      </svg>
-      <div class="grid-empty-title">History</div>
-      <div class="grid-empty-subtitle">Browsing history will appear here</div>
+    <div class="activation-history" bind:this={historyContainer}>
+      <div class="activation-history-list">
+        <div class="activation-history-heading">
+          <h1>Activation history</h1>
+          <p>{historySwitch ? 'Ctrl+Tab for older visits · Release Ctrl to return' : 'Your recent tab visits, newest first'}</p>
+        </div>
+        {#each activationHistory as entry, index (`${entry.spaceId}:${entry.index}`)}
+          {@const selected = historySwitch ? index === historySwitch.index : entry.id === activeTabId && index === 0}
+          <div class="activation-history-entry" class:selected data-history-index={index} aria-current={selected ? 'true' : undefined}>
+            <div class="activation-history-meta">
+              <span>{data.spaces[entry.spaceId]?.name || 'Space'}</span>
+              {#if entry.activatedAt > 0}
+                <time datetime={new Date(entry.activatedAt).toISOString()}>{new Date(entry.activatedAt).toLocaleString()}</time>
+              {/if}
+            </div>
+            <TabHoverCard tab={entry.tab} stacked={true} active={selected}
+              showHistoryImmediately={true} historyBeside={windowWidth >= 680}
+              onActivate={(tab) => handleFrameClick(tab, index, entry.spaceId)}
+              onCloseTab={() => onTabClose(entry.tab)} />
+          </div>
+        {:else}
+          <p class="activation-history-empty">Tab visits will appear here as you switch tabs.</p>
+        {/each}
+      </div>
     </div>
   {:else if activeView === 'resources'}
     <div class="grid-empty-view">
@@ -593,13 +666,72 @@
 </div>
 
 <style>
+  .activation-history {
+    height: 100%;
+    overflow-y: auto;
+    padding: 80px 20px 40px;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scroll-padding: 80px 0 24px;
+  }
+
+  .activation-history-list {
+    width: min(640px, 100%);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .activation-history-heading h1 {
+    margin: 0 0 6px;
+    font-size: 18px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .activation-history-heading p, .activation-history-empty {
+    margin: 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .activation-history-entry {
+    border-radius: 12px;
+    scroll-margin: 12px;
+  }
+
+  .activation-history-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 4px 8px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+  }
+
+  .activation-history .activation-history-entry :global(.hovercard-content) {
+    width: 100%;
+  }
+
+  .activation-history-entry.selected :global(.hovercard-content) {
+    border-color: rgba(255, 255, 255, 0.55);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+  }
+
+  .grid-view-tab:disabled, .grid-scope-toggle:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .grid-view {
     position: fixed;
-    top: 35px;
+    top: 0;
     left: 0;
     right: 0;
     width: 100%;
-    height: calc(100vh - 35px);
+    height: 100vh;
     background: rgb(0, 0, 0);
     overflow: hidden;
     z-index: 10000;
@@ -833,6 +965,55 @@
     margin: auto 0;
   }
 
+  .spaces-vertical-container.paged {
+    overflow: hidden;
+  }
+
+  .paged .spaces-content {
+    position: relative;
+    display: flex;
+    gap: 20px;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: none;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .paged .spaces-content::-webkit-scrollbar {
+    display: none;
+  }
+
+  .paged .space-section {
+    flex: 0 0 100%;
+    min-width: 0;
+    height: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 60px 40px 40px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
+  .paged .space-section-content {
+    margin: auto 0;
+  }
+
+  .spaces-content:focus-visible {
+    outline: 1px solid rgba(255, 255, 255, 0.4);
+    outline-offset: -2px;
+  }
+
   .spaces-vertical-container::-webkit-scrollbar {
     width: 6px;
   }
@@ -982,8 +1163,8 @@
 
   .space-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, 320px);
-    grid-auto-rows: 180px;
+    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 320px));
+    grid-auto-rows: minmax(180px, auto);
     gap: 20px;
     width: 100%;
     will-change: auto;
@@ -1339,53 +1520,14 @@
     position: fixed;
     display: flex;
     flex-direction: column;
-    background: rgba(0, 0, 0, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 4px 0;
     width: max-content;
     z-index: 10001;
-    backdrop-filter: blur(12px);
     transform: translateY(-4px);
     animation: grid-menu-in 150ms ease forwards;
   }
 
   @keyframes grid-menu-in {
     to { transform: translateY(0); opacity: 1; }
-  }
-
-  .grid-context-item {
-    padding: 8px 14px;
-    color: #fff;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: -0.008em;
-    line-height: 1;
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-    -webkit-font-smoothing: antialiased;
-    cursor: pointer;
-    transition: background 150ms ease;
-    background: transparent;
-    border: none;
-    text-align: left;
-  }
-
-  .grid-context-item:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.95);
-  }
-
-  .grid-context-item:active {
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  .grid-context-item.delete {
-    color: #ff6b6b;
-  }
-
-  .grid-context-item.delete:hover {
-    color: #ff4444;
-    background: rgba(255, 107, 107, 0.1);
   }
 
   .grid-color-picker-dropdown {

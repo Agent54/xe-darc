@@ -81,8 +81,7 @@
     let { src, digest = null, alt = '', class: className = '', lazy = false, fadeIn = false, ...props } = $props()
     
     let containerEl = null
-    let currentSrc = null
-    let currentDigest = null
+    let loadVersion = 0
     let shouldLoad = $state(!lazy)
 
     function updateDOM(state, resolvedSrc = null, skipFade = false) {
@@ -91,10 +90,14 @@
         const loadingEl = containerEl.querySelector('.attachment-loading')
         const errorEl = containerEl.querySelector('.attachment-error')
         const imageEl = containerEl.querySelector('.attachment-image')
+        const hasImage = !!imageEl?.getAttribute('src')
+
+        // Retain the decoded image while its replacement loads, including failed updates.
+        if (hasImage && (state === 'loading' || state === 'error')) return
         
         if (loadingEl) loadingEl.style.display = 'none'
         if (errorEl) errorEl.style.display = 'none'
-        if (imageEl) imageEl.style.display = 'none'
+        if (imageEl && state !== 'loaded') imageEl.style.display = 'none'
         
         if (state === 'loading') {
             if (loadingEl) loadingEl.style.display = 'flex'
@@ -102,7 +105,7 @@
             if (errorEl) errorEl.style.display = 'flex'
         } else if (state === 'loaded' && resolvedSrc) {
             if (imageEl) {
-                const shouldAnimate = fadeIn && !skipFade
+                const shouldAnimate = fadeIn && !skipFade && !hasImage
                 if (shouldAnimate) {
                     imageEl.style.opacity = '0'
                     imageEl.style.transition = 'none'
@@ -135,38 +138,35 @@
         }
     }
     
-    async function loadImage(srcToLoad) {
+    async function loadImage(srcToLoad, digestToLoad) {
+        const version = ++loadVersion
         if (!srcToLoad || !shouldLoad) {
             updateDOM('loading')
             return
         }
         
-        const cacheKey = srcToLoad + '|' + (digest || '')
+        const cacheKey = srcToLoad + '|' + (digestToLoad || '')
         const alreadyDisplayed = displayedSet.has(cacheKey)
         
         if (!alreadyDisplayed) updateDOM('loading')
         
         async function doLoad() {
             try {
-                const resolved = await data.getAttachmentUrl(srcToLoad, digest)
-                if (srcToLoad !== currentSrc) return
+                if (version !== loadVersion) return
+                const resolved = await data.getAttachmentUrl(srcToLoad, digestToLoad)
+                if (version !== loadVersion || !containerEl) return
+
+                const img = new Image()
+                img.src = resolved
+                await img.decode()
                 
-                if (!alreadyDisplayed) {
-                    await new Promise((resolve, reject) => {
-                        const img = new Image()
-                        img.onload = resolve
-                        img.onerror = reject
-                        img.src = resolved
-                    })
-                }
-                
-                if (srcToLoad === currentSrc) {
+                if (version === loadVersion) {
                     displayedSet.add(cacheKey)
                     updateDOM('loaded', resolved, alreadyDisplayed)
                 }
             } catch (err) {
-                console.warn('Failed to resolve attachment image:', err)
-                if (srcToLoad === currentSrc) {
+                if (version === loadVersion) {
+                    console.warn('Failed to resolve attachment image:', err)
                     updateDOM('error')
                 }
             }
@@ -181,33 +181,23 @@
     
     // Use $effect to react to src or digest changes instead of polling interval
     $effect(() => {
-        if (src !== currentSrc || digest !== currentDigest) {
-            currentSrc = src
-            currentDigest = digest
-            if (shouldLoad) {
-                loadImage(src)
-            }
+        if (shouldLoad) {
+            loadImage(src, digest)
         }
     })
     
     onMount(() => {
-        // Initial load
-        currentSrc = src
-        if (shouldLoad) {
-            loadImage(src)
-        }
-        
         // Setup lazy loading with shared observer
         if (lazy && containerEl) {
             observeLazy(containerEl, () => {
                 if (!shouldLoad) {
                     shouldLoad = true
-                    loadImage(currentSrc)
                 }
             })
         }
         
         return () => {
+            loadVersion++
             if (lazy && containerEl) {
                 unobserveLazy(containerEl)
             }

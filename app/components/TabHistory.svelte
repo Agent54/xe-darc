@@ -1,4 +1,5 @@
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
     import { SvelteFlow, Position } from '@xyflow/svelte'
     import '@xyflow/svelte/dist/style.css'
     import HistoryNode from './HistoryNode.svelte'
@@ -79,7 +80,7 @@
         {
             id: 'current',
             type: 'current',
-            title: targetTab?.title || 'Untitled',
+            title: getTabTitle(targetTab),
             url: targetTab?.url || '',
             timestamp: Date.now(),
             isCurrent: true,

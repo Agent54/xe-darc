@@ -1,40 +1,50 @@
 <script>
     import UrlBar from './UrlBar.svelte'
     import Tooltip from './Tooltip.svelte'
+    import Favicon from './Favicon.svelte'
+    import { getTabTitle } from '../lib/tab-title.js'
+    import OpenTabSettings from './OpenTabSettings.svelte'
 
     let {
-        url = '',
-        title = '',
-        tabId = null,
-        favicon = '',
+        tab,
         showControls = true,
         onMoveToTab = null,
         onExpandFull = null,
+        onExpandLightbox = null,
+        onNavigate = null,
         onCollapsePreview = null,
         onSettings = null,
         onClose = null,
     } = $props()
-
-    const faviconUrl = $derived(
-        favicon || (url ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${url}&size=16` : '')
-    )
 </script>
 
 <div class="lightbox-header-wrapper">
-    {#if title}
-        <div class="lightbox-title">{title}</div>
-    {/if}
+    <div class="lightbox-title">{getTabTitle(tab)}</div>
     <div class="lightbox-header">
     <div class="lightbox-info">
-        {#if faviconUrl}
-            <img src={faviconUrl} alt="" class="lightbox-favicon" />
-        {/if}
+        <Favicon {tab} showButton={false} />
         <div class="lightbox-urlbar">
-            <UrlBar {url} {tabId} variant="hovercard" showCloseButton={false} showSettingsButton={false} />
+            <UrlBar url={tab.url} tabId={tab.id} {onNavigate} variant="hovercard" showCloseButton={false} showSettingsButton={false} />
         </div>
     </div>
     {#if showControls}
         <div class="lightbox-controls">
+            {#if onExpandLightbox}
+                <Tooltip text="Switch to full lightbox" position="bottom">
+                    <button
+                        class="lightbox-btn"
+                        aria-label="Switch to full lightbox"
+                        onclick={onExpandLightbox}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15,3 21,3 21,9"></polyline>
+                            <polyline points="9,21 3,21 3,15"></polyline>
+                            <line x1="21" y1="3" x2="14" y2="10"></line>
+                            <line x1="3" y1="21" x2="10" y2="14"></line>
+                        </svg>
+                    </button>
+                </Tooltip>
+            {/if}
             {#if onMoveToTab}
                 <Tooltip text="Open in new tab" position="bottom">
                     <button
@@ -81,11 +91,14 @@
                     </button>
                 </Tooltip>
             {/if}
-            {#if onSettings}
+            {#if tab?.opener}
+                <OpenTabSettings tabId={tab.opener} targetUrl={tab.url} onOpenInTab={onMoveToTab} {onClose} />
+            {:else if onSettings}
                 <Tooltip text="Settings" position="bottom">
                     <button
                         class="lightbox-btn"
                         aria-label="Settings"
+                        onmousedown={onSettings}
                     >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
@@ -151,13 +164,6 @@
         gap: 8px;
         min-width: 0;
         flex: 1;
-    }
-
-    .lightbox-favicon {
-        width: 16px;
-        height: 16px;
-        flex-shrink: 0;
-        border-radius: 2px;
     }
 
     .lightbox-urlbar {

@@ -1,7 +1,16 @@
+<script module>
+    // Shared by every sidebar instance for this session; never persisted with tab data.
+    const defaultTabGroupMaxHeight = 5 * 36 + 4 * 4 + 2 * 5
+    let tabGroupMaxHeight = $state(defaultTabGroupMaxHeight)
+</script>
+
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
+    import { openTabDevTools } from '../lib/tab-devtools.js'
+    import { closeButtonHistory } from '../lib/close-button-history.js'
     // Tab sidebar component with Firefox-like hover behavior
-    // let { isDragEnabled = true } = $props() 
     let { 
+        isDragEnabled = true,
         onShowApps = () => {},
         customTabSidebarWidth = null,
         tabSidebarVisible = false,
@@ -10,8 +19,14 @@
         devModeEnabled = false,
         onGoBack = null,
         onGoForward = null,
+        onNavigateHistory = null,
         onReload = null,
         onCloseTab = null,
+        onRevealPinnedTab = () => {},
+        onOpenPinMenu = () => {},
+        onSettings = null,
+        onHeaderContextMenu = () => {},
+        headerMenuOpen = false,
         showUrl = true
     } = $props()
     import data from '../data.svelte.js'
@@ -20,10 +35,18 @@
     import UrlRenderer from './UrlRenderer.svelte'
     import UrlBar from './UrlBar.svelte'
     import TabHoverCard from './TabHoverCard.svelte'
+    import TabGroupPreview from './TabGroupPreview.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
-    import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred } from '../lib/tab-drag.svelte.js'
+    import NewTabMenu from './NewTabMenu.svelte'
+    import { observeScrollEdges } from '../lib/scroll-edges.js'
+    import { getSidebarPinnedItems } from '../lib/tab-groups.js'
+    import { getActivitySidebarItems, getActivityGroupTabs } from '../lib/tab-activity.js'
+    import { getArchivedTabItems } from '../lib/pending-tabs.js'
+    import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
+    import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
+    import { tabDrag, startTabDrag, startCreationDrag, setActivateRafId, didDragOccurred, onGroupExpand } from '../lib/tab-drag.svelte.js'
     import { colors as spaceColors } from '../lib/utils.js'
-    import { untrack, onMount } from 'svelte'
+    import { untrack, onMount, tick } from 'svelte'
     
     let isHovered = $state(false)
     let tabListRef = $state(null)
@@ -33,10 +56,17 @@
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
     let closedTabsHideTimeout = null
+    let pendingHoveredSpace = $state(null)
+    let pendingHideTimeout = null
+    const closedItems = $derived(getArchivedTabItems(data.spaceMeta.closedTabs, data.docs))
+    const pendingItems = $derived(getArchivedTabItems(data.spaceMeta.pendingTabs, data.docs))
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
     let urlBarExpanded = $state(false)
+    $effect(() => {
+        if (!showUrl) urlBarExpanded = false
+    })
     let urlInput = $state(null)
     let urlInputValue = $state('')
     let copyUrlSuccess = $state(false)
@@ -45,6 +75,38 @@
     let renameInputRef = $state(null)
     let colorPickerSpaceId = $state(null)
     let colorPickerFromMenu = $state(false)
+    let spaceTitlesVisible = $state(true)
+    let spaceTitlesHideTimeout = null
+    let hoveredSpaceTitleId = $state(null)
+    let spaceTitleHoverHideTimeout = null
+
+    function revealSpaceTitles() {
+        spaceTitlesVisible = true
+        clearTimeout(spaceTitlesHideTimeout)
+        spaceTitlesHideTimeout = setTimeout(() => {
+            spaceTitlesVisible = false
+            spaceTitlesHideTimeout = null
+        }, 1000)
+    }
+
+    function handleSpaceTitleMouseEnter(spaceId) {
+        clearTimeout(spaceTitleHoverHideTimeout)
+        spaceTitleHoverHideTimeout = null
+        hoveredSpaceTitleId = spaceId
+    }
+
+    function handleSpaceTitleMouseLeave() {
+        clearTimeout(spaceTitleHoverHideTimeout)
+        spaceTitleHoverHideTimeout = setTimeout(() => {
+            hoveredSpaceTitleId = null
+            spaceTitleHoverHideTimeout = null
+        }, 600)
+    }
+
+    $effect(() => {
+        const activeSpace = data.spaceMeta.activeSpace
+        if (activeSpace) untrack(revealSpaceTitles)
+    })
     
     // Multi-space expansion state
     let multiSpaceMode = $state(false)
@@ -65,44 +127,119 @@
     
     // Hover card state
     let hoveredTab = $state(null)
+    let hoveredGroupTarget = $state(null)
+    let hovercardAnchor = $state(null)
+    let hovercardHistoryBeside = $state(false)
+    const hoveredGroup = $derived(hoveredGroupTarget?.archived
+        ? [...closedItems, ...pendingItems].find(item => item.id === hoveredGroupTarget.id)
+        : hoveredGroupTarget ? data.getTabGroup(hoveredGroupTarget.tabId, hoveredGroupTarget.spaceId) : null)
+    const hovercardActivationTabId = $derived(hoveredGroup ? data.getGroupActiveTab(hoveredGroup, hoveredGroupTarget.spaceId)?.id : null)
+    const hovercardTabs = $derived(hoveredGroupTarget ? getActivityGroupTabs(hoveredGroup?.tabs || [], data.docs, data.ui.tabActivityMode) : hoveredTab ? [hoveredTab] : [])
     let hoverTimeout = null
     let hovercardPosition = $state({ x: 0, y: 0 })
     let hovercardShowTime = null
     let hovercardResetTimer = null
     let hovercardCheckInterval = null
-    let closeButtonHovered = $state(false)
     let closeButtonHoveredDelayed = $state(false)
-    let closeButtonHoverTimer = null
     let instantHovercardsMode = $state(false)
     let instantModeResetTimer = null
     let hovercardUrlBarExpanded = $state(false)
+    let expandedHovercardTabs = $state({})
+    let expandedHovercardHistoryTabId = $state(null)
+    let hovercardHistoryReady = $state(false)
     let menuCloseTimeout = null
+    let newTabMenuSpaceId = $state(null)
+    let newTabMenuRefreshCounter = $state(0)
+    let newTabMenuCloseTimeout = null
     
     // Resize handle visibility - only enable after sidebar is fully shown
     let sidebarFullyShown = $state(false)
     let sidebarShowTimeout = null
     
     // Tab group expansion state
-    let tabGroupExpanded = $state(false)
+    let allGroupsExpanded = $state(false)
+    let tabGroupExpansion = $state({})
+    let tabGroupExpansionLoaded = $state(false)
+
+    async function loadTabGroupExpansion() {
+        // The SharedWorker assigns the persistent virtual window ID asynchronously.
+        await window.darcWindowIdPromise
+        if (!window.darcWindowId) return
+        try {
+            const saved = JSON.parse(localStorage.getItem(`tabGroupExpansion:${window.darcWindowId}`))
+            if (saved && typeof saved === 'object') {
+                allGroupsExpanded = saved.allGroupsExpanded === true
+                if (saved.tabGroupExpansion && typeof saved.tabGroupExpansion === 'object' && !Array.isArray(saved.tabGroupExpansion)) {
+                    tabGroupExpansion = Object.fromEntries(Object.entries(saved.tabGroupExpansion).filter(([, expanded]) => typeof expanded === 'boolean'))
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to load tab group expansion:', error)
+        } finally {
+            tabGroupExpansionLoaded = true
+        }
+    }
+
+    onMount(() => { loadTabGroupExpansion() })
+
+    $effect(() => {
+        if (!tabGroupExpansionLoaded || !window.darcWindowId) return
+        try {
+            localStorage.setItem(`tabGroupExpansion:${window.darcWindowId}`, JSON.stringify({ allGroupsExpanded, tabGroupExpansion }))
+        } catch (error) {
+            console.warn('Failed to save tab group expansion:', error)
+        }
+    })
+
+    function handleTabGroupToggle(id, expanded) {
+        tabGroupExpansion[id] = !expanded
+    }
+
+    async function handleAllTabGroupsToggle() {
+        const anchor = captureActiveTabScrollAnchor()
+        allGroupsExpanded = !allGroupsExpanded
+        tabGroupExpansion = {}
+        if (anchor) {
+            await tick()
+            restoreActiveTabScrollAnchor(anchor)
+        }
+    }
+
+    let groupResize = $state(null)
+    const groupPreview = createTabGroupPreview()
+    onMount(() => () => groupPreview.destroy())
     let tabSearchQuery = $state('')
     let isSearchModeActive = $state(false)
     let searchInputRef = $state(null)
+
+    function closeTabSearch() {
+        tabSearchQuery = ''
+        isSearchModeActive = false
+    }
     
     function tabMatchesSearch(tab) {
         if (!tabSearchQuery) return true;
         const query = tabSearchQuery.toLowerCase();
-        const title = (data.docs[tab.id]?.title || tab.title || '').toLowerCase();
+        const title = getTabTitle(data.docs[tab.id] || tab).toLowerCase();
         const url = (data.docs[tab.id]?.url || tab.url || '').toLowerCase();
         return title.includes(query) || url.includes(query);
     }
-    
+
+    function groupNameMatchesSearch(item) {
+        return !!(tabSearchQuery && item.name?.toLowerCase().includes(tabSearchQuery.toLowerCase()))
+    }
+
     function spaceHasMatchingTabs(spaceId) {
         if (!tabSearchQuery) return true;
         const space = data.spaces[spaceId];
         if (!space) return false;
         
-        if (space.pinnedTabs?.some(tab => tabMatchesSearch(tab))) return true;
-        if (space.tabs?.some(tab => tab.type !== 'divider' && tabMatchesSearch(tab))) return true;
+        if (data.getSpacePins(spaceId).some(tab => tabMatchesSearch(tab))) return true;
+        if (space.tabs?.some(tab => tab.type === 'tab' && tabMatchesSearch(tab))) return true;
+        if ((data.spaceMeta.pendingTabs || []).some(tab => tab.spaceId === spaceId && tabMatchesSearch(tab))) return true;
+        if (data.getSidebarItems(spaceId).some(groupNameMatchesSearch)) return true
+        if (getSidebarPinnedItems(space.tabs, false, [], data.docs).some(groupNameMatchesSearch)) return true
+        if (getSidebarPinnedItems(space.tabs, true, [], data.docs).some(groupNameMatchesSearch)) return true
         
         return false;
     }
@@ -110,37 +247,66 @@
     const hasAnySearchResults = $derived.by(() => {
         if (!tabSearchQuery) return true;
         return data.spaceMeta.spaceOrder.some(spaceId => spaceHasMatchingTabs(spaceId)) ||
-               data.spaceMeta.closedTabs.some(tab => tabMatchesSearch(tab));
+               data.spaceMeta.closedTabs.some(tab => tabMatchesSearch(tab)) ||
+               (data.spaceMeta.pendingTabs || []).some(tab => tabMatchesSearch(tab));
     });
     
-    function handleTabGroupToggle() {
-        tabGroupExpanded = !tabGroupExpanded
-    }
-    
-    // Tabs list vertical rubberband scroll state (per space for visual state, global for accumulation)
-    let tabsListVerticalRubberBand = $state({}) // { [spaceId]: offset }
-    let tabsListVerticalAccumulated = 0 // global accumulated deltaY - resets on horizontal scroll
-    let tabsListSpacerVisible = $state({}) // { [spaceId]: boolean }
-    let tabsListSpacerHeight = $state({}) // { [spaceId]: number } - current spacer height (0-250)
-    let tabsListSeparatorAdded = $state({}) // { [spaceId]: boolean } - tracks if separator was added
-    let tabsListScrollStartPosition = 0 // global scrollTop when gesture started
-    let tabsListScrollGestureTimeout = null // global timeout id
+    onMount(() => onGroupExpand(({ spaceId, tabGroupId }) => {
+        handleTabGroupToggle(`${spaceId}:group:${tabGroupId}`, false)
+    }))
     
     // Centralized function to close hovercard - prevents closing when URL bar is expanded
     function closeHovercard() {
         if (hovercardUrlBarExpanded) return
         hoveredTab = null
+        hoveredGroupTarget = null
+        hovercardAnchor = null
         hovercardShowTime = null
+        expandedHovercardHistoryTabId = null
+        hovercardHistoryReady = false
     }
     
+    function dismissHovercards() {
+        hoveredTab = null
+        hoveredGroupTarget = null
+        hovercardAnchor = null
+        hovercardShowTime = null
+        expandedHovercardHistoryTabId = null
+        hovercardHistoryReady = false
+        hovercardUrlBarExpanded = false
+        expandedHovercardTabs = {}
+        if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+        stopHovercardPositionCheck()
+    }
+
     onMount(() => {
-        const dismissHovercards = () => {
-            hoveredTab = null
-            hovercardShowTime = null
-            if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+        const dismissOverlays = () => {
+            dismissHovercards()
+            hideTabContextMenu()
+            openMenuId = null
+            newSpaceMenuOpen = false
+            spaceContextMenuId = null
+            newTabMenuSpaceId = null
+            clearTimeout(newTabMenuCloseTimeout)
+            colorPickerSpaceId = null
+            renamingSpaceId = null
+            urlBarExpanded = false
+            closedTabsHovered = false
+            closedTabsHeaderHovered = false
+            pendingHoveredSpace = null
+            clearTimeout(pendingHideTimeout)
+            clearTimeout(menuCloseTimeout)
+            clearTimeout(closedTabsHideTimeout)
+            menuCloseTimeout = null
+            closedTabsHideTimeout = null
+            groupPreview.dismiss()
         }
         window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
-        return () => window.removeEventListener('darc-dismiss-hovercards', dismissHovercards)
+        window.addEventListener('darc-dismiss-overlays', dismissOverlays)
+        return () => {
+            window.removeEventListener('darc-dismiss-hovercards', dismissHovercards)
+            window.removeEventListener('darc-dismiss-overlays', dismissOverlays)
+        }
     })
 
     // Focus the URL input when it becomes visible
@@ -156,10 +322,6 @@
     
 
 
-    let isManualScroll = false
-    let previousSpaceIndex = -1
-    // let scrollActiveSpaceTimeout = null
-    
     // Spaces list horizontal scroll fade state
     let spacesScrolledLeft = $state(false)
     let spacesScrolledRight = $state(false)
@@ -207,7 +369,7 @@
     
     function handleMouseLeave() {
         // Don't hide sidebar when URL bar is expanded, in multi-space mode, or dragging/pending drag
-        if (!urlBarExpanded && !multiSpaceMode && !tabDrag.active && !tabDrag.pending) {
+        if (!urlBarExpanded && !multiSpaceMode && !tabDrag.active && !tabDrag.pending && !groupResize) {
             // Always set isHovered to false for resize handle logic
             isHovered = false
             // Immediately disable resize handle when leaving
@@ -282,6 +444,21 @@
     let verticalScrollTimeout = null
     let isHorizontalScrolling = $state(false)
     let horizontalScrollTimeout = null
+
+    function markHorizontalScrolling() {
+        isHorizontalScrolling = true
+        dismissHovercards()
+        clearTimeout(scrollHoverTimeout)
+        scrollHoverTimeout = null
+        clearTimeout(instantModeResetTimer)
+        instantModeResetTimer = null
+        instantHovercardsMode = false
+        clearTimeout(horizontalScrollTimeout)
+        horizontalScrollTimeout = setTimeout(() => {
+            isHorizontalScrolling = false
+            horizontalScrollTimeout = null
+        }, 150)
+    }
     
     function handleTabContentWheel(event) {
         if (!tabListRef || tabSearchQuery) return
@@ -310,14 +487,7 @@
         if (isVerticalScrolling) return
         
         // Mark as horizontal scrolling to disable vertical scrolling in tabs list
-        isHorizontalScrolling = true
-        if (horizontalScrollTimeout) clearTimeout(horizontalScrollTimeout)
-        horizontalScrollTimeout = setTimeout(() => {
-            isHorizontalScrolling = false
-        }, 150)
-        
-        // Reset vertical tabs list accumulation on horizontal scroll
-        tabsListVerticalAccumulated = 0
+        markHorizontalScrolling()
         
         // Block all scroll during closing animation
         if (isClosingMultiSpace) {
@@ -505,16 +675,13 @@
 
     
     function exitMultiSpaceMode() {
-        // Store active space before any changes
-        const activeSpace = data.spaceMeta.activeSpace
-        
         // Start closing animation
         isClosingMultiSpace = true
         closeRubberBandOffset = 0
         accumulatedCloseDeltaX = 0
         isCloseRubberBanding = false
         
-        // After transition completes, fully reset state and scroll to active space
+        // Restoring the single-space layout also reveals the current space.
         setTimeout(() => {
             multiSpaceMode = false
             isClosingMultiSpace = false
@@ -522,16 +689,6 @@
             accumulatedDeltaX = 0
             // Reset hover state so sidebar collapses properly
             isHovered = false
-            
-            // Wait for DOM to update, then scroll to active space
-            setTimeout(() => {
-                if (tabListRef && activeSpace) {
-                    const targetElement = tabListRef.querySelector(`[data-space-id="${activeSpace}"]`)
-                    if (targetElement) {
-                        targetElement.scrollIntoView({ behavior: 'instant', inline: 'start' })
-                    }
-                }
-            }, 50)
         }, 300) // Match the transition duration
     }
     
@@ -560,190 +717,62 @@
         document.removeEventListener('mousemove', handleLaneDividerMouseMove)
         document.removeEventListener('mouseup', handleLaneDividerMouseUp)
     }
-    
-    // Tabs list vertical rubberband scroll handling
-    let tabsListSnapTimeouts = {}
-    
-    function handleTabsListWheel(event, spaceId) {
-        const tabsList = event.currentTarget
-        if (!tabsList || tabSearchQuery) return
-        
 
-        
-        const scrollTop = tabsList.scrollTop
-        
-        // Only handle vertical scroll down when at top
-        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
-        
-        const resistance = 0.05
-        const threshold = 18
-        const maxStretch = 25
-        const activationThreshold = 400
-        
-        // DEBUG: completely disable rubberband to test
-        // return
-        const maxSpacerHeight = 250
-        const maxStartPositionForActivation = 500
-        
-        // Track scroll gesture start position - only capture if not yet set and we're not already at top
-        if (tabsListScrollStartPosition === 0 && scrollTop > 5) {
-            tabsListScrollStartPosition = scrollTop
-        }
-        // Reset start position after gesture ends (no scroll events for 150ms)
-        if (tabsListScrollGestureTimeout) clearTimeout(tabsListScrollGestureTimeout)
-        tabsListScrollGestureTimeout = setTimeout(() => {
-            tabsListScrollStartPosition = 0
-            tabsListVerticalAccumulated = 0
-        }, 150)
-        
-        // If spacer is visible and growing, continue growing it (no rubberband, just grow)
-        if (tabsListSpacerVisible[spaceId]) {
-            // Ensure rubberband is disabled during expansion
-            if (tabsListVerticalRubberBand[spaceId]) {
-                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-            }
-            
-            const currentHeight = tabsListSpacerHeight[spaceId] || 0
-            if (currentHeight < maxSpacerHeight && scrollTop <= 5 && event.deltaY < 0) {
-                event.preventDefault()
-                const growAmount = Math.abs(event.deltaY)
-                tabsListSpacerHeight = {
-                    ...tabsListSpacerHeight,
-                    [spaceId]: Math.min(currentHeight + growAmount, maxSpacerHeight)
-                }
-            }
-            return
-        }
-        
-        // Only activate when nearly at top (within 20px)
-        if (scrollTop > 20) {
-            tabsListVerticalAccumulated = 0
-            return
-        }
-        
-        // console.log('tabsListScrollStartPosition', tabsListScrollStartPosition)
-        // console.log('distanceScrolled', Math.abs(tabsListScrollStartPosition - scrollTop))
-        // Don't activate rubberband if scroll started more than 500px from top
-        if (tabsListScrollStartPosition > maxStartPositionForActivation) {
-            return
-        }
-        
-       
-        // Don't activate if scrolled more than 400px during this gesture
-        const distanceScrolled = Math.abs(tabsListScrollStartPosition - scrollTop)
-        if (distanceScrolled > 400) {
-            tabsListVerticalAccumulated = 0
-            return
-        }
-        
-        // Check if scrolling up while at top (deltaY < 0 = scroll up gesture = pulling content down)
-        if (scrollTop <= 5 && event.deltaY < 0) {
-            // Accumulate vertical scroll before activating spring
-            tabsListVerticalAccumulated += Math.abs(event.deltaY)
-            
-            // console.log('[SPACER] accumulated:', tabsListVerticalAccumulated, 'threshold:', activationThreshold)
-            
-            // Only activate spring after threshold is met
-            if (tabsListVerticalAccumulated < activationThreshold) {
-                return
-            }
-            
-            event.preventDefault()
-            
-            const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
-            tabsListVerticalRubberBand = {
-                ...tabsListVerticalRubberBand,
-                [spaceId]: Math.min(currentOffset - event.deltaY * resistance, maxStretch)
-            }
-            
-            // If pulled far enough, break rubberband and start spacer
-            if ((tabsListVerticalRubberBand[spaceId] || 0) > threshold && !tabsListSpacerVisible[spaceId]) {
-                // Add separator at top if not already one
-                ensureSeparatorAtTop(spaceId)
-                
-                // Reset rubberband immediately and start spacer with initial height
-                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-                tabsListVerticalAccumulated = 0
-                tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: true }
-                tabsListSpacerHeight = { ...tabsListSpacerHeight, [spaceId]: 20 }
-                return
-            }
-            
-            scheduleTabsListSnapBack(spaceId)
-        } else if (scrollTop <= 0 && event.deltaY > 0 && (tabsListVerticalRubberBand[spaceId] || 0) > 0) {
-            // Scrolling down while rubber banding - reduce offset
-            const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
-            tabsListVerticalRubberBand = {
-                ...tabsListVerticalRubberBand,
-                [spaceId]: Math.max(0, currentOffset - event.deltaY * 0.15)
-            }
-            if ((tabsListVerticalRubberBand[spaceId] || 0) <= 0) {
-                tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-                tabsListVerticalAccumulated = 0
-            }
-        } else {
-            // Reset when not at edge
-            tabsListVerticalAccumulated = 0
-        }
-    }
-    
-    function ensureSeparatorAtTop(spaceId) {
-        const space = data.spaces[spaceId]
-        if (!space?.tabs?.length) return
-        
-        // Check if first tab is already a divider
-        const firstTab = space.tabs[0]
-        if (firstTab?.type === 'divider') {
-            // Already has a separator at top, just mark that we've ensured it
-            tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: false }
-            return
-        }
-        
-        // Add in-memory separator at beginning (we don't persist this)
-        tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: true }
-    }
-    
-    function scheduleTabsListSnapBack(spaceId) {
-        if (tabsListSnapTimeouts[spaceId]) clearTimeout(tabsListSnapTimeouts[spaceId])
-        tabsListSnapTimeouts[spaceId] = setTimeout(() => {
-            snapBackTabsListRubberBand(spaceId)
-        }, 30)
-    }
-    
-    function snapBackTabsListRubberBand(spaceId) {
-        const currentOffset = tabsListVerticalRubberBand[spaceId] || 0
-        if (currentOffset === 0) {
-            tabsListVerticalAccumulated = 0
-            return
-        }
-        
-        const newOffset = currentOffset * 0.85
-        if (Math.abs(newOffset) < 0.5) {
-            tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: 0 }
-            tabsListVerticalAccumulated = 0
-        } else {
-            tabsListVerticalRubberBand = { ...tabsListVerticalRubberBand, [spaceId]: newOffset }
-            requestAnimationFrame(() => snapBackTabsListRubberBand(spaceId))
-        }
-    }
-    
-    function handleTabsListScrollForSpacer(event, spaceId) {
-        const tabsList = event.currentTarget
-        if (!tabsList) return
-        
-        if (!tabsListSpacerVisible[spaceId]) return
-        
-        const spacerHeight = tabsListSpacerHeight[spaceId] || 0
-        const scrollTop = tabsList.scrollTop
-        
-        // Remove spacer once it's fully scrolled out of view
-        if (scrollTop > spacerHeight + 30) {
-            tabsListSpacerVisible = { ...tabsListSpacerVisible, [spaceId]: false }
-            tabsListSeparatorAdded = { ...tabsListSeparatorAdded, [spaceId]: false }
-        }
+    function setTabGroupMaxHeight(height) {
+        tabGroupMaxHeight = Math.max(86, Math.min(window.innerHeight - 120, height))
     }
 
+    function startGroupResize(event, groupId) {
+        if (event.button !== 0 || tabDrag.active || tabDrag.pending) return
+        event.preventDefault()
+        event.stopPropagation()
+        closeHovercard()
+        if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+        const content = event.currentTarget.parentElement.querySelector('.tab-group-content')
+        const style = getComputedStyle(content)
+        const padding = style.boxSizing === 'border-box' ? 0 : parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+        groupResize = { groupId, pointerId: event.pointerId, startY: event.clientY, startHeight: content.clientHeight - padding }
+        event.currentTarget.setPointerCapture(event.pointerId)
+    }
+
+    function moveGroupResize(event) {
+        if (event.pointerId !== groupResize?.pointerId) return
+        setTabGroupMaxHeight(groupResize.startHeight + event.clientY - groupResize.startY)
+    }
+
+    function endGroupResize(event) {
+        if (event.pointerId !== groupResize?.pointerId) return
+        groupResize = null
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+        if (!event.currentTarget.closest('.sidebar-box')?.matches(':hover')) handleMouseLeave()
+    }
+
+    function handleGroupResizeKey(event) {
+        if (!['ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return
+        event.preventDefault()
+        event.stopPropagation()
+        setTabGroupMaxHeight(event.key === 'Home' ? defaultTabGroupMaxHeight : tabGroupMaxHeight + (event.key === 'ArrowDown' ? 20 : -20))
+    }
     
+    function addTabsListSpacer(spaceId = data.spaceMeta.activeSpace) {
+        if (!spaceId || tabSearchQuery || data.getSidebarItems(spaceId).at(-1)?.type === 'divider') return
+
+        data.addDivider(spaceId)
+    }
+
+    let lastCreatedSidebarTabId = null
+
+    async function createSidebarTab(spaceId, options) {
+        if (!data.activateSpace(spaceId, { ensureTab: false })) {
+            return null
+        }
+        const creation = data.newTab(spaceId, { ...options, shouldFocus: true })
+        lastCreatedSidebarTabId = data.spaceMeta.activeTabId
+        const tab = await creation
+        await tick()
+        return tab
+    }
+
     // Initialize spaces scroll fade state when spacesListRef is available or spaces change
     $effect(() => {
         if (spacesListRef) {
@@ -751,8 +780,6 @@
             setTimeout(updateSpacesScrollFade, 0)
         }
     })
-
-    let isSwitchingSpaces = false
 
     function handleSpaceClick(event, spaceId) {
         // Right-click (button 2) - show context menu
@@ -787,15 +814,10 @@
                     }
                 } else {
                     // If not scrolled into view, just scroll it into view without switching spaces
-                    isManualScroll = true
                     scrollToCurrentSpace('smooth')
-                    setTimeout(() => { isManualScroll = false }, 500)
                     return
                 }
             }
-            
-            // Set flag to prevent scroll-triggered tab activation during space switch
-            isSwitchingSpaces = true
             
             // Close multi-space mode when switching spaces
             if (multiSpaceMode) {
@@ -822,37 +844,37 @@
                 }
             } else if (targetSpace?.tabs?.length > 0) {
                 // Fallback: activate the first tab in the space
-                const firstNonPinned = targetSpace.tabs.find(t => !t.pinned)
+                const firstNonPinned = targetSpace.tabs.find(t => t.type === 'tab' && !t.pinned)
                 if (firstNonPinned) {
                     data.activate(firstNonPinned.id)
                 }
             }
-            
-            previousSpaceIndex = data.spaceMeta.spaceOrder.indexOf(spaceId)
-            isManualScroll = true
-            scrollToCurrentSpace('smooth')
-            setTimeout(() => { 
-                isManualScroll = false 
-                isSwitchingSpaces = false
-            }, 500)
         }
     }
 
-    function activateTab(tabId, spaceId) {
+    function activateTab(tabId, spaceId, expansionId = null) {
         // Close multi-space mode when switching tabs, but not during drag
         if (multiSpaceMode && !tabDrag.active && !tabDrag.pending) {
             exitMultiSpaceMode()
         }
         
-        // If clicking on the currently active tab, switch to previous tab
         data.activateSpace(spaceId)
         const tab = data.docs[tabId]
+        if (tab?.pinned === 'menu') return
+        const selectingSearchResult = isSearchModeActive
+        if (selectingSearchResult) {
+            if (expansionId) {
+                tabGroupExpansion[expansionId] = true
+            }
+            closeTabSearch()
+        }
+        if (tab?.pinned) {
+            onRevealPinnedTab(tabId)
+        }
         
-        // For unpinned tabs, use the original behavior
+        // Clicking the active pin reveals it; normal tabs return to the previous tab outside search.
         if (tabId === data.spaceMeta.activeTabId) {
-            // For pinned tabs, don't activate them in the sidebar (they should only toggle visibility from main tabs)
-            // For now, just do nothing for pinned tabs in sidebar
-            if (tab?.pinned) {
+            if (tab?.pinned || selectingSearchResult) {
                 return
             }
             data.previous()
@@ -861,53 +883,37 @@
         }   
     }
 
+    function startPinDrag(event, tab, spaceId) {
+        if (event.button !== 0) {
+            return
+        }
+        event.stopPropagation()
+        const wasActive = tab.id === data.spaceMeta.activeTabId
+        startTabDrag(tab.id, event.currentTarget, 'sidebar', tab.spaceId, event, wasActive, tab.pinned)
+    }
+
+    function finishPinClick(event, tab, spaceId) {
+        if (event.detail === 0 || (event.button === 0 && !didDragOccurred())) {
+            if (tab.pinned === 'menu') onOpenPinMenu(tab.id, event.currentTarget)
+            else activateTab(tab.id, spaceId)
+        }
+    }
+
     let currentScrolledSpace = $state(null)
     let hoveredSpaceInMultiMode = $state(null)
 
     function handleTabScroll(event) {
-        if (!tabListRef) return
-        
-        // Skip scroll handling during space switching to prevent unwanted tab activation
-        if (isSwitchingSpaces) return
-        
-        // console.log('[DEBUG:SCROLL] Tab list scroll event', {
-        //     scrollLeft: tabListRef.scrollLeft,
-        //     scrollTop: event.target.scrollTop,
-        //     clientWidth: tabListRef.clientWidth,
-        //     isHorizontalScroll: event.target === tabListRef,
-        //     target: event.target.className,
-        //     pointerEvents: window.getComputedStyle(event.target).pointerEvents,
-        //     zIndex: window.getComputedStyle(event.target).zIndex
-        // })
+        if (!tabListRef || event.target !== tabListRef || (tabSearchQuery && !multiSpaceMode)) return
+        if (!multiSpaceMode) revealSpaceTitles()
+        markHorizontalScrolling()
         
         const scrollLeft = tabListRef.scrollLeft
         const containerWidth = tabListRef.clientWidth
         const spaceWidth = containerWidth + 20
         const newIndex = Math.floor((scrollLeft + spaceWidth / 2) / spaceWidth)
         
-        if ( newIndex >= 0 && newIndex < data.spaceMeta.spaceOrder.length) {
+        if (newIndex >= 0 && newIndex < data.spaceMeta.spaceOrder.length) {
             currentScrolledSpace = data.spaceMeta.spaceOrder[newIndex]
-    //         if (scrollActiveSpaceTimeout) {
-    //             clearTimeout(scrollActiveSpaceTimeout)
-    //         }
-            
-    //         scrollActiveSpaceTimeout = setTimeout(() => {
-    //             // Double-check that we're still on the same space after the delay
-    //             const currentScrollLeft = tabListRef.scrollLeft
-    //             const currentContainerWidth = tabListRef.clientWidth
-    //             const currentSpaceWidth = currentContainerWidth + 20
-    //             const currentIndex = Math.floor((currentScrollLeft + currentSpaceWidth / 2) / currentSpaceWidth)
-                
-    //             if (currentIndex === newIndex && currentIndex >= 0 && currentIndex < data.spaceMeta.spaceOrder.length) {
-    //                 isManualScroll = true
-    //                 data.spaceMeta.activeSpace = data.spaceMeta.spaceOrder[currentIndex]
-    //                 setTimeout(() => { isManualScroll = false }, 1500)
-    //             }
-                
-    //             scrollActiveSpaceTimeout = null
-    //         }, 340)
-        } else {
-            // currentScrolledSpace = null
         }
     }
     
@@ -966,6 +972,10 @@
     }
     
     function handleClickOutside(event) {
+        if (event.key === 'Escape' || (!event.target.closest('.pending-tabs-section') && !event.target.closest('.tab-hovercard-sidebar'))) {
+            pendingHoveredSpace = null
+        }
+        if (event.key === 'Escape' || !event.target.closest('.new-tab-button')) newTabMenuSpaceId = null
         if (openMenuId !== null && !event.target.closest('.space-menu')) {
             openMenuId = null
         }
@@ -995,30 +1005,67 @@
             spaceContextMenuId = null
         }
     }
-    
+
     function handleNewSpaceMenuToggle() {
         newSpaceMenuOpen = !newSpaceMenuOpen
     }
-    
+
     function handleNewSpaceMenuAction(action) {
         newSpaceMenuOpen = false
-        
+
         if (action === 'new-space') {
             console.log('Creating new space...')
             data.newSpace()
         } else if (action === 'new-divider') {
-            data.newDivider()
+            addTabsListSpacer()
         } else if (action === 'new-folder') {
             data.newFolder()
         }
     }
     
     function handleClosedTabsMouseEnter() {
+        if (tabDrag.active || tabDrag.pending) return
         if (closedTabsHideTimeout) {
             clearTimeout(closedTabsHideTimeout)
             closedTabsHideTimeout = null
         }
         closedTabsHovered = true
+    }
+
+    function showPending(spaceId) {
+        if (tabDrag.active || tabDrag.pending) return
+        clearTimeout(pendingHideTimeout)
+        pendingHoveredSpace = spaceId
+    }
+
+    function hidePending() {
+        clearTimeout(pendingHideTimeout)
+        pendingHideTimeout = setTimeout(() => {
+            if (hoveredTab && (data.spaceMeta.pendingTabs || []).some(tab => tab.id === hoveredTab.id)) return
+            pendingHoveredSpace = null
+        }, 200)
+    }
+
+    async function restoreArchivedItem(item, pending) {
+        closeHovercard()
+        if (pending) {
+            for (const tab of item.tabs) await data.resumePendingTab(tab.id, { activate: false })
+            const restored = item.tabs.find(tab => !data.docs[tab.id]?.archive)
+            if (restored) activateTab(restored.id, item.spaceId)
+        } else {
+            closeTabSearch()
+            if (item.tabs.length > 1) await data.restoreClosedItems(item.tabs.map(tab => tab.id))
+            else data.restoreClosedTab(item.tabs[0].id)
+        }
+    }
+
+    function removeArchivedItem(item, pending) {
+        closeHovercard()
+        const batchId = item.tabs.length > 1 ? crypto.randomUUID() : null
+        for (const tab of item.tabs) {
+            if (pending) data.closeTab(tab.spaceId, tab.id, { batchId })
+            else data.removeClosedTab(tab.id)
+        }
     }
     
     function handleClosedTabsMouseLeave() {
@@ -1041,7 +1088,10 @@
     let tabsListScrolledBottom = $state({})
     
     function handleTabsListScroll(event) {
-        const tabsList = event.target
+        if (event.target !== event.currentTarget) {
+            return
+        }
+        const tabsList = event.currentTarget
         const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
         if (spaceId) {
             tabsListScrolled[spaceId] = tabsList.scrollTop > 0
@@ -1082,19 +1132,61 @@
         }, 150) // Small delay after scroll stops
     }
     
-    // onMount(() => {
-    //     scrollToCurrentSpace('instant')
-    //     previousSpaceIndex = data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace)
-    // })
+    function getActiveTabScrollRow() {
+        const tab = tabListRef?.querySelector('.space-tabs-sections .tab-item-container.active')
+        return tab && !tab.closest('[hidden]') ? tab : tabListRef?.querySelector('.space-tabs-sections .tab-group.active')
+    }
 
-    // Watch for changes in space order that might affect current space position
-    $effect(() => {
-        const currentIndex = data.spaceMeta.spaceOrder.indexOf(untrack(() => data.spaceMeta.activeSpace))
-        if (currentIndex !== -1 && currentIndex !== previousSpaceIndex && tabListRef && !isManualScroll) {
-            scrollToCurrentSpace('instant')
+    function captureActiveTabScrollAnchor() {
+        let row = getActiveTabScrollRow()
+        const tabsList = row?.closest('.space-tabs-sections')
+        if (!tabsList) return null
+        const innerList = row.closest('.tab-group-content, .sidebar-pinned-tabs')
+        if (innerList) {
+            const bounds = innerList.getBoundingClientRect()
+            const rect = row.getBoundingClientRect()
+            // A clipped group member is represented by its visible group header.
+            if (rect.bottom <= bounds.top || rect.top >= bounds.bottom) {
+                row = row.closest('.tab-group-wrapper')?.querySelector('.tab-group')
+                if (!row) return null
+            }
         }
-        if (currentIndex !== -1) {
-            previousSpaceIndex = currentIndex
+        const bounds = tabsList.getBoundingClientRect()
+        const rect = row.getBoundingClientRect()
+        if (!bounds.height || rect.bottom <= bounds.top || rect.top >= bounds.bottom) return null
+        return { tabsList, tabId: data.spaceMeta.activeTabId, relativeTop: (rect.top - bounds.top) / bounds.height }
+    }
+
+    function restoreActiveTabScrollAnchor({ tabsList, tabId, relativeTop }) {
+        if (!tabsList.isConnected || data.spaceMeta.activeTabId !== tabId) return
+        const row = getActiveTabScrollRow()
+        if (row?.closest('.space-tabs-sections') !== tabsList) return
+        // Measure the natural row position rather than its sticky viewport position.
+        const previousPosition = row.style.position
+        row.style.position = 'relative'
+        // Expanding can mount the active member outside its group's inner viewport.
+        const innerList = row.closest('.tab-group-content, .sidebar-pinned-tabs')
+        if (innerList) {
+            const bounds = innerList.getBoundingClientRect()
+            const rect = row.getBoundingClientRect()
+            if (rect.top < bounds.top) innerList.scrollTop += rect.top - bounds.top
+            else if (rect.bottom > bounds.bottom) innerList.scrollTop += rect.bottom - bounds.bottom
+        }
+        const bounds = tabsList.getBoundingClientRect()
+        const targetTop = bounds.top + relativeTop * bounds.height
+        tabsList.scrollTop += row.getBoundingClientRect().top - targetTop
+        row.style.position = previousPosition
+        // Sticky positioning can apply an inset at the inner list's padded edge.
+        tabsList.scrollTop += row.getBoundingClientRect().top - targetTop
+    }
+
+    // Follow navigation and layout changes directly, even when the active tab
+    // stays unchanged or is a newly created tab whose vertical reveal is skipped.
+    $effect(() => {
+        const currentIndex = data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace)
+        data.spaceMeta.activeTabId
+        if (currentIndex !== -1 && tabListRef && !multiSpaceMode && !tabSearchQuery) {
+            scrollToCurrentSpace('instant')
         }
     })
 
@@ -1108,34 +1200,56 @@
         }
     })
 
-    // Watch for active tab changes and scroll to it in sidebar
+    // Reveal the active tab when it changes or search is cleared
     $effect(() => {
-        if (!data.spaceMeta.activeTabId) {
+        const tabId = data.spaceMeta.activeTabId
+        if (!tabId || tabSearchQuery || tabId === lastCreatedSidebarTabId) {
             return
         }
+        lastCreatedSidebarTabId = null
         
         // Find the active tab element in the sidebar
-        setTimeout(() => {
-            const activeTabElement = document.querySelector(`[data-tab-id="${data.spaceMeta.activeTabId}"]`)
+        const timeout = setTimeout(() => {
+            let activeTabElement = document.querySelector(`.sidebar .tab-item-container[data-tab-id="${tabId}"]`)
+            if (!activeTabElement || activeTabElement.closest('.tab-group-scroll[hidden]')) {
+                activeTabElement = document.querySelector(`.sidebar [data-tab-group-id="${data.docs[tabId]?.tabGroupId}"]`)
+            }
             if (activeTabElement) {
-                const tabsList = activeTabElement.closest('.tabs-list')
+                const innerList = activeTabElement.closest('.tab-group-content, .sidebar-pinned-tabs')
+                if (innerList) {
+                    const bounds = innerList.getBoundingClientRect()
+                    const row = activeTabElement.getBoundingClientRect()
+                    if (row.top < bounds.top) innerList.scrollTop += row.top - bounds.top
+                    else if (row.bottom > bounds.bottom) innerList.scrollTop += row.bottom - bounds.bottom
+                }
+
+
+                // FIXME: not smooth? activeTabElement.scrollIntoView({
+                    //                         behavior: 'smooth',
+                    //                         block: 'nearest'
+                    //                     })
+
+                const tabsList = activeTabElement.closest('.space-tabs-sections')
                 if (tabsList) {
-                    console.log('%c[TAB-DEBUG] TabSidebar scrolling active tab into view: ' + data.spaceMeta.activeTabId, 'color: #d946ef; font-weight: bold; font-size: 13px')
-                    // Scroll the tab into view within its tabs list
-                    activeTabElement.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'nearest'
-                    })
+                    const bounds = tabsList.getBoundingClientRect()
+                    const row = activeTabElement.getBoundingClientRect()
+                    const top = bounds.top
+                    if (row.top < top) {
+                        tabsList.scrollTop += row.top - top
+                    } else if (row.bottom > bounds.bottom) {
+                        tabsList.scrollTop += row.bottom - bounds.bottom
+                    }
                 }
             }
         }, 50) // Small delay to ensure DOM is updated
+        return () => clearTimeout(timeout)
     })
 
     // Initialize bottom scroll fade state when tabs lists render or change
     $effect(() => {
         data.spaceMeta.spaceOrder // dependency on spaces
         setTimeout(() => {
-            const tabsLists = document.querySelectorAll('.tabs-list')
+            const tabsLists = document.querySelectorAll('.space-tabs-sections')
             tabsLists.forEach(tabsList => {
                 const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
                 if (spaceId) {
@@ -1178,26 +1292,10 @@
         }
     })
 
-    // Watch for new closed tabs and auto-show menu, might be a bit much?
-    // $effect(() => {
-    //     const currentLength = data.spaceMeta.closedTabs.length
-    //     if (currentLength > previousClosedTabsLength) {
-    //         // New tab was closed, show menu
-    //         if (closedTabsHideTimeout) {
-    //             clearTimeout(closedTabsHideTimeout)
-    //         }
-    //         closedTabsHovered = true
-    //         closedTabsHideTimeout = setTimeout(() => {
-    //             closedTabsHovered = false
-    //             closedTabsHideTimeout = null
-    //         }, 1000)
-    //     }
-    //     previousClosedTabsLength = currentLength
-    // })
-    
     // Cleanup timeouts on component destroy
     $effect(() => {
         return () => {
+            clearTimeout(pendingHideTimeout)
             if (closedTabsHideTimeout) {
                 clearTimeout(closedTabsHideTimeout)
             }
@@ -1207,10 +1305,109 @@
             if (hovercardResetTimer) {
                 clearTimeout(hovercardResetTimer)
             }
+            clearTimeout(horizontalScrollTimeout)
+            clearTimeout(scrollHoverTimeout)
+            clearTimeout(spaceTitlesHideTimeout)
+            clearTimeout(spaceTitleHoverHideTimeout)
             stopHovercardPositionCheck()
         }
     })
     
+    function revealGroupActivationTab(element) {
+        if (tabDrag.active || tabDrag.pending || groupResize) return
+        const wrapper = element.closest('.tab-group-wrapper.expanded')
+        const content = wrapper?.querySelector('.tab-group-content')
+        const target = content?.querySelector('.group-activation-target')
+        if (!target) return
+        const bounds = content.getBoundingClientRect()
+        const row = target.getBoundingClientRect()
+        // Keep the target clear of the group's overflow fades without scrolling the sidebar.
+        const top = bounds.top + 16
+        const bottom = bounds.bottom - 16
+        if (row.top < top) content.scrollTop += row.top - top
+        else if (row.bottom > bottom) content.scrollTop += row.bottom - bottom
+    }
+
+    function handleGroupPointerOver(event) {
+        const wrapper = event.currentTarget
+        const content = wrapper.querySelector('.tab-group-scroll')
+        if (content?.contains(event.target)) return
+        if (wrapper.contains(event.relatedTarget) && !content?.contains(event.relatedTarget)) return
+        revealGroupActivationTab(wrapper)
+    }
+
+    function getSidebarHoverTarget(element, fallbackTab = null) {
+        const row = element?.closest('.tab-item-container, .closed-tab-item, .closed-tab-row, .pinned-tab, .app-tab')
+        const header = element?.closest('.tab-group-wrapper > .tab-group')
+        if (!row && header) {
+            const wrapper = header.closest('.tab-group-wrapper')
+            const spaceId = header.closest('.space-content')?.dataset.spaceId
+            const group = data.getTabGroup(wrapper.dataset.tabId, spaceId)
+            if (!group) return null
+            return { element: header, tab: data.getGroupActiveTab(group, spaceId), group: { tabId: group.tabs[0].id, spaceId, id: group.id }, tabs: group.tabs }
+        }
+        if (!row) return null
+        const archivedId = row.getAttribute('data-archived-id')
+        const archived = archivedId && [...closedItems, ...pendingItems].find(item => item.id === archivedId)
+        if (archived?.tabGroupId) return {
+            element: row, tab: archived.tabs[0], tabs: archived.tabs,
+            group: { id: archived.id, tabId: archived.tabs[0].id, spaceId: archived.spaceId, archived: true }
+        }
+        const tabId = row.getAttribute('data-tab-id')
+        const tab = fallbackTab || data.docs[tabId] || data.spaceMeta.closedTabs.find(tab => tab.id === tabId)
+        return tab ? { element: row, tab, group: null, tabs: [tab] } : null
+    }
+
+    function isCurrentHoverTarget(target) {
+        return target?.group
+            ? hoveredGroupTarget?.id === target.group.id && hoveredGroupTarget?.spaceId === target.group.spaceId
+            : !hoveredGroupTarget && target?.tab.id === hoveredTab?.id
+    }
+
+    function updateHovercardPosition(position) {
+        if (position.x !== hovercardPosition.x || position.y !== hovercardPosition.y) hovercardPosition = position
+    }
+
+    function showSidebarHovercard(target) {
+        if (tabDrag.active || isHorizontalScrolling || !target.element.isConnected) return
+        hovercardAnchor = target.group && !target.group.archived ? target.element.closest('.tab-group-wrapper') : target.element
+        hovercardHistoryBeside = canFitSidebarHovercardHistory(hovercardAnchor.getBoundingClientRect(), window.innerWidth)
+        hovercardPosition = getSidebarHovercardPosition(
+            hovercardAnchor.getBoundingClientRect(), target.group ? 336 : 328,
+            target.tabs.length * 268, window.innerWidth, window.innerHeight
+        )
+        hoveredGroupTarget = target.group
+        hoveredTab = target.tab
+        expandedHovercardTabs = {}
+        expandedHovercardHistoryTabId = null
+        hovercardUrlBarExpanded = false
+        hovercardShowTime = Date.now()
+        instantHovercardsMode = true
+    }
+
+    function activateHovercardTab(tab) {
+        closeTabSearch()
+        if (tab.archive === 'deferred') { data.resumePendingTab(tab.id); return }
+        if (tab.archive === 'closed') { data.restoreClosedTab(tab.id); return }
+        if (data.spaceMeta.activeSpace !== tab.spaceId) data.activateSpace(tab.spaceId)
+        if (data.spaceMeta.activeTabId !== tab.id) data.activate(tab.id)
+    }
+
+    function closeHovercardTab(tab) {
+        const remaining = hovercardTabs.filter(member => member.id !== tab.id)
+        if (tab.archive === 'closed') data.removeClosedTab(tab.id)
+        else data.closeTab(tab.spaceId, tab.id)
+        if (expandedHovercardHistoryTabId === tab.id) expandedHovercardHistoryTabId = null
+        delete expandedHovercardTabs[tab.id]
+        hovercardUrlBarExpanded = Object.values(expandedHovercardTabs).some(Boolean)
+        if (hoveredGroupTarget && remaining.length) {
+            hoveredGroupTarget = { ...hoveredGroupTarget, tabId: remaining[0].id }
+            hoveredTab = remaining[0]
+        } else {
+            closeHovercard()
+        }
+    }
+
     function startHovercardPositionCheck() {
         stopHovercardPositionCheck()
         
@@ -1237,41 +1434,9 @@
             if (elementUnderCursor.closest('.tab-hovercard-sidebar')) {
                 isStillHovering = true
             } else {
-                // Check if still over a tab, closed tab, or pinned tab
-                const hoveredTabElement = elementUnderCursor.closest('.tab-item-container') ||
-                                         elementUnderCursor.closest('.closed-tab-item') ||
-                                         elementUnderCursor.closest('.pinned-tab')
-                if (hoveredTabElement) {
-                    // Check if it's a DIFFERENT tab - if so, switch to it instantly
-                    const tabId = hoveredTabElement.getAttribute('data-tab-id')
-                    if (tabId && tabId !== hoveredTab.id && instantHovercardsMode) {
-                        const newTab = data.docs[tabId] || data.spaceMeta.closedTabs.find(t => t.id === tabId)
-                        if (newTab) {
-                            // console.log('[DEBUG:HOVER] Switching to new tab during position check', tabId)
-                            // Update to new tab immediately
-                            const rect = hoveredTabElement.getBoundingClientRect()
-                            const hovercardWidth = 320
-                            
-                            let x = rect.right
-                            let y = rect.top - 26
-                            
-                            if (x + hovercardWidth > window.innerWidth - 10) {
-                                x = rect.left - hovercardWidth - 10
-                            }
-                            if (x < 10) {
-                                x = 10
-                            }
-                            
-                            const hovercardHeight = newTab.screenshot ? 180 + 80 : 80
-                            if (y + hovercardHeight > window.innerHeight - 20) {
-                                y = window.innerHeight - hovercardHeight - 20
-                            }
-                            
-                            hovercardPosition = { x, y }
-                            hoveredTab = newTab
-                            hovercardShowTime = Date.now()
-                        }
-                    }
+                const target = getSidebarHoverTarget(elementUnderCursor)
+                if (target) {
+                    if (!isCurrentHoverTarget(target) && instantHovercardsMode) showSidebarHovercard(target)
                     isStillHovering = true
                 }
             }
@@ -1298,11 +1463,9 @@
     }
     
     function handleTabMouseEnter(tab, event) {
-        if (tabDrag.active) return
-        // Disable hovercards while spacer is visible (scrolling to add space)
-        const anySpacerVisible = Object.values(tabsListSpacerVisible).some(v => v)
-        if (anySpacerVisible) return
-        
+        if (tabDrag.active || isHorizontalScrolling) return
+        const target = getSidebarHoverTarget(event.target, tab)
+        if (!target) return
         // console.log('[DEBUG:HOVER] Tab mouse enter', {
         //     tabId: tab.id,
         //     tabTitle: tab.title,
@@ -1315,12 +1478,7 @@
         // })
         
         // Reset close button hover state when entering a new tab
-        closeButtonHovered = false
         closeButtonHoveredDelayed = false
-        if (closeButtonHoverTimer) {
-            clearTimeout(closeButtonHoverTimer)
-            closeButtonHoverTimer = null
-        }
         
         if (hoverTimeout) {
             clearTimeout(hoverTimeout)
@@ -1329,43 +1487,11 @@
         const delay = instantHovercardsMode ? 0 : 800
         
         hoverTimeout = setTimeout(() => {
-            // console.log('[DEBUG:HOVER] Showing hovercard for tab', tab.id)
-            instantHovercardsMode = true
-            
+            if (isHorizontalScrolling) return
             if (instantModeResetTimer) {
                 clearTimeout(instantModeResetTimer)
             }
-            
-            const tabElement = event.target.closest('.tab-item-container') || 
-                              event.target.closest('.closed-tab-item') ||
-                              event.target.closest('.pinned-tab')
-            if (!tabElement) return
-            
-            const rect = tabElement.getBoundingClientRect()
-            const hovercardWidth = 320
-            
-            let x = rect.right
-            let y = rect.top - 26
-            
-            // Check if hovercard would go off right edge
-            if (x + hovercardWidth > window.innerWidth - 10) {
-                x = rect.left - hovercardWidth - 10
-            }
-            
-            // Check if hovercard would go off left edge
-            if (x < 10) {
-                x = 10
-            }
-            
-            // Check if hovercard would go off bottom (base card height only, history list scrolls if needed)
-            const hovercardHeight = tab.screenshot ? 180 + 80 : 80
-            if (y + hovercardHeight > window.innerHeight - 20) {
-                y = window.innerHeight - hovercardHeight - 20
-            }
-            
-            hovercardPosition = { x, y }
-            hoveredTab = tab
-            hovercardShowTime = Date.now()
+            showSidebarHovercard(target)
             
             if (hovercardResetTimer) {
                 clearTimeout(hovercardResetTimer)
@@ -1408,7 +1534,7 @@
             const isOverInfo = elementUnderCursor?.closest('.hovercard-info')
             const isOverHovercard = elementUnderCursor?.closest('.tab-hovercard-sidebar')
             
-            if (!isOverInfo && !isOverHovercard) {
+            if (!isOverInfo && !isOverHovercard && !getSidebarHoverTarget(elementUnderCursor)) {
                 // console.log('[DEBUG:HOVER] Clearing hovered tab')
                 closeHovercard()
                 if (!hovercardUrlBarExpanded) {
@@ -1448,48 +1574,22 @@
         'ephemeral:3'
     ]
 
-    async function handleNewFromClipboard(spaceId) {
-        try {
-            const text = (await navigator.clipboard.readText())?.trim()
-            if (!text) {
-                const tab = await data.newTab(spaceId, { shouldFocus: true })
-                if (tab) {
-                    data.activateSpace(spaceId)
-                    data.activate(tab.id)
-                }
-                return
-                }
+    function showNewTabMenu(spaceId, refresh = false) {
+        if (tabDrag.active || tabDrag.pending) return
+        clearTimeout(newTabMenuCloseTimeout)
+        if (newTabMenuSpaceId === spaceId && !refresh) return
+        newTabMenuSpaceId = spaceId
+        newTabMenuRefreshCounter++
+    }
 
-            let url = text
-            try {
-                // If scheme missing, try with https
-                if (!/^https?:\/\//i.test(url)) {
-                    new URL('https://' + url)
-                    url = 'https://' + url
-                } else {
-                    new URL(url)
-                }
-            } catch (e) {
-                // Fallback to about:newtab if invalid
-                url = 'about:newtab'
-            }
-
-            const tab = await data.newTab(spaceId, { url, shouldFocus: true })
-            if (tab) {
-                data.activateSpace(spaceId)
-                data.activate(tab.id)
-            }
-        } catch (err) {
-            const tab = await data.newTab(spaceId, { shouldFocus: true })
-            if (tab) {
-                data.activateSpace(spaceId)
-                data.activate(tab.id)
-            }
-        }
+    async function handleNewFromClipboard(spaceId, url) {
+        newTabMenuSpaceId = null
+        await createSidebarTab(spaceId, { url, shouldFocus: true })
     }
 
     async function handleNewTabInPartition(spaceId, partition) {
-        const tab = await data.newTab(spaceId, { shouldFocus: true })
+        newTabMenuSpaceId = null
+        const tab = await createSidebarTab(spaceId, { shouldFocus: true })
         if (tab) {
             // In-memory assignment mirrors App.svelte partition handling
             data.docs[tab.id].partition = partition
@@ -1498,8 +1598,6 @@
             if (idx !== -1) {
                 space.tabs[idx].partition = partition
             }
-            data.activateSpace(spaceId)
-            data.activate(tab.id)
         }
     }
 
@@ -1615,99 +1713,58 @@
         }
     }
 
-    async function handleDevToolsClick() {
-        try {
-            // Get dev tools list to find the correct context ID
-            const response = await fetch('/devtools-api/json/list')
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-            }
-            const devToolsData = await response.json()
-            
-            const activeTab = data.docs[data.spaceMeta.activeTabId]
-            if (!activeTab?.url) return
-            
-            // Find matching dev tools entry for current tab URL
-            let matchingItem = devToolsData.find(item => {
-                return item.url === activeTab.url || item.title === activeTab.title
-            })
-            
-            // If multiple URLs exist for the same site, use hash trick to find correct ID
-            if (!matchingItem && devToolsData.length > 1) {
-                const originalUrl = activeTab.url
-                const randomHash = Math.random().toString(36).substring(2, 15)
-                
-                try {
-                    // Change URL hash to identify this specific tab
-                    const urlWithHash = originalUrl.includes('#') 
-                        ? originalUrl.replace(/#.*$/, `#${randomHash}`)
-                        : `${originalUrl}#${randomHash}`
-                    
-                    // Navigate to the URL with hash
-                    data.navigate(data.spaceMeta.activeTabId, urlWithHash)
-                    
-                    // Wait a moment for the change to register
-                    await new Promise(resolve => setTimeout(resolve, 1))
-                    
-                    // Fetch updated dev tools list
-                    const updatedResponse = await fetch('/devtools-api/json/list')
-                    if (updatedResponse.ok) {
-                        const updatedData = await updatedResponse.json()
-                        matchingItem = updatedData.find(item => item.url?.includes(randomHash))
-                    }
-                    
-                    // Restore original URL
-                    data.navigate(data.spaceMeta.activeTabId, originalUrl)
-                } catch (err) {
-                    console.warn('Hash trick failed:', err)
-                }
-            }
-            
-            // Default to first item if still no match
-            if (!matchingItem && devToolsData.length > 0) {
-                matchingItem = devToolsData[0]
-            }
-            
-            if (matchingItem?.devtoolsFrontendUrl) {
-                // Replace the remote DevTools frontend with local one while keeping WebSocket params
-                const originalUrl = new URL(matchingItem.devtoolsFrontendUrl)
-                const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html?wss=localhost:5194/devtools-api/devtools/${originalUrl.search.split('/devtools/')[1]}`
-                
-                await data.newTab(data.spaceMeta.activeSpace, { 
-                    url: localDevToolsUrl, 
-                    title: `DevTools - ${activeTab.title || 'Untitled'}`,
-                    shouldFocus: true,
-                    pinned: 'right'
-                })
-                
-                // if (devToolsTab) {
-                //     // Pin the dev tools tab to the right after a small delay to ensure DB persistence
-                //     setTimeout(() => {
-                //         data.pin({ tabId: devToolsTab.id, pinned: 'right' })
-                //     }, 1)
-                //     data.activate(devToolsTab.id)
-                // }
-            }
-        } catch (err) {
-            console.error('Failed to open dev tools:', err)
-        }
+    function handleDevToolsClick() {
+        return openTabDevTools(data, data.spaceMeta.activeTabId)
     }
 
     function handleBackgroundDoubleClick() {
         if (data.spaceMeta.activeSpace) {
-            const newTab = data.newTab(data.spaceMeta.activeSpace)
-            if (newTab) {
-                data.activate(newTab.id)
-            }
+            createSidebarTab(data.spaceMeta.activeSpace)
         }
     }
 
 </script>
 
+{#snippet archivedRows(items, pending = false)}
+    {#each items as item (item.id)}
+        {#if item.tabs.some(tabMatchesSearch) || (tabSearchQuery && item.title.toLowerCase().includes(tabSearchQuery.toLowerCase()))}
+            <div class="closed-tab-row" data-tab-id={item.tabs[0].id} data-archived-id={item.id}>
+                <button class="closed-tab-item" data-tab-id={item.tabs[0].id} data-archived-id={item.id}
+                        onclick={() => restoreArchivedItem(item, pending)}
+                        onmouseenter={(e) => handleTabMouseEnter(item.tabs[0], e)}
+                        onmouseleave={handleTabMouseLeave}>
+                    {#if item.tabGroupId}
+                        <TabGroupPreview group={item} />
+                        <span class="closed-tabs-count">{item.tabs.length}</span>
+                    {:else}
+                        <Favicon tab={item.tabs[0]} showButton={false} />
+                        <div class="tab-text">
+                            <span class="tab-title">{getTabTitle(data.docs[item.tabs[0].id] || item.tabs[0])}</span>
+                            <span class="tab-space">{pending ? (item.tabs[0].pending?.wakeAt ? new Date(item.tabs[0].pending.wakeAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Waiting for external action') : data.spaces[item.spaceId]?.name || 'Unknown Space'}</span>
+                        </div>
+                    {/if}
+                </button>
+                <button class="closed-tab-remove" type="button" aria-label={pending ? 'Close pending tabs' : 'Remove from recently closed'}
+                        title={pending ? 'Close pending tabs' : 'Remove from recently closed'}
+                        onclick={() => removeArchivedItem(item, pending)}
+                        use:closeButtonHistory={{ cardVisible: hoveredTab?.id === item.tabs[0].id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+                </button>
+            </div>
+        {/if}
+    {/each}
+{/snippet}
+
 <svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
+{#if tabSidebarVisible}
+    <div class="sidebar-window-drag" class:drag-enabled={isDragEnabled && !tabDrag.active && !tabDrag.pending && !isResizingTabSidebar && !tabContextMenu.visible && !headerMenuOpen}
+         oncontextmenu={onHeaderContextMenu}
+         style:width="{customTabSidebarWidth || 263}px" aria-hidden="true"></div>
+{/if}
+
 <div class="sidebar-box" 
-     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
+     class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || headerMenuOpen || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
      class:multi-space-mode={multiSpaceMode}
@@ -1719,22 +1776,22 @@
     <div class="sidebar">
         {#if spaceContextMenuId}
     <div class="space-context-menu-overlay">
-        <div class="space-context-menu-dropdown" 
+        <div class="space-context-menu-dropdown menu-surface"
             class:open={spaceContextMenuId !== null}
             style="top: {contextMenuPosition.y}px; left: {contextMenuPosition.x}px;">
-            <button class="space-context-menu-item" 
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('rename', spaceContextMenuId)}
                     role="menuitem">Rename</button>
-            <button class="space-context-menu-item"
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('change-color', spaceContextMenuId)}
                     role="menuitem">Change Color</button>
-            <button class="space-context-menu-item"
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('change-icon', spaceContextMenuId)}
                     role="menuitem">Change Icon</button>
-            <button class="space-context-menu-item"
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('container', spaceContextMenuId)}
                     role="menuitem">Container</button>
-            <button class="space-context-menu-item delete"
+            <button class="space-context-menu-item menu-action"
                     onmouseup={() => handleSpaceContextMenuAction('delete', spaceContextMenuId)}
                     role="menuitem">Delete</button>
         </div>
@@ -1750,6 +1807,10 @@
                     </svg>
                 </button>
             {/if}
+            <div class="sidebar-header" class:drag-enabled={tabSidebarVisible && isDragEnabled && !tabDrag.active && !tabDrag.pending && !isResizingTabSidebar && !tabContextMenu.visible && !headerMenuOpen}
+                 role="toolbar" aria-label="Tab sidebar header" tabindex="-1"
+                 oncontextmenu={onHeaderContextMenu}>
+            <div class="sidebar-top-row">
             {#if showUrl}
                 <UrlBar
                     url={data.docs[data.spaceMeta.activeTabId]?.url || ''}
@@ -1762,9 +1823,19 @@
                     onReload={handleReloadClick}
                     onCloseTab={handleCloseTabClick}
                     onDevTools={handleDevToolsClick}
+                    {onSettings}
                     onExpandedChange={(v) => urlBarExpanded = v}
                 />
             {/if}
+                <button class="activity-toggle" class:active={data.ui.tabActivityMode}
+                        type="button" aria-label="Sort tabs by activity" aria-pressed={!!data.ui.tabActivityMode}
+                        title="{data.ui.tabActivityMode ? 'Disable' : 'Enable'} activity sorting"
+                        onclick={() => data.toggleTabActivityMode()}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a24 24 0 0 0 5.454-1.31A8.97 8.97 0 0 1 18 9.75V9a6 6 0 0 0-12 0v.75a8.97 8.97 0 0 1-2.312 6.022 24 24 0 0 0 5.455 1.31m5.714 0a24.3 24.3 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+                    </svg>
+                </button>
+            </div>
             
             {#if isSearchModeActive}
                 <div class="section search-section" class:multi-space={multiSpaceMode}>
@@ -1772,8 +1843,8 @@
                         <svg class="tab-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
                         </svg>
-                        <input type="text" class="tab-search-input" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) isSearchModeActive = false }} onkeydown={(e) => { if (e.key === 'Escape') { tabSearchQuery = ''; isSearchModeActive = false; searchInputRef?.blur(); } }} />
-                        <button class="tab-search-clear" onmousedown={() => { tabSearchQuery = ''; isSearchModeActive = false; }} aria-label="Close search">
+                        <input type="text" class="tab-search-input" aria-label="Search tabs" placeholder="Search tabs..." bind:value={tabSearchQuery} bind:this={searchInputRef} onblur={() => { if (!tabSearchQuery) closeTabSearch() }} onkeydown={(e) => { if (e.key === 'Escape') closeTabSearch() }} />
+                        <button class="tab-search-clear" onmousedown={closeTabSearch} onclick={(e) => { if (e.detail === 0) closeTabSearch() }} aria-label="Close search">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                 <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                             </svg>
@@ -1782,7 +1853,7 @@
                 </div>
             {:else}
                 <div class="section global-pins-section">
-                    <div class="pinned-tabs-grid">
+                    <div class="pinned-tabs-grid" data-pin-scope="global">
                         <button class="pinned-tab search-toggle-tab"
                                 title="Search Tabs"
                                 onmousedown={(e) => { e.stopPropagation(); isSearchModeActive = true; setTimeout(() => searchInputRef?.focus(), 50); }}
@@ -1804,8 +1875,14 @@
                             </svg>
                         </button>
                         <!-- NOTE: Tabs are also rendered in App.svelte (top bar) - keep hibernated class in sync there too -->
-                        {#each globallyPinnedTabs as tab}
-                            <button class="pinned-tab" class:hibernated={data.isTabHibernated(tab.id)}
+                        {#each globallyPinnedTabs as tab (tab.id)}
+                            <button class="pinned-tab" data-tab-id={tab.id} class:hibernated={data.isTabHibernated(tab.id)}
+                                    class:active={tab.id === data.spaceMeta.activeTabId}
+                                    class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
+                                    title={getTabTitle(data.docs[tab.id] || tab)} aria-label={getTabTitle(data.docs[tab.id] || tab)}
+                                    onmousedown={(e) => startPinDrag(e, tab, data.spaceMeta.activeSpace)}
+                                    onclick={(e) => finishPinClick(e, tab, data.spaceMeta.activeSpace)}
+                                    oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}
                                     onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                     onmouseleave={handleTabMouseLeave}>
                                 <Favicon {tab} showButton={false} />
@@ -1815,6 +1892,7 @@
                 </div>
             {/if}
 
+            </div>
             {#if !tabSearchQuery}
                 <div class="section">
                     <div class="spaces-container">
@@ -1842,7 +1920,7 @@
                         <div class="spaces-list-fade-right" class:visible={spacesScrolledRight}></div>
                     </div>
                     <div class="new-space-menu">
-                        <button class="new-space-button" 
+                        <button class="new-space-button"
                                 onmousedown={(e) => { e.stopPropagation(); handleNewSpaceMenuToggle(); }}
                                 aria-label="Create new space">
                             <svg class="plus-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -1853,18 +1931,18 @@
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div class="menu-scrim" onmousedown={() => newSpaceMenuOpen = false}></div>
                         {/if}
-                            <div class="new-space-menu-dropdown" class:open={newSpaceMenuOpen}>
-                                <button class="new-space-menu-item"
-                                        onmouseup={() => handleNewSpaceMenuAction('new-space')}
-                                        role="menuitem">New Space</button>
-                                <button class="new-space-menu-item"
-                                        onmouseup={() => handleNewSpaceMenuAction('new-divider')}
-                                        role="menuitem">New Divider</button>
-                                <button class="new-space-menu-item"
-                                        onmouseup={() => handleNewSpaceMenuAction('new-folder')}
-                                        role="menuitem">New Folder</button>
-                            </div>
+                        <div class="new-space-menu-dropdown menu-surface" class:open={newSpaceMenuOpen}>
+                            <button class="new-space-menu-item menu-action"
+                                    onmouseup={() => handleNewSpaceMenuAction('new-space')}
+                                    role="menuitem">New Space</button>
+                            <button class="new-space-menu-item menu-action"
+                                    onmouseup={() => handleNewSpaceMenuAction('new-divider')}
+                                    role="menuitem">New Divider</button>
+                            <button class="new-space-menu-item menu-action"
+                                    onmouseup={() => handleNewSpaceMenuAction('new-folder')}
+                                    role="menuitem">New Folder</button>
                         </div>
+                    </div>
                     </div>
                 </div>
             {/if}
@@ -1905,6 +1983,10 @@
                     {/if}
                     <div class="tab-content-track" class:multi-space={multiSpaceMode}>
                         {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
+                            {@const spacePins = data.getSpacePins(spaceId)}
+                            {@const spacePending = pendingItems.filter(item => item.spaceId === spaceId)}
+                            {@const sidebarPins = getSidebarPinnedItems(data.spaces[spaceId]?.tabs, false, data.spaces[spaceId]?.activeTabsOrder?.map(entry => typeof entry === 'string' ? entry : entry.id), data.docs)}
+                            {@const fixedSidebarPins = getSidebarPinnedItems(data.spaces[spaceId]?.tabs, true, data.spaces[spaceId]?.activeTabsOrder?.map(entry => typeof entry === 'string' ? entry : entry.id), data.docs)}
                             {#if spaceHasMatchingTabs(spaceId)}
                                 {#if multiSpaceMode && index > 0}
                                     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1920,7 +2002,13 @@
                                      onmouseleave={() => { if (multiSpaceMode) hoveredSpaceInMultiMode = null }}
                                      role="group"
                                      aria-label="Space tabs">
-                                <div class="space-title-container">
+                                <div class="space-sticky-tabs">
+                                <div class="space-title-container"
+                                     data-pin-scope={spacePins.length ? undefined : 'space'} data-pin-layout="rows" data-pin-empty-edge="bottom"
+                                     class:titles-visible={spaceTitlesVisible || multiSpaceMode || tabSearchQuery.length > 0 || renamingSpaceId === spaceId || colorPickerSpaceId === spaceId || openMenuId === spaceId || spaceContextMenuId === spaceId}
+                                     class:title-hovered={hoveredSpaceTitleId === spaceId}
+                                     onmouseenter={() => handleSpaceTitleMouseEnter(spaceId)}
+                                     onmouseleave={handleSpaceTitleMouseLeave}>
                                     {#if renamingSpaceId === spaceId}
                                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                                         <input class="space-title-rename"
@@ -1955,6 +2043,20 @@
                                         </div>
                                     {/if}
                                     <div class="space-menu">
+                                        <button class="space-group-toggle" type="button"
+                                                aria-label={allGroupsExpanded ? 'Collapse all tab groups' : 'Expand all tab groups'}
+                                                aria-expanded={allGroupsExpanded}
+                                                title={allGroupsExpanded ? 'Collapse all tab groups' : 'Expand all tab groups'}
+                                                onclick={(e) => { e.stopPropagation(); handleAllTabGroupsToggle() }}
+                                                ondblclick={(e) => e.stopPropagation()}>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                {#if allGroupsExpanded}
+                                                    <path d="m6 3 6 6 6-6M6 21l6-6 6 6" />
+                                                {:else}
+                                                    <path d="m6 9 6-6 6 6M6 15l6 6 6-6" />
+                                                {/if}
+                                            </svg>
+                                        </button>
                                         <button class="space-menu-button" 
                                                 onmousedown={(e) => { e.stopPropagation(); handleMenuToggle(spaceId); }}
                                                 aria-label="Space options">⋯</button>
@@ -1962,24 +2064,24 @@
                                         {#if openMenuId === spaceId}
                                             <div class="menu-scrim" onmousedown={() => openMenuId = null}></div>
                                         {/if}
-                                        <div class="space-menu-dropdown" class:open={openMenuId === spaceId}>
-                                            <button class="space-menu-item" 
+                                        <div class="space-menu-dropdown menu-surface" class:open={openMenuId === spaceId}>
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('rename', spaceId)}
                                                     role="menuitem">Rename</button>
-                                            <button class="space-menu-item"
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('change-color', spaceId)}
                                                     role="menuitem">Change Color</button>
-                                            <button class="space-menu-item"
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('change-icon', spaceId)}
                                                     role="menuitem">Change Icon</button>
-                                            <button class="space-menu-item"
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('container', spaceId)}
                                                     role="menuitem">Container</button>
-                                            <button class="space-menu-item delete"
+                                            <button class="space-menu-item menu-action"
                                                     onmousedown={(e) => e.preventDefault()}
                                                     onmouseup={() => handleMenuItemClick('delete', spaceId)}
                                                     role="menuitem">Delete</button>
@@ -1987,11 +2089,14 @@
                                     </div>
                                 </div>
                                 
-                                {#if data.spaces[spaceId].pinnedTabs?.length > 0}
-                                    <div class="pinned-tabs-grid">
-                                        {#each data.spaces[spaceId].pinnedTabs as tab (tab.id)}
+                                {#if spacePins.length > 0}
+                                    <div class="pinned-tabs-grid" data-pin-scope="space">
+                                        {#each spacePins as tab (tab.id)}
                                             {#if tabMatchesSearch(tab)}
-                                                <button class="app-tab" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} onmousedown={() => activateTab(tab.id, spaceId)}>
+                                                <button class="app-tab" data-tab-id={tab.id} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} title={getTabTitle(data.docs[tab.id] || tab)} aria-label={getTabTitle(data.docs[tab.id] || tab)}
+                                                        onmousedown={(e) => startPinDrag(e, tab, spaceId)}
+                                                        onclick={(e) => finishPinClick(e, tab, spaceId)}
+                                                        oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}>
                                                     <Favicon {tab} showButton={false} />
                                                 </button>
                                             {/if}
@@ -1999,13 +2104,36 @@
                                     </div>
                                 {/if}
                                 
+                                {#if fixedSidebarPins.length}
+                                    <div class="sidebar-pinned-tabs fixed-sidebar-pins" data-pin-scope="sidebar-fixed" data-pin-layout="rows"
+                                         role="list" aria-label="Always visible pinned tabs">
+                                        {#each fixedSidebarPins as tab, i (tab.id)}
+                                            {@render sidebarItem(tab, i, true)}
+                                        {/each}
+                                    </div>
+                                {/if}
                                 <div class="new-tab-row">
-                                    <div class="new-tab-button" 
-                                            onmousedown={async () => {
-                                                const newTab = await data.newTab(spaceId)
-                                                if (newTab) {
-                                                    data.activateSpace(spaceId)
-                                                    data.activate(newTab.id)
+                                    {#if !fixedSidebarPins.length}
+                                        <div class="fixed-pin-drop-anchor" data-pin-scope="sidebar-fixed" data-pin-layout="rows" data-pin-hit-padding="8" aria-hidden="true"></div>
+                                    {/if}
+                                    <div class="new-tab-button"
+                                            onmouseenter={() => clearTimeout(newTabMenuCloseTimeout)}
+                                            onmouseleave={() => { newTabMenuCloseTimeout = setTimeout(() => { newTabMenuSpaceId = null }, 150) }}
+                                            oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); showNewTabMenu(spaceId, true) }}
+                                            onmousedown={(e) => {
+                                                if (!e.target.closest('.new-tab-more-button')) {
+                                                    startCreationDrag('tab', e.currentTarget, spaceId, e)
+                                                }
+                                            }}
+                                            onclick={(e) => {
+                                                if (!didDragOccurred() && !e.target.closest('.new-tab-more-button')) {
+                                                    createSidebarTab(spaceId)
+                                                }
+                                            }}
+                                            onkeydown={(e) => {
+                                                if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                                                    e.preventDefault()
+                                                    createSidebarTab(spaceId)
                                                 }
                                             }}
                                             role="button"
@@ -2016,132 +2144,184 @@
                                         </svg>
                                         <span class="new-tab-text">New Tab</span>
 
-                                        <span class="new-tab-more-button" aria-label="New tab options">
+                                        <span class="new-tab-more-button" class:menu-open={newTabMenuSpaceId === spaceId} role="group" aria-label="New tab options" onmouseenter={() => showNewTabMenu(spaceId)}>
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="down-icon"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
-                                            <div class="new-tab-hover-menu" role="menu" aria-label="New tab options">
-                                          <span class="new-tab-hover-item" onmouseup={() => handleNewFromClipboard(spaceId)} role="menuitem" tabindex="0">
-                                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="item-icon"><path d="M15.75 3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h7.5Zm0 1.5h-7.5A1.5 1.5 0 0 0 6.75 6v9A1.5 1.5 0 0 0 8.25 16.5h7.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5Z"/><path d="M8.25 6A2.25 2.25 0 0 1 10.5 3.75h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 0 9.75 6v.75H8.25V6Z"/></svg>
-                                              <span>New from clipboard</span>
-                                          </span>
-                                         <div class="new-tab-hover-item has-submenu" role="menuitem" aria-haspopup="true" aria-expanded="false" tabindex="0">
-                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="item-icon"><path d="M6.75 3A1.75 1.75 0 0 0 5 4.75v4.5C5 10.44 5.56 11 6.25 11h4.5c.69 0 1.25-.56 1.25-1.25v-4.5C12 4.56 11.44 4 10.75 4h-4Zm7 0A1.75 1.75 0 0 0 12 4.75v4.5c0 .69.56 1.25 1.25 1.25h4.5C18.44 10.5 19 9.94 19 9.25v-4.5C19 4.06 18.44 3.5 17.75 3.5h-4Zm-7 10.5c-.69 0-1.25.56-1.25 1.25v4.5C5.5 20.44 6.06 21 6.75 21h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Zm7 0c-.69 0-1.25.56-1.25 1.25v4.5c0 .69.56 1.25 1.25 1.25h4.5c.69 0 1.25-.56 1.25-1.25v-4.5c0-.69-.56-1.25-1.25-1.25h-4.5Z"/></svg>
-                                             <span>New tab in container…</span>
-                                             <svg class="chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1-.02-1.06L10.94 10 7.19 6.29a.75.75 0 1 1 1.06-1.06l4.5 4.25a.75.75 0 0 1 0 1.06l-4.5 4.25a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
-                                             <div class="new-tab-submenu" role="menu">
-                                                 {#each partitions as partition}
-                                                     <span class="new-tab-submenu-item" onmouseup={() => handleNewTabInPartition(spaceId, partition)} role="menuitem" tabindex="0">
-                                                         <span class="partition-dot" data-variant={partition.startsWith('persist') ? 'persist' : 'ephemeral'}></span>
-                                                         <span>{partition}</span>
-                                                     </span>
-                                                 {/each}
-                                             </div>
-                                         </div>
+                                            <div class="new-tab-hover-menu menu-surface" class:visible={newTabMenuSpaceId === spaceId} role="menu" aria-label="New tab options">
+                                                <NewTabMenu active={newTabMenuSpaceId === spaceId} refreshCounter={newTabMenuRefreshCounter} {partitions}
+                                                    onCreate={(url) => handleNewFromClipboard(spaceId, url)}
+                                                    onPartition={(partition) => handleNewTabInPartition(spaceId, partition)} />
                                             </div>
                                         </span>
                                     </div>
+                                    {#if !tabSearchQuery && data.getSidebarItems(spaceId).at(-1)?.type !== 'divider'}
+                                        <div class="add-spacer-insertion">
+                                            <Tooltip text="Add spacer" position="top" delay={300}>
+                                                <button class="add-spacer-preview"
+                                                        onmousedown={(e) => {
+                                                            e.stopPropagation()
+                                                            startCreationDrag('divider', e.currentTarget, spaceId, e)
+                                                        }}
+                                                        onclick={() => { if (!didDragOccurred()) { addTabsListSpacer(spaceId) } }}
+                                                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTabsListSpacer(spaceId); } }}
+                                                        aria-label="Add spacer">
+                                                    <span class="add-spacer-preview-line"></span>
+                                                </button>
+                                            </Tooltip>
+                                        </div>
+                                    {/if}
                                 </div>
                                 
-                                <div class="tabs-list-container">
-                                    <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
-                                    <div class="tabs-list" 
-                                         onscroll={(e) => { handleTabsListScroll(e); handleTabsListScrollForSpacer(e, spaceId); }}
-                                         onwheel={(e) => handleTabsListWheel(e, spaceId)}
-                                         style={tabsListVerticalRubberBand[spaceId] ? `transform: translateY(${tabsListVerticalRubberBand[spaceId]}px)` : ''}>
-                                        
-                                        {#if tabsListSpacerVisible[spaceId] && !tabSearchQuery}
-                                            <div class="tabs-list-spacer" style="height: {tabsListSpacerHeight[spaceId] || 0}px"></div>
-                                        {/if}
-                                        
-                                        {#if tabsListSeparatorAdded[spaceId]}
-                                            <div class="tab-divider">
-                                                <div class="tab-divider-line-only"></div>
-                                            </div>
-                                        {/if}
-                                        
-                                   {#each data.spaces[spaceId].tabs as tab, i (tab.id)}
+                                </div>
+                                    {#snippet sidebarTab(tab, i, groupActivationTarget = false, expansionId = null)}
                                         {#if tab.type === 'divider'}
                                             {#if !tabSearchQuery}
-                                                <div class="tab-divider">
-                                                    {#if tab.title}
-                                                        <span class="tab-divider-title">{tab.title}</span>
-                                                        <div class="tab-divider-line"></div>
-                                                    {:else}
-                                                        <div class="tab-divider-line-only"></div>
-                                                    {/if}
+                                                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                                <div class="tab-divider-item" class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
+                                                     role="listitem"
+                                                     onmousedown={(e) => { if (e.button === 0) startTabDrag(tab.id, e.currentTarget, 'sidebar', spaceId, e, false, null, 'divider') }}
+                                                     oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
+                                                    <div class="tab-divider">
+                                                        {#if tab.title}
+                                                            <span class="tab-divider-title">{tab.title}</span>
+                                                            <div class="tab-divider-line"></div>
+                                                        {:else}
+                                                            <div class="tab-divider-line-only"></div>
+                                                        {/if}
+                                                        <button class="tab-divider-remove"
+                                                                onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); data.removeDivider(tab.id); } }}
+                                                                aria-label="Remove divider"
+                                                                title="Remove divider">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             {/if}
-                                        {:else}
-                                            {#if tabMatchesSearch(tab)}
-                                                <div class="tab-item-container" class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id} data-tab-id={tab.id}
+                                        {:else if tab.type === 'tab'}
+                                                <div class="tab-item-container" class:group-activation-target={groupActivationTarget} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id} data-tab-id={tab.id}
                                                      role="listitem"
                                                      onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                                      onmouseleave={handleTabMouseLeave}
                                                      oncontextmenu={(e) => handleTabContextMenu(e, tab, i)}>
-                                                    <button class="tab-item-main" onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive); if (!wasActive && !multiSpaceMode) { setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150)) } } }}
-                                                        onclick={(e) => { if (e.button === 0 && !didDragOccurred()) { if (multiSpaceMode) { activateTab(tab.id, spaceId) } else if (tabDrag.wasAlreadyActive) { activateTab(tab.id, spaceId) } } }}>
+                                                    <button class="tab-item-main" onmousedown={(e) => {
+                                                            if (e.button === 0) {
+                                                                const wasActive = tab.id === data.spaceMeta.activeTabId
+                                                                startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive)
+                                                                if (!wasActive && !multiSpaceMode && !tabSearchQuery) {
+                                                                    setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150))
+                                                                }
+                                                            }
+                                                        }}
+                                                        onclick={(e) => {
+                                                            if (e.detail === 0 || (e.button === 0 && !didDragOccurred() && (tabSearchQuery || multiSpaceMode || tabDrag.wasAlreadyActive))) {
+                                                                activateTab(tab.id, spaceId, expansionId)
+                                                            }
+                                                        }}>
                                                         <Favicon {tab} showButton={false} />
-                                                        <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
+                                                        <span class="tab-title">{getTabTitle(data.docs[tab.id] || tab)}</span>
                                                     </button>
                                                     
                                                     <button class="tab-close" aria-label="Close tab"
                                                             onmousedown={(e) => { e.stopPropagation(); data.closeTab(spaceId, tab.id); }}
-                                                            onmouseenter={() => {
-                                                                closeButtonHovered = true
-                                                                if (closeButtonHoverTimer) clearTimeout(closeButtonHoverTimer)
-                                                                if (instantHovercardsMode) {
-                                                                    closeButtonHoverTimer = setTimeout(() => {
-                                                                        closeButtonHoveredDelayed = true
-                                                                    }, 300)
-                                                                } else {
-                                                                    closeButtonHoveredDelayed = true
-                                                                }
-                                                            }}
-                                                            onmouseleave={() => {
-                                                                closeButtonHovered = false
-                                                                closeButtonHoveredDelayed = false
-                                                                if (closeButtonHoverTimer) {
-                                                                    clearTimeout(closeButtonHoverTimer)
-                                                                    closeButtonHoverTimer = null
-                                                                }
-                                                            }}>
+                                                            use:closeButtonHistory={{ cardVisible: !hoveredGroupTarget && hoveredTab?.id === tab.id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
                                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                                                 <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
                                                             </svg>
                                                         </button>
                                                 </div>
+                                        {/if}
+                                    {/snippet}
+                                    {#snippet sidebarItem(item, i, pinnedSection = false)}
+                                        {@const matchingTabs = !tabSearchQuery || groupNameMatchesSearch(item) ? item.tabs : item.tabs?.filter(tabMatchesSearch)}
+                                        {#if item.type === 'divider'}
+                                            {@render sidebarTab(item, i)}
+                                        {:else if matchingTabs?.length}
+                                            {#if !item.tabGroupId}
+                                                {@render sidebarTab(item.tabs[0], i)}
+                                            {:else}
+                                                {@const expansionId = `${spaceId}:${item.id}`}
+                                                {@const expanded = !!tabSearchQuery || (tabGroupExpansion[expansionId] ?? allGroupsExpanded)}
+                                                {@const active = item.tabs.some(tab => tab.id === data.spaceMeta.activeTabId)}
+                                                {@const activationTab = data.getGroupActiveTab({ tabs: matchingTabs }, spaceId)}
+                                                {@const sidebarGroupTabs = getActivityGroupTabs(matchingTabs, data.docs, !pinnedSection && data.ui.tabActivityMode)}
+                                                {@const recentEntry = data.spaces[spaceId]?.activeTabsOrder?.[0]}
+                                                {@const spaceActive = spaceId !== data.spaceMeta.activeSpace && item.tabs.some(tab => tab.id === (typeof recentEntry === 'string' ? recentEntry : recentEntry?.id))}
+                                                <div class="tab-group-wrapper" class:expanded class:active class:custom-group-height={tabGroupMaxHeight > defaultTabGroupMaxHeight} class:group-resizing={groupResize?.groupId === expansionId} style:--tab-group-max-height="{tabGroupMaxHeight}px" class:tab-dragging={tabDrag.active && tabDrag.dragType === 'group' && tabDrag.tabId === item.tabs[0].id} data-tab-id={item.tabs[0].id} data-other-tab-id={item.tabs[1]?.id} data-tab-group-id={item.tabGroupId}
+                                                     role="group" aria-label={item.title} onmouseenter={() => groupPreview.enter(expansionId)} onmouseleave={() => groupPreview.leave(expansionId)} onpointerover={handleGroupPointerOver}>
+                                                    <div class="tab-group" class:expanded class:active class:space-active-tab={spaceActive}
+                                                        onmouseenter={(e) => handleTabMouseEnter(null, e)} onmouseleave={handleTabMouseLeave}
+                                                        onfocusin={(e) => revealGroupActivationTab(e.currentTarget)}
+                                                        oncontextmenu={(e) => handleTabContextMenu(e, { ...item, type: 'tabgroup', spaceId }, i)} role="group" aria-label={item.title}>
+                                                        <button class="tab-group-main"
+                                                            aria-label={item.title}
+                                                            onmousedown={(e) => { if (e.button === 0) { startTabDrag(item.tabs[0].id, e.currentTarget.closest('.tab-group-wrapper'), 'sidebar', spaceId, e, false, null, 'group') } }}
+                                                            onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred())) { activateTab(activationTab.id, spaceId, expansionId) } }}
+                                                            ondblclick={(e) => { if (!tabSearchQuery && e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(activationTab.id); handleTabGroupToggle(expansionId, expanded) } }}>
+                                                            <TabGroupPreview group={{ ...item, tabs: sidebarGroupTabs }} groupId={expansionId} activeTabId={activationTab.id} preview={groupPreview} active={active || spaceActive} disabled={tabDrag.active || tabDrag.pending} />
+                                                        </button>
+                                                        <span class="tab-group-count">{matchingTabs.length}</span>
+                                                        {#if !tabSearchQuery}
+                                                        <button class="tab-group-toggle" aria-label="{expanded ? 'Collapse' : 'Expand'} {item.title}" aria-expanded={expanded}
+                                                            onclick={(e) => { if (e.detail === 0) { handleTabGroupToggle(expansionId, expanded) } }}
+                                                            onmousedown={(e) => { if (e.button === 0) { e.stopPropagation(); handleTabGroupToggle(expansionId, expanded) } }}>
+                                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6" /></svg>
+                                                        </button>
+                                                        {/if}
+                                                    </div>
+                                                    {#if expanded || tabGroupExpansion[expansionId] !== undefined}
+                                                        <div class="tab-group-scroll" hidden={!expanded}>
+                                                            <div class="tab-group-content" data-group-tab-id={item.tabs[0].id} use:observeScrollEdges={matchingTabs.length}>
+                                                                {#each sidebarGroupTabs as tab (tab.id)}
+                                                                    {@render sidebarTab(tab, i, tab.id === activationTab.id, expansionId)}
+                                                                {/each}
+                                                            </div>
+                                                            <button class="tab-group-resize" type="button" aria-label="Resize expanded tab groups" title="Drag to resize tab groups"
+                                                                onpointerdown={(event) => startGroupResize(event, expansionId)} onpointermove={moveGroupResize}
+                                                                onpointerup={endGroupResize} onpointercancel={endGroupResize} onlostpointercapture={endGroupResize}
+                                                                onkeydown={handleGroupResizeKey}>
+                                                                <svg viewBox="0 0 12 4" fill="none" stroke="currentColor"><path d="m4 3 3-3m1 3 2-2" /></svg>
+                                                            </button>
+                                                        </div>
+                                                    {/if}
+                                                </div>
                                             {/if}
                                         {/if}
-                                    {/each}
-                                    
-                                    <!-- Tab Group -->
-                                    <div class="tab-group-wrapper" class:expanded={tabGroupExpanded}>
-                                        <div class="tab-group" class:expanded={tabGroupExpanded} title="April - 10 tabs">
-                                            <div class="tab-group-main">
-                                                <div class="tab-group-favicons">
-                                                    <div class="tab-group-favicon">
-                                                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/></svg>
-                                                    </div>
-                                                    <div class="tab-group-favicon">
-                                                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                                                    </div>
-                                                    <div class="tab-group-favicon fade">
-                                                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.354-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.015-4.49-4.491S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.019 3.019 3.019h3.117v-6.038H8.148zm7.704 0h-.002c-2.476 0-4.49 2.015-4.49 4.491s2.014 4.49 4.49 4.49c2.476 0 4.49-2.014 4.49-4.49s-2.014-4.491-4.49-4.491zm0 7.509c-1.665 0-3.019-1.355-3.019-3.019s1.354-3.019 3.019-3.019 3.019 1.355 3.019 3.019-1.354 3.019-3.019 3.019z"/></svg>
-                                                    </div>
-                                                </div>
-                                                <span class="tab-group-title">April</span>
-                                            </div>
-                                            <span class="tab-group-count">10</span>
-                                            <button class="tab-group-toggle" aria-label="Expand/collapse tab group" onclick={handleTabGroupToggle}>
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                                </svg>
+                                    {/snippet}
+                                <div class="space-tabs-sections" onscroll={handleTabsListScroll}>
+                                    {#if spacePending.length}
+                                        <div class="closed-tabs-section pending-tabs-section" role="region" aria-label="Pending tabs"
+                                             onmouseenter={() => showPending(spaceId)} onmouseleave={hidePending}
+                                             onfocusin={() => showPending(spaceId)}
+                                             onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) hidePending() }}
+                                             ondblclick={(e) => e.stopPropagation()}>
+                                            <button class="closed-tabs-header" type="button" aria-expanded={pendingHoveredSpace === spaceId}
+                                                    onclick={() => showPending(spaceId)}>
+                                                <span class="closed-tabs-title">Pending</span>
+                                                <span class="closed-tabs-count">{spacePending.length}</span>
                                             </button>
+                                            <div class="closed-tabs-content pending-tabs-content" class:expanded={pendingHoveredSpace === spaceId} inert={pendingHoveredSpace !== spaceId}>
+                                                <div class="closed-tabs-list">{@render archivedRows(spacePending, true)}</div>
+                                            </div>
                                         </div>
-                                        <div class="tab-group-content">
-                                            <div class="tab-group-empty-message">No tabs in this group</div>
-                                        </div>
-                                    </div><!-- -->
-                                    
+                                    {/if}
+                                    {#if sidebarPins.length}
+                                    <div class="sidebar-pinned-tabs" data-pin-scope="sidebar" data-pin-layout="rows"
+                                         role="list" aria-label="Scrolling sidebar pins">
+                                        {#each sidebarPins as item, i (item.id)}
+                                            {@render sidebarItem(item, i, true)}
+                                        {/each}
+                                    </div>
+                                    {/if}
+                                    <div class="pinned-tabs-divider" role="separator" aria-label="Pinned and normal tabs"
+                                         data-pin-scope={sidebarPins.length ? undefined : 'sidebar'} data-pin-layout="rows" data-pin-hit-padding="8"></div>
+                                    <div class="tabs-list-container">
+                                    <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
+                                    <div class="tabs-list">
+                                    {#each getActivitySidebarItems(data.getSidebarItems(spaceId), data.docs, data.ui.tabActivityMode) as item, i (item.id)}
+                                        {@render sidebarItem(item, i)}
+                                    {/each}
+
                                     {#if !tabSearchQuery}
                                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                                         <!-- Bottom spacer for scrolling and double-click to create new tab -->
@@ -2153,15 +2333,12 @@
                                              }}
                                              ondblclick={async (e) => {
                                                 e.stopPropagation()
-                                                const newTab = await data.newTab(spaceId)
-                                                if (newTab) {
-                                                    data.activateSpace(spaceId)
-                                                    data.activate(newTab.id)
-                                                }
+                                                await createSidebarTab(spaceId)
                                         }}></div>
                                     {/if}
                                 </div>
                                         <div class="tabs-list-fade-bottom" class:visible={tabsListScrolledBottom[spaceId]}></div>
+                                    </div>
                                     </div>
                                 </div>
                             {/if}
@@ -2179,34 +2356,16 @@
                  role="region"
                  aria-label="Recently closed tabs">
                 <button class="closed-tabs-header"
-                        onmouseenter={() => { closedTabsHeaderHovered = true }}
+                        onmouseenter={() => { if (!tabDrag.active && !tabDrag.pending) closedTabsHeaderHovered = true }}
                         onmouseleave={() => { closedTabsHeaderHovered = false }}
                         onclick={() => { data.clearClosedTabs(); handleClosedTabsMouseLeave() }}
                         aria-label="Clear all recently closed tabs">
                     <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
-                    <span class="closed-tabs-count">{data.spaceMeta.closedTabs.length}</span>
+                    <span class="closed-tabs-count">{closedItems.length}</span>
                 </button>
                 <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
                     <div class="closed-tabs-list">
-                        {#each data.spaceMeta.closedTabs as tab}
-                            {#if tabMatchesSearch(tab)}
-                                <button class="closed-tab-item"
-                                        onmousedown={() => data.restoreClosedTab(tab.id)}
-                                        onmouseenter={(e) => handleTabMouseEnter(tab, e)}
-                                        onmouseleave={handleTabMouseLeave}>
-                                    <Favicon {tab} showButton={false} />
-                                    <div class="tab-text">
-                                        <span class="tab-title">{data.docs[tab.id]?.title || tab.title}</span>
-                                        <span class="tab-space">{data.spaces[tab.spaceId]?.name || 'Unknown Space'}</span>
-                                    </div>
-                                    <div class="closed-tab-remove" onmousedown={(e) => { e.stopPropagation(); data.removeClosedTab(tab.id) }}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                                        </svg>
-                                    </div>
-                                </button>
-                            {/if}
-                        {/each}
+                        {@render archivedRows(closedItems)}
                     </div>
                 </div>
             </div>
@@ -2228,91 +2387,73 @@
     </div>
 </div>
 
-{#if hoveredTab && !tabDrag.active}
-    {#key hoveredTab.id}
-        <div class="tab-hovercard-sidebar" 
-         style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px; --hovercard-top: {hovercardPosition.y}px;">
-        
-            <TabHoverCard tab={hoveredTab} 
-                        isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === hoveredTab.id)} 
-                        showHistoryImmediately={closeButtonHoveredDelayed}
+{#if hoveredTab && hovercardTabs.length && !tabDrag.active}
+    {#key hoveredGroupTarget ? `${hoveredGroupTarget.spaceId}:${hoveredGroupTarget.id}` : hoveredTab.id}
+        <div class="tab-hovercard-sidebar" class:group-hovercards={!!hoveredGroupTarget}
+             role={hoveredGroupTarget ? 'region' : undefined} aria-label={hoveredGroup?.title}
+             style="left: {hovercardPosition.x}px; top: {hovercardPosition.y}px;">
+            <div class="tab-hovercard-stack"
+                 use:fitSidebarHovercard={{ anchor: hovercardAnchor, onPosition: updateHovercardPosition, onHistoryBesideChange: (beside) => { hovercardHistoryBeside = beside } }}>
+            {#each hovercardTabs as previewTab (previewTab.id)}
+            <TabHoverCard tab={previewTab} stacked={!!hoveredGroupTarget}
+                        historyBeside={hovercardHistoryBeside}
+                        active={hoveredGroupTarget ? previewTab.id === hovercardActivationTabId : undefined}
+                        onActivate={activateHovercardTab}
+                        bind:showHistory={
+                            () => expandedHovercardHistoryTabId === previewTab.id,
+                            (visible) => {
+                                if (visible) {
+                                    expandedHovercardHistoryTabId = previewTab.id
+                                    hovercardHistoryReady = true
+                                }
+                                else if (expandedHovercardHistoryTabId === previewTab.id) expandedHovercardHistoryTabId = null
+                            }
+                        }
+                        isClosedTab={data.spaceMeta.closedTabs.some(t => t.id === previewTab.id)}
+                        showHistoryImmediately={!hoveredGroupTarget && closeButtonHoveredDelayed}
+                        historyDelay={hovercardHistoryReady ? 0 : 1500}
                         instantMode={instantHovercardsMode}
                         showDevTools={devModeEnabled}
                         availableHeight={window.innerHeight - hovercardPosition.y - 20}
-                        onDevTools={handleDevToolsClick}
+                        onDevTools={() => openTabDevTools(data, previewTab.id)}
+                        {onSettings}
                         onGoBack={() => {
-                            if (!hoveredTab?.id) return
-                            // Activate tab first if not active
-                            if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                data.activate(hoveredTab.id)
-                            }
+                            activateHovercardTab(previewTab)
                             setTimeout(() => {
-                                const frame = data.frames[hoveredTab?.id]?.frame
-                                frame?.back?.()
+                                onNavigateHistory?.(previewTab.id, 'back')
                             }, 50)
                         }}
                         onGoForward={() => {
-                            if (!hoveredTab?.id) return
-                            if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                data.activate(hoveredTab.id)
-                            }
+                            activateHovercardTab(previewTab)
                             setTimeout(() => {
-                                const frame = data.frames[hoveredTab?.id]?.frame
-                                frame?.forward?.()
+                                onNavigateHistory?.(previewTab.id, 'forward')
                             }, 50)
                         }}
                         onReload={() => {
-                            if (!hoveredTab?.id) return
-                            if (data.spaceMeta.activeTabId !== hoveredTab.id) {
-                                data.activate(hoveredTab.id)
-                            }
+                            activateHovercardTab(previewTab)
                             setTimeout(() => {
-                                data.reloadTab(hoveredTab?.id)
+                                data.reloadTab(previewTab.id)
                             }, 50)
                         }}
-                        onCloseTab={() => {
-                            if (!hoveredTab?.id) return
-                            data.closeTab(hoveredTab.id)
-                            hovercardUrlBarExpanded = false
-                            hoveredTab = null
-                            hovercardShowTime = null
-                        }}
+                        onCloseTab={() => closeHovercardTab(previewTab)}
                         onUrlBarExpandedChange={(expanded) => {
-                            hovercardUrlBarExpanded = expanded
+                            expandedHovercardTabs[previewTab.id] = expanded
+                            hovercardUrlBarExpanded = Object.values(expandedHovercardTabs).some(Boolean)
                         }}
-                        onHistoryVisibilityChange={(visible) => {
-                            if (visible) {
-                                const historyHeight = 200
-                                const neededBottom = hovercardPosition.y + (hoveredTab?.screenshot ? 180 + 80 : 80) + historyHeight
-                                if (neededBottom > window.innerHeight - 20) {
-                                    const adjustment = neededBottom - (window.innerHeight - 20)
-                                    hovercardPosition = { ...hovercardPosition, y: Math.max(20, hovercardPosition.y - adjustment) }
-                                }
-                            }
-                        }}
-                        onMouseLeave={() => {
-                setTimeout(() => {
-                    const mouseX = window.mouseX || 0
-                    const mouseY = window.mouseY || 0
-                    const elementUnderCursor = document.elementFromPoint(mouseX, mouseY)
-                    
-                    const isOverHovercard = elementUnderCursor?.closest('.tab-hovercard-sidebar')
-                    const isOverTab = elementUnderCursor?.closest('.tab-item-container') ||
-                                    elementUnderCursor?.closest('.closed-tab-item') ||
-                                    elementUnderCursor?.closest('.pinned-tab')
-                    
-                    if (!isOverHovercard && !isOverTab) {
-                        closeHovercard()
-                    }
-                }, 100)
-            }} />
-    </div>
+                        onMouseLeave={handleTabMouseLeave} />
+            {/each}
+            </div>
+        </div>
     {/key}
 {/if}
 
 <TabContextMenu 
     menu={tabContextMenu} 
+    defaultPinScope="space"
     onHide={hideTabContextMenu} 
+    showDevTools={devModeEnabled}
+    {onSettings}
+    {onNavigateHistory}
     onReload={(tab) => {
         if (!tab?.id) return
         data.reloadTab(tab.id)
@@ -2321,12 +2462,25 @@
     contextMenuOpenTime={tabContextMenuOpenTime} />
 
 <style>
+    .sidebar-window-drag {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 9px;
+        z-index: 2201;
+        -webkit-app-region: no-drag;
+    }
+
+    .sidebar-window-drag.drag-enabled {
+        -webkit-app-region: drag;
+    }
+
     .sidebar-box {
         background: transparent;
         position: fixed;
-        z-index: 2000;
+        z-index: 2200;
         bottom: 9px;
-        top: 43px;
+        top: 9px;
         left: 0px;
         transition: transform 190ms 340ms cubic-bezier(.78,-0.01,.34,1.04);
 
@@ -2344,6 +2498,79 @@
     .sidebar-box.visible {
         padding-right: 0;
         padding-left: 3px;
+    }
+
+    .sidebar-header {
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        max-height: 35%;
+        min-height: 0;
+        -webkit-app-region: no-drag;
+    }
+
+    .sidebar-header.drag-enabled {
+        -webkit-app-region: drag;
+    }
+
+    .sidebar-top-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        min-height: 24px;
+    }
+
+    .sidebar-top-row :global(.url-bar-section) {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .sidebar-content.no-url .sidebar-top-row {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        z-index: 1;
+    }
+
+    .sidebar-content.no-url .global-pins-section,
+    .sidebar-content.no-url .search-section {
+        margin-right: 28px;
+    }
+
+    .activity-toggle {
+        flex: 0 0 20px;
+        width: 20px;
+        height: 20px;
+        margin: 2px 4px 0 auto;
+        padding: 0;
+        border: 0;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color 150ms ease, color 150ms ease;
+    }
+
+    .activity-toggle:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.84);
+    }
+
+    .activity-toggle.active {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.84);
+    }
+
+    .activity-toggle:focus-visible { outline: 1px solid #a3a3a3; outline-offset: 2px; }
+    .activity-toggle svg { width: 12px; height: 12px; }
+
+    .sidebar-header :global(button),
+    .sidebar-header :global(input),
+    .sidebar-header :global(.url-bar-section) {
+        -webkit-app-region: no-drag;
     }
     
     /* Constrain URL bar width to prevent stretching in fullscreen mode */
@@ -2376,6 +2603,20 @@
         transform: translateZ(0);
         backface-visibility: hidden;
     }
+
+    .sidebar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        /* Extend past the 18px corners and the existing 16px shadow. */
+        height: 34px;
+        border-radius: inherit;
+        box-shadow: 0 -3px 6px 1px rgb(0 0 0 / 85%);
+        z-index: -1;
+        pointer-events: none;
+    }
     
     .sidebar-box.visible .sidebar {
         background: black;
@@ -2388,7 +2629,7 @@
         top: 0;
         right: 1px;
         width: 1px;
-        height: calc(100vh - 50px);
+        height: 100%;
         background: linear-gradient(to bottom, transparent 0%, #ffffff17 12%, #ffffff17 95%, transparent 100%), rgba(0, 0, 0, 0.802);
         background-size: 1px 100%, 100% 100%;
         background-position: right center, center;
@@ -2480,10 +2721,10 @@
     
     .tab-search-icon {
         position: absolute;
-        left: 10px;
+        left: 11px;
         width: 14px;
         height: 14px;
-        color: rgba(255, 255, 255, 0.3);
+        color: rgba(255, 255, 255, 0.46);
         pointer-events: none;
         transition: color 150ms ease;
     }
@@ -2491,69 +2732,83 @@
     .tab-search-input {
         width: 100%;
         height: 36px; /* Match pinned-tab height */
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 12px;
-        padding: 0 30px 0 30px;
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 13px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 0;
+        border-radius: 11px;
+        padding: 0 32px;
+        color: rgba(255, 255, 255, 0.84);
+        caret-color: rgba(255, 255, 255, 0.84);
+        font-size: 13.5px;
+        font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        appearance: none;
         outline: none;
-        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+        box-shadow: none;
+        transition: background-color 150ms ease;
         box-sizing: border-box;
     }
     
     .tab-search-clear {
         position: absolute;
-        right: 8px;
-        width: 20px;
-        height: 20px;
-            border-radius: 12px;
+        right: 7px;
+        width: 22px;
+        height: 22px;
+        border-radius: 7px;
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.4);
+        color: rgba(255, 255, 255, 0.44);
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 150ms ease;
+        transition: background-color 150ms ease, color 150ms ease;
         padding: 0;
     }
     
     .tab-search-clear:hover {
+        color: rgba(255, 255, 255, 0.75);
+    }
+
+    .tab-search-clear:focus-visible {
+        outline: none;
         background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.8);
+        color: rgba(255, 255, 255, 0.84);
     }
     
     .tab-search-clear svg {
-        width: 14px;
-        height: 14px;
+        width: 13px;
+        height: 13px;
     }
     
     .tab-search-input:hover {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.08);
     }
     
     .tab-search-input:focus {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.15);
-        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.1);
     }
     
-    .tab-search-input:focus + .tab-search-icon {
-        color: rgba(255, 255, 255, 0.6);
+    .tab-search-container:focus-within .tab-search-icon {
+        color: rgba(255, 255, 255, 0.66);
     }
     
     .tab-search-input::placeholder {
-        color: rgba(255, 255, 255, 0.3);
-        font-weight: 400;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 450;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .tab-search-icon,
+        .tab-search-input,
+        .tab-search-clear {
+            transition: none;
+        }
     }
 
     .global-pins-section {
         margin-bottom: 10px;
-        flex-shrink: 0;
+        flex-shrink: 1;
+        min-height: 0;
     }
     
     .flex-1 {
@@ -2572,6 +2827,34 @@
         gap: 3px;
         padding: 4px;
         flex-shrink: 0;
+    }
+
+    .global-pins-section > .pinned-tabs-grid {
+        min-height: 44px;
+        flex-shrink: 1;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+    }
+
+    .space-sticky-tabs > .pinned-tabs-grid {
+        padding-inline: 0;
+        min-height: 44px;
+        max-height: min(25vh, 180px);
+        flex-shrink: 1;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+    }
+
+    .pinned-tab.tab-dragging,
+    .app-tab.tab-dragging {
+        opacity: 0.3;
+    }
+
+    .pinned-tab.active {
+        background: var(--tab-active-background);
+        border-color: var(--tab-active-border);
     }
     
     .pinned-tab {
@@ -2754,55 +3037,27 @@
         width: 16px;
         height: 16px;
         color: rgba(255, 255, 255, 0.6);
-    }    
+    }
+    
     .new-space-menu-dropdown {
         position: absolute;
         top: 100%;
         right: 0;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 4px 0;
         min-width: 120px;
         z-index: 10000;
         opacity: 0;
         visibility: hidden;
         transform: translateY(-4px);
         transition: all 150ms ease;
-        backdrop-filter: blur(12px);
         overflow: hidden;
     }
-    
+
     .new-space-menu-dropdown.open {
         opacity: 1;
         visibility: visible;
         transform: translateY(0);
     }
-    
-    .new-space-menu-item {
-        padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
-        cursor: pointer;
-        transition: background 150ms ease;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-    }
-    
-    .new-space-menu-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-    
-    .new-space-menu-item:active {
-        background: rgba(255, 255, 255, 0.15);
-    }
-    
+
     .space-title-container {
         display: flex;
         align-items: center;
@@ -2811,6 +3066,21 @@
         margin-bottom: -4px;
         flex-shrink: 0;
         position: relative;
+        opacity: 0;
+        transition: opacity 250ms ease;
+    }
+
+    .space-title-container.titles-visible,
+    .space-title-container.title-hovered,
+    .space-title-container:focus-within {
+        opacity: 1;
+        transition-duration: 100ms;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .space-title-container {
+            transition: none;
+        }
     }
     
     .space-title {
@@ -2922,9 +3192,14 @@
     .space-menu {
         position: relative;
         opacity: 1;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        flex-shrink: 0;
     }
     
-    .space-menu-button {
+    .space-menu-button,
+    .space-group-toggle {
         background: transparent;
         border: none;
         color: rgba(255, 255, 255, 0.4);
@@ -2937,30 +3212,42 @@
         opacity: 0;
     }
     
-    .space-title-container:hover .space-menu-button {
+    .space-title-container:hover .space-menu-button,
+    .space-title-container:hover .space-group-toggle,
+    .space-title-container:focus-within .space-menu-button,
+    .space-title-container:focus-within .space-group-toggle {
         opacity: 1;
     }
     
-    .space-menu-button:hover {
+    .space-menu-button:hover,
+    .space-group-toggle:hover {
         color: rgba(255, 255, 255, 0.8);
         background: rgba(255, 255, 255, 0.1);
+    }
+
+    .space-group-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+    }
+
+    .space-group-toggle:focus-visible {
+        outline: 1px solid currentColor;
+        outline-offset: 1px;
     }
     
     .space-menu-dropdown {
         position: absolute;
         top: 100%;
         right: 0;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 4px 0;
         min-width: 180px;
         z-index: 10000;
         opacity: 0;
         visibility: hidden;
         transform: translateY(-4px);
         transition: all 150ms ease;
-        backdrop-filter: blur(12px);
         overflow: visible;
     }
     
@@ -2970,45 +3257,6 @@
         transform: translateY(0);
     }
     
-    .space-menu-item {
-        padding: 8px 14px;
-        color: #fff;
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: -0.008em;
-        line-height: 1;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: antialiased;
-        cursor: pointer;
-        transition: background 150ms ease;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-    }
-    
-    .space-menu-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-    
-    .space-menu-item:active {
-        background: rgba(255, 255, 255, 0.15);
-    }
-
-    .space-menu-item.delete {
-        color: #ff6b6b;
-    }
-
-    .space-menu-item.delete:hover {
-        color: #ff4444;
-        background: rgba(255, 107, 107, 0.1);
-    }
-
-    .space-menu-item.delete:active {
-        background: rgba(255, 107, 107, 0.2);
-    }
-
     .space-item.scrolled {
         background: rgba(255, 255, 255, 0.3);
     }
@@ -3058,7 +3306,7 @@
         pointer-events: none;
         overflow: hidden;
     }
-    
+
     .tab-content-container::-webkit-scrollbar {
         display: none;
     }
@@ -3085,7 +3333,7 @@
         flex-direction: column;
         gap: 8px;
         height: 100%;
-        overflow-y: hidden;
+        overflow: clip;
         padding-top: 0;
         padding-right: 8px;
         position: relative;
@@ -3093,7 +3341,6 @@
     
     .tab-content-container.searching:not(.multi-space) .space-content {
         height: auto;
-        max-height: calc(36px * 5 + 8px * 4 + 40px); /* 5 tabs + gaps + header */
     }
     
     .tab-content-track.multi-space {
@@ -3131,7 +3378,7 @@
     .close-multi-space-button {
         position: absolute;
         top: 12px;
-        right: 12px;
+        right: 36px;
         width: 32px;
         height: 32px;
         border-radius: 8px;
@@ -3223,18 +3470,18 @@
     }
     
     .app-tab:hover {
-        background-color: rgb(255 255 255 / 9%);
-        border: 1px solid hsl(0deg 0% 100% / 3%);
+        background-color: var(--tab-hover-background);
+        border: 1px solid var(--tab-hover-border);
     }
     
     .app-tab.active {
-        background: rgb(255 255 255 / 14%);
-        border: 1px solid hsl(0deg 0% 100% / 4%);
+        background: var(--tab-active-background);
+        border: 1px solid var(--tab-active-border);
     }
     
     .app-tab.active:hover {
-        background: rgb(255 255 255 / 17%);
-        border: 1px solid hsl(0deg 0% 100% / 5%);
+        background: var(--tab-active-hover-background);
+        border: 1px solid var(--tab-active-hover-border);
     }
     
     .pinned-tab :global(.favicon-wrapper) {
@@ -3286,14 +3533,114 @@
     }
     
     /* Tabs list container with fade */
+    .space-tabs-sections {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overflow-anchor: none;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+        position: relative;
+        isolation: isolate;
+    }
+
+    .sidebar-pinned-tabs {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex-shrink: 0;
+        min-height: 36px;
+        overflow: visible;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+        position: relative;
+        isolation: isolate;
+    }
+
+    .fixed-pin-drop-anchor {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 0;
+        pointer-events: none;
+    }
+
+    .space-sticky-tabs {
+        position: relative;
+        isolation: isolate;
+        z-index: 12;
+        flex-shrink: 0;
+        max-height: calc(100% - 44px);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: black;
+    }
+
+    .fixed-sidebar-pins {
+        max-height: min(30vh, 240px);
+        flex-shrink: 1;
+        overflow-y: auto;
+    }
+
+    .pinned-tabs-divider {
+        flex-shrink: 0;
+        height: 1px;
+        margin: 10px 4px 2px;
+        background: rgb(255 255 255 / 12%);
+    }
+
     .tabs-list-container {
         position: relative;
-        flex: 1;
+        flex: 1 0 auto;
         min-height: 0;
         display: flex;
         flex-direction: column;
         transform: translateZ(0);
         contain: layout style;
+    }
+
+    .add-spacer-insertion {
+        width: 100%;
+        height: 16px;
+        flex-shrink: 0;
+    }
+
+    .add-spacer-insertion :global(.tooltip-container) {
+        width: 100%;
+        height: 100%;
+    }
+
+    .add-spacer-preview {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+    }
+
+    .add-spacer-preview:focus-visible {
+        outline: none;
+    }
+
+    .add-spacer-preview-line {
+        width: 100%;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.22);
+        opacity: 0;
+        transition: opacity 150ms ease;
+    }
+
+    .add-spacer-preview:hover .add-spacer-preview-line,
+    .add-spacer-preview:focus-visible .add-spacer-preview-line {
+        opacity: 1;
     }
     
     .tabs-list-fade-top {
@@ -3335,9 +3682,10 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        flex: 1;
+        flex: 1 0 auto;
         min-height: 0;
-        overflow-y: auto;
+        overflow-y: visible;
+        overflow-x: clip;
         overscroll-behavior-y: contain; /* Prevent vertical scroll chaining to background views */
         padding-top: 8px;
         padding-bottom: 0; /* Bottom spacer element handles scroll space */
@@ -3349,13 +3697,14 @@
     
     .tab-content-container.searching:not(.multi-space) .tabs-list {
         overscroll-behavior-y: auto;
-        overflow-y: auto;
+        overflow-y: visible;
         padding-top: 0;
     }
     
-    .tab-content-container.horizontal-scrolling .tabs-list {
+    .tab-content-container.horizontal-scrolling .space-tabs-sections {
         overflow-y: hidden;
     }
+
     
     .tabs-list::-webkit-scrollbar {
         width: 6px;
@@ -3372,14 +3721,6 @@
 
     .tabs-list::-webkit-scrollbar-thumb:hover {
         background: rgba(255, 255, 255, 0.3);
-    }
-    
-    .tabs-list-spacer {
-        flex-shrink: 0;
-        width: 100%;
-        pointer-events: none;
-        will-change: height;
-        contain: layout style;
     }
     
     .tabs-list-bottom-spacer {
@@ -3427,13 +3768,18 @@
     }
     
     .tab-item-container:hover {
-        background-color: rgb(255 255 255 / 7%);
-        border: 1px solid hsl(0deg 0% 100% / 2%);
+        background-color: var(--tab-hover-background);
+        border: 1px solid var(--tab-hover-border);
     }
     
     .tab-item-container.active {
-        background: #1c1c1c;
-        border: 1px solid hsl(0deg 0% 100% / 3%);
+        background: var(--tab-active-background);
+        border: 1px solid var(--tab-active-border);
+    }
+
+    .tabs-list > .tab-item-container.active,
+    .sidebar-pinned-tabs > .tab-item-container.active,
+    .tab-group-content > .tab-item-container.active {
         position: sticky;
         top: 0;
         bottom: 0;
@@ -3442,8 +3788,8 @@
     }
     
     .tab-item-container.active:hover {
-        background: #292929;
-        border: 1px solid hsl(0deg 0% 100% / 4%);
+        background: var(--tab-active-hover-background);
+        border: 1px solid var(--tab-active-hover-border);
     }
     
     .tab-item-container.tab-dragging {
@@ -3544,7 +3890,26 @@
         color: rgba(255, 255, 255, 0.9);
     }
     
+    .tab-divider-item {
+        position: relative;
+        flex-shrink: 0;
+        width: 100%;
+        cursor: grab;
+    }
+
+    .tab-divider-item.tab-dragging {
+        opacity: 0.3;
+    }
+
+    .tabs-list > .tab-divider-item:first-child::before {
+        content: '';
+        display: block;
+        height: 36px;
+        width: 100%;
+    }
+
     .tab-divider {
+        position: relative;
         padding: 8px 8px 8px 8px;
         margin: 4px 0;
         display: flex;
@@ -3578,8 +3943,50 @@
         width: 100%;
         margin: 0 8px;
     }
+
+    .tab-divider-remove {
+        position: absolute;
+        top: 50%;
+        right: 6px;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 0;
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.88);
+        color: rgba(255, 255, 255, 0.45);
+        cursor: pointer;
+        opacity: 0;
+        transform: translateY(-50%);
+        transition: color 150ms ease, opacity 150ms ease, background-color 150ms ease;
+    }
+
+    .tab-divider-item:hover .tab-divider-remove,
+    .tab-divider-remove:focus-visible {
+        opacity: 1;
+    }
+
+    .tab-divider-remove:hover,
+    .tab-divider-remove:focus-visible {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.85);
+        outline: none;
+    }
+
+    .tab-divider-remove svg {
+        width: 14px;
+        height: 14px;
+    }
     
     /* New Tab Button */
+    :global(body.tab-dragging-active) :is(.new-tab-row, .add-spacer-insertion),
+    :global(body.tab-dragging-active) :is(.new-tab-row, .add-spacer-insertion) :global(*) {
+        pointer-events: none !important;
+    }
+
     .new-tab-button {
         display: flex;
         align-items: center;
@@ -3617,7 +4024,8 @@
         visibility: hidden;
     }
 
-    .new-tab-row:hover .new-tab-more-button {
+    .new-tab-row:hover .new-tab-more-button,
+    .new-tab-more-button.menu-open {
         opacity: 1;
         visibility: visible;
     }
@@ -3669,7 +4077,10 @@
     
     .new-tab-row {
         position: relative;
+        flex-shrink: 0;
+        background: black;
         display: flex;
+        flex-direction: column;
         align-items: center;
     }
     
@@ -3677,140 +4088,20 @@
         position: absolute;
         top: 10px;
         right: 0;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 0;
         min-width: 200px;
+        width: max-content;
+        max-width: 100%;
         z-index: 1000;
         opacity: 0;
         visibility: hidden;
         transition: opacity 150ms ease, visibility 150ms ease;
-        backdrop-filter: blur(12px);
         pointer-events: none;
-        box-sizing: border-box;
     }
 
-    .new-tab-more-button:hover .new-tab-hover-menu {
+    .new-tab-hover-menu.visible {
         opacity: 1;
         visibility: visible;
         pointer-events: auto;
-    }
-    .new-tab-hover-menu:hover {
-        opacity: 1;
-        visibility: visible;
-        pointer-events: auto;
-    }
-    
-    .new-tab-hover-item {
-        padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
-        cursor: pointer;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        position: relative;
-        white-space: nowrap;
-        min-width: 0;
-    }
-    
-    .new-tab-hover-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .new-tab-hover-item:first-child:hover {
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
-    }
-
-    .new-tab-hover-item:last-child:hover {
-        border-bottom-left-radius: 8px;
-        border-bottom-right-radius: 8px;
-    }
-    
-    .new-tab-hover-item.has-submenu {
-        padding-right: 26px;
-    }
-    
-    .new-tab-hover-item .chevron {
-        width: 14px;
-        height: 14px;
-        color: rgba(255, 255, 255, 0.5);
-        position: absolute;
-        right: 8px;
-        top: 50%;
-        transform: translateY(-50%);
-    }
-    
-    .new-tab-hover-item .item-icon {
-        width: 14px;
-        height: 14px;
-        color: rgba(255, 255, 255, 0.5);
-    }
-    
-    .new-tab-submenu {
-        position: absolute;
-        top: 95%;
-        right: 5px;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 0;
-        min-width: 170px;
-        z-index: 1001;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 120ms ease, visibility 120ms ease;
-        backdrop-filter: blur(12px);
-        pointer-events: none;
-        margin-top: -4px;
-    }
-    
-    .new-tab-hover-item.has-submenu:hover .new-tab-submenu {
-        opacity: 1;
-        visibility: visible;
-        pointer-events: auto;
-    }
-    
-    .new-tab-submenu-item {
-        padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
-        cursor: pointer;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    
-    .new-tab-submenu-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .new-tab-submenu-item:first-child:hover {
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
-    }
-
-    .new-tab-submenu-item:last-child:hover {
-        border-bottom-left-radius: 8px;
-        border-bottom-right-radius: 8px;
     }
     
     .partition-dot {
@@ -3830,33 +4121,46 @@
 
     /* Tab Group */
     .tab-group-wrapper {
+        --tab-group-background: #0c0c0c;
         display: flex;
         flex-direction: column;
         width: 100%;
+        min-width: 0;
         border-radius: 12px;
         background: transparent;
         border: 1px solid transparent;
 
         overflow: visible;
         flex-shrink: 0;
-        margin: -1px;
-        width: calc(100% + 2px);
+        margin: 0;
     }
     
     .tab-group-wrapper:hover {
         background: transparent;
         border: 1px solid transparent;
     }
+
+    .tab-group-wrapper.tab-dragging {
+        opacity: 0.3;
+    }
     
     .tab-group-wrapper.expanded {
-        background: transparent;
-        border: 1px solid hsl(0deg 0% 100% / 12%);
-        min-height: 200px;
+        background: var(--tab-group-background);
+        border: 1px solid hsl(0deg 0% 100% / 6%);
         overflow: hidden;
-        margin-left: 0;
-        margin-top: 0;
-        margin-right: -2px;
-        max-width: calc(100% + 0px);
+    }
+
+    .tab-group-wrapper.expanded.active {
+        --tab-group-background: #111111;
+    }
+
+    .tab-group-wrapper.expanded:not(.active) {
+        border-color: hsl(0deg 0% 100% / 4.5%);
+    }
+
+    .tab-group-wrapper.expanded:not(.active):hover {
+        --tab-group-background: #101010;
+        border-color: hsl(0deg 0% 100% / 6%);
     }
     
     .tab-group {
@@ -3865,7 +4169,7 @@
         gap: 4px;
         border-radius: 12px;
         /* background: #ffffff0f; */
-        transition: background-color 150ms ease;
+        transition: background-color 150ms ease, opacity 150ms ease;
         border: 1px solid  transparent;
         /* hsl(0deg 0% 100% / 2%); */
         height: 36px;
@@ -3880,35 +4184,171 @@
     }
     
     .tab-group:hover {
-        background-color: rgb(255 255 255 / 9%);
-        border: 1px solid hsl(0deg 0% 100% / 3%);
+        background-color: var(--tab-hover-background);
+        border: 1px solid var(--tab-hover-border);
     }
     
     .tab-group.expanded {
         border-radius: 12px 12px 0 0;
         border: 1px solid transparent;
-        background: #ffffff0f;
-        margin-left: -1px;
-        margin-top: -1px;
-        width: calc(100% + 1px);
-        max-width: unset;
+        background: transparent;
+        margin: 0;
+        opacity: 0.35;
+    }
+
+    .tab-group.expanded:hover,
+    .tab-group.expanded:has(:focus-visible) {
+        opacity: 0.7;
     }
     
     .tab-group.expanded:hover {
-        border: 1px solid transparent;
-        background-color: rgb(255 255 255 / 9%);
+        border-color: transparent;
+        background: transparent;
+    }
+
+    .tab-group.active {
+        background: var(--tab-active-background);
+        border-color: var(--tab-active-border);
+    }
+
+    .tab-group.active:hover {
+        background: var(--tab-active-hover-background);
+        border-color: var(--tab-active-hover-border);
+    }
+
+    .tab-group.space-active-tab {
+        background: rgb(255 255 255 / 6%);
+        border-color: hsl(0deg 0% 100% / 5.5%);
+    }
+
+    .tab-group.expanded.active,
+    .tab-group.expanded.space-active-tab {
+        background: transparent;
+        border-color: transparent;
+    }
+
+    .tab-group-scroll {
+        position: relative;
+        min-height: 0;
+    }
+
+    .tab-group-scroll::before,
+    .tab-group-scroll::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 16px;
+        z-index: 10;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 150ms ease;
+    }
+
+    .tab-group-scroll::before {
+        top: 0;
+        background: linear-gradient(to bottom, var(--tab-group-background), transparent);
+    }
+
+    .tab-group-scroll::after {
+        bottom: 0;
+        background: linear-gradient(to top, var(--tab-group-background), transparent);
+    }
+
+    .tab-group-scroll:global([data-scroll-top='true']),
+    .tab-group-scroll:global([data-scroll-bottom='true']),
+    .custom-group-height .tab-group-scroll,
+    .group-resizing .tab-group-scroll {
+        padding-bottom: 4px;
+    }
+
+    .tab-group-scroll:global([data-scroll-bottom='true'])::after {
+        bottom: 4px;
+    }
+
+    /* The action adds these attributes at runtime, outside Svelte's CSS analysis. */
+    .tab-group-scroll:global([data-scroll-top='true'])::before,
+    .tab-group-scroll:global([data-scroll-bottom='true'])::after {
+        opacity: 1;
     }
     
     .tab-group-content {
         display: none;
         flex-direction: column;
-        padding: 8px;
+        padding: 5px 4px;
         gap: 4px;
         flex: 1;
+        max-height: var(--tab-group-max-height, 206px);
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #ffffff33 transparent;
+    }
+
+    .tab-group-scroll:global([data-scroll-top='true']) > .tab-group-content,
+    .tab-group-scroll:global([data-scroll-bottom='true']) > .tab-group-content {
+        overscroll-behavior-y: contain;
+    }
+
+    .tab-group-wrapper.expanded:not(.active) .tab-item-container.group-activation-target,
+    .tab-group-wrapper.expanded:not(.active):hover:not(:has(> .tab-group-scroll:hover)) .tab-item-container,
+    .tab-group-wrapper.expanded:not(.active):has(> .tab-group :focus-visible) .tab-item-container {
+        transition: none;
+    }
+
+    .tab-group-wrapper.expanded:not(.active):hover:not(:has(> .tab-group-scroll:hover)) .tab-item-container.group-activation-target,
+    .tab-group-wrapper.expanded:not(.active):has(> .tab-group :focus-visible) .tab-item-container.group-activation-target {
+        background-color: var(--tab-hover-background);
+        border-color: var(--tab-hover-border);
+    }
+
+    .tab-group-content .tab-item-container.active {
+        box-shadow: 0 -8px 8px -2px var(--tab-group-background), 0 8px 8px -2px var(--tab-group-background);
     }
     
     .tab-group-wrapper.expanded .tab-group-content {
         display: flex;
+    }
+
+    .tab-group-resize {
+        display: none;
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 4px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: rgb(255 255 255 / 45%);
+        opacity: 0;
+        cursor: ns-resize;
+        user-select: none;
+        touch-action: none;
+        z-index: 11;
+        -webkit-app-region: no-drag;
+    }
+
+    .tab-group-resize svg {
+        position: absolute;
+        right: 4px;
+        bottom: 0;
+        width: 12px;
+        height: 4px;
+        pointer-events: none;
+    }
+
+    .tab-group-scroll:global([data-scroll-top='true']) > .tab-group-resize,
+    .tab-group-scroll:global([data-scroll-bottom='true']) > .tab-group-resize,
+    .custom-group-height .tab-group-resize,
+    .group-resizing .tab-group-resize {
+        display: block;
+    }
+
+    .tab-group-resize:hover,
+    .tab-group-resize:focus-visible,
+    .group-resizing .tab-group-resize {
+        opacity: 1;
     }
     
     .tab-group-empty-message {
@@ -3920,6 +4360,9 @@
     }
     
     .tab-group-main {
+        background: transparent;
+        border: 0;
+        text-align: left;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -3930,60 +4373,6 @@
         border-radius: 12px;
         min-width: 0;
         overflow: hidden;
-    }
-    
-    .tab-group-favicons {
-        display: flex;
-        align-items: center;
-        margin-right: 6px;
-    }
-    
-    .tab-group-favicon {
-        width: 14px;
-        height: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        opacity: 50%;
-        position: relative;
-        margin-left: 4px;
-    }
-
-    .tab-group-wrapper:hover .tab-group-favicon {
-        opacity: 85%;
-    }
-    
-    .tab-group-favicon:first-child {
-        margin-left: 0;
-    }
-    
-    .tab-group-favicon.fade {
-        position: relative;
-        mask: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
-        -webkit-mask: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
-    }
-    
-    .tab-group-favicon svg {
-        width: 100%;
-        height: 100%;
-    }
-    
-    .tab-group-title {
-        color: hsl(0 0% 50% / 1);
-        font-size: 13px;
-        font-weight: 600;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        flex: 1;
-        line-height: 1.2;
-        margin-top: -2px;
-        mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
-        -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
-        min-width: 0;
-        max-width: 100%;
     }
     
     .tab-group-count {
@@ -4033,6 +4422,11 @@
     .tab-group-toggle:hover {
         color: rgba(255, 255, 255, 0.9);
     }
+
+    .tab-group-main:focus-visible, .tab-group-toggle:focus-visible {
+        outline: 2px solid #a3a3a3;
+        outline-offset: -2px;
+    }
     
     .tab-group-toggle svg {
         transform: rotate(-90deg);
@@ -4042,23 +4436,32 @@
         transform: rotate(0deg);
     }
     
-    .tab-group-wrapper:hover .tab-group-count {
+    .tab-group:has(.tab-group-toggle):hover .tab-group-count,
+    .tab-group:has(.tab-group-toggle):has(:focus-visible) .tab-group-count {
         opacity: 0;
     }
     
-    .tab-group-wrapper:hover .tab-group-toggle {
+    .tab-group:hover .tab-group-toggle,
+    .tab-group:has(:focus-visible) .tab-group-toggle {
         opacity: 1;
     }
     
-    .tab-group-wrapper:hover .tab-group-title {
-        color: rgba(255, 255, 255, 0.8);
-    }
-    
-    .tab-group-wrapper:hover .tab-group-favicon {
-        color: rgba(255, 255, 255, 0.6);
-    }
-    
     /* Recently Closed Tabs */
+    .closed-tab-row { display: flex; align-items: center; border-radius: 12px; }
+    .closed-tab-row .closed-tab-item { flex: 1; min-width: 0; }
+    .closed-tab-row:focus-within, .closed-tab-row:hover { background: rgba(255, 255, 255, 0.05); }
+    .closed-tab-row button:focus-visible { outline: 1px solid #a3a3a3; outline-offset: -2px; }
+    .closed-tabs-section.pending-tabs-section {
+        position: relative;
+        inset: auto;
+        width: auto;
+        margin: 4px 0 8px;
+        z-index: 12;
+    }
+    :global(.sidebar-box.visible) .closed-tabs-section.pending-tabs-section { width: auto; bottom: auto; }
+    .closed-tabs-content.pending-tabs-content { top: 100%; bottom: auto; border: 1px solid var(--menu-border); border-radius: 0 0 13px 13px; }
+    .closed-tabs-content.pending-tabs-content.expanded { transform: translateY(-4px); }
+    .pending-tabs-content .closed-tabs-list { max-height: min(360px, 45vh); padding: 8px; }
     .closed-tabs-section {
         position: absolute;
         bottom: 8px;
@@ -4132,11 +4535,11 @@
         left: 0;
         right: 0;
         background: rgba(0, 0, 0, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--menu-border);
         border-radius: 13px 13px 0 0;
         border-bottom: none;
         backdrop-filter: blur(20px);
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.5), 0 -8px 28px rgba(0, 0, 0, 0.65);
         opacity: 0;
         visibility: hidden;
         transform: translateY(10px);
@@ -4265,7 +4668,8 @@
         max-width: 28px;
     }
 
-    .closed-tab-item:hover .closed-tab-remove {
+    .closed-tab-row:hover .closed-tab-remove,
+    .closed-tab-row:focus-within .closed-tab-remove {
         opacity: 1;
         width: 25px;
         padding: 0 4px;
@@ -4335,17 +4739,12 @@
 
     .space-context-menu-dropdown {
         position: fixed;
-        background: rgba(0, 0, 0, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 4px 0;
         min-width: 180px;
         z-index: 10000;
         opacity: 0;
         visibility: hidden;
         transform: translateY(-4px);
         transition: all 150ms ease;
-        backdrop-filter: blur(12px);
         overflow: visible;
         pointer-events: auto;
     }
@@ -4356,44 +4755,6 @@
         transform: translateY(0);
     }
 
-    .space-context-menu-item {
-        padding: 8px 14px;
-        color: #fff;
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: -0.008em;
-        line-height: 1;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: antialiased;
-        cursor: pointer;
-        transition: background 150ms ease;
-        background: transparent;
-        border: none;
-        width: 100%;
-        text-align: left;
-    }
-
-    .space-context-menu-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .space-context-menu-item:active {
-        background: rgba(255, 255, 255, 0.15);
-    }
-
-    .space-context-menu-item.delete {
-        color: #ff6b6b;
-    }
-
-    .space-context-menu-item.delete:hover {
-        color: #ff4444;
-        background: rgba(255, 107, 107, 0.1);
-    }
-
-    .space-context-menu-item.delete:active {
-        background: rgba(255, 107, 107, 0.2);
-    }
     
     /* Tab sidebar resize handle - positioned next to the fading divider line */
     .sidebar .resize-handle {
@@ -4447,19 +4808,41 @@
         animation: hovercard-sidebar-fade-in 0.2s ease-out forwards;
         -webkit-app-region: no-drag;
         user-select: none;
-        max-height: calc(100vh - var(--hovercard-top, 0px) - 20px);
+        /* Transparent hit area spans the gap on either side without moving the cards. */
+        padding: 0 10px;
+        margin-left: -10px;
+    }
+
+    .tab-hovercard-stack {
+        max-height: calc(100vh - 40px);
         display: flex;
         flex-direction: column;
+    }
+
+    .tab-hovercard-sidebar.group-hovercards > .tab-hovercard-stack {
+        box-sizing: border-box;
+        width: 336px;
+        max-width: calc(100vw - 20px);
+        padding: 8px;
+        gap: 8px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: none;
+        filter: drop-shadow(0 20px 20px rgb(0 0 0 / 55%)) drop-shadow(0 8px 8px rgb(0 0 0 / 30%));
+    }
+
+    .tab-hovercard-sidebar.group-hovercards > .tab-hovercard-stack:has(:global(.history-beside)) {
+        width: 656px;
     }
     
     @keyframes hovercard-sidebar-fade-in {
         from {
             opacity: 0;
-            transform: translateX(-10px) scale(0.95);
+             /*  transform: translateX(-10px)scale(0.95) */
         }
         to {
             opacity: 1;
-            transform: translateX(0) scale(1);
+            /*transform: translateX(0)  scale(1) */
         }
     }
 </style>

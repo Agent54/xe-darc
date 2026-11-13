@@ -1,13 +1,16 @@
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
     import { fade, scale } from 'svelte/transition'
-    import { tick } from 'svelte'
+    import { onMount, tick } from 'svelte'
 
     import ControlledFrame from './ControlledFrame.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
+    import LinkPreviewFavicon from './LinkPreviewFavicon.svelte'
     // import Tooltip from './Tooltip.svelte'
     import AttachmentImage from './AttachmentImage.svelte'
     import LightboxHeader from './LightboxHeader.svelte'
     import { origin } from '../lib/utils.js'
+    import { showLinkPreview } from '../lib/link-preview.js'
     import data from '../data.svelte.js'
 
     let {
@@ -24,6 +27,12 @@
     } = $props()
 
     const tab = $derived(data.docs[tabId])
+
+    function lightboxTransition(node, options) {
+        return /* node.parentElement.classList.contains('lightbox-effects')
+            ? scale(node, options)
+            : */ fade(node, options)
+    }
 
     // Immediately unhibernate unhidden pinned frames on initial load
     // Also unhibernate the last active non-pinned tab when the active tab is pinned
@@ -74,6 +83,41 @@
     let globalHoverPreviewExpanding = $state(false) // Track if preview is expanding to lightbox
     // Delay timer for hiding the global hover preview (prevents flicker while moving cursor)
     let hidePreviewDelayTimeout = null
+    let previewShowTimeout = null
+    let previewCleanupTimeout = null
+    let previewSwitchTimeout = null
+    let previewGeneration = 0
+
+    function dismissPreviews() {
+        previewGeneration++
+        clearTimeout(globalHoverPreviewTimeout)
+        clearTimeout(hidePreviewDelayTimeout)
+        clearTimeout(previewShowTimeout)
+        clearTimeout(previewCleanupTimeout)
+        clearTimeout(previewSwitchTimeout)
+        globalHoverPreviewTimeout = null
+        hidePreviewDelayTimeout = null
+        previewShowTimeout = null
+        previewCleanupTimeout = null
+        previewSwitchTimeout = null
+        hoveredLink = null
+        isHoveringPreview = false
+        globalHoverPreviewPinned = false
+        globalHoverPreviewExpanding = false
+        globalHoverPreviewShown = false
+        globalHoverPreviewVisible = false
+        globalHoverPreview = null
+        globalHoverPreviewTabId = null
+        globalHoverPreviewTab = null
+    }
+
+    onMount(() => {
+        window.addEventListener('darc-dismiss-overlays', dismissPreviews)
+        return () => {
+            window.removeEventListener('darc-dismiss-overlays', dismissPreviews)
+            dismissPreviews()
+        }
+    })
     
     // Instant-hide state for lightboxes (prevents slow close and reactivity loops)
     const closedLightboxes = $state({})
@@ -273,7 +317,9 @@
             globalHoverPreviewTimeout = null
         }
         globalHoverPreviewShown = false
-        setTimeout(() => {
+        clearTimeout(previewCleanupTimeout)
+        previewCleanupTimeout = setTimeout(() => {
+            previewCleanupTimeout = null
             if (!globalHoverPreviewExpanding) {
                 globalHoverPreviewVisible = false
                 globalHoverPreview = null
@@ -354,7 +400,10 @@
                 hidePreviewDelayTimeout = setTimeout(() => {
                     cleanupGlobalPreview()
                     // Start the new preview slightly after the old one begins hiding
-                    setTimeout(() => startGlobalPreview(), 100)
+                    previewSwitchTimeout = setTimeout(() => {
+                        previewSwitchTimeout = null
+                        startGlobalPreview()
+                    }, 100)
                 }, 150)
             } else if (!globalHoverPreviewVisible) {
                 console.log('📍 Calling startGlobalPreview()')
@@ -387,12 +436,18 @@
                 console.log('❌ No hovered link, aborting preview creation')
                 return
             }
-            const tab = await data.newTab(data.spaceMeta.activeSpace, { url: hoveredLink.href, preview: true, opener: tabId })
-            console.log('✅ Preview tab created:', { tabId: tab.id, url: hoveredLink.href })
+            window.dispatchEvent(new Event('darc-link-preview'))
+            const generation = previewGeneration
+            const link = hoveredLink
+            const tab = await data.newTab(data.spaceMeta.activeSpace, { url: link.href, preview: true, opener: tabId })
+            if (generation !== previewGeneration || hoveredLink?.href !== link.href) {
+                return
+            }
+            console.log('✅ Preview tab created:', { tabId: tab.id, url: link.href })
 
             globalHoverPreviewTabId = tab.id
             globalHoverPreviewTab = tab
-            globalHoverPreview = hoveredLink
+            globalHoverPreview = link
             globalHoverPreviewVisible = true
             console.log('✅ Preview state set visible')
             
@@ -400,7 +455,9 @@
             if (globalHoverPreviewPinned) {
                 globalHoverPreviewShown = true
             } else {
-                setTimeout(() => {
+                clearTimeout(previewShowTimeout)
+                previewShowTimeout = setTimeout(() => {
+                    previewShowTimeout = null
                     globalHoverPreviewShown = true
                 }, 300) // 300ms delay for page loading
             }
@@ -466,7 +523,7 @@
     $effect(() => {
         // Don't create new object here - let data layer handle initialization
         // Just set wrapper if frames object exists
-        if (data.frames[tab.id] && frameWrapper) {
+        if (!controlledFrameSupported && data.frames[tab.id] && frameWrapper) {
             data.frames[tab.id].wrapper = frameWrapper
         }
         
@@ -563,7 +620,7 @@
 <svelte:window onkeydown={handleWindowKeyDown} onkeyup={handleWindowKeyUp} />
 
 <div bind:this={frameWrapper} id="tab_{tab.id}" class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
-    {#if data.isTabHibernated(tab.id) || (!data.frames[tab.id]?.initialLoad && !data.isInternalPage(tab.url))}
+    {#if data.isTabHibernated(tab.id)}
         <div 
             transition:fade={{duration: 200, delay: 0}}
             class="frame hibernated-frame"
@@ -581,14 +638,14 @@
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="" class="hibernated-lightbox-bg" lazy={true} />
                     {/if}
                     <div class="hibernated-lightbox-card">
-                        <LightboxHeader url={lbTab.url} title={lbTab.title} showControls={false} />
+                        <LightboxHeader tab={lbTab} showControls={false} />
                         {#if lbTab.screenshot}
                             <div class="hibernated-lightbox-body">
                                 <AttachmentImage src={lbTab.screenshot} digest={lbTab._attachments?.screenshot?.digest} alt="Lightbox preview" class="hibernated-lightbox-screenshot" lazy={true} />
                             </div>
                         {:else}
                             <div class="hibernated-lightbox-body hibernated-lightbox-empty">
-                                <div class="hibernated-text">{lbTab.title || lbTab.url}</div>
+                                <div class="hibernated-text">{getTabTitle(lbTab)}</div>
                             </div>
                         {/if}
                     </div>
@@ -651,7 +708,7 @@
             <!--  bind:linkPreviewTimeout bind:linkPreviewVisible    linkPreviewVisible &&  -->
 
             {#if hoveredLink}
-                <div class="link-preview" transition:fade={{duration: 100}}>
+                <div class="link-preview" popover="manual" use:showLinkPreview transition:fade={{duration: 100}}>
                     {#if isDifferentOrigin}
                         <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
@@ -659,11 +716,7 @@
                             <line x1="10" y1="14" x2="21" y2="3"/>
                         </svg>
                     {/if}
-                    <img 
-                        src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
-                        alt=""
-                        class="link-preview-favicon"
-                    />
+                    <span class="link-preview-favicon"><LinkPreviewFavicon url={hoveredLink?.href || ''} /></span>
                     <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
                 </div>
             {/if}
@@ -709,7 +762,7 @@
                 
                 <!-- Link preview for iframe fallback  linkPreviewVisible &&-->
                 {#if hoveredLink}
-                    <div class="link-preview" transition:fade={{duration: 100}}>
+                    <div class="link-preview" popover="manual" use:showLinkPreview transition:fade={{duration: 100}}>
                         {#if isDifferentOrigin}
                             <svg class="link-preview-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
@@ -717,11 +770,7 @@
                                 <line x1="10" y1="14" x2="21" y2="3"/>
                             </svg>
                         {/if}
-                        <img 
-                            src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={hoveredLink?.href || ''}&size=16"
-                            alt=""
-                            class="link-preview-favicon"
-                        />
+                        <span class="link-preview-favicon"><LinkPreviewFavicon url={hoveredLink?.href || ''} /></span>
                         <UrlRenderer url={hoveredLink?.href || ''} variant="compact" />
                     </div>
                 {/if}
@@ -775,6 +824,7 @@
 
         {#if globalHoverPreviewVisible && globalHoverPreview && globalHoverPreviewTabId}
             {#key globalHoverPreview.href}
+                <!-- out:scale={{duration: 200}} -->
                 <div 
                     class="global-hover-preview" 
                     class:shown={globalHoverPreviewShown}
@@ -784,7 +834,6 @@
                     role="dialog"
                     aria-label="Link preview"
                     tabindex="-1"
-                    out:scale={{duration: 200}}
                     onmouseenter={() => { 
                         isHoveringPreview = true 
                         // Cancel pending hide when mouse enters the preview
@@ -816,11 +865,7 @@
                                     <line x1="10" y1="14" x2="21" y2="3"/>
                                 </svg>
                             {/if}
-                            <img 
-                                src="https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url={globalHoverPreview.href}&size=16"
-                                alt=""
-                                class="global-hover-preview-favicon"
-                            />
+                            <span class="global-hover-preview-favicon"><LinkPreviewFavicon url={globalHoverPreview.href} size={14} /></span>
                             <UrlRenderer url={globalHoverPreview.href} variant="compact" />
                         </div>
                         <div class="global-hover-preview-controls">
@@ -916,12 +961,21 @@
 
         {#if data.previews[tab._id] && data.docs[data.previews[tab._id]?.lightbox] && !closedLightboxes[data.previews[tab._id]?.lightbox]}
             {@const lightboxChild = data.docs[data.previews[tab._id].lightbox]}
+            <!-- Remove lightbox-effects to compare the simpler fade without blur. -->
             <div 
-                class="lightbox-backdrop"
+                class="lightbox-backdrop lightbox-effects"
                 role="dialog"
                 aria-modal="true"
                 tabindex="-1"
                 in:fade={{duration: 100}}
+                onwheel={(e) => {
+                    if ((!e.ctrlKey && !e.metaKey) || !e.deltaY || !lightboxChild.lightbox) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    data.promoteLightboxToTab(lightboxChild._id, tab._id, e.deltaY < 0
+                        ? { closeParent: true }
+                        : { toPreview: true })
+                }}
                 onmousedown={(e) => {
                     if (e.target === e.currentTarget) {
                         closeLightbox(tab.spaceId, lightboxChild?._id)
@@ -934,11 +988,9 @@
                 }}
             >
                 <div class="lightbox-container" 
-                    in:scale={{duration: 100}}>
+                    in:lightboxTransition={{duration: 100}}>
                     <LightboxHeader
-                        url={lightboxChild?.url}
-                        title={lightboxChild?.title}
-                        tabId={lightboxChild?.id}
+                        tab={lightboxChild}
                         onMoveToTab={(e) => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { focus: !e.metaKey })}
                         onExpandFull={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { closeParent: true })}
                         onCollapsePreview={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { toPreview: true })}
@@ -946,22 +998,24 @@
                         onClose={() => closeLightbox(tab.spaceId, lightboxChild?._id)}
                     />
                     <div class="lightbox-frame">
-                        <ControlledFrame
-                            {style}
-                            {isScrolling}
-                            class="lightbox-controlledframe"
-                            tabId={lightboxChild?.id}
-                            {headerPartOfMain}
-                            {onFrameFocus}
-                            {onFrameBlur}
-                            {userMods}
-                            {statusLightsEnabled}
-                            bind:hoveredLink
-                            
-                            bind:inputDiffVisible
-                            bind:inputDiffTimeout
-                            bind:inputDiffData
-                        />
+                        {#key lightboxChild?.id}
+                            <ControlledFrame
+                                {style}
+                                {isScrolling}
+                                class="lightbox-controlledframe"
+                                tabId={lightboxChild?.id}
+                                {headerPartOfMain}
+                                {onFrameFocus}
+                                {onFrameBlur}
+                                {userMods}
+                                {statusLightsEnabled}
+                                bind:hoveredLink
+
+                                bind:inputDiffVisible
+                                bind:inputDiffTimeout
+                                bind:inputDiffData
+                            />
+                        {/key}
                         <!-- bind:linkPreviewTimeout bind:linkPreviewVisible -->
                     </div>
                 </div>
@@ -1205,8 +1259,15 @@
     }
 
     .link-preview {
-        position: absolute;
-        top: -4px;
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        /* SECURITY: This preview MUST overlap the web content boundary into browser
+           chrome so users can tell it is browser UI that web content cannot spoof.
+           Keep the -4px overlap and the popover top layer: z-index alone cannot
+           escape frame stacking contexts or clipping to stay above the tab bar. */
+        top: calc(var(--link-preview-frame-top) - 4px);
+        left: var(--link-preview-frame-left);
         /* margin-left: 7px; */
         background: rgba(25, 25, 25, 0.98);
         color: rgba(255, 255, 255, 0.95);
@@ -1218,7 +1279,7 @@
         border: 1px solid rgba(255, 255, 255, 0.103);
         backdrop-filter: blur(12px);
         z-index: 10010;
-        max-width: calc(100% - 24px);
+        max-width: calc(var(--link-preview-frame-width) - 24px);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1227,7 +1288,6 @@
         pointer-events: none;
         display: flex;
         align-items: center;
-        z-index: 10000;
         gap: 8px;
     }
 
@@ -1585,22 +1645,19 @@
         width: 100%;
         height: 100%;
         background: rgb(0 0 0 / 58%);
-        backdrop-filter: blur(1px);
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 40px;
         z-index: 1;
-        /* CSS optimization tricks */
+    }
+
+    .lightbox-backdrop:global(.lightbox-effects) {
+        backdrop-filter: blur(1px);
         will-change: opacity, backdrop-filter;
         transform: translateZ(0);
         backface-visibility: hidden;
-        /* Disable expensive effects during animation */
         transition: backdrop-filter 0.2s ease;
-    }
-
-    .lightbox-backdrop.animating {
-        backdrop-filter: none;
     }
 
     /* @media (min-width: 1800px) {
@@ -1621,16 +1678,13 @@
         display: flex;
         flex-direction: column;
         overflow: visible;
-        /* CSS optimization tricks */
+    }
+
+    .lightbox-backdrop:global(.lightbox-effects) .lightbox-container {
         will-change: transform, opacity, box-shadow;
         transform: translateZ(0);
         backface-visibility: hidden;
-        /* Optimize rendering during transitions */
         transition: box-shadow 0.15s ease;
-    }
-
-    .lightbox-container.animating {
-        box-shadow: none;
     }
     .lightbox-container :global(.frame > *) {
         border-radius: 15px;

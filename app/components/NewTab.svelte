@@ -2,13 +2,27 @@
     import { Canvas } from '@threlte/core'
     import Scene from './InteractiveLineScene.svelte'
     import data from '../data.svelte.js'
+    import { resolveNewTabInput } from '../lib/new-tab-input.js'
     // import { sandbox } from './sandbox.js'
     
     let { tab, isActive = false } = $props()
     
     let inputValue = $state('')
+    let detectedInput = $state(null)
     let mouseX = $state(0)
     let mouseY = $state(0)
+
+    $effect(() => {
+        const value = inputValue
+        detectedInput = null
+        if (!value.trim()) return
+
+        const timeout = setTimeout(() => {
+            detectedInput = resolveNewTabInput(value)
+        }, 150)
+
+        return () => clearTimeout(timeout)
+    })
     
     // AI completions with proper cancellation and tracking
     let completions = $state([])
@@ -313,18 +327,6 @@
     }
 
     function handleKeyDown(event) {
-        // Handle Cmd+W / Ctrl+W for tab closing - let it bubble up to the global handler
-        if ((event.metaKey || event.ctrlKey) && event.key === 'w') {
-            // Don't prevent default here, let the global handler in App.svelte handle it
-            return
-        }
-
-        // Handle Cmd+T / Ctrl+T for new tab - let it bubble up to the global handler  
-        if ((event.metaKey || event.ctrlKey) && event.key === 't') {
-            // Don't prevent default here, let the global handler in App.svelte handle it
-            return
-        }
-
         const filteredCompletions = completions.filter(c => c.trim().length > 0)
         if (filteredCompletions.length === 0) {
             return
@@ -375,6 +377,16 @@
     }
 
     // Handle clicks outside input/dropdown to clear completions
+    function dismissCompletions() {
+        clearTimeout(completionTimeout)
+        completionTimeout = null
+        currentAbortController?.abort()
+        currentAbortController = null
+        isGeneratingCompletions = false
+        completions = []
+        selectedCompletionIndex = -1
+    }
+
     function handleClickOutside(event) {
         const inputContainer = event.target.closest('.input-wrapper')
         const dropdown = event.target.closest('.completions-dropdown')
@@ -397,54 +409,8 @@
 
     function handleSubmit(event) {
         event.preventDefault()
-        
-        if (!inputValue.trim()) {
-            return
-        }
-        
-        try {
-            let url = new URL(inputValue)
-            data.navigate(tab.id, url.href)
-        } catch {
-            // Not a valid URL, check for Kagi prefix or use default search engine
-            if (inputValue.toLowerCase().startsWith('k ')) {
-                // Use Kagi search, remove the "k " prefix
-                let searchUrl = new URL('https://kagi.com/search')
-                searchUrl.searchParams.set('q', inputValue.slice(2))
-                data.navigate(tab.id, searchUrl.href)
-            } else {
-                // Use default search engine from settings
-                const defaultSearchEngine = localStorage.getItem('defaultSearchEngine') || 'google'
-                let searchUrl
-                
-                switch (defaultSearchEngine) {
-                    case 'kagi':
-                        searchUrl = new URL('https://kagi.com/search')
-                        break
-                    case 'custom':
-                        const customUrl = localStorage.getItem('customSearchUrl')
-                        if (customUrl) {
-                            try {
-                                searchUrl = new URL(customUrl + encodeURIComponent(inputValue))
-                                data.navigate(tab.id, searchUrl.href)
-                                return
-                            } catch {
-                                // Fallback to Google if custom URL is invalid
-                                searchUrl = new URL('https://www.google.com/search')
-                            }
-                        } else {
-                            searchUrl = new URL('https://www.google.com/search')
-                        }
-                        break
-                    default: // google
-                        searchUrl = new URL('https://www.google.com/search')
-                        break
-                }
-                
-                searchUrl.searchParams.set('q', inputValue)
-                data.navigate(tab.id, searchUrl.href)
-            }
-        }
+        const input = resolveNewTabInput(inputValue)
+        if (input) data.navigate(tab.id, input.url)
     }
     
     function handleMouseMove(event) {
@@ -593,6 +559,8 @@
     })
 </script>
 
+<svelte:window ondarc-dismiss-overlays={dismissCompletions} />
+
 <div class="new-tab flex flex-col items-center min-h-screen bg-black" role="application" onmousemove={handleMouseMove} onclick={handleClickOutside} onkeydown={(e) => { if (e.key === 'Escape') handleClickOutside(e) }} tabindex="-1">
     <div class="content-container relative pt-[15vh] w-full">
         <div class="omnibar-container max-w-xl w-full mx-auto px-6">
@@ -655,11 +623,11 @@
             </form>
             
             <div class="action-buttons flex gap-3 justify-center mt-4">
-                <button class="action-btn search-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
+                <button class:detected={detectedInput?.isSearch === false} class="action-btn go-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
                     go
                 </button>
 
-                <button class="action-btn search-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
+                <button class:detected={detectedInput?.isSearch === true} class="action-btn search-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
                     search
                 </button>
                 <button class="action-btn ask-btn px-4 py-2 text-sm bg-black/80 text-white/80 rounded-lg border border-white/10 hover:bg-black/90 hover:text-white hover:border-white/20 hover:cursor-pointer transition-all duration-200">
@@ -736,6 +704,12 @@
 </div>
 
 <style>
+    .action-btn.detected {
+        background-color: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.4);
+        color: white;
+    }
+
     /* .omnibar-input:focus + .input-accent {
         opacity: 1;
     } */
