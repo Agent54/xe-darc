@@ -3,7 +3,8 @@ import { createHttpStream } from '@agentclientprotocol/sdk/experimental/http-cli
 import { readAcpModelPreference, saveAcpModelPreference, validateAcpSettings } from './acp-settings.js'
 import { configValues, getModelConfig } from './agent-models.js'
 
-export function createAgentClient({ getSettings, createBrowserServer, modelStorage, createStream = createHttpStream, setupTimeout = 15000, cancelTimeout = 5000 }) {
+export function createAgentClient({ getSettings, createBrowserServer, modelStorage, conversationStorage, getConversationKey = () => 'acpConversations',
+    createStream = createHttpStream, setupTimeout = 15000, cancelTimeout = 5000, reconnectDelay = 1000 }) {
     const state = {
         status: 'disconnected', error: '', agentName: '',
         conversations: [], activeConversationId: null, queue: [], queuePaused: false,
@@ -23,6 +24,54 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
     let settings = null
     let generation = 0
     let activeTurn = null
+    let wantConnection = false
+    let reconnectTimer
+    let reconnectAttempts = 0
+    let saveTimer
+    let restored = false
+
+    function restore() {
+        const key = getConversationKey()
+        if (restored || !conversationStorage || !key) { return }
+        restored = true
+        try {
+            const saved = JSON.parse(conversationStorage.getItem(key) || 'null')
+            if (!saved) { return }
+            state.conversations = saved.conversations.filter(chat => typeof chat.id === 'string' && Array.isArray(chat.messages))
+                .map(chat => ({ ...chat, generation: null, loading: false, messages: chat.messages.map(message => ({ ...message,
+                    streaming: false, ...(message.role === 'approval' && message.status === 'pending' ? { status: 'cancelled' } : {}) })) }))
+            state.activeConversationId = state.conversations.some(chat => chat.id === saved.activeConversationId)
+                ? saved.activeConversationId : state.conversations[0]?.id || null
+            state.queue = Array.isArray(saved.queue) ? saved.queue.filter(item => state.conversations.some(chat => chat.id === item.conversationId)) : []
+            state.queuePaused = true
+            wantConnection = saved.wantConnection === true
+        } catch (error) {
+            state.error = `Could not restore ACP conversations: ${error.message}`
+        }
+    }
+
+    function save() {
+        clearTimeout(saveTimer)
+        saveTimer = undefined
+        const key = getConversationKey()
+        if (!restored || !conversationStorage || !key) { return }
+        try {
+            conversationStorage.setItem(key, JSON.stringify({ conversations: state.conversations,
+                activeConversationId: state.activeConversationId, queue: state.queue, wantConnection }))
+        } catch (error) {
+            state.error = `Could not save ACP conversations: ${error.message}`
+        }
+    }
+
+    function scheduleReconnect() {
+        if (!wantConnection || reconnectTimer || connecting) { return }
+        reconnectTimer = setTimeout(async () => {
+            reconnectTimer = undefined
+            if (!wantConnection) { return }
+            try { await connect() } catch { /* Retry transport setup; prompts remain paused. */ }
+            if (!connection && wantConnection) { scheduleReconnect() }
+        }, Math.min(reconnectDelay * 2 ** Math.min(reconnectAttempts++, 4), 15000))
+    }
 
     function snapshot() {
         return {
@@ -33,6 +82,8 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
     }
 
     function publish() {
+        // Coalesce storage writes so streaming markdown does not write on every chunk.
+        if (restored && conversationStorage && !saveTimer) { saveTimer = setTimeout(save, 250) }
         for (const listener of listeners) {
             listener(snapshot())
         }
@@ -209,7 +260,10 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         for (const chat of browserServers.keys()) { releaseBrowserServer(chat) }
     }
 
-    function disconnect(reason = '') {
+    function disconnect(reason = '', reconnect = false) {
+        wantConnection = reconnect
+        clearTimeout(reconnectTimer)
+        reconnectTimer = undefined
         generation++
         const peer = connection
         connection = null
@@ -224,9 +278,15 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         state.status = 'disconnected'
         state.error = reason
         publish()
+        save()
+        if (reconnect) { scheduleReconnect() }
     }
 
     async function connect() {
+        restore()
+        wantConnection = true
+        clearTimeout(reconnectTimer)
+        reconnectTimer = undefined
         if (connection && state.status === 'connected') {
             return connection
         }
@@ -277,13 +337,8 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                 if (connection !== peer) {
                     return
                 }
-                connection = null
-                releaseBrowserServers()
-                state.status = 'disconnected'
                 state.queuePaused = true
-                cancelApprovals()
-                state.error = 'ACP connection closed. Reconnect to continue; interrupted prompts are not resent.'
-                publish()
+                disconnect('ACP connection lost. Reconnecting; interrupted prompts remain paused.', wantConnection)
             })
             try {
                 const result = await setupRequest(peer, acp.methods.agent.initialize, {
@@ -300,12 +355,22 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                 state.agentName = result.agentInfo?.title || result.agentInfo?.name || 'ACP agent'
                 agentInfo = result.agentInfo
                 persistentMcp = result._meta?.['darc/mcpPersistence'] === true
+                const identity = `${settings.endpoint}\n${settings.cwd}\n${settings.mcpConnectionId || ''}`
+                for (const chat of state.conversations.filter(chat => chat.sessionId && chat.endpoint === identity)) {
+                    try { await ensureSession(chat, peer) } catch (error) {
+                        if (connection !== peer) { throw error }
+                        state.error = `Could not resume ${chat.title}: ${error.message}`
+                    }
+                }
+                if (connection !== peer || currentGeneration !== generation) { throw new Error('ACP connection changed while reconnecting') }
+                reconnectAttempts = 0
                 state.status = 'connected'
                 publish()
+                save()
                 return peer
             } catch (error) {
                 if (connection === peer) {
-                    disconnect(error.message)
+                    disconnect(error.message, wantConnection)
                 } else {
                     peer.close()
                 }
@@ -323,6 +388,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
     }
 
     function newConversation() {
+        restore()
         if (state.processing) {
             return
         }
@@ -388,6 +454,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             }
             chat.generation = generation
             publish()
+            save()
         }).catch(error => {
             releaseBrowserServer(chat)
             throw error
@@ -485,9 +552,16 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
     }
 
     return {
-        subscribe(listener) { listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener) },
+        subscribe(listener) { restore(); listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener) },
         get state() { return snapshot() },
         connect, disconnect, newConversation, stop,
+        start() { restore(); publish(); if (wantConnection && !connection) { scheduleReconnect() } },
+        suspend() {
+            const reconnect = wantConnection
+            disconnect()
+            wantConnection = reconnect
+            save()
+        },
         async prepareConversation() {
             const peer = await connect()
             const id = state.activeConversationId || newConversation()

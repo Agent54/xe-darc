@@ -94,7 +94,7 @@ Deno.test('OAuth-looking URLs use the common open-tab policy and preserve the na
         h.newWindow({ targetUrl: 'https://login.example/oauth', initialWidth: 500, initialHeight: 500, window: controller })
         assert.equal(h.opened.length, 1)
         assert.equal(h.opened[0].lightbox, policy !== 'allow')
-        assert.equal(h.opened[0].guestWindow, controller)
+        assert.equal(h.opened[0].pendingWindow, controller)
     }
     let discarded = 0
     const denied = navigationHarness({ policy: 'deny' })

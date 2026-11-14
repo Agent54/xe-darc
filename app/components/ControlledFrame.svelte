@@ -42,6 +42,8 @@
     } = $props()
 
     let tab = $derived(data.docs[tabId])
+    const scriptSetupFailed = $derived(data.frames[tabId]?.scriptSetup === 'failed' &&
+        !isNewTabUrl(tab?.url) && !isTabHistoryUrl(tab?.url))
 
     let viewMode = $derived(data.ui.viewMode)
 
@@ -58,6 +60,7 @@
     
     // Track command key state
     let isCommandKeyDown = $state(false)
+    let requestedLinkTab = null
 
     // OAuth popup state
     let oauthPopup = $state(null) // { url, width, height, expanded, parentTab, event, frame }
@@ -120,6 +123,8 @@
     }
 
     function shouldNavigateInSameTab(originUrl, forceNewTab = false) {
+        const currentTab = data.docs[tabId]
+        if (currentTab?.lightbox && !currentTab.archive) return true
         if (forceNewTab) {
             return false
         }
@@ -245,7 +250,7 @@
 
     // Check if the current URL is about:newtab
     function isNewTabUrl(url) {
-        return url?.startsWith('about:newtab') || (!data.frames[tabId]?.nativeGuest && url?.startsWith('about:blank'))
+        return url?.startsWith('about:newtab') || (!data.frames[tabId]?.openedByPage && url?.startsWith('about:blank'))
     }
     
     // Check if the current URL is about:tabhistory
@@ -459,12 +464,19 @@
 
     function handleLoadCommit(tab, event) {
         const info = event.loadInfo || event
-        if (!info.isTopLevel || !data.frames[tab.id]) {
+        const frameData = data.frames[tab.id]
+        const currentTab = data.docs[tab.id]
+        if (!info.isTopLevel || !info.url || !frameData || !currentTab || (currentTab.archive && currentTab.archive !== 'preview')) {
             return
         }
-        data.frames[tab.id].committedUrl = info.url
+        const traversal = frameData.historyTraversal
+        frameData.historyTraversal = null
+        if (!traversal && frameData.committedUrl && frameData.committedUrl !== info.url) {
+            data.clearLightboxForward?.(tab.id)
+        }
+        frameData.committedUrl = info.url
         if (!data.isInternalPage(info.url)) {
-            data.updateTab(tab.id, { lastLoadedAt: Date.now() })
+            data.updateTab(tab.id, { lastLoadedAt: Date.now(), ...(currentTab.lightbox ? { url: info.url } : {}) })
         }
         if (isDirectNavigation(info.url)) {
             data.frames[tab.id].directNavigation = null
@@ -542,7 +554,8 @@
 
     function handleLoadStart(tab, event) {
         event = event.loadInfo || event
-        if (!event.isTopLevel) {
+        const currentTab = data.docs[tab.id]
+        if (!event.isTopLevel || !currentTab || (currentTab.archive && currentTab.archive !== 'preview')) {
             return
         }
 
@@ -559,8 +572,8 @@
 
         // Fallback off-origin blocking in loadstart (main blocking is in onBeforeRequest)
         // This catches edge cases where the request handler didn't fire
-        if (event?.url && tab.url && !isDirectNavigation(event.url)) {
-            const currentTabUrl = data.frames[tab.id]?.committedUrl || tab.url
+        if (event?.url && currentTab.url && !isDirectNavigation(event.url)) {
+            const currentTabUrl = data.frames[tab.id]?.committedUrl || currentTab.url
             const currentOrigin = origin(currentTabUrl)
             const targetOrigin = origin(event.url)
             
@@ -596,7 +609,7 @@
                     return
                 }
                 
-                data.newTab(data.spaceMeta.activeSpace, {
+                data.newTab(currentTab.spaceId || data.spaceMeta.activeSpace, {
                     url: event.url,
                     title: '',
                     opener: tab.id,
@@ -711,15 +724,23 @@
         */
 
         const currentTab = data.docs[tab.id] || tab
+        if (currentTab.lightbox && currentTab.archive) {
+            e.window?.discard?.()
+            return
+        }
         const currentOrigin = origin(data.frames[tab.id]?.committedUrl || currentTab.url)
         const decision = data.permissionDecision('open-tab', tab.id, currentOrigin)
         if (decision === 'deny') {
             e.window?.discard?.()
             return
         }
-        if (decision === 'same-tab' && !hasModifierKey) {
+        const link = requestedLinkTab
+        requestedLinkTab = null
+        const sameLightbox = currentTab.lightbox && link?.url === e.targetUrl && link.expires >= Date.now() &&
+            ['new_foreground_tab', 'new_background_tab'].includes(e.windowOpenDisposition) && (!e.name || e.name === '_blank')
+        if (!hasModifierKey && (sameLightbox || (!currentTab.lightbox && decision === 'same-tab'))) {
             e.window?.discard?.()
-            if (e.targetUrl && origin(e.targetUrl) !== currentOrigin &&
+            if (!sameLightbox && e.targetUrl && origin(e.targetUrl) !== currentOrigin &&
                 data.permissionDecision('navigate-off-origin', tab.id, currentOrigin) === 'deny') {
                 return
             }
@@ -733,7 +754,7 @@
         // Command+click always opens in new tab (not lightbox), in background
         const forceNewTab = hasModifierKey
         const hasOpenTabPermission = data.isPermissionGranted('open-tab', currentOrigin, tab.id)
-        const useLightbox = !forceNewTab && !hasOpenTabPermission
+        const useLightbox = !currentTab.lightbox && !forceNewTab && !hasOpenTabPermission
         const shouldFocus = forceNewTab ? false : e.windowOpenDisposition !== 'new_background_tab'
         data.newTab(currentTab.spaceId || data.spaceMeta.activeSpace, {
             url: e.targetUrl || 'about:blank',
@@ -742,7 +763,7 @@
             groupTabId: forceNewTab ? data.getCurrentGroupTabId(currentTab.spaceId) : undefined,
             lightbox: useLightbox,
             shouldFocus,
-            guestWindow: e.window
+            pendingWindow: e.window
         })
     }
 
@@ -851,7 +872,7 @@
     }
 
 // Content script for window focus/blur handling
-function setupContentScripts(frame) {        
+async function setupContentScripts(frame) {        
         const currentTabId = tab?.id || tabId
         // First try a simple test script to verify content script injection works
         const systemInjections = [
@@ -1154,32 +1175,35 @@ document.addEventListener('input', function(event) {
             })
         ]
 
-        if (!frame.addContentScripts) {
-            if (data.frames[currentTabId]?.guestWindow) {
-                data.frames[currentTabId].guestWindow.attach(frame)
-                delete data.frames[currentTabId].guestWindow
-            } else {
-                frame.src = untrack(() => tab.url)
-            }
-        } else {
-            frame.addContentScripts([...systemInjections, ...userInjections]).then((res) => {
-                if (releasedFrames.has(frame) || data.frames[currentTabId]?.frame !== frame) return
-                const currentTab = data.docs[currentTabId]
-                if (!isLiveFrameTab(currentTab)) return
-                console.log('####### 💉 [INJECT] Successful script injection | tabId:', tab?.id || tabId, '| res:', res)
+        const frameData = data.frames[currentTabId]
+        const isCurrentFrame = () => !releasedFrames.has(frame) &&
+            data.frames[currentTabId]?.frame === frame && isLiveFrameTab(data.docs[currentTabId])
+        frameData.scriptSetup = 'pending'
 
-                if (data.frames[currentTabId]?.guestWindow) {
-                    data.frames[currentTabId].guestWindow.attach(frame)
-                    delete data.frames[currentTabId].guestWindow
-                } else {
-                    frame.src = currentTab.url
+        // Now add the focus/blur script
+        // return frame.addContentScripts([contentScript])
+        try {
+            await frame.addContentScripts([...systemInjections, ...userInjections])
+            if (!isCurrentFrame()) return
+
+            delete frameData.scriptSetup
+            if (frameData.pendingWindow) {
+                frameData.pendingWindow.attach(frame)
+                delete frameData.pendingWindow
+            } else {
+                const url = data.docs[currentTabId].url
+                if (!data.isInternalPage(url)) {
+                    frame.src = url
                 }
-            
-                // Now add the focus/blur script
-                // return frame.addContentScripts([contentScript])
-            }).catch((err) => {
-                console.error('❌ inject error:', err)
-            })
+            }
+        } catch (error) {
+            if (!isCurrentFrame()) return
+            frameData.scriptSetup = 'failed'
+            frameData.loading = false
+            frameData.directNavigation = null
+            console.error('Could not prepare tab scripts:', error)
+            frameData.pendingWindow?.discard?.()
+            delete frameData.pendingWindow
         }
     }
 
@@ -1235,8 +1259,9 @@ document.addEventListener('input', function(event) {
             const requestId = details.request?.id ?? details.requestId ?? null
             
             // Block off-origin main_frame navigations BEFORE they start (more reliable than frame.stop())
-            if (requestType === 'main-frame' && !isDirectNavigation(url.href, requestId)) {
-                const currentTabUrl = data.frames[tab.id]?.committedUrl || tab?.url
+            const currentTab = data.docs[tabId]
+            if (requestType === 'main-frame' && currentTab && !currentTab.archive && !isDirectNavigation(url.href, requestId)) {
+                const currentTabUrl = data.frames[tabId]?.committedUrl || currentTab.url
                 if (currentTabUrl) {
                     const currentOrigin = origin(currentTabUrl)
                     const targetOrigin = origin(url.href)
@@ -1267,16 +1292,16 @@ document.addEventListener('input', function(event) {
                         // Otherwise check if origin has 'navigate-off-origin' permission
                         const useLightbox = shouldUseLightboxForOffOrigin(currentTabUrl, isCommandKeyDown)
                         const shouldFocus = !isCommandKeyDown
-                        if (data.permissionDecision('open-tab', tab.id, currentOrigin) === 'deny' ||
-                            data.permissionDecision('navigate-off-origin', tab.id, currentOrigin) === 'deny') {
+                        if (data.permissionDecision('open-tab', tabId, currentOrigin) === 'deny' ||
+                            data.permissionDecision('navigate-off-origin', tabId, currentOrigin) === 'deny') {
                             showBlockedRequest()
                             return { cancel: true }
                         }
                         
-                        data.newTab(data.spaceMeta.activeSpace, {
+                        data.newTab(currentTab.spaceId || data.spaceMeta.activeSpace, {
                             url: url.href,
                             title: '',
-                            opener: tab.id,
+                            opener: tabId,
                             groupTabId: isCommandKeyDown ? data.getCurrentGroupTabId() : undefined,
                             lightbox: useLightbox,
                             shouldFocus
@@ -1960,8 +1985,10 @@ document.addEventListener('input', function(event) {
                 try {
                     const clickData = JSON.parse(message.substring(prefix.length))
                     if (!clickData || typeof clickData !== 'object' || Array.isArray(clickData)) return
+                    const { newTabUrl, ...detail } = clickData
+                    requestedLinkTab = typeof newTabUrl === 'string' ? { url: newTabUrl, expires: Date.now() + 500 } : null
                     window.dispatchEvent(new CustomEvent('darc-controlled-frame-click', {
-                        detail: { ...clickData, tabId: mytab.id, sourceFrame: `tab_${mytab.id}` }
+                        detail: { ...detail, tabId: mytab.id, sourceFrame: `tab_${mytab.id}` }
                     }))
                 } catch (error) {
                     console.error('Failed to parse controlled frame click:', error)
@@ -2079,6 +2106,7 @@ document.addEventListener('input', function(event) {
         // Wrapper and anchor readiness must trigger attachment as well as URL changes.
         const currentTabUrl = tab?.url
         const currentTab = tab
+        const reloadRequested = data.frames[tabId]?.reloadRequested
         const permissionsReady = data.permissionState.status === 'ready'
         const isInternalPage = isNewTabUrl(currentTabUrl) || isTabHistoryUrl(currentTabUrl)
         
@@ -2097,7 +2125,8 @@ document.addEventListener('input', function(event) {
             untrack(() => {
                 const latestTab = data.docs[currentTab.id]
                 if (!isLiveFrameTab(latestTab) || latestTab.spaceId !== spaceId ||
-                    latestTab.url !== currentTabUrl || tabId !== currentTab.id) {
+                    latestTab.url !== currentTabUrl || tabId !== currentTab.id ||
+                    data.frames[tabId]?.reloadRequested !== reloadRequested) {
                     return
                 }
                 mountControlledFrame(latestTab, isInternalPage, wrapper, frameAnchor)
@@ -2512,6 +2541,7 @@ document.addEventListener('input', function(event) {
         
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
+        class:frame-setup-error={scriptSetupFailed}
         class:certificate-error={!!currentCertificateError}
         class:network-error={!!currentNetworkError}
         class:new-tab-page={isNewTabUrl(tab?.url)}
@@ -2540,6 +2570,11 @@ document.addEventListener('input', function(event) {
             <div class="permission-load-error" role="alert">
                 <p>Permission settings could not be loaded.</p>
                 <button onmousedown={() => window.location.reload()}>Reload Darc</button>
+            </div>
+        {:else if scriptSetupFailed}
+            <div class="permission-load-error" role="alert">
+                <p>Darc could not prepare this tab. The page was blocked.</p>
+                <button onclick={() => data.reloadTab(tabId)}>Reload Tab</button>
             </div>
         {:else if currentCertificateError}
             <SSLErrorPage
@@ -2659,6 +2694,9 @@ loading="eager"
         display: none;
     }
     :global(.network-error > .frame-instance:not(.network-error)) {
+        display: none;
+    }
+    .frame-setup-error > :global(.frame-instance) {
         display: none;
     }
     :global(.new-tab-page > .frame-instance) {

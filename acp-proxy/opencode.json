@@ -1,0 +1,38 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "browser",
+  "permissions": [
+    { "action": "*", "resource": "*", "effect": "deny" },
+    { "action": "darc_*", "resource": "*", "effect": "allow" }
+  ],
+  "policies": [
+    { "action": "tool.use", "resource": "*", "effect": "deny" },
+    { "action": "tool.use", "resource": "darc_*:*", "effect": "allow" },
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "darc", "effect": "allow" },
+    { "action": "skill.use", "resource": "*", "effect": "deny" },
+    { "action": "plugin.use", "resource": "*", "effect": "deny" },
+    { "action": "websearch.use", "resource": "*", "effect": "deny" }
+  ],
+  "agents": {
+    "browser": {
+      "description": "Use the connected Darc browser through its MCP tools",
+      "mode": "primary",
+      "system": "Use the darc MCP tools for browser tasks. Browser access is authorized by Darc's existing permission prompts. No local filesystem, shell, skills, or other MCP servers are available."
+    },
+    "build": { "disabled": true },
+    "plan": { "disabled": true },
+    "general": { "disabled": true },
+    "explore": { "disabled": true }
+  },
+  "mcp": { "servers": {} },
+  "skills": [],
+  "instructions": [],
+  "plugins": [],
+  "snapshots": false,
+  "formatter": false,
+  "lsp": false,
+  "websearch": false,
+  "warming": false,
+  "experimental": { "todo": false, "subagent_depth": 0 }
+}

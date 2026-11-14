@@ -4,7 +4,7 @@ import bootstrap from './bootstrap.js'
 import testData from './test-data.js'
 import { throttle, origin } from './lib/utils.js'
 import { tick } from 'svelte'
-import { getFrameMoveIds } from './lib/frame-lifecycle.js'
+import { getFrameMoveIds, isLiveFrameTab } from './lib/frame-lifecycle.js'
 import { pageContentScript } from './lib/page-content.js'
 import { scheduleBackgroundTabMetadata } from './lib/background-tab-metadata.js'
 import { getActivityTimestamp, activityBetween, withOrderActivity } from './lib/tab-activity.js'
@@ -326,7 +326,9 @@ const permissionStore = createPermissionStore({
             if (frameData.frame && permissionOrigin(frameData.committedUrl || tab?.url) === scope.topLevelOrigin &&
                 (tab?.partition || 'persist:myapp') === scope.partition) {
                 permissionStore.cancelFrame(frameData.frame)
-                frameData.frame.reload()
+                if (!data.reloadTab(tabId)) {
+                    releaseTabFrame(tabId)
+                }
             }
         }
     }
@@ -494,18 +496,44 @@ function syncTabPreview(tab, previousOpener = tab.opener) {
         if (visible) {
             if (index === -1) {
                 preview.tabs.push(tab)
-            } else {
+            } else if (preview.tabs[index] !== tab) {
                 preview.tabs[index] = tab
             }
         } else if (index !== -1) {
             preview.tabs.splice(index, 1)
         }
-        if (visible && tab.lightbox) {
-            preview.lightbox = tab.id
-        } else if (preview.lightbox === tab.id) {
-            preview.lightbox = null
-        }
+        // A metadata write or a refresh must not pick an older lightbox for this opener.
+        preview.lightbox = preview.tabs.reduce((latest, child) => {
+            if (!child.lightbox) return latest
+            const opened = child.lightboxOpenedAt ?? child.created ?? 0
+            const latestOpened = latest?.lightboxOpenedAt ?? latest?.created ?? 0
+            return !latest || opened > latestOpened || (opened === latestOpened && child.id > latest.id) ? child : latest
+        }, null)?.id ?? null
     }
+}
+
+function getTabOwner(tabId) {
+    let tab = docs[tabId]
+    const visited = new Set()
+    while (tab?.lightbox) {
+        if (tab.archive || tab._deleted || visited.has(tab.id)) return null
+        visited.add(tab.id)
+        const opener = docs[tab.opener]
+        if (!opener || previews[opener.id]?.lightbox !== tab.id) return null
+        tab = opener
+    }
+    return tab?.type === 'tab' && !tab.archive && !tab.preview && !tab._deleted ? tab : null
+}
+
+function getDisplayedTab(tabId) {
+    const tab = docs[tabId]
+    if (!tab || tab.archive || tab._deleted) return tab
+    const child = docs[previews[tabId]?.lightbox]
+    return child?.lightbox && !child.archive && !child._deleted ? child : tab
+}
+
+function isRecentlyClosedTab(tab) {
+    return tab.type === 'tab' && tab.archive === 'closed' && !tab.lightbox && !tab.preview && !tab._deleted
 }
 
 function applyDocumentUpdate(tabId, update) {
@@ -933,7 +961,7 @@ const refresh = throttle(async function (spaceId) {
     }
 
     // Space-scoped refreshes must retain history and pending items from other spaces.
-    spaceMeta.closedTabs = Object.values(docs).filter(doc => doc.type === 'tab' && doc.archive === 'closed' && !doc._deleted)
+    spaceMeta.closedTabs = Object.values(docs).filter(isRecentlyClosedTab)
         .sort((a, b) => b.modified - a.modified)
     spaceMeta.pendingTabs = Object.values(docs).filter(doc => doc.type === 'tab' && doc.archive === 'deferred' && !doc._deleted)
         .sort((a, b) => b.modified - a.modified)
@@ -1119,6 +1147,11 @@ live: true,
 function activate(tabId, { source = 'navigation', recordIfAlreadyCurrent = false } = {}) {
     // console.log('activate tab id ..', {tabId})
 
+    if (docs[tabId]?.preview || docs[tabId]?.lightbox) {
+        const owner = getTabOwner(tabId)
+        if (!owner || owner.id === spaceMeta.activeTabId) return owner
+        tabId = owner.id
+    }
     spaceMeta.activeTabId = tabId
     // Transient UI state: each activation carries its own scroll intent.
     ui.tabActivation = { tabId, source }
@@ -1189,12 +1222,142 @@ function getPreviousActiveSpace() {
     return null
 }
 
+function releaseTabFrame(tabId) {
+    const frameData = frames[tabId]
+    if (!frameData) return
+    frameData.pendingWindow?.discard?.()
+    frameData.frame?.remove?.()
+    delete frames[tabId]
+}
+
+function restartTabFrame(tabId, url) {
+    const frameData = frames[tabId]
+    const reloadRequested = (frameData?.reloadRequested ?? 0) + 1
+    const active = frameData?.active
+    const pendingLoad = !isInternalPage(url)
+    releaseTabFrame(tabId)
+    frames[tabId] = { reloadRequested, active, pendingLoad, loading: pendingLoad }
+}
+
+function dismissLightbox(tabId, { rememberForForward = true, restoreWithParent = false } = {}) {
+    const tab = docs[tabId]
+    if (!tab?.lightbox || tab.archive || tab._deleted) return
+
+    const opener = docs[tab.opener]
+    const selected = opener && previews[opener.id]?.lightbox === tabId
+    const canReopen = rememberForForward && selected && !opener.archive
+    const frameData = frames[tabId]
+    const now = Date.now()
+    const closing = queueDocumentUpdate(tabId, {
+        archive: 'closed', closed: true, closedAt: now, modified: now, restoreWithParent
+    })
+    const descendants = (previews[tabId]?.tabs.slice() || []).map(child =>
+        child.lightbox ? dismissLightbox(child.id, { rememberForForward: false }) : closeTab(child.spaceId, child.id, { createReplacement: false }))
+
+    let savingForward
+    if (canReopen) {
+        const parentFrame = frames[opener.id]
+        const anchor = { id: tabId, url: parentFrame?.committedUrl || opener.url }
+        if (parentFrame?.frame?.executeScript) {
+            parentFrame.lightboxForwardEntry = readFrameHistoryEntry(parentFrame.frame)
+        }
+        savingForward = queueDocumentUpdate(opener.id, { lightboxForward: anchor })
+        if (frameData?.frame && !frameData.scriptSetup) {
+            frameData.frame.stop?.()
+            frameData.loading = false
+            frameData.frame.setAudioMuted?.(true)
+        } else {
+            releaseTabFrame(tabId)
+        }
+        if (getTabOwner(opener.id)?.id === spaceMeta.activeTabId) {
+            tick().then(() => {
+                if (!previews[opener.id]?.lightbox && getTabOwner(opener.id)?.id === spaceMeta.activeTabId) {
+                    frames[opener.id]?.frame?.focus?.()
+                }
+            })
+        }
+    } else {
+        releaseTabFrame(tabId)
+    }
+
+    return Promise.all([closing, savingForward, ...descendants])
+}
+
+function readFrameHistoryEntry(frame) {
+    return Promise.resolve().then(() => frame.executeScript({ code: 'window.navigation?.currentEntry?.key || null' }))
+        .then(result => result?.[0] ?? null, () => null)
+}
+
+function clearLightboxForward(tab, keepFrameId) {
+    const forwardId = tab.lightboxForward?.id
+    if (!forwardId) return
+    if (forwardId !== keepFrameId && docs[forwardId]?.archive) releaseTabFrame(forwardId)
+    if (frames[tab.id]) delete frames[tab.id].lightboxForwardEntry
+    return queueDocumentUpdate(tab.id, { lightboxForward: null })
+}
+
+function replaceLightbox(parentId, nextId) {
+    const parent = docs[parentId]
+    if (!parent) return
+    const previousId = previews[parentId]?.lightbox
+    if (previousId && previousId !== nextId) dismissLightbox(previousId, { rememberForForward: false })
+    clearLightboxForward(parent, nextId)
+}
+
+function reopenLightbox(tabId) {
+    const tab = docs[tabId]
+    const parent = tab && docs[tab.opener]
+    if (!tab?.lightbox || tab.archive !== 'closed' || !getTabOwner(parent?.id)) return
+    replaceLightbox(parent.id, tabId)
+    const frame = frames[tabId]?.frame
+    const opening = queueDocumentUpdate(tabId, {
+        archive: null, closed: false, closedAt: null, restoreWithParent: false, lightboxOpenedAt: Date.now()
+    })
+    frame?.setAudioMuted?.(!!tab.muted)
+    return opening
+}
+
+function navigateTabHistory(tabId, direction) {
+    const tab = getDisplayedTab(tabId)
+    if (!tab || tab.archive || tab._deleted || !['back', 'forward'].includes(direction)) return false
+    const frameData = frames[tab.id]
+    const frame = frameData?.frame
+    const navigate = () => frame?.[direction]?.()
+    const reportError = error => console.warn('Could not navigate tab history', error)
+    if (tab.lightbox && direction === 'back') {
+        const back = canGoBack => {
+            if (getDisplayedTab(tabId)?.id !== tab.id || docs[tab.id]?.archive || frames[tab.id]?.frame !== frame) return
+            return canGoBack ? navigate() : dismissLightbox(tab.id)
+        }
+        const canGoBack = frame?.canGoBack ? frame.canGoBack() : typeof frame?.back === 'function'
+        Promise.resolve(canGoBack).then(back).catch(reportError)
+        return true
+    }
+    const forward = direction === 'forward' && tab.lightboxForward
+    if (forward && forward.url === (frameData?.committedUrl || tab.url) && docs[forward.id]?.archive === 'closed') {
+        const anchor = frameData?.lightboxForwardEntry
+        if (anchor && frame?.executeScript) {
+            Promise.all([anchor, readFrameHistoryEntry(frame)]).then(([expected, current]) => {
+                if (docs[tab.id]?.lightboxForward?.id !== forward.id || getDisplayedTab(tabId)?.id !== tab.id || frames[tab.id]?.frame !== frame) return
+                return !expected || current === expected ? reopenLightbox(forward.id) : navigate()
+            }).catch(reportError)
+        } else {
+            reopenLightbox(forward.id)
+        }
+        return true
+    }
+    if (typeof frame?.[direction] !== 'function') return false
+    Promise.resolve(navigate()).catch(reportError)
+    return true
+}
+
 function closeTab (spaceId, tabId, { createReplacement = true, batchId = null } = {}) {
     const tab = docs[tabId]
 
     if (!tab) {
         return
     }
+    if (tab.lightbox) return dismissLightbox(tabId)
 
     const frame = frames[tabId]?.frame
     const discard = !batchId && (tab.url?.startsWith('about:newtab') || tab.url?.startsWith('about:blank')) &&
@@ -1233,18 +1396,19 @@ function closeTab (spaceId, tabId, { createReplacement = true, batchId = null } 
         ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
     }
    
-    bulkDocuments([
-        ...(previews[tabId]?.tabs.map(prev => {
+    const openLightboxId = previews[tabId]?.lightbox
+    const closingPreviews = [
+        ...(previews[tabId]?.tabs.slice().map(prev => {
+            if (prev.lightbox) return dismissLightbox(prev.id, { rememberForForward: false, restoreWithParent: !discard && prev.id === openLightboxId })
             if (frames[prev.id])  {
                 frames[prev.id].frame = null
             }
             
-            return {
-                ...prev,
+            return queueDocumentUpdate(prev.id, {
                 closed: true, // legacy
                 archive: 'closed',
                 modified: Date.now()
-            }
+            })
         }) || []),
         // {
         //     _id: `darc:activity_${crypto.randomUUID()}`,
@@ -1258,14 +1422,10 @@ function closeTab (spaceId, tabId, { createReplacement = true, batchId = null } 
         //     favicon: tab.favicon,
         //     created: Date.now()
         // }
-    ])
-
-    spaceMeta.closedTabs = [
-        ...(discard ? [] : [tab]),
-        ...spaceMeta.closedTabs.filter(item => item.id !== tabId)
     ]
     spaceMeta.pendingTabs = spaceMeta.pendingTabs.filter(item => item.id !== tabId)
-    return queueDocumentUpdate(tabId, {
+    clearLightboxForward(tab)
+    const closing = queueDocumentUpdate(tabId, {
         closed: true, // legacy > make timestamp
         closedAt: Date.now(),
         closedBatchId: batchId,
@@ -1275,6 +1435,11 @@ function closeTab (spaceId, tabId, { createReplacement = true, batchId = null } 
         ...(discard ? { deleted: true } : {}),
         modified: Date.now()
     })
+    spaceMeta.closedTabs = [
+        ...(isRecentlyClosedTab(tab) ? [tab] : []),
+        ...spaceMeta.closedTabs.filter(item => item.id !== tabId)
+    ]
+    return Promise.all([closing, ...closingPreviews])
 
     // const space = spaces[spaceId]
     // if (!space || !space.tabs) {
@@ -1593,6 +1758,15 @@ const data = {
     docs,
     frames,
     previews,
+    getDisplayedTab,
+    getTabOwner,
+    isLightboxFrameRetained: tabId => {
+        const tab = docs[tabId]
+        return tab?.lightbox && tab.archive === 'closed' && docs[tab.opener]?.lightboxForward?.id === tabId
+    },
+    navigateTabHistory,
+    dismissLightbox,
+    reopenLightbox,
     settings,
     ledIndicators,
     permissions,
@@ -1763,7 +1937,7 @@ const data = {
 
     restoreClosedTab: (tabId) => {
         const tab = docs[tabId]
-        if (!tab || !spaces[tab.spaceId]) return
+        if (!tab || !isRecentlyClosedTab(tab) || !spaces[tab.spaceId]) return
 
         const restoring = queueDocumentUpdate(tabId, {
             // TODO: handle previews and tab groups
@@ -1793,7 +1967,8 @@ const data = {
         spaceMeta.closedTabs = spaceMeta.closedTabs.filter(item => item.id !== tabId)
         activateSpace(tab.spaceId)
         activate(tabId)
-        return restoring
+        const lightbox = Object.values(docs).find(child => child.opener === tabId && child.lightbox && child.restoreWithParent && !child._deleted)
+        return Promise.all([restoring, lightbox && reopenLightbox(lightbox.id)])
     },
 
     readPage: async (tabId, options = {}) => {
@@ -2094,9 +2269,14 @@ const data = {
 
     navigate(tabId, url) {
         const tab = docs[tabId]
-        if (tab?.type !== 'tab') {
+        if (tab?.type !== 'tab' || (tab.archive && tab.archive !== 'preview') || tab._deleted) {
             return
         }
+        clearLightboxForward(tab)
+        if (frames[tabId]?.scriptSetup || frames[tabId]?.pendingWindow) {
+            restartTabFrame(tabId, url)
+        }
+
         const frame = frames[tabId] ??= {}
         if (frame.frame && !frame.committedUrl) {
             frame.committedUrl = tab.url
@@ -2106,7 +2286,7 @@ const data = {
 
         frame.pendingLoad = !frame.frame && !isInternalPage(url)
         frame.loading = !isInternalPage(url)
-        frame.directNavigation = isInternalPage(url) ? null : { urls: [url.split('#')[0]], requestId: null }
+        frame.directNavigation = frame.loading ? { urls: [url.split('#')[0]], requestId: null } : null
         frame.forceHibernated = false
         const saving = queueDocumentUpdate(tabId, {
             url,
@@ -2155,7 +2335,7 @@ const data = {
         removal.catch(error => console.error('Failed to remove divider:', error))
     },
     
-    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned, pinScope = 'group', groupTabId, guestWindow } = {}) => {
+    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned, pinScope = 'group', groupTabId, pendingWindow } = {}) => {
         // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
         const firstItem = getSidebarItems(spaces[spaceId]?.tabs).at(-1)
@@ -2196,6 +2376,7 @@ const data = {
             preview: !!preview,
             archive: preview ? 'preview' : undefined,
             lightbox: !!lightbox,
+            ...(lightbox ? { lightboxOpenedAt: Date.now() } : {}),
             pinned,
             ...(pinned ? { pinScope, pinOrder: nextPinOrder(spaces[spaceId].tabs) } : {})
         }
@@ -2209,6 +2390,7 @@ const data = {
             spaces[spaceId].tabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         }
         
+        if (lightbox) replaceLightbox(opener, tab.id)
         docs[tab._id] = tab
         syncTabPreview(docs[tab._id])
         for (const localTabIds of tabRefreshes) {
@@ -2224,9 +2406,11 @@ const data = {
         }
        
         frames[tab.id].pendingLoad = !!shouldFocus && !isInternalPage(tab.url)
-        if (guestWindow) {
-            frames[tab.id].guestWindow = guestWindow
-            frames[tab.id].nativeGuest = true
+        if (pendingWindow) {
+            // Chromium supplies this window when a page opens a popup. Attaching it to the frame preserves its connection to the opener.
+            // TODO: Revisit the pending window lifecycle, including when to discard it if the frame never opens.
+            frames[tab.id].pendingWindow = pendingWindow
+            frames[tab.id].openedByPage = true
         }
         frames[tab.id].loading = frames[tab.id].pendingLoad
 
@@ -2503,21 +2687,20 @@ const data = {
 
     reloadTab: (tabId) => {
         const tab = docs[tabId]
-        const frame = frames[tabId]?.frame
-        if (!tab || !frame) return
-        
-        // Clear errors before reload
-        const originValue = origin(tab.url)
-        if (origins[originValue]) {
-            origins[originValue].certificateError = null
-            origins[originValue].networkError = null
+        if (tab?.type !== 'tab' || !isLiveFrameTab(tab)) return false
+
+        const frameData = frames[tabId]
+        const frame = frameData?.frame
+        if (isInternalPage(tab.url) && !frameData?.openedByPage && !frame) return false
+
+        data.clearTabErrors(tabId)
+        if (!frame || frameData.scriptSetup) {
+            restartTabFrame(tabId, tab.url)
+            return true
         }
-        
-        // Set loading state
-        if (frames[tabId]) {
-            frames[tabId].loading = true
-        }
-        
+
+        frameData.loading = true
+
         // Reload the frame
         if (typeof frame.reload === 'function') {
             frame.reload()
@@ -2526,39 +2709,13 @@ const data = {
         }
         
         console.log(`🔄 Reload initiated for tab ${tabId}`)
+        return true
     },
 
     reloadCurrentTab: () => {
-        const currentTabId = spaceMeta.activeTabId
-        if (currentTabId && frames[currentTabId]?.frame) {
-            // Clear errors before reload
-            const tab = docs[currentTabId]
-            if (tab?.url) {
-                const originValue = origin(tab.url)
-                if (origins[originValue]) {
-                    origins[originValue].certificateError = null
-                    origins[originValue].networkError = null
-                }
-            }
-            
-            // Set loading state
-            if (frames[currentTabId]) {
-                frames[currentTabId].loading = true
-            }
-            
-            frames[currentTabId].frame.reload()
-            
+        if (data.reloadTab(spaceMeta.activeTabId)) {
             // Clear needsReload flags after reload
-            for (const resourceKey of Object.keys(permissions)) {
-                for (const originKey of Object.keys(permissions[resourceKey].origins || {})) {
-                    const requests = permissions[resourceKey].origins[originKey].requests || []
-                    requests.forEach(request => {
-                        if (request.needsReload) {
-                            request.needsReload = false
-                        }
-                    })
-                }
-            }
+            data.clearNeedsReloadFlags()
         }
     },
 

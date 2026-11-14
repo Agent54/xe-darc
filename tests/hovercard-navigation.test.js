@@ -86,7 +86,7 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
     const frame = { addContentScripts(injections) { scripts.push(...injections); return Promise.resolve() } }
     const setup = new Function('frame', 'window', 'CustomEvent', 'tab', 'tabId', 'ipc', 'console', 'getFrameShortcutScript', 'connectFrameIPC', 'scopedGuestScript', 'readGuestMessage', 'releasedFrames', 'isLiveFrameTab', `
         const untrack = callback => callback()
-        const data = { docs: { [tabId]: tab }, frames: { [tabId]: { frame } } }
+        const data = { docs: { [tabId]: tab }, frames: { [tabId]: { frame } }, isInternalPage: () => false }
         const userMods = { css: [], js: [] }, select = '', zoomControl = '', contextMenu = ''
         let isCommandKeyDown = false, commandKeyPressed = false
         ${bridgeHandlers}

@@ -43,7 +43,7 @@ function movedWrappers(before, after) {
 
 function attachmentEffect() {
     const tab = { id: 'page', spaceId: 'space', url: 'https://search.example/?q=one' }
-    const data = { docs: { page: tab }, permissionState: { status: 'ready' } }
+    const data = { docs: { page: tab }, frames: {}, permissionState: { status: 'ready' } }
     const wrapper = { isConnected: true }
     const anchor = { parentNode: wrapper }
     const ticks = []
@@ -97,6 +97,19 @@ Deno.test('superseded attachment effects cannot mount the previous navigation', 
     h.ticks.forEach(resolve => resolve())
     await Promise.resolve()
     assert.deepEqual(h.mounted, ['https://search.example/?q=two'])
+})
+
+Deno.test('reload replaces a scheduled attachment even when the URL has not changed', async () => {
+    const h = attachmentEffect()
+    h.effect()
+    h.data.frames.page = { reloadRequested: 1, pendingLoad: true }
+    h.effect()
+    h.ticks[0]()
+    await Promise.resolve()
+    assert.deepEqual(h.mounted, [])
+    h.ticks[1]()
+    await Promise.resolve()
+    assert.deepEqual(h.mounted, [h.tab.url])
 })
 
 Deno.test('a pending attachment cannot reclaim a transferred tab or removed wrapper', async () => {

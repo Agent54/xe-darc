@@ -23,7 +23,8 @@
         userMods = { css: [], js: [] },
         statusLightsEnabled = false,
         controlledFrameSupported = false,
-        observer
+        observer,
+        frameWrapper = $bindable(null)
     } = $props()
 
     const tab = $derived(data.docs[tabId])
@@ -518,7 +519,6 @@
     //TODO: clear data support
 
     let iframeFrame = $state(null)
-    let frameWrapper = $state(null)
 
     $effect(() => {
         // Don't create new object here - let data layer handle initialization
@@ -622,7 +622,6 @@
 <div bind:this={frameWrapper} id="tab_{tab.id}" class="frame-wrapper frame" style={style} class:window-controls-overlay={headerPartOfMain} class:no-pointer-events={isScrolling}>
     {#if data.isTabHibernated(tab.id)}
         <div 
-            transition:fade={{duration: 200, delay: 0}}
             class="frame hibernated-frame"
             role="button"
             tabindex="0"
@@ -742,19 +741,25 @@
         {:else}
             {#if true} 
             <!-- initial url  -->
-                <iframe
-                    style={style}
-                    transition:fade={{duration: 150}}
-                    bind:this={iframeFrame}
-                    src={tab.url}
-                    class:window-controls-overlay={headerPartOfMain}
-                    class:no-pointer-events={isScrolling}
-                    class="frame"
-                    title="fallback-iframe"
-                    credentialless={true}
-                    referrerpolicy="strict-origin-when-cross-origin"
-                    loading="lazy"
-                ></iframe>
+                {#key data.frames[tab.id]?.reloadRequested}
+                    <iframe
+                        style={style}
+                        bind:this={iframeFrame}
+                        src={tab.url}
+                        class:window-controls-overlay={headerPartOfMain}
+                        class:no-pointer-events={isScrolling}
+                        class="frame"
+                        title="fallback-iframe"
+                        credentialless={true}
+                        referrerpolicy="strict-origin-when-cross-origin"
+                        onload={(event) => {
+                            const frameData = data.frames[tab.id]
+                            if (event.currentTarget === iframeFrame && frameData?.pendingLoad) {
+                                frameData.loading = false
+                            }
+                        }}
+                    ></iframe>
+                {/key}
 
                 <!--  sandbox="allow-scripts allow-forms"
                     csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; child-src 'none'; worker-src 'none'; frame-src 'none';"

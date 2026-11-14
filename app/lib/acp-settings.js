@@ -62,5 +62,5 @@ export function saveAcpSettings(settings, storage = globalThis.localStorage, ses
 }
 
 export function exportableStorage(storage = globalThis.localStorage) {
-    return Object.fromEntries(Object.entries(storage).filter(([key]) => key !== tokenKey && key !== 'mcpProxyRevocations' && !key.startsWith('mcpProxyCredentials:') && !key.startsWith('mcpBridgeKey:') && !key.startsWith('aiToken_') && !['selectedAiProvider', 'selectedModel'].includes(key)))
+    return Object.fromEntries(Object.entries(storage).filter(([key]) => key !== tokenKey && !key.startsWith('acpConversations:') && key !== 'mcpProxyRevocations' && !key.startsWith('mcpProxyCredentials:') && !key.startsWith('mcpBridgeKey:') && !key.startsWith('aiToken_') && !['selectedAiProvider', 'selectedModel'].includes(key)))
 }

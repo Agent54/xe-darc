@@ -1,8 +1,10 @@
 # OpenCode ACP proxy demo
 
-Requires Deno and an installed, configured `opencode` on PATH. If prompts report
-"provider authentication required", run `opencode acp --login` in your terminal
-before connecting. The proxy does not perform provider login.
+Requires Deno and OpenCode v2 on PATH (tested with 2.3.0). This proxy uses a
+private OpenCode profile in the git-ignored `acp-proxy/data/opencode/` directory.
+If prompts report "provider authentication required", run `deno task login`
+from this folder before connecting. Provider API keys from the environment
+remain available; the profile does not reuse your normal OpenCode login/config.
 
 ```sh
 cd acp-proxy
@@ -12,7 +14,7 @@ deno task start
 In Darc's Agent connection settings:
 
 - Endpoint: `https://localhost:7331/acp`
-- Working directory: the absolute project directory on this machine
+- Working directory: ignored by this restricted proxy; it uses its private workspace
 - Bearer token: leave empty
 
 HTTPS uses the same `../certs/localhost.crt` and `../certs/device.key` as Darc's
@@ -62,24 +64,39 @@ To also verify a streamed model reply using your configured provider:
 deno task smoke "Reply exactly ACP_PROXY_OK. Do not use tools."
 ```
 
-The official SDK's `AcpServer` handles ACP HTTP routing. Each ACP connection
-launches `opencode acp`; requests, notifications, cancellation, and permission
-replies are forwarded through the SDK. DELETE or server shutdown terminates that child. OpenCode
-inherits your environment and uses its existing provider configuration/login.
-Session recovery across child restarts depends on OpenCode's persistence.
+The official SDK's `AcpServer` handles ACP HTTP routing. The proxy supports one
+active ACP client and one private `opencode acp` process. OpenCode starts when
+the ACP client connects, not when the proxy starts. Another simultaneous client
+receives HTTP 409; disconnect the existing client before running the smoke task.
+Requests, notifications, cancellation, and permission replies are forwarded
+through the SDK. DELETE or server shutdown terminates that child. Multiple ACP
+profiles belong to the browser; each proxy instance has only one active client.
+
+`opencode.json` defines the restricted browser agent. It denies local tools,
+skills, plugins, and other MCP servers. The bridge replaces incoming working
+directories with `data/opencode/workspace/` and disables project/Claude config
+discovery. It writes the exact browser MCP URL to
+`data/opencode/config/opencode/opencode.json` before forwarding session creation
+or loading, and supplies that same URL through ACP under the fixed name `darc`.
+Additional MCP declarations are rejected. The existing browser permission
+prompts still authorize each browser operation.
+
+OpenCode's database, login, cache, config, logs, and temporary files live in
+`data/opencode/`. This is why the start/login tasks need `--allow-write=./data`.
+This directory stores OpenCode runtime data, not a proxy connection registry;
+saved connection identities and permissions remain browser-owned. Reconnects
+retain OpenCode's database/login. Session recovery depends on OpenCode's persistence.
 
 ## Browser MCP compatibility
 
 Create an MCP connection in Darc and select it in Agent connection settings.
-Darc supplies its browser tools over ACP. When the agent advertises native
-MCP-over-ACP support, the proxy forwards that declaration and its traffic unchanged.
-When the agent advertises only HTTP MCP, the proxy substitutes a persistent
+Darc supplies its browser tools over ACP. For OpenCode, the proxy substitutes a persistent
 `https://localhost:7331/mcp/<connection-id>` endpoint. The agent receives this URL
 automatically; no separate MCP configuration or tool token is needed.
 
 After a conversation opens, Darc's MCP connection entry displays the full URL,
 and **Copy MCP URL** copies the entire value. The proxy also
-provides this URL when the agent uses native MCP-over-ACP. The URL remains
+provides this URL through the ACP session response. The URL remains
 saved until the MCP connection is removed. They survive disconnects, browser
 reloads, and proxy restarts, and are excluded from Darc exports. A direct ACP
 connection without this proxy has no HTTP URL to copy.
@@ -97,15 +114,13 @@ endpoint and credentials for reconnect. Removing the browser connection in Darc
 revokes its endpoint and saved permissions. Offline removals are saved locally and
 retried when Darc starts or reconnects. No automatic time limit is applied.
 HTTP tool requests use the connection ID in the URL and the same host/origin checks
-as `/acp`. The proxy saves registrations in `data/mcp-connections.json`, with
-owner-only file permissions. Keep this file across restarts. Removed registrations
-remain revoked after restart and cannot be recreated with their old owner key.
+as `/acp`. The proxy keeps registrations only in memory. After a proxy restart,
+Darc registers its saved identity again to restore the same URL.
 The browser retains its owner key for reconnect and removal; tool clients need
 only the URL. ACP connection settings and their bearer token are also
 saved until changed or removed.
 There is no additional MCP tool token or Authorization header. Old saved token
-fields are removed during migration, and previously issued paths remain aliases
-for the same connection until it is removed.
+fields are removed during migration.
 
 Darc supplies its saved connection identity in `darc/connections` metadata when
 opening or loading a session. The proxy requires this identity and uses its ID
@@ -154,6 +169,16 @@ For the automated native/fallback permission and URL tests, run from the repo ro
 ```sh
 deno test --no-check --allow-env --allow-read --allow-write=.cache --allow-sys --allow-net tests/acp-mcp-proxy.test.js
 ```
+
+To verify the installed OpenCode's isolated configuration, single-client lifecycle,
+and actual MCP discovery without a model prompt:
+
+```sh
+deno test --no-check --allow-env --allow-read --allow-write=.cache --allow-sys --allow-net --allow-run=opencode tests/opencode-proxy.test.js
+```
+
+The test uses a random loopback port and a temporary profile inside `.cache/`;
+it closes its child and listener and removes that profile afterward.
 
 This is a local, unauthenticated HTTPS demo bound to loopback. Deno handles TLS
 directly. MCP tool clients use their connection URL and Darc's permission prompts.

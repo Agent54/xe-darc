@@ -13,6 +13,7 @@ import * as svelteServer from 'svelte/internal/server'
 import * as svelteClient from 'svelte/internal/client'
 import { createTabHistorySwitcher } from '../app/lib/tab-activation-history.js'
 import { getTabTitle } from '../app/lib/tab-title.js'
+import { origin } from '../app/lib/utils.js'
 
 function compileStore(generate) {
     return compileModule(
@@ -143,6 +144,34 @@ Deno.test('revoking every grant lifetime reloads matching live pages and cancels
             assert.equal(data.permissionDecision('geolocation', 'page', resource.url), action === 'deny' ? 'deny' : 'ask')
         }
     }
+})
+
+Deno.test('revoking a permission cancels requests and restarts unfinished matching frames', async () => {
+    const { data, request } = await downloadSession()
+    await data.setPermissionDecision('geolocation', 'page', 'allow')
+    const removed = []
+    for (const [id, scriptSetup, archive] of [
+        ['page', 'pending', null],
+        ['failed', 'failed', null],
+        ['closed', undefined, 'closed']
+    ]) {
+        data.docs[id] = { ...tab(id), archive }
+        data.frames[id] = {
+            scriptSetup,
+            frame: { remove() { removed.push(id) } }
+        }
+    }
+    const pending = request()
+    await data.setPermissionDecision('geolocation', 'page', 'deny')
+
+    assert.equal(data.permissionDecision('geolocation', 'page'), 'deny')
+    assert.deepEqual(pending, ['defer', 'deny'])
+    assert.deepEqual(removed, ['page', 'failed', 'closed'])
+    for (const id of ['page', 'failed']) {
+        assert.equal(data.frames[id].frame, undefined)
+        assert.equal(data.frames[id].pendingLoad, true)
+    }
+    assert.equal(data.frames.closed, undefined)
 })
 
 Deno.test('revoking popup policy does not reload pages or cancel unrelated permission requests', async () => {
@@ -472,6 +501,7 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
         permissionTypes: [],
         projectColors: [{}, {}, {}, { color: '#000' }],
         throttle: fn => fn,
+        origin,
         tick: () => Promise.resolve(),
         window,
         document: { getElementById() { return null } },
@@ -1493,6 +1523,77 @@ Deno.test('rapid navigation uses the existing frame and keeps the latest destina
     assert.deepEqual(navigations, ['https://first.example/', 'https://second.example/'])
     await Promise.all([first, second])
     assert.equal((await db.get('page')).url, 'https://second.example/')
+})
+
+Deno.test('navigation replaces unfinished frames and discards popups waiting for a frame', async () => {
+    const { data, refresh } = session({ tabs: [tab('page')], runtime: 'client' })
+    await refresh()
+    const calls = []
+    const frame = {
+        remove() { calls.push('remove') },
+        set src(url) { calls.push(url) }
+    }
+    for (const [oldFrame, url, expected] of [
+        [{ frame, scriptSetup: 'pending' }, data.docs.page.url, ['remove']],
+        [{ frame, scriptSetup: 'failed' }, 'https://example.com/latest', ['remove']],
+        [{ pendingWindow: { discard() { calls.push('discard') } } }, 'about:newtab', ['discard']]
+    ]) {
+        data.frames.page = { ...oldFrame, active: 10, reloadRequested: 1 }
+        const navigating = data.navigate('page', url)
+        assert.deepEqual(calls.splice(0), expected)
+        assert.equal(data.docs.page.url, url)
+        assert.equal(data.frames.page.frame, undefined)
+        assert.equal(data.frames.page.pendingWindow, undefined)
+        assert.equal(data.frames.page.scriptSetup, undefined)
+        assert.equal(data.frames.page.active, 10)
+        assert.equal(data.frames.page.reloadRequested, 2)
+        assert.equal(data.frames.page.pendingLoad, url !== 'about:newtab')
+        assert.equal(data.frames.page.loading, url !== 'about:newtab')
+        await navigating
+    }
+})
+
+Deno.test('reload discards a pending or failed frame and retries the same tab', async () => {
+    const { data, refresh } = session({ tabs: [tab('page')], runtime: 'client' })
+    await refresh()
+    data.activate('page')
+    const calls = []
+    const frame = {
+        remove() { calls.push('remove') },
+        reload() { calls.push('reload') },
+        set src(url) { calls.push(url) }
+    }
+    data.frames.page = {
+        frame, scriptSetup: 'pending',
+        pendingWindow: { discard() { calls.push('discard') } }
+    }
+    const url = data.docs.page.url
+
+    data.reloadTab('page')
+    assert.deepEqual(calls.splice(0), ['discard', 'remove'])
+    assert.equal(data.frames.page.pendingLoad, true)
+    assert.equal(data.frames.page.loading, true)
+    assert.equal(data.frames.page.frame, undefined)
+    assert.equal(data.frames.page.scriptSetup, undefined)
+
+    const previousRequest = data.frames.page.reloadRequested
+    Object.assign(data.frames.page, { frame, scriptSetup: 'failed' })
+    data.reloadCurrentTab()
+    assert.deepEqual(calls.splice(0), ['remove'])
+    assert.notEqual(data.frames.page.reloadRequested, previousRequest)
+    assert.equal(data.frames.page.pendingLoad, true)
+    assert.equal(data.docs.page.url, url)
+    assert.equal(data.spaceMeta.activeTabId, 'page')
+
+    data.frames.page.frame = frame
+    data.reloadTab('page')
+    assert.deepEqual(calls.splice(0), ['reload'])
+
+    data.frames.page = { hibernated: Date.now() }
+    data.reloadCurrentTab()
+    assert.equal(data.frames.page.pendingLoad, true)
+    assert.equal(data.isTabHibernated('page'), false)
+    assert.deepEqual(calls, [])
 })
 
 Deno.test('fresh web tabs stay pending until frame creation and hibernation still clears that intent', async () => {

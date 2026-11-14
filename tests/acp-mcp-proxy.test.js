@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import * as acp from '@agentclientprotocol/sdk/unstable'
 import { connectProxy } from '../acp-proxy/bridge.ts'
 import { createMcpGateway } from '../acp-proxy/mcp-gateway.ts'
-import { fileMcpRegistry } from '../acp-proxy/mcp-store.ts'
 import { createBrowserServer } from '../app/lib/acp-browser-server.js'
 import { createMcpConnections } from '../app/lib/mcp-connections.js'
 import { mcpFixture } from './mcp-permissions.test.js'
@@ -162,12 +161,10 @@ Deno.test('MCP URL survives browser reload, disconnect, and proxy restart; only 
         storage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
         fetcher: (...args) => { if (controlOffline) { throw new TypeError('Proxy unreachable') }; return fetch(...args) } })
     let manager = createManager()
-    const directory = new URL(`../.cache/mcp-persistence-${crypto.randomUUID()}/`, import.meta.url)
-    const registry = fileMcpRegistry(new URL('connections.json', directory))
     let gateway
     const http = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, request => gateway.fetch(request))
     const origin = `http://127.0.0.1:${http.addr.port}`
-    gateway = createMcpGateway(origin, registry)
+    gateway = createMcpGateway(origin)
     const runtimes = []
     async function attach() {
         const [browserStream, frontStream] = pair(), [proxyStream, backendStream] = pair()
@@ -223,21 +220,14 @@ Deno.test('MCP URL survives browser reload, disconnect, and proxy restart; only 
         assert.equal(manager.state.connections[0].mcpUrl, first.url)
         assert.equal(manager.state.connections[0].status, 'offline')
         manager = createManager()
-        // Migrate the previous registry format without losing its issued URL or saved grants.
-        const [saved] = registry.load()
-        const legacyPath = `/mcp/${crypto.randomUUID()}`
-        const registryPath = new URL('connections.json', directory)
-        await Deno.writeTextFile(registryPath, JSON.stringify([{ ...saved, path: legacyPath, token: 'obsolete-token' }]))
-        gateway = createMcpGateway(origin, registry)
-        assert(!(await Deno.readTextFile(registryPath)).includes('obsolete-token'))
+        // After restart the stateless proxy learns the saved identity from the browser again.
+        gateway = createMcpGateway(origin)
         assert.equal(manager.state.connections[0].mcpUrl, first.url)
-        await status(first.url, 503)
-        await status(origin + legacyPath, 503)
+        await status(first.url, 404)
         const second = await attach()
         assert.equal(second.url, first.url)
         assert.deepEqual(second.identity, first.identity)
         assert.equal(JSON.parse((await call(first.url, 'readTab', { tabId: 'one' })).result.content[0].text).tabId, 'one')
-        assert.equal(JSON.parse((await call(origin + legacyPath, 'readTab', { tabId: 'one' })).result.content[0].text).tabId, 'one')
         assert.equal(f.pending().length, 0)
         const control = new URL(first.url)
         control.search = ''; control.pathname += '/connection'
@@ -249,7 +239,7 @@ Deno.test('MCP URL survives browser reload, disconnect, and proxy restart; only 
         await second.close()
         await pending
         await waitFor(() => f.pending().length === 0)
-        assert.equal(f.data.reads.length, 3)
+        assert.equal(f.data.reads.length, 2)
         controlOffline = true
         await manager.remove('first')
         assert.equal(manager.state.connections.length, 0)
@@ -260,14 +250,14 @@ Deno.test('MCP URL survives browser reload, disconnect, and proxy restart; only 
         manager.start()
         await waitFor(() => JSON.parse(storage.get('mcpProxyRevocations')).length === 0)
         await status(first.url, 404)
-        await status(origin + legacyPath, 404)
-        gateway = createMcpGateway(origin, registry)
-        await status(first.url, 404)
         await assert.rejects(gateway.expose({}, new acp.McpOverAcpCaller(), { type: 'acp', name: 'old', serverId: 'fake' },
             new AbortController().signal, { name: 'old', version: '' }, first.identity), /removed/)
+        gateway = createMcpGateway(origin)
+        manager = createManager()
+        assert.equal(manager.state.connections.length, 0)
+        await status(first.url, 404)
     } finally {
         for (const runtime of runtimes) { await runtime.close() }
         await http.shutdown()
-        await Deno.remove(directory, { recursive: true }).catch(() => {})
     }
 })

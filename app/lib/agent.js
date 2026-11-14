@@ -7,6 +7,8 @@ import { createBrowserServer } from './acp-browser-server.js'
 export const agent = createAgentClient({
     getSettings: readAcpSettings,
     modelStorage: globalThis.localStorage,
+    conversationStorage: globalThis.localStorage,
+    getConversationKey: () => window.darcWindowId ? `acpConversations:${window.darcWindowId}` : null,
     createBrowserServer: (settings, agentInfo) => createBrowserServer({ connection: mcp.openAcp(settings.mcpConnectionId, agentInfo, settings.endpoint) })
 })
 
@@ -23,5 +25,8 @@ export async function testAgentConnection(settings) {
 }
 
 if (typeof window !== 'undefined') {
-    window.addEventListener('pagehide', () => agent.disconnect())
+    void window.waitForDarcWindowId().then(() => agent.start())
+    window.addEventListener('pagehide', () => agent.suspend())
+    window.addEventListener('pageshow', () => agent.start())
+    window.addEventListener('online', () => agent.start())
 }

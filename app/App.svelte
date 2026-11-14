@@ -1149,6 +1149,7 @@
     }
 
     let tabButtons = $state({})
+    let centerFrameWrappers = $state({})
 
     // Track if initial scroll to active tab has been performed
     let initialScrollPerformed = $state(false)
@@ -1162,11 +1163,11 @@
         const tabLayout = `${visibleLeftPinnedTabs.length}:${visibleRightPinnedTabs.length}:${unpinnedTabCount}`
         const tabLayoutChanged = previousTabLayout !== null && tabLayout !== previousTabLayout
         const activeTabId = data.spaceMeta.activeTabId
-        const activeFrameWrapper = data.frames[activeTabId]?.wrapper
+        const activeFrameWrapper = centerFrameWrappers[activeTabId]
         const activeTab = data.docs[activeTabId]
         // Subscribe to last non-pinned tab's wrapper so effect re-runs when it mounts
         const _lastNonPinnedId = activeTab?.pinned ? data.getLastActiveNonPinnedTabId() : null
-        const _lastNonPinnedWrapper = _lastNonPinnedId ? data.frames[_lastNonPinnedId]?.wrapper : null
+        const _lastNonPinnedWrapper = centerFrameWrappers[_lastNonPinnedId]
 
         if (!activeFrameWrapper && !activeTab?.pinned) {
             return
@@ -1222,7 +1223,7 @@
         if (!initialScrollPerformed && activeTab?.pinned) {
             // When active tab is a sidepin, scroll the last active non-pinned tab into view
             const lastNonPinnedId = data.getLastActiveNonPinnedTabId()
-            const lastNonPinnedWrapper = lastNonPinnedId && data.frames[lastNonPinnedId]?.wrapper
+            const lastNonPinnedWrapper = centerFrameWrappers[lastNonPinnedId]
             if (lastNonPinnedWrapper && scrollContainer) {
                 initialScrollPerformed = true
                 tabChangeFromScroll = true
@@ -1596,7 +1597,7 @@
                         const tab = data.docs[tabId]
                         // Unobserving/removing a frame doesn't cancel already queued callbacks.
                         if (data.ui.tabActivation !== activation || !entry.target.isConnected ||
-                            data.frames[tabId]?.wrapper !== entry.target || !scrollContainer?.contains(entry.target) ||
+                            centerFrameWrappers[tabId] !== entry.target || !scrollContainer?.contains(entry.target) ||
                             tab?.spaceId !== data.spaceMeta.activeSpace || tab?.pinned || tab?.archive) return
                         if (tabChangeFromScroll || pinScrollTimer !== null) {
                             console.log('%c[TAB-DEBUG] IntersectionObserver SKIPPED tab: ' + tabId + ' (tabChangeFromScroll=' + tabChangeFromScroll + ')', 'color: #d946ef; font-weight: bold; font-size: 13px')
@@ -2369,7 +2370,7 @@
         
         // Find the frame that's currently visible in the center
         for (const tab of unpinnedTabs) {
-            const frameWrapper = data.frames[tab.id]?.wrapper
+            const frameWrapper = centerFrameWrappers[tab.id]
             if (frameWrapper) {
                 const frameRect = frameWrapper.getBoundingClientRect()
                 if (frameRect.left <= containerCenterX && frameRect.right >= containerCenterX) {
@@ -2384,7 +2385,7 @@
     function scrollVisibleFrameIntoView() {
         if (!visibleFrameDuringResize || !scrollContainer) return
         
-        const frameWrapper = data.frames[visibleFrameDuringResize]?.wrapper
+        const frameWrapper = centerFrameWrappers[visibleFrameDuringResize]
         if (frameWrapper) {
             // Use a small timeout to ensure the layout has updated
             setTimeout(() => {
@@ -4621,7 +4622,7 @@
                             </div>
                         {/key}
                         
-                        <Frame {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={() => handleFrameBlur(tab.id)} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
+                        <Frame bind:frameWrapper={centerFrameWrappers[tab.id]} {observer} {controlledFrameSupported} tabId={tab.id} {requestedResources} {headerPartOfMain} {isScrolling} onFrameFocus={() => handleFrameFocus(tab.id)} onFrameBlur={() => handleFrameBlur(tab.id)} userMods={getEnabledUserMods(tab)} {statusLightsEnabled} />
                     </div>
                 {/if}
             {/key}

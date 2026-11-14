@@ -1,10 +1,8 @@
-import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 import { AcpServer } from "@agentclientprotocol/sdk/experimental/server";
-import { connectProxy } from "./bridge.ts";
 import { createMcpGateway } from "./mcp-gateway.ts";
-import { fileMcpRegistry } from "./mcp-store.ts";
+import { createOpenCodeAgent } from "./opencode.ts";
 
-const gateway = createMcpGateway("https://localhost:7331", fileMcpRegistry(new URL("./data/mcp-connections.json", import.meta.url)));
+const gateway = createMcpGateway("https://localhost:7331");
 
 // Add a custom Darc origin with: deno task start isolated-app://your-app-id
 const origins = new Set([
@@ -16,51 +14,8 @@ const origins = new Set([
   ...Deno.args,
 ]);
 
-const acp = new AcpServer({
-  createAgent: () => ({
-    connect(stream: Stream) {
-      const child = new Deno.Command("opencode", {
-        args: ["acp"],
-        cwd: new URL("../", import.meta.url),
-        stdin: "piped",
-        stdout: "piped",
-        stderr: "inherit",
-      }).spawn();
-      const stdio = ndJsonStream(child.stdin, child.stdout);
-      let stopping = false;
-      let killTimer: ReturnType<typeof setTimeout> | undefined;
-      const stop = () => {
-        if (stopping) return;
-        stopping = true;
-        try {
-          child.kill("SIGTERM");
-          killTimer = setTimeout(() => {
-            try {
-              child.kill("SIGKILL");
-            } catch { /* Already exited. */ }
-          }, 2000);
-        } catch { /* Already exited. */ }
-      };
-      // Forward raw ACP messages in both directions, including permission replies.
-      // The bridge only adapts browser MCP declarations for HTTP-only agents.
-      const proxy = connectProxy(stream, stdio, gateway);
-      void proxy.closed.then(stop, stop);
-      const exited = child.status.then((status) => {
-        const expected = stopping;
-        stop();
-        clearTimeout(killTimer);
-        if (!expected && !status.success) {
-          console.error(
-            `opencode exited: ${status.code} (${status.signal ?? "no signal"})`,
-          );
-        }
-      });
-      return {
-        closed: Promise.allSettled([proxy.closed, exited]).then(() => {}),
-      };
-    },
-  }),
-});
+const openCode = createOpenCodeAgent(gateway);
+const acp = new AcpServer({ agent: openCode });
 
 const server = Deno.serve(
   {
@@ -105,7 +60,12 @@ const server = Deno.serve(
     }
     let response: Response;
     try {
-      response = url.pathname === "/acp" ? await acp.handleRequest(request) : await gateway.fetch(request);
+      if (url.pathname === "/acp" && request.method === "POST" &&
+        !request.headers.has("Acp-Connection-Id") && openCode.busy) {
+        response = new Response("This proxy already has an ACP client connected", { status: 409 });
+      } else {
+        response = url.pathname === "/acp" ? await acp.handleRequest(request) : await gateway.fetch(request);
+      }
     } catch (error) {
       console.error(error);
       response = new Response("ACP proxy error; see terminal", { status: 502 });

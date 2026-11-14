@@ -2,7 +2,8 @@ import * as acp from '@agentclientprotocol/sdk/unstable'
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server'
 import { timingSafeEqual } from 'node:crypto'
 import { mcpTools } from '../app/lib/mcp-tool-defs.js'
-import type { McpRegistration, McpRegistry } from './mcp-store.ts'
+
+type McpRegistration = { id: string; path: string; ownerKeyHash?: string; deleted?: boolean }
 
 async function keyHash(value: string) {
     const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
@@ -15,12 +16,11 @@ function matches(left: string, right: string) {
 }
 
 // HTTP compatibility terminates here; browser execution and permissions stay on ACP.
-export function createMcpGateway(origin: string, registry?: McpRegistry) {
-    const records = new Map((registry?.load() || []).map(record => [record.id, record]))
+export function createMcpGateway(origin: string) {
+    // The browser owns saved identities. This map only tracks registrations in this process.
+    const records = new Map<string, McpRegistration>()
     const active = new Map<string, Set<{ handler: ReturnType<typeof createMcpHandler>; controller: AbortController }>>()
     function save(record: McpRegistration) {
-        const next = new Map(records).set(record.id, record)
-        registry?.save([...next.values()])
         records.set(record.id, record)
     }
     return {
@@ -85,8 +85,7 @@ export function createMcpGateway(origin: string, registry?: McpRegistry) {
             const url = new URL(request.url)
             const control = url.pathname.endsWith('/connection')
             const path = control ? url.pathname.slice(0, -'/connection'.length) : url.pathname
-            // Retain previously issued paths as aliases when upgrading to /mcp/<connection-id>.
-            const entry = [...records.values()].find(record => record.path === path || `/mcp/${encodeURIComponent(record.id)}` === path)
+            const entry = [...records.values()].find(record => record.path === path)
             if (!entry || entry.deleted) { return new Response('MCP connection removed or not registered; connect Darc to this proxy', { status: 404 }) }
             if (control) {
                 if (request.method !== 'DELETE') { return new Response(null, { status: 405 }) }

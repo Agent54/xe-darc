@@ -2,7 +2,9 @@ import * as acp from '@agentclientprotocol/sdk/unstable'
 import type { Stream } from '@agentclientprotocol/sdk'
 import { createMcpGateway } from './mcp-gateway.ts'
 
-export function connectProxy(stream: Stream, stdio: Stream, gateway: ReturnType<typeof createMcpGateway>) {
+export function connectProxy(stream: Stream, stdio: Stream, gateway: ReturnType<typeof createMcpGateway>, options: {
+    browserOnly?: { cwd: string; configure(url: string): void | Promise<void> }
+} = {}) {
     let front: acp.AgentConnection
     let nativeMcp = false
     let httpMcp = false
@@ -24,8 +26,11 @@ export function connectProxy(stream: Stream, stdio: Stream, gateway: ReturnType<
         })
         .onRequest('*', async ({ method, params, signal }) => {
             const mcpUrls: Record<string, string> = {}
-            if ((method === acp.methods.agent.session.new || method === acp.methods.agent.session.load) &&
+            if ((options.browserOnly || method === acp.methods.agent.session.new || method === acp.methods.agent.session.load) &&
                 params && typeof params === 'object' && 'mcpServers' in params && Array.isArray(params.mcpServers)) {
+                if (options.browserOnly && (params.mcpServers.length > 1 || params.mcpServers.some(server => !acp.isMcpServerAcp(server)))) {
+                    throw acp.RequestError.invalidParams(undefined, 'This proxy accepts only the connected browser MCP server')
+                }
                 const { 'darc/connections': owners, ...meta } = ('_meta' in params ? params._meta || {} : {}) as Record<string, unknown>
                 const identities = owners as Record<string, { id: string; key: string }> | undefined
                 const mcpServers = []
@@ -43,10 +48,20 @@ export function connectProxy(stream: Stream, stdio: Stream, gateway: ReturnType<
                         exported.set(server.serverId, endpoint)
                     }
                     mcpUrls[server.serverId] = endpoint.url
-                    mcpServers.push(nativeMcp ? server : endpoint.declaration)
+                    if (options.browserOnly) {
+                        await options.browserOnly.configure(endpoint.url)
+                        mcpServers.push({ ...endpoint.declaration, name: 'darc' })
+                    } else {
+                        mcpServers.push(nativeMcp ? server : endpoint.declaration)
+                    }
                 }
                 // Owner credentials are for the proxy, never the downstream tool client.
                 params = { ...params, mcpServers, _meta: meta }
+            }
+            if (options.browserOnly && params && typeof params === 'object') {
+                params = { ...params,
+                    ...('cwd' in params ? { cwd: options.browserOnly.cwd } : {}),
+                    ...('additionalDirectories' in params ? { additionalDirectories: [] } : {}) }
             }
             const result = await backend.agent.request(method, params, { cancellationSignal: signal, stopWaitingOnCancel: true })
             if (Object.keys(mcpUrls).length && result && typeof result === 'object') {
