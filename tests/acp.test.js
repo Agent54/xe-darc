@@ -48,6 +48,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
     const sessions = new Map()
     const sessionConfigs = new Map()
     const prompts = []
+    const loads = []
     const calls = []
     const headers = []
     const pendingTurns = new Map()
@@ -84,6 +85,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
         })
         .onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
             assert(sessions.has(params.sessionId))
+            loads.push(params.sessionId)
             sessions.set(params.sessionId, params)
             lastClient = client
             await client.notify(acp.methods.client.session.update, { sessionId: params.sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Replay should not duplicate' } } })
@@ -132,7 +134,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
             await send({ sessionUpdate: 'plan', entries: [{ content: 'Connected', priority: 'medium', status: 'completed' }] })
             return { stopReason: 'end_turn' }
         })
-    const transport = new AcpServer({ agent: app })
+    let transport = new AcpServer({ agent: app })
     const server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, async request => {
         headers.push({ method: request.method, auth: request.headers.get('Authorization') })
         if (request.method === 'OPTIONS') {
@@ -143,7 +145,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
                 'Access-Control-Allow-Headers': 'Content-Type, Authorization, Acp-Connection-Id, Acp-Session-Id'
             } })
         }
-        const response = await transport.handleRequest(request)
+        const response = transport ? await transport.handleRequest(request) : new Response('Backend restarting', { status: 503 })
         const responseHeaders = new Headers(response.headers)
         responseHeaders.set('Access-Control-Allow-Origin', request.headers.get('Origin') || '*')
         responseHeaders.set('Access-Control-Allow-Credentials', 'true')
@@ -151,8 +153,16 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
         return new Response(response.body, { status: response.status, headers: responseHeaders })
     })
     return {
-        endpoint: `http://127.0.0.1:${server.addr.port}/acp`, prompts, calls, sessions, headers,
-        async close() { for (const release of releaseTurns) { release() }; await transport.close(); await server.shutdown() },
+        endpoint: `http://127.0.0.1:${server.addr.port}/acp`, prompts, calls, sessions, headers, loads,
+        async stopBackend() {
+            const closing = transport?.close()
+            transport = null
+            for (const release of releaseTurns) { release() }
+            releaseTurns.clear()
+            await closing
+        },
+        restartBackend() { transport = new AcpServer({ agent: app }) },
+        async close() { await this.stopBackend(); await server.shutdown() },
         async notify(sessionId, update) { await lastClient.notify(acp.methods.client.session.update, { sessionId, update }) }
     }
 }
@@ -172,6 +182,7 @@ async function run() {
     assert(!JSON.stringify(exportableStorage(local)).includes('private-browser-secret'))
     local.setItem('mcpProxyCredentials:connection', '{"key":"owner-secret","url":"https://proxy/mcp/id?token=tool-secret"}')
     local.setItem('mcpProxyRevocations', '[{"key":"owner-secret"}]')
+    local.setItem('acpConversations:window', '{"messages":["private-conversation-secret"]}')
     assert(!JSON.stringify(exportableStorage(local)).includes('secret'))
     const migrated = memoryStorage()
     const oldSession = memoryStorage({ acpBearerToken: 'legacy-token' })
@@ -270,6 +281,62 @@ async function run() {
         await host.close()
     }
 
+    const recoverable = await mockEndpoint()
+    const conversations = memoryStorage()
+    const options = { ...clientOptions, conversationStorage: conversations, getConversationKey: () => 'acpConversations:window',
+        getSettings: () => ({ endpoint: recoverable.endpoint, cwd: '/project', token: 'connection-secret', mcpConnectionId: 'identity' }),
+        reconnectDelay: 10 }
+    let recovering = createAgentClient(options)
+    try {
+        await recovering.submit('keep this conversation', context)
+        await recovering.setConfig('model', 'deep')
+        const original = recovering.state.conversations[0]
+        const interrupted = recovering.submit('wait', context)
+        await until(() => recoverable.prompts.at(-1) === 'wait')
+        await recovering.submit('keep this queued', context)
+        await recoverable.stopBackend()
+        await interrupted
+        await until(() => recovering.state.status !== 'connected')
+        const requests = recoverable.headers.length
+        await until(() => recoverable.headers.length > requests, 'The browser did not retry the unavailable backend')
+        recoverable.restartBackend()
+        await until(() => recovering.state.status === 'connected')
+        assert(recoverable.loads.includes(original.sessionId))
+        assert.equal(recoverable.sessions.size, 1)
+        assert.deepEqual(recoverable.prompts, ['keep this conversation', 'wait'])
+        assert.equal(recovering.state.queuePaused, true)
+        assert.equal(recovering.state.queue[0].text, 'keep this queued')
+        assert(!recovering.state.conversations[0].messages.some(message => message.content.includes('Replay should not duplicate')))
+        assert.equal(recovering.state.conversations[0].configOptions[0].currentValue, 'deep')
+
+        recovering.suspend()
+        const saved = JSON.parse(conversations.getItem('acpConversations:window'))
+        assert.equal(saved.wantConnection, true)
+        assert.equal(saved.conversations[0].sessionId, original.sessionId)
+        const loads = recoverable.loads.length
+        recovering = createAgentClient(options)
+        recovering.start()
+        assert.equal(recovering.state.activeConversationId, original.id)
+        await until(() => recovering.state.status === 'connected')
+        assert.equal(recoverable.loads.length, loads + 1)
+        assert.equal(recoverable.sessions.size, 1)
+        assert.equal(recovering.state.conversations[0].sessionId, original.sessionId)
+        assert.equal(recovering.state.queuePaused, true)
+        assert.deepEqual(recoverable.prompts, ['keep this conversation', 'wait'])
+        await recovering.resumeQueue()
+        assert.equal(recoverable.prompts.at(-1), 'keep this queued')
+        recovering.disconnect()
+        assert.equal(JSON.parse(conversations.getItem('acpConversations:window')).wantConnection, false)
+        const disconnected = createAgentClient(options)
+        disconnected.start()
+        assert.equal(disconnected.state.status, 'disconnected')
+        assert.equal(disconnected.state.conversations[0].sessionId, original.sessionId)
+        disconnected.disconnect()
+    } finally {
+        recovering.disconnect()
+        await recoverable.close()
+    }
+
     const limited = await mockEndpoint({ acpMcp: false, loadSession: false })
     const legacy = memoryStorage({ selectedModel: 'deep' })
     const limitedClient = createAgentClient({ getSettings: () => ({ endpoint: limited.endpoint, cwd: '/', token: '' }), modelStorage: legacy })
@@ -287,7 +354,7 @@ async function run() {
         limitedClient.disconnect()
         await limited.close()
     }
-    console.log('ACP HTTP, MCP-over-ACP discovery, permissions, queue, cancellation, settings, and reconnect tests passed')
+    console.log('ACP HTTP, MCP-over-ACP, permissions, browser persistence, backend restart recovery, queue, and cancellation tests passed')
 }
 
 if (import.meta.main) {

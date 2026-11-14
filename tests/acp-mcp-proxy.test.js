@@ -153,7 +153,7 @@ for (const native of [true, false]) {
     })
 }
 
-Deno.test('MCP URL survives browser reload, disconnect, and proxy restart; only owner removal revokes it', async () => {
+Deno.test('browser-owned MCP URL survives reload and a stateless proxy restart; removal stays browser-owned', async () => {
     const f = await mcpFixture()
     const storage = new Map([['mcpConnections', JSON.stringify([{ ...f.connections.get('first'), windowId: 'window' }])]])
     let controlOffline = false
@@ -223,7 +223,7 @@ Deno.test('MCP URL survives browser reload, disconnect, and proxy restart; only 
         // After restart the stateless proxy learns the saved identity from the browser again.
         gateway = createMcpGateway(origin)
         assert.equal(manager.state.connections[0].mcpUrl, first.url)
-        await status(first.url, 404)
+         await status(first.url, 503)
         const second = await attach()
         assert.equal(second.url, first.url)
         assert.deepEqual(second.identity, first.identity)
@@ -250,12 +250,13 @@ Deno.test('MCP URL survives browser reload, disconnect, and proxy restart; only 
         manager.start()
         await waitFor(() => JSON.parse(storage.get('mcpProxyRevocations')).length === 0)
         await status(first.url, 404)
-        await assert.rejects(gateway.expose({}, new acp.McpOverAcpCaller(), { type: 'acp', name: 'old', serverId: 'fake' },
-            new AbortController().signal, { name: 'old', version: '' }, first.identity), /removed/)
+         await assert.rejects(gateway.expose({}, new acp.McpOverAcpCaller(), { type: 'acp', name: 'old', serverId: 'fake' },
+             new AbortController().signal, { name: 'old', version: '' }, first.identity), /removed/)
         gateway = createMcpGateway(origin)
+        await status(first.url, 503)
         manager = createManager()
         assert.equal(manager.state.connections.length, 0)
-        await status(first.url, 404)
+        assert.throws(() => manager.openAcp('first', { name: 'Test agent' }, `${origin}/acp`), /owned by this window/)
     } finally {
         for (const runtime of runtimes) { await runtime.close() }
         await http.shutdown()

@@ -11,6 +11,7 @@ const source = compileModule(`
     export function observe (state, data, scrollContainer, initial) {
         const openSidebars = new Set()
         const tabButtons = {}
+        const centerFrameWrappers = state.centerFrameWrappers
         const isWindowResizing = false
         const visibleLeftPinnedTabs = $derived(state.leftPins)
         const visibleRightPinnedTabs = $derived(state.rightPins)
@@ -40,7 +41,7 @@ function scrollHarness ({ active = 'one', center = 'one', pinned = [], initial =
         ui: { tabActivation: { tabId: active, source: 'navigation' } },
         spaceMeta: { activeTabId: active },
         docs: Object.fromEntries(['one', 'two', 'pin', 'other-pin'].map(id => [id, { id, pinned: pinned.includes(id) }])),
-        frames: Object.fromEntries(['one', 'two', 'pin', 'other-pin'].map(id => [id, { wrapper: new Wrapper(id) }]))
+        centerFrameWrappers: Object.fromEntries(['one', 'two', 'pin', 'other-pin'].map(id => [id, new Wrapper(id)]))
     })
     const data = { ...state, getLastActiveNonPinnedTabId: () => state.center }
     const container = { style: {}, scrollLeft: 0, getBoundingClientRect: () => ({ left: 0 }) }
@@ -62,7 +63,7 @@ function scrollHarness ({ active = 'one', center = 'one', pinned = [], initial =
                 state.ui.tabActivation = { tabId, source }
             })
         },
-        mount (id) { this.change(() => { state.frames[id].wrapper = new Wrapper(id) }) },
+        mount (id) { this.change(() => { state.centerFrameWrappers[id] = new Wrapper(id) }) },
         advance (ms) {
             for (const [id, timer] of timers) {
                 timer.delay -= ms
@@ -87,7 +88,7 @@ Deno.test('selecting a group pin after startup aligns its group when the center 
     const h = scrollHarness({ pinned: ['pin'] })
     try {
         h.change(state => {
-            state.frames.two.wrapper = null
+            state.centerFrameWrappers.two = null
             state.center = 'two'
             state.spaceMeta.activeTabId = 'pin'
         })
@@ -172,7 +173,7 @@ Deno.test('switching to an equal-sized group waits for its selected tab to mount
     try {
         h.api.fromScroll(true)
         h.activate('two', 'scroll')
-        h.change(state => { state.frames.one.wrapper = null })
+        h.change(state => { state.centerFrameWrappers.one = null })
         h.activate('one')
         assert.equal(h.calls.length, 0)
         h.mount('one')
@@ -185,7 +186,7 @@ Deno.test('unpinning the only tab waits for its center wrapper without scrolling
     try {
         h.change(state => {
             state.docs.pin.pinned = false
-            state.frames.pin.wrapper = null
+            state.centerFrameWrappers.pin = null
         })
         assert.equal(h.calls.length, 0)
         h.mount('pin')
@@ -199,7 +200,7 @@ Deno.test('unpinning a hidden tab during observer suppression realigns after its
         assert.equal(h.api.scrollSuppressed(), true)
         h.change(state => {
             state.docs.pin.pinned = false
-            state.frames.pin.wrapper = null
+            state.centerFrameWrappers.pin = null
         })
         assert.equal(h.calls.length, 0)
         h.mount('pin')
@@ -245,7 +246,8 @@ function visibilityHarness () {
     let nextTimer = 1
     let deliver
     const visibilityTimers = new Map()
-    new Function('onMount', 'IntersectionObserver', 'data', 'scrollContainer', 'visibilityTimers', 'console', 'setTimeout', 'clearTimeout', `
+    const centerFrameWrappers = {}
+    new Function('onMount', 'IntersectionObserver', 'data', 'scrollContainer', 'visibilityTimers', 'centerFrameWrappers', 'console', 'setTimeout', 'clearTimeout', `
         let _observer = null
         let tabChangeFromScroll = false
         let tabChangeFromScrollTimer = null
@@ -254,17 +256,17 @@ function visibilityHarness () {
     `)(
         callback => callback(),
         function (callback) { deliver = callback }, data,
-        { contains: target => targets.has(target) }, visibilityTimers, { log () {} },
+        { contains: target => targets.has(target) }, visibilityTimers, centerFrameWrappers, { log () {} },
         (callback, delay) => { const id = nextTimer++; timers.set(id, { callback, delay }); return id },
         id => timers.delete(id)
     )
     return {
-        data, calls, visibilityTimers,
+        data, calls, visibilityTimers, centerFrameWrappers,
         entry (tabId, intersectionRatio = 0.8) {
             const target = { id: `tab_${tabId}`, isConnected: true }
             targets.add(target)
             data.docs[tabId] = { id: tabId, spaceId: 'space' }
-            data.frames[tabId] = { wrapper: target }
+            centerFrameWrappers[tabId] = target
             return { target, isIntersecting: intersectionRatio > 0, intersectionRatio }
         },
         deliver: entries => deliver(entries),
@@ -299,7 +301,7 @@ Deno.test('detached or replaced group frames cannot reactivate through stale vis
         const entry = h.entry('two')
         h.deliver([entry])
         if (invalidation === 'detached') entry.target.isConnected = false
-        if (invalidation === 'replaced') h.data.frames.two.wrapper = {}
+        if (invalidation === 'replaced') h.centerFrameWrappers.two = {}
         if (invalidation === 'space') h.data.spaceMeta.activeSpace = 'other-space'
         if (invalidation === 'pinned') h.data.docs.two.pinned = 'left'
         h.advance(450)

@@ -43,7 +43,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             state.activeConversationId = state.conversations.some(chat => chat.id === saved.activeConversationId)
                 ? saved.activeConversationId : state.conversations[0]?.id || null
             state.queue = Array.isArray(saved.queue) ? saved.queue.filter(item => state.conversations.some(chat => chat.id === item.conversationId)) : []
-            state.queuePaused = true
+            state.queuePaused = saved.queuePaused === true || state.queue.length > 0
             wantConnection = saved.wantConnection === true
         } catch (error) {
             state.error = `Could not restore ACP conversations: ${error.message}`
@@ -57,7 +57,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         if (!restored || !conversationStorage || !key) { return }
         try {
             conversationStorage.setItem(key, JSON.stringify({ conversations: state.conversations,
-                activeConversationId: state.activeConversationId, queue: state.queue, wantConnection }))
+                activeConversationId: state.activeConversationId, queue: state.queue, queuePaused: state.queuePaused, wantConnection }))
         } catch (error) {
             state.error = `Could not save ACP conversations: ${error.message}`
         }

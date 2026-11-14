@@ -174,7 +174,7 @@ Deno.test('destroying the parked owner releases only its wrapper registration', 
     assert.equal(h.frame.parentNode, h.background)
 })
 
-Deno.test('a new frame at about:blank navigates to the search URL after script setup', async () => {
+Deno.test('a new frame starts the search navigation after script registration completes', async () => {
     const h = harness()
     h.frame.src = 'about:blank'
     h.events.length = 0
@@ -187,27 +187,37 @@ Deno.test('a new frame at about:blank navigates to the search URL after script s
     await setup
     assert.equal(h.frame.src, h.tab.url)
     assert.deepEqual(h.events, [h.tab.url])
+    h.frame.src = 'https://next.example/'
+    finishInjection()
+    await Promise.resolve()
+    assert.deepEqual(h.events, [h.tab.url, 'https://next.example/'])
 })
 
 Deno.test('native popup attachment uses the configured guest instead of navigating away from its opener', async () => {
     const h = harness()
     const attachments = []
-    h.frame.addContentScripts = () => Promise.resolve()
+    let finishInjection
+    h.frame.addContentScripts = () => new Promise(resolve => { finishInjection = resolve })
     h.data.frames.page.pendingWindow = { attach(frame) { attachments.push(frame) } }
     h.setupContentScripts(h.frame)
+    assert.deepEqual(attachments, [])
+    finishInjection()
+    await Promise.resolve()
     await Promise.resolve()
     assert.deepEqual(attachments, [h.frame])
     assert.equal(h.data.frames.page.pendingWindow, undefined)
     assert.equal(h.events.includes(h.tab.url), false)
 })
 
-Deno.test('pending content script setup cannot reload a released frame', async () => {
+Deno.test('pending content script setup cannot attach a released guest', async () => {
     const h = harness()
     let finishInjection
     h.frame.addContentScripts = () => new Promise(resolve => { finishInjection = resolve })
+    h.data.frames.page.pendingWindow = { attach() { h.events.push('attached') } }
     h.setupContentScripts(h.frame)
     h.frame.remove()
     finishInjection()
+    await Promise.resolve()
     await Promise.resolve()
     assert.deepEqual(h.events, ['about:blank', 'remove'])
     assert.equal(h.frame.src, 'about:blank')
@@ -232,29 +242,33 @@ Deno.test('failed script setup blocks the URL and discards an unopened popup', a
     }
 })
 
-Deno.test('content script completion navigates live previews but not closed previews', async () => {
+Deno.test('content script completion attaches live preview guests but not closed ones', async () => {
     for (const closed of [false, true]) {
         const h = harness()
         Object.assign(h.tab, { preview: true, archive: 'preview' })
         let finishInjection
         h.frame.addContentScripts = () => new Promise(resolve => { finishInjection = resolve })
+        h.data.frames.page.pendingWindow = { attach() { h.events.push('attached') } }
         h.setupContentScripts(h.frame)
         if (closed) {
             h.tab.archive = 'closed'
         }
         finishInjection()
         await Promise.resolve()
-        assert.deepEqual(h.events, closed ? [] : [h.tab.url])
+        await Promise.resolve()
+        assert.deepEqual(h.events, closed ? [] : ['attached'])
     }
 })
 
-Deno.test('script completion cannot navigate a replaced frame', async () => {
+Deno.test('script completion cannot attach a replaced guest', async () => {
     const h = harness()
     let finishInjection
     h.frame.addContentScripts = () => new Promise(resolve => { finishInjection = resolve })
+    h.data.frames.page.pendingWindow = { attach() { h.events.push('attached') } }
     h.setupContentScripts(h.frame)
     h.data.frames.page.frame = {}
     finishInjection()
+    await Promise.resolve()
     await Promise.resolve()
     assert.deepEqual(h.events, [])
 })

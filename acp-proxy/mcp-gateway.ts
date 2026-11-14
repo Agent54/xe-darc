@@ -86,7 +86,11 @@ export function createMcpGateway(origin: string) {
             const control = url.pathname.endsWith('/connection')
             const path = control ? url.pathname.slice(0, -'/connection'.length) : url.pathname
             const entry = [...records.values()].find(record => record.path === path)
-            if (!entry || entry.deleted) { return new Response('MCP connection removed or not registered; connect Darc to this proxy', { status: 404 }) }
+            if (entry?.deleted || (!entry && (control || !/^\/mcp\/[^/]+$/.test(path)))) {
+                return new Response('MCP connection removed or not registered', { status: 404 })
+            }
+            // After a restart, only the browser can tell us which saved IDs still exist.
+            if (!entry) { return new Response('Browser MCP connection is offline; reconnect Darc', { status: 503 }) }
             if (control) {
                 if (request.method !== 'DELETE') { return new Response(null, { status: 405 }) }
                 const key = request.headers.get('Authorization')?.replace(/^Bearer /, '') || ''

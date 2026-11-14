@@ -536,6 +536,10 @@ function isRecentlyClosedTab(tab) {
     return tab.type === 'tab' && tab.archive === 'closed' && !tab.lightbox && !tab.preview && !tab._deleted
 }
 
+function isArchivedLightbox(tab) {
+    return tab?.lightbox && !tab._deleted && (tab.archive === 'closed-lightbox' || tab.archive === 'closed')
+}
+
 function applyDocumentUpdate(tabId, update) {
     const tab = docs[tabId]
     if (!['tab', 'tabgroup', 'divider'].includes(tab?.type)) return false
@@ -1249,7 +1253,7 @@ function dismissLightbox(tabId, { rememberForForward = true, restoreWithParent =
     const frameData = frames[tabId]
     const now = Date.now()
     const closing = queueDocumentUpdate(tabId, {
-        archive: 'closed', closed: true, closedAt: now, modified: now, restoreWithParent
+        archive: 'closed-lightbox', closed: true, closedAt: now, modified: now, restoreWithParent
     })
     const descendants = (previews[tabId]?.tabs.slice() || []).map(child =>
         child.lightbox ? dismissLightbox(child.id, { rememberForForward: false }) : closeTab(child.spaceId, child.id, { createReplacement: false }))
@@ -1307,7 +1311,7 @@ function replaceLightbox(parentId, nextId) {
 function reopenLightbox(tabId) {
     const tab = docs[tabId]
     const parent = tab && docs[tab.opener]
-    if (!tab?.lightbox || tab.archive !== 'closed' || !getTabOwner(parent?.id)) return
+    if (!isArchivedLightbox(tab) || !getTabOwner(parent?.id)) return
     replaceLightbox(parent.id, tabId)
     const frame = frames[tabId]?.frame
     const opening = queueDocumentUpdate(tabId, {
@@ -1322,7 +1326,17 @@ function navigateTabHistory(tabId, direction) {
     if (!tab || tab.archive || tab._deleted || !['back', 'forward'].includes(direction)) return false
     const frameData = frames[tab.id]
     const frame = frameData?.frame
-    const navigate = () => frame?.[direction]?.()
+    const navigate = () => {
+        if (typeof frame?.[direction] !== 'function' || frames[tab.id]?.frame !== frame) return
+        const traversal = {}
+        frameData.historyTraversal = traversal
+        return Promise.resolve().then(() => frame[direction]()).then(result => {
+            if (result === false && frameData.historyTraversal === traversal) frameData.historyTraversal = null
+        }, error => {
+            if (frameData.historyTraversal === traversal) frameData.historyTraversal = null
+            throw error
+        })
+    }
     const reportError = error => console.warn('Could not navigate tab history', error)
     if (tab.lightbox && direction === 'back') {
         const back = canGoBack => {
@@ -1334,7 +1348,7 @@ function navigateTabHistory(tabId, direction) {
         return true
     }
     const forward = direction === 'forward' && tab.lightboxForward
-    if (forward && forward.url === (frameData?.committedUrl || tab.url) && docs[forward.id]?.archive === 'closed') {
+    if (forward && forward.url === (frameData?.committedUrl || tab.url) && isArchivedLightbox(docs[forward.id])) {
         const anchor = frameData?.lightboxForwardEntry
         if (anchor && frame?.executeScript) {
             Promise.all([anchor, readFrameHistoryEntry(frame)]).then(([expected, current]) => {
@@ -1347,7 +1361,9 @@ function navigateTabHistory(tabId, direction) {
         return true
     }
     if (typeof frame?.[direction] !== 'function') return false
-    Promise.resolve(navigate()).catch(reportError)
+    const canNavigate = direction === 'back' ? frame.canGoBack : frame.canGoForward
+    Promise.resolve().then(() => canNavigate?.call(frame) ?? true)
+        .then(allowed => allowed && navigate()).catch(reportError)
     return true
 }
 
@@ -1762,8 +1778,9 @@ const data = {
     getTabOwner,
     isLightboxFrameRetained: tabId => {
         const tab = docs[tabId]
-        return tab?.lightbox && tab.archive === 'closed' && docs[tab.opener]?.lightboxForward?.id === tabId
+        return isArchivedLightbox(tab) && docs[tab.opener]?.lightboxForward?.id === tabId
     },
+    clearLightboxForward: tabId => docs[tabId] && clearLightboxForward(docs[tabId]),
     navigateTabHistory,
     dismissLightbox,
     reopenLightbox,
@@ -2526,6 +2543,10 @@ const data = {
 
         if (typeof lightbox !== 'undefined') {
             newProps.lightbox = lightbox
+            if (lightbox && !tab.lightbox) {
+                replaceLightbox(tab.opener, tab.id)
+                newProps.lightboxOpenedAt = Date.now()
+            }
         }
         if (typeof preview !== 'undefined') {
             newProps.preview = preview

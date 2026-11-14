@@ -5,6 +5,7 @@
     import { getTabTitle } from '../lib/tab-title.js'
     import { agent, agentState } from '../lib/agent.js'
     import { captureAgentContext } from '../lib/agent-context.js'
+    import { clickToScroll } from '../lib/click-to-scroll.js'
     import { readAcpSettings } from '../lib/acp-settings.js'
     import { configValues, demoModels, getModelConfig, modelAvatar } from '../lib/agent-models.js'
     import * as smd from 'streaming-markdown'
@@ -591,7 +592,7 @@ The current system demonstrates strong performance and security characteristics.
 	{devModeEnabled}
 >
 	{#snippet children()}
-		<div class="agent-panel">
+		<div class="agent-panel" use:clickToScroll={'.agent-markdown-content, .agent-tool-result, .agent-info-card.tool .agent-info-card-details, .agent-history-dropdown-content, pre, textarea'}>
 		<div class="agent-sticky-header">
 			<div class="agent-header-row">
 				<select class="agent-model-select" aria-label="Conversation" value={selectedHistoryId} disabled={isProcessing} onchange={handleHistoryChange}>
@@ -1332,6 +1333,9 @@ The current system demonstrates strong performance and security characteristics.
 
 <style>
 	.agent-panel { display: flex; flex-direction: column; min-height: 100%; color: #ddd }
+	.agent-panel :global(:is(.agent-markdown-content, .agent-tool-result, .agent-info-card.tool .agent-info-card-details, .agent-history-dropdown-content, pre, textarea):not([data-scroll-active])) {
+		overflow: hidden;
+	}
 	.agent-connection-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px }
 	.agent-connection-row span { flex: 1 }
 	.agent-error, .agent-voice-status, .agent-commands, .agent-plan { font-size: 12px; color: #aaa; padding: 0 20px; overflow-wrap: anywhere }
