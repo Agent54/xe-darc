@@ -491,7 +491,7 @@
         }
         
         console.log('🚨 onloadabort', event)
-        if (!tab) {
+        if (!tab || !data.frames[tab.id] || (data.docs[tab.id]?.archive && data.docs[tab.id].archive !== 'preview')) {
             return
         }
 
@@ -501,6 +501,7 @@
 
         // Load failed, stop loading immediately
         data.frames[tab.id].loading = false
+        data.frames[tab.id].historyTraversal = null
         
         // Check if this is a certificate error
         if (event && event.reason) {
@@ -629,7 +630,9 @@
     function handleLoadStop(tab) {
         // console.log('stopped', {tab})
         // console.log('handleLoadStop', data.frames[tab.id]?.frame?.src)
-        if (!data.frames[tab.id]) return
+        const currentTab = data.docs[tab.id]
+        if (!data.frames[tab.id] || !currentTab || (currentTab.archive && currentTab.archive !== 'preview')) return
+        tab = currentTab
         const wasLoading = data.frames[tab.id].loading
         data.frames[tab.id].loading = false
         
@@ -1260,7 +1263,7 @@ document.addEventListener('input', function(event) {
             
             // Block off-origin main_frame navigations BEFORE they start (more reliable than frame.stop())
             const currentTab = data.docs[tabId]
-            if (requestType === 'main-frame' && currentTab && !currentTab.archive && !isDirectNavigation(url.href, requestId)) {
+            if (requestType === 'main-frame' && currentTab && (!currentTab.archive || currentTab.archive === 'preview') && !isDirectNavigation(url.href, requestId)) {
                 const currentTabUrl = data.frames[tabId]?.committedUrl || currentTab.url
                 if (currentTabUrl) {
                     const currentOrigin = origin(currentTabUrl)
@@ -2296,10 +2299,10 @@ document.addEventListener('input', function(event) {
         let controlledFrame = data.frames[tab.id]?.frame
 
         if (controlledFrame) {
-            frameScreenshots.cancel(controlledFrame)
             const backgroundFrames = document.getElementById('backgroundFrames')
             const anchorFrame = document.getElementById('anchorFrame')
-            if (controlledFrame.parentNode === node) {
+            frameScreenshots.cancel(controlledFrame)
+            if (controlledFrame.parentNode === node && backgroundFrames && anchorFrame) {
                 backgroundFrames.moveBefore(controlledFrame, anchorFrame)
             }
             detached = true

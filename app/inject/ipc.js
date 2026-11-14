@@ -168,8 +168,12 @@ document.addEventListener('keydown', function(event) {
 
 // Global mouse event listeners for controlled frame
 // Capture on window before page handlers can stop the event from reaching document.
-window.addEventListener('click', function(event) {
+window.addEventListener('mousedown', function(event) {
     if (!event.isTrusted) return;
+    const link = event.composedPath().find(node => node.matches?.('a[href], area[href]'));
+    const target = link?.target || document.querySelector?.('base[target]')?.target;
+    const newTabUrl = target?.toLowerCase() === '_blank' && !link?.hasAttribute('download') &&
+        !link?.relList?.contains('opener') && /^https?:/.test(link?.href || '') ? link.href : null;
     console.log(`iwa:click:${tabId}:` + JSON.stringify({
         button: event.button,
         clientX: event.clientX,
@@ -181,7 +185,8 @@ window.addEventListener('click', function(event) {
         metaKey: event.metaKey,
         shiftKey: event.shiftKey,
         detail: event.detail,
-        isTopLevel: window === window.top
+        isTopLevel: window === window.top,
+        ...(newTabUrl ? { newTabUrl } : {})
     }));
 }, { capture: true, passive: true });
 
