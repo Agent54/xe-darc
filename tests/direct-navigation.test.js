@@ -8,7 +8,7 @@ const handlers = parse(source).instance.content.body
     .filter(node => node.type === 'FunctionDeclaration' && names.includes(node.id.name))
     .map(node => source.slice(node.start, node.end)).join('\n')
 
-function navigationHarness({ direct = true, legacy = false, command = false, policy = 'ask' } = {}) {
+function navigationHarness({ direct = true, legacy = false, command = false, policy = 'ask', lightbox = false, linkUrl } = {}) {
     const listeners = {}
     const opened = []
     const navigated = []
@@ -29,7 +29,7 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
                 } }
             } }
     }
-    const tab = { id: 'page', url: frame.src, favicon: 'old' }
+    const tab = { id: 'page', url: frame.src, favicon: 'old', lightbox }
     const data = {
         docs: { page: tab },
         frames: { page: {
@@ -47,9 +47,10 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
         isInternalPage: url => url?.startsWith('about:')
     }
     const noop = () => {}
-    const api = new Function('data', 'tab', 'origin', 'window', 'console', 'setTimeout', `
+    const api = new Function('data', 'tab', 'origin', 'window', 'console', 'setTimeout', 'linkUrl', `
         const tabId = tab.id
         let hoveredLink = null, isCommandKeyDown = ${command}
+        let requestedLinkTab = linkUrl ? { url: linkUrl, expires: Date.now() + 1000 } : null
         const recentlyBlockedUrls = new Map(), BLOCK_DEDUP_TIMEOUT = 2000
         const instantlyCleanupGlobalPreview = () => {}, evaluateSecurityState = () => {}
         const showNetworkAccess = () => {}, showBlockedRequest = () => {}
@@ -67,7 +68,7 @@ function navigationHarness({ direct = true, legacy = false, command = false, pol
             stop: () => handleLoadStop(tab),
             abort: event => handleLoadAbort(tab, event)
         }
-    `)(data, tab, origin, { location: { origin: 'https://browser.example' } }, { log: noop, error: noop }, noop)
+    `)(data, tab, origin, { location: { origin: 'https://browser.example' } }, { log: noop, error: noop }, noop, linkUrl)
     function requestEvent(name, url, { id = 'navigation', type = legacy ? 'main_frame' : 'main-frame', ...extra } = {}) {
         const event = legacy
             ? { url, requestId: id, type, defaultPrevented: false, preventDefault() { this.defaultPrevented = true }, ...extra }
@@ -162,6 +163,44 @@ Deno.test('same-tab popups respect an explicit denial of off-origin navigation',
 
 for (const legacy of [false, true]) {
     const api = legacy ? 'legacy' : 'current'
+
+    Deno.test(`${api} lightbox navigation keeps same-origin and cross-origin commits in the guest`, async () => {
+        const h = navigationHarness({ direct: false, legacy, lightbox: true, policy: 'deny' })
+        for (const url of ['https://original.example/next', 'https://other.example/', 'https://original.example/next']) {
+            assert.equal(h.request(url).cancel, false)
+            h.load(url)
+            h.commitUrl(url)
+            assert.equal(h.tab.url, url)
+        }
+        assert.equal(h.stopped, 0)
+        assert.deepEqual(h.opened, [])
+        assert.equal(h.request('https://google-analytics.com/pixel', { type: 'image' }).cancel, true)
+    })
+
+    Deno.test(`${api} an ordinary new-tab link reuses its lightbox, while popup guests and modifiers are preserved`, () => {
+        const url = 'https://other.example/'
+        for (const [disposition, command, opensTab] of [
+            ['new_foreground_tab', false, false],
+            ['new_background_tab', true, true],
+            ['new_popup', false, true]
+        ]) {
+            const h = navigationHarness({ direct: false, legacy, lightbox: true, command, linkUrl: url })
+            let discarded = false
+            const controller = { discard() { discarded = true } }
+            const event = { targetUrl: url, windowOpenDisposition: disposition, window: controller }
+            h.newWindow(legacy ? event : { newWindow: event })
+            if (opensTab) {
+                assert.equal(h.opened[0].guestWindow, controller)
+                assert.equal(h.opened[0].lightbox, false)
+                assert.equal(discarded, false)
+                if (command) assert.equal(h.opened[0].shouldFocus, false)
+            } else {
+                assert.deepEqual(h.opened, [])
+                assert.deepEqual(h.navigated, [{ id: 'page', url }])
+                assert.equal(discarded, true)
+            }
+        }
+    })
 
     Deno.test(`${api} request API cancels off-origin navigation before opening one lightbox`, async () => {
         const h = navigationHarness({ direct: false, legacy })

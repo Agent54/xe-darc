@@ -20,9 +20,6 @@ export function createMcpGateway(origin: string) {
     // The browser owns saved identities. This map only tracks registrations in this process.
     const records = new Map<string, McpRegistration>()
     const active = new Map<string, Set<{ handler: ReturnType<typeof createMcpHandler>; controller: AbortController }>>()
-    function save(record: McpRegistration) {
-        records.set(record.id, record)
-    }
     return {
         async expose(client: acp.AgentContext, caller: acp.McpOverAcpCaller, declaration: acp.McpServerAcpDeclaration,
             signal: AbortSignal, agentInfo: { name: string; version: string }, identity: { id: string; key: string }) {
@@ -40,7 +37,7 @@ export function createMcpGateway(origin: string) {
                 }
             } else {
                 record = { id, path: `/mcp/${encodeURIComponent(id)}`, ownerKeyHash }
-                save(record)
+                records.set(record.id, record)
             }
             const path = `/mcp/${encodeURIComponent(record.id)}`
             const controller = new AbortController()
@@ -95,7 +92,7 @@ export function createMcpGateway(origin: string) {
                 if (request.method !== 'DELETE') { return new Response(null, { status: 405 }) }
                 const key = request.headers.get('Authorization')?.replace(/^Bearer /, '') || ''
                 if (!entry.ownerKeyHash || !matches(await keyHash(key), entry.ownerKeyHash)) { return new Response('Invalid owner credential', { status: 401 }) }
-                save({ ...entry, deleted: true })
+                records.set(entry.id, { ...entry, deleted: true })
                 for (const binding of active.get(entry.id) || []) { binding.controller.abort() }
                 return new Response(null, { status: 204 })
             }

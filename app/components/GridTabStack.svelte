@@ -3,6 +3,7 @@
   import { onDestroy, tick } from 'svelte'
   import AttachmentImage from './AttachmentImage.svelte'
   import Favicon from './Favicon.svelte'
+  import data from '../data.svelte.js'
   import { createTabGroupPreview, getFaviconWindow, getDefaultGroupTabIndex } from '../lib/tab-group-preview.svelte.js'
 
   let { group, activeTabId, spaceActiveTabId = null, defaultTabId = null, inline = false, onActivate, onClose, onWheel } = $props()
@@ -21,7 +22,8 @@
   const defaultIndex = $derived(getDefaultGroupTabIndex(group.tabs, [activeTabId, spaceActiveTabId, defaultTabId]))
   const selectedIndex = $derived(Math.min(scrubbing ? preview.state.tabIndex : keyboardIndex ?? defaultIndex, group.tabs.length - 1))
   const selectedTab = $derived(group.tabs[selectedIndex])
-  const stackTitle = $derived((!scrubbing && keyboardIndex === null ? group.name : null) || getTabTitle(selectedTab))
+  const shownTab = $derived(data.getDisplayedTab?.(selectedTab.id) || selectedTab)
+  const stackTitle = $derived((shownTab.id === selectedTab.id && !scrubbing && keyboardIndex === null ? group.name : null) || getTabTitle(shownTab))
   const faviconSlots = $derived(group.metadata?.emoji || group.metadata?.favicon ? 2 : 3)
   const faviconProgress = $derived(scrubbing ? preview.state.progress : selectedIndex / Math.max(1, group.tabs.length - 1))
   const faviconWindow = $derived(getFaviconWindow(group.tabs.length, faviconProgress, faviconSlots))
@@ -153,18 +155,19 @@
 
 {#snippet groupCards()}
   {#each group.tabs as tab, index (tab.id)}
+    {@const shown = data.getDisplayedTab?.(tab.id) || tab}
     <div class="dialog-card" class:active={tab.id === activeTabId} class:space-active-tab={tab.id === spaceActiveTabId} data-tab-id={tab.id} use:observePreview>
       <div class="card-header">
-        <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} aria-label="Activate {getTabTitle(tab)}">
-          <span class="tab-favicon">{#if visiblePreviews.has(tab.id)}<Favicon {tab} showButton={false} />{/if}</span>
-          <span class="title-text">{getTabTitle(tab)}</span>
+        <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} aria-label="Activate {getTabTitle(shown)}">
+          <span class="tab-favicon">{#if visiblePreviews.has(tab.id)}<Favicon tab={shown} showButton={false} />{/if}</span>
+          <span class="title-text">{getTabTitle(shown)}</span>
         </button>
         <button class="icon-button close-tab" onmousedown={(event) => { if (event.button === 0) onClose(event, tab, index) }} onclick={(event) => { if (event.detail === 0) onClose(event, tab, index) }} aria-label="Close {getTabTitle(tab)}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
         </button>
       </div>
-      <button class="card-preview" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} onwheel={(event) => onWheel(event, tab, index)} aria-label="Activate {getTabTitle(tab)}">
-        {#if visiblePreviews.has(tab.id)}{@render thumbnail(tab, false)}{/if}
+      <button class="card-preview" onmousedown={(event) => { if (event.button === 0) onActivate(tab, index) }} onclick={(event) => { if (event.detail === 0) onActivate(tab, index) }} onwheel={(event) => onWheel(event, tab, index)} aria-label="Activate {getTabTitle(shown)}">
+        {#if visiblePreviews.has(tab.id)}{@render thumbnail(shown, false)}{/if}
       </button>
     </div>
   {/each}
@@ -193,12 +196,12 @@
   <div class="stack-layer stack-middle" aria-hidden="true"></div>
   <div class="stack-front" class:active={selectedTab.id === activeTabId} class:space-active-tab={selectedTab.id === spaceActiveTabId}>
     <div class="stack-header">
-      <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} aria-label="Activate {getTabTitle(selectedTab)}. Use left and right arrows to browse tabs.">
+      <button class="stack-title" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} aria-label="Activate {getTabTitle(shownTab)}. Use left and right arrows to browse tabs.">
         {@render groupIcon()}
         <span class="group-favicons" class:scrolled={group.tabs.length > faviconWindow.visible && faviconProgress > 0} class:at-end={group.tabs.length <= faviconWindow.visible || faviconProgress === 1} aria-hidden="true" style:width="{faviconWindow.visible * 18}px">
           <span class="group-favicon-track" style:transform="translateX({-faviconWindow.offset * 18}px)">
             {#each group.tabs.slice(faviconWindow.start, faviconWindow.end) as tab (tab.id)}
-              <span class="preview-favicon" class:selected={scrubbing && selectedTab.id === tab.id}><Favicon {tab} showButton={false} /></span>
+              <span class="preview-favicon" class:selected={scrubbing && selectedTab.id === tab.id}><Favicon tab={data.getDisplayedTab?.(tab.id) || tab} showButton={false} /></span>
             {/each}
           </span>
         </span>
@@ -209,9 +212,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6m0-6-7 7M10 20H4v-6m0 6 7-7" /></svg>
       </button>
     </div>
-    <button class="stack-preview" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} onwheel={(event) => onWheel(event, selectedTab, selectedIndex)} aria-label="Activate {getTabTitle(selectedTab)}">
-      {#key selectedTab.id}
-        <span class="preview-image">{@render thumbnail(selectedTab)}</span>
+    <button class="stack-preview" onmousedown={(event) => { if (event.button === 0) onActivate(selectedTab, selectedIndex) }} onclick={(event) => { if (event.detail === 0) onActivate(selectedTab, selectedIndex) }} onkeydown={handleStackKey} onwheel={(event) => onWheel(event, selectedTab, selectedIndex)} aria-label="Activate {getTabTitle(shownTab)}">
+      {#key shownTab.id}
+        <span class="preview-image">{@render thumbnail(shownTab)}</span>
       {/key}
       <span class="scrub-position" aria-hidden="true">{selectedIndex + 1} / {group.tabs.length}</span>
       <span class="scrub-track" aria-hidden="true"><span style:width="{100 / group.tabs.length}%" style:left="{selectedIndex * 100 / group.tabs.length}%"></span></span>

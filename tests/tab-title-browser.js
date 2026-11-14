@@ -41,10 +41,24 @@ await withSidebarFixture('tab-title', async ({ page }) => {
         })
     }
     assert.equal(await page.evaluate(() => window.data.frames['group-two']?.frame), undefined, 'internal new tabs must have their title without a native page frame')
+    await page.evaluate(() => window.flushSync(() => {
+        window.displayedTabs['group-two'] = { id: 'lightbox', title: 'Article in lightbox', url: 'https://other.example/article' }
+    }))
+    assert.deepEqual(await page.$eval('.tab-item-container[data-tab-id="group-two"] .lightbox-tab-title', el => [
+        el.querySelector('.parent-title').textContent, el.querySelector('.page-title').textContent
+    ]), ['New Tab', 'Article in lightbox'])
+    const titles = await page.evaluate(() => ({
+        hovercard: document.querySelector('#title-fixture .hovercard-title').textContent,
+        stack: document.querySelector('#title-fixture .stack-title .title-text').textContent
+    }))
+    assert.deepEqual(titles, { hovercard: 'Article in lightbox', stack: 'Article in lightbox' })
     console.log('Chromium: URL fallback and reactive titles agree across lightbox, hovercard, group members, grid stack, closed tabs and pins')
 }, `
     import LightboxHeader from './app/components/LightboxHeader.svelte'
     import GridTabStack from './app/components/GridTabStack.svelte'
+    data.ui.displayedTabs = {}
+    window.displayedTabs = data.ui.displayedTabs
+    data.getDisplayedTab = id => data.ui.displayedTabs[id] || data.docs[id]
     window.mountTitleFixtures = () => {
         const target = document.createElement('div')
         target.id = 'title-fixture'

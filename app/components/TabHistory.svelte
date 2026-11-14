@@ -10,6 +10,7 @@
     // Extract the target tab ID from the URL hash (about:tabhistory#tabid)
     let targetTabId = $derived(tab?.url?.split('#')[1] || null)
     let targetTab = $derived(targetTabId ? data.docs[targetTabId] : null)
+    const lightboxHistory = $derived(data.getLightboxHistory?.(targetTabId) || [])
     
     // Custom node types
     const nodeTypes = {
@@ -154,6 +155,20 @@
     <div class="tab-history-header">
         <h1 class="page-title">Tab History</h1>
     </div>
+
+    {#if lightboxHistory.length}
+        <ul class="lightbox-history" aria-label="Lightbox history">
+            {#each lightboxHistory as entry (entry.id)}
+                <li>
+                    <button type="button" title={entry.url} disabled={!!targetTab?.archive && entry.lightbox}
+                        onmousedown={(event) => { if (event.button === 0) data.openLightboxHistoryEntry(entry.id) }}
+                        onclick={(event) => { if (event.detail === 0) data.openLightboxHistoryEntry(entry.id) }}>
+                        {entry.lightbox ? 'Reopen' : 'Switch to'} {getTabTitle(entry)}
+                    </button>
+                </li>
+            {/each}
+        </ul>
+    {/if}
     
     {#if targetTab && nodes.length > 0}
         <div class="flow-container">
@@ -202,6 +217,31 @@
         font-weight: 600;
         color: rgba(255, 255, 255, 0.9);
         margin: 0;
+    }
+
+    .lightbox-history {
+        list-style: none;
+        margin: 0;
+        padding: 0 24px 12px;
+        max-height: 35%;
+        overflow: auto;
+    }
+
+    .lightbox-history button {
+        width: 100%;
+        padding: 6px 8px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: left;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: inherit;
+    }
+
+    .lightbox-history button:hover:not(:disabled) {
+        background: rgb(255 255 255 / 10%);
     }
     
     .flow-container {

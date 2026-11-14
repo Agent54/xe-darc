@@ -48,10 +48,10 @@ try {
     `, { filename: `${root}mcp-data.svelte.js`, generate: 'client' }).js.code
     const fixture = compile(`
         <script>
-            import McpConnections from './app/components/McpConnections.svelte'
+            import AcpSettings from './app/components/AcpSettings.svelte'
             import PermissionToasts from './app/components/PermissionToasts.svelte'
         </script>
-        <McpConnections />
+        <AcpSettings />
         <PermissionToasts onOpenResources={()=>{}} />
     `, { filename: `${root}mcp-fixture.svelte`, generate: 'client', css: 'injected' }).js.code
     const { outputFiles } = await build({
@@ -115,6 +115,7 @@ try {
     await page.evaluateOnNewDocument(() => {
         localStorage.clear()
         window.darcWindowId = 'window'
+        window.waitForDarcWindowId = () => Promise.resolve(window.darcWindowId)
     })
     await page.goto(`http://127.0.0.1:${server.addr.port}`, { waitUntil: 'networkidle0' })
     const clickText = async (selector, text) => {
@@ -124,14 +125,14 @@ try {
         }
         throw new Error(`Missing button: ${text}`)
     }
-    await clickText('button', 'Add new MCP connection')
-    await page.click('button[aria-label="Close new MCP connection"]')
-    assert.equal(await page.$('input[aria-label="New MCP connection title"]'), null)
+    await page.click('button[aria-label="Close new agent connection"]')
+    assert.equal(await page.$('input[aria-label="ACP connection name"]'), null)
     const add = async (title, description = '') => {
-        await clickText('button', 'Add new MCP connection')
-        await page.type('input[aria-label="New MCP connection title"]', title)
-        if (description) { await page.type('textarea[aria-label="New MCP connection description"]', description) }
-        await clickText('button', 'Create connection')
+        await clickText('button', 'Add new connection')
+        await page.type('input[aria-label="ACP connection name"]', title)
+        await page.type('input[aria-label="ACP endpoint"]', 'https://agent.example/acp')
+        if (description) { await page.type('textarea[aria-label="ACP connection description"]', description) }
+        await clickText('button', 'Save connection')
         await page.waitForFunction(title => window.mcpState.connections.some(entry => entry.title === title && entry.status === 'ready'), {}, title)
         return page.evaluate(title => window.mcpState.connections.find(entry => entry.title === title), title)
     }
@@ -139,7 +140,12 @@ try {
     assert.equal(first.description, '')
     const second = await add('Other agent', 'Other development agent')
     assert.notEqual(first.endpoint, second.endpoint)
-    const rpc = (connection, name, args = {}) => page.evaluate(({ id, name, args }) => window.mcpCall(id, name, args), { id: connection.id, name, args })
+    assert.equal(await page.$('select[aria-label="Agent MCP connection"]'), null)
+    assert.equal(await page.$$eval('select[aria-label="Saved ACP connection"] option', nodes => nodes.length), 2)
+    const rpc = async (connection, name, args = {}) => {
+        await page.select('select[aria-label="Saved ACP connection"]', connection.id)
+        return page.evaluate(({ id, name, args }) => window.mcpCall(id, name, args), { id: connection.id, name, args })
+    }
     const firstSelector = `[data-mcp-connection-id="${first.id}"]`
     const secondSelector = `[data-mcp-connection-id="${second.id}"]`
     const listing = rpc(first, 'listSpaces')
@@ -174,12 +180,27 @@ try {
     await page.evaluate(() => { window.closeMcp(); window.mcp.start() })
     await page.screenshot({ path: `${output}/connections.png`, fullPage: true })
     assert.deepEqual(errors, [])
-    await clickText(`${secondSelector} button`, 'Remove')
+    await page.select('select[aria-label="Saved ACP connection"]', second.id)
+    // Escape during a delete press cancels the following click.
+    const removeButton = await page.$('button[aria-label="Remove ACP connection"]')
+    await removeButton.evaluate(node => node.scrollIntoView({ block: 'center' }))
+    const box = await removeButton.boundingBox()
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    assert(await page.evaluate(id => window.mcpState.connections.some(entry => entry.id === id), second.id))
+    await page.mouse.down()
+    await page.mouse.move(0, 0)
+    await page.mouse.up()
+    assert(await page.evaluate(id => window.mcpState.connections.some(entry => entry.id === id), second.id))
+    await removeButton.focus()
+    await page.keyboard.press('Enter')
     await page.waitForFunction(id => !window.mcpState.connections.some(entry => entry.id === id), {}, second.id)
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('mcpProxyRevocations') || '[]').length === 0)
     assert.deepEqual(removals, [`/mcp/${second.id}/connection`])
     await page.evaluate(() => window.mcp.stop())
-    console.log('MCP-over-ACP Settings, connection identities, existing permission prompts, scoped reads, isolation, HTML creation, and removal passed')
+    console.log('Unified ACP settings, shared MCP identities, full URL copy, existing permissions, scoped reads, isolation, and removal passed')
 } finally {
     await browser?.close()
     await server?.shutdown()

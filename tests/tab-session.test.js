@@ -193,9 +193,10 @@ const readTopTabsSource = compileModule(`${appTabState}\nexport function readTab
     .replace('export function readTabs', 'function readTabs') + '\nreadTabs'
 
 const hovercardTabState = Deno.readTextFileSync(new URL('../app/components/TabHoverCard.svelte', import.meta.url))
-    .match(/^    const tab = \$derived\(.*$/m)[0]
+    .match(/^    const parent = \$derived\(.*\n    const tab = \$derived\(.*$/m)[0]
 const readHovercardSource = compileModule(`
     export function createHovercardReader () {
+        const isClosedTab = false
         ${hovercardTabState}
         return () => ({ screenshot: tab.screenshot, digest: tab._attachments?.screenshot?.digest })
     }
@@ -2146,6 +2147,78 @@ Deno.test('lightbox visibility survives refreshing a different space', async () 
     await refresh(otherSpace)
     assert.equal(data.previews.parent.lightbox, 'lightbox')
     assert.equal(data.previews.parent.tabs.length, 1)
+})
+
+Deno.test('lightbox history stays out of Recently Closed before and after refresh and restart', async () => {
+    const h = session({ tabs: [tab('parent'), tab('lightbox', defaultSpace, { opener: 'parent', lightbox: true }),
+        tab('legacy', defaultSpace, { opener: 'parent', lightbox: true, archive: 'closed', closedAt: Date.now() })],
+        history: ['parent'], runtime: 'client' })
+    await h.refresh()
+    assert.equal(h.data.spaceMeta.closedTabs.length, 0)
+    const closing = h.data.closeTab(defaultSpace, 'lightbox')
+    assert.equal(h.data.previews.parent.lightbox, null)
+    assert.equal(h.data.spaceMeta.closedTabs.length, 0)
+    await closing
+    await h.refresh(defaultSpace)
+    assert.equal(h.data.spaceMeta.closedTabs.length, 0)
+    const saved = await Promise.all(['parent', 'lightbox', 'legacy'].map(id => h.db.get(id)))
+    const restarted = session({ tabs: saved, history: ['parent'], runtime: 'client' })
+    await restarted.refresh()
+    assert.equal(restarted.data.spaceMeta.closedTabs.length, 0)
+    assert.deepEqual(Array.from(restarted.data.getLightboxHistory('parent'), tab => tab.id).sort(), ['legacy', 'lightbox'])
+    assert.equal(restarted.data.navigateTabHistory('parent', 'forward'), true)
+    assert.equal(restarted.data.previews.parent.lightbox, 'lightbox')
+    assert.equal(restarted.data.spaceMeta.activeTabId, 'parent')
+})
+
+Deno.test('Back navigates the lightbox and dismisses its first entry, and Forward restores the same frame', async () => {
+    const { data, refresh } = session({ tabs: [tab('parent'), tab('lightbox', defaultSpace, { opener: 'parent', lightbox: true })],
+        history: ['parent'], runtime: 'client' })
+    await refresh()
+    const calls = []
+    let index = 1
+    const frame = {
+        canGoBack: async () => index > 0,
+        canGoForward: () => index < 1,
+        back() { index--; calls.push('back') },
+        forward() { index++; calls.push('forward') },
+        setAudioMuted(muted) { calls.push(muted) }
+    }
+    data.frames.lightbox = { frame }
+    const liveFrame = data.frames.lightbox.frame
+    data.frames.parent = { frame: { back() { throw new Error('Parent should not navigate') } } }
+    const settle = () => new Promise(resolve => setTimeout(resolve, 0))
+    data.navigateTabHistory('parent', 'back')
+    await settle()
+    assert.deepEqual(calls, ['back'])
+    assert.equal(data.previews.parent.lightbox, 'lightbox')
+    data.navigateTabHistory('parent', 'back')
+    await settle()
+    assert.equal(data.previews.parent.lightbox, null)
+    assert.equal(data.spaceMeta.closedTabs.length, 0)
+    data.navigateTabHistory('parent', 'forward')
+    assert.equal(data.previews.parent.lightbox, 'lightbox')
+    assert.equal(data.frames.lightbox.frame, liveFrame)
+    data.navigateTabHistory('parent', 'forward')
+    await settle()
+    assert.deepEqual(calls, ['back', true, false, 'forward'])
+})
+
+Deno.test('restoring or refreshing multiple saved lightboxes keeps the latest child and parent tab identity', async () => {
+    const h = session({ tabs: [tab('parent'), tab('newer', defaultSpace, { opener: 'parent', lightbox: true, created: 2 }),
+        tab('older', defaultSpace, { opener: 'parent', lightbox: true, created: 1 })], history: ['parent'], runtime: 'client' })
+    await h.refresh()
+    assert.equal(h.data.previews.parent.lightbox, 'newer')
+    h.data.activate('newer')
+    assert.equal(h.data.spaceMeta.activeTabId, 'parent')
+    await h.emitChange({ ...await h.db.get('older'), title: 'Metadata updated', _rev: '2-test' })
+    await h.refresh(defaultSpace)
+    assert.equal(h.data.previews.parent.lightbox, 'newer')
+    await h.data.closeTab(defaultSpace, 'parent')
+    assert.deepEqual(Array.from(h.data.spaceMeta.closedTabs, tab => tab.id), ['parent'])
+    await h.data.restoreClosedTab('parent')
+    assert.equal(h.data.previews.parent.lightbox, 'newer')
+    assert.equal(h.data.spaceMeta.activeTabId, 'parent')
 })
 
 Deno.test('moving a lightbox from a standalone tab creates a group with that tab', async () => {

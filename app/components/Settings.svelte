@@ -2,7 +2,6 @@
     import RightSidebar from './RightSidebar.svelte'
     import data from '../data.svelte.js'
     import AcpSettings from './AcpSettings.svelte'
-    import McpConnections from './McpConnections.svelte'
     import { readAcpSettings, exportableStorage } from '../lib/acp-settings.js'
     
     let { onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods, switchToActivity, switchToAgent, switchToDevTools, devModeEnabled = false, tabs = [], closed = [] } = $props()
@@ -855,7 +854,6 @@ To import this data back into DARC, use the import function in Settings.
 
 <RightSidebar title="Settings" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
-        <McpConnections />
         <AcpSettings bind:this={acpSettingsPanel} />
 
         <!-- Search Engine Section -->

@@ -38,11 +38,12 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             const saved = JSON.parse(conversationStorage.getItem(key) || 'null')
             if (!saved) { return }
             state.conversations = saved.conversations.filter(chat => typeof chat.id === 'string' && Array.isArray(chat.messages))
-                .map(chat => ({ ...chat, generation: null, loading: false, messages: chat.messages.map(message => ({ ...message,
+                .map(({ context: _context, ...chat }) => ({ ...chat, generation: null, loading: false, messages: chat.messages.map(message => ({ ...message,
                     streaming: false, ...(message.role === 'approval' && message.status === 'pending' ? { status: 'cancelled' } : {}) })) }))
             state.activeConversationId = state.conversations.some(chat => chat.id === saved.activeConversationId)
                 ? saved.activeConversationId : state.conversations[0]?.id || null
-            state.queue = Array.isArray(saved.queue) ? saved.queue.filter(item => state.conversations.some(chat => chat.id === item.conversationId)) : []
+            state.queue = Array.isArray(saved.queue) ? saved.queue.filter(item => state.conversations.some(chat => chat.id === item.conversationId))
+                .map(({ context: _context, ...item }) => item) : []
             state.queuePaused = saved.queuePaused === true || state.queue.length > 0
             wantConnection = saved.wantConnection === true
         } catch (error) {
@@ -75,7 +76,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
 
     function snapshot() {
         return {
-            ...state,
+            ...state, connectionRequested: wantConnection,
             conversations: state.conversations.map(chat => ({ ...chat, messages: chat.messages.map(message => ({ ...message })) })),
             queue: state.queue.map(item => ({ ...item })), approvals: [...state.approvals]
         }
@@ -83,7 +84,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
 
     function publish() {
         // Coalesce storage writes so streaming markdown does not write on every chunk.
-        if (restored && conversationStorage && !saveTimer) { saveTimer = setTimeout(save, 250) }
+        if (restored && conversationStorage) { clearTimeout(saveTimer); saveTimer = setTimeout(save, 250) }
         for (const listener of listeners) {
             listener(snapshot())
         }
@@ -486,7 +487,6 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                 activeTurn = turn
                 try {
                     const peer = await connect()
-                    chat.context = item.context
                     await ensureSession(chat, peer)
                     if (turn.cancelled) {
                         break
@@ -503,7 +503,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                     publish()
                     const result = await peer.agent.request(acp.methods.agent.session.prompt, {
                         sessionId: chat.sessionId,
-                        prompt: [{ type: 'text', text: `Selected Darc browser context:\n${JSON.stringify(item.context)}` }, { type: 'text', text: item.text }]
+                        prompt: [{ type: 'text', text: item.text }]
                     })
                     chat.stopReason = result.stopReason
                     const usage = result.usage
@@ -582,14 +582,14 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                 publish()
             }
         },
-        submit(text, context) {
+        submit(text) {
             if (!text.trim()) {
                 return
             }
             if (!state.activeConversationId) {
                 newConversation()
             }
-            state.queue.push({ id: crypto.randomUUID(), text: text.trim(), context: structuredClone(context), conversationId: state.activeConversationId, paused: false })
+            state.queue.push({ id: crypto.randomUUID(), text: text.trim(), conversationId: state.activeConversationId, paused: false })
             publish()
             return drainQueue()
         },

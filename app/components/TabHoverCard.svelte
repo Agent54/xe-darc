@@ -31,8 +31,9 @@
         availableHeight = null
     } = $props()
 
-    const tab = $derived(data.docs[previewTab.id] || previewTab)
-    const headerFocused = $derived(!isClosedTab && (active ?? tab.id === data.spaceMeta.activeTabId))
+    const parent = $derived(data.docs[previewTab.id] || previewTab)
+    const tab = $derived(isClosedTab ? parent : data.getDisplayedTab?.(parent.id) || parent)
+    const headerFocused = $derived(!isClosedTab && (active ?? parent.id === data.spaceMeta.activeTabId))
     
     const HEADER_HEIGHT = 100
     const SCREENSHOT_HEIGHT = 180
@@ -47,10 +48,10 @@
     }
 
     function activateTab() {
-        if (isClosedTab) return data.restoreClosedTab(tab.id)
-        if (onActivate) return onActivate(tab)
-        if (tab.spaceId && data.spaceMeta.activeSpace !== tab.spaceId) data.activateSpace(tab.spaceId)
-        data.activate(tab.id)
+        if (isClosedTab) return data.restoreClosedTab(parent.id)
+        if (onActivate) return onActivate(parent)
+        if (parent.spaceId && data.spaceMeta.activeSpace !== parent.spaceId) data.activateSpace(parent.spaceId)
+        data.activate(parent.id)
     }
     
     let historyMaxHeight = $derived(() => {
@@ -63,11 +64,11 @@
     })
     
     async function openTabHistory() {
-        const historyTab = await data.newTab(tab.spaceId || data.spaceMeta.activeSpace, {
-            url: `about:tabhistory#${tab.id}`,
-            title: `History - ${getTabTitle(tab)}`,
+        const historyTab = await data.newTab(parent.spaceId || data.spaceMeta.activeSpace, {
+            url: `about:tabhistory#${parent.id}`,
+            title: `History - ${getTabTitle(parent)}`,
             pinned: 'right',
-            groupTabId: tab.id
+            groupTabId: parent.id
         })
         if (historyTab) {
             data.activateSpace(historyTab.spaceId)
@@ -270,17 +271,21 @@
         isLeaf: false
     }] : []
     
-    let historyEntries = $derived([...debugHistoryEntries, ...closedTabEntry])
+    const lightboxHistory = $derived((data.getLightboxHistory?.(parent.id) || []).map(entry => ({
+        ...entry, type: 'lightbox', timestamp: entry.closedAt ?? entry.lightboxOpenedAt,
+        source: { label: entry.lightbox ? 'Lightbox' : 'Moved to tab' }, isLeaf: true
+    })))
+    let historyEntries = $derived([...lightboxHistory, ...debugHistoryEntries, ...closedTabEntry])
 
     let historyLastActiveText = $derived.by(() => {
-        const spaceId = tab.spaceId || data.docs[tab.id]?.spaceId
+        const spaceId = parent.spaceId
         if (!spaceId) return ''
 
-        const lastActiveAt = data.getTabLastActiveAt?.(tab.id, spaceId)
+        const lastActiveAt = data.getTabLastActiveAt?.(parent.id, spaceId)
         const timeAgo = formatRelativeTime(lastActiveAt)
         if (!timeAgo) return ''
 
-        const isCurrentActiveTab = data.spaceMeta.activeTabId === tab.id
+        const isCurrentActiveTab = data.spaceMeta.activeTabId === parent.id
         return isCurrentActiveTab ? `active since ${timeAgo}` : `last active ${timeAgo}`
     })
     
@@ -295,7 +300,7 @@
     // Reset showHistory when tab changes
     let previousTabId = null
     $effect(() => {
-        const tabId = tab.id
+        const tabId = parent.id
         if (previousTabId !== null && previousTabId !== tabId) {
             showHistory = false
             showDelayedElements = false
@@ -514,6 +519,15 @@
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div class="history-actions" onclick={(e) => e.stopPropagation()}>
+                        {#if historyTab.type === 'lightbox' && !isClosedTab}
+                            <button class="history-action-btn" aria-label={`Open ${getTabTitle(historyTab)}`} title={historyTab.lightbox ? 'Reopen lightbox' : 'Switch to tab'}
+                                onmousedown={(e) => { if (e.button === 0) data.openLightboxHistoryEntry(historyTab.id) }}
+                                onclick={(e) => { if (e.detail === 0) data.openLightboxHistoryEntry(historyTab.id) }}>
+                                <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M7 17 17 7M7 7h10v10" />
+                                </svg>
+                            </button>
+                        {/if}
                         <button class="history-action-btn" class:success={copiedEntryId === historyTab.id} onclick={(e) => { e.stopPropagation(); copyUrl(historyTab.url, historyTab.id) }} title="Copy URL">
                             {#if copiedEntryId === historyTab.id}
                                 <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">

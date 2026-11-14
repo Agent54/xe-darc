@@ -1,10 +1,8 @@
 <script>
     import { onMount, tick } from 'svelte'
     import RightSidebar from './RightSidebar.svelte'
-    import data from '../data.svelte.js'
     import { getTabTitle } from '../lib/tab-title.js'
     import { agent, agentState } from '../lib/agent.js'
-    import { captureAgentContext } from '../lib/agent-context.js'
     import { clickToScroll } from '../lib/click-to-scroll.js'
     import { readAcpSettings } from '../lib/acp-settings.js'
     import { configValues, demoModels, getModelConfig, modelAvatar } from '../lib/agent-models.js'
@@ -17,7 +15,6 @@
     } = $props()
 
     let conversation = $state('')
-    let selectedTarget = $state('')
     let hoveredMessageId = $state(null)
     let editingMessageId = $state(null)
     let editingContent = $state('')
@@ -28,41 +25,12 @@
     const chat = $derived($agentState.conversations.find(item => item.id === $agentState.activeConversationId))
     const isProcessing = $derived($agentState.processing || !!chat?.messages.some(message => message.local && message.streaming))
     const queuePaused = $derived($agentState.queuePaused)
-    const target = $derived(selectedTarget || (viewMode === 'canvas' ? 'current-space' : 'current-tab'))
     const selectedHistoryId = $derived($agentState.activeConversationId || 'current')
     const chatHistoryList = $derived($agentState.conversations)
     const modelConfig = $derived(getModelConfig(chat?.configOptions))
     const selectedModel = $derived(modelConfig?.currentValue || demoModel)
-	// Get available targets with actual names in brackets
-	let availableTargets = $derived.by(() => {
-		const currentTabTitle = currentTab ? getTabTitle(currentTab) : 'No active tab'
-		const currentSpaceName = data.spaceMeta.activeSpace
-			? data.spaces[data.spaceMeta.activeSpace]?.name || 'Unnamed Space'
-			: 'No active space'
-
-		return [
-			{
-				id: 'current-tab',
-				name: `Current Tab [${currentTabTitle}]`,
-				type: 'current-tab',
-				description: currentTab ? currentTab.url || 'No URL' : 'No active tab'
-			},
-			{
-				id: 'current-space',
-				name: `Current Space [${currentSpaceName}]`,
-				type: 'current-space',
-				description: data.spaceMeta.activeSpace
-					? `${data.spaces[data.spaceMeta.activeSpace]?.tabs?.filter(tab => tab.type === 'tab').length || 0} tabs`
-					: 'No active space'
-			},
-			{
-				id: 'all-spaces',
-				name: `All Spaces [${Object.keys(data.spaces).length} spaces]`,
-				type: 'all-spaces',
-				description: 'Access all workspaces'
-			}
-		]
-	})
+    const composerOptions = $derived(chat?.configOptions.filter(option => option !== modelConfig) || [])
+    const showLegacyMode = $derived(chat?.modes && !chat?.configOptions.some(option => option.category === 'mode' || option.id === 'mode'))
     const messageQueue = $derived($agentState.queue.map(item => ({ ...item, userMessage: item.text, status: 'queued' })))
     const chatHistory = $derived.by(() => {
         const messages = (chat?.messages || []).map(message => {
@@ -157,7 +125,7 @@
                 showTestMessage()
                 break
             default:
-                agent.submit(text, captureAgentContext(data, target))
+                agent.submit(text)
         }
         input?.focus()
     }
@@ -203,9 +171,14 @@
         const item = messageQueue.find(item => item.id === id)
         if (item) { editingMessageId = id; editingContent = item.userMessage }
     }
-    function editMessage(id) {
+    async function editMessage(id) {
         const message = chat?.messages.find(item => item.id === id && item.role === 'user')
-        if (message) { editingMessageId = id; editingContent = message.content }
+        if (message) {
+            editingMessageId = id
+            editingContent = message.content
+            await tick()
+            document.querySelector('.agent-edit-input')?.focus()
+        }
     }
     function saveQueueItemEdit(id) { agent.updateQueued(id, editingContent); cancelMessageEdit() }
     function saveMessageEdit(id) { agent.editMessage(id, editingContent); cancelMessageEdit() }
@@ -616,42 +589,21 @@ The current system demonstrates strong performance and security characteristics.
 				</select>
 			</div>
 
+			{#if $agentState.connections?.length}
+				<label class="agent-selector-row">Connection
+					<select class="agent-model-select" aria-label="Agent connection" value={$agentState.connectionId} onchange={event => { agent.selectConnection(event.currentTarget.value); connectionError = '' }}>
+						{#each $agentState.connections as connection (connection.id)}<option value={connection.id}>{connection.title}</option>{/each}
+					</select>
+				</label>
+			{/if}
 			<div class="agent-connection-row">
-				<span role="status">{$agentState.status === 'connected' ? $agentState.agentName : $agentState.status === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
-				{#if $agentState.status === 'connected'}
+				<span role="status">{$agentState.status === 'connected' ? $agentState.agentName : $agentState.status === 'connecting' ? 'Connecting…' : $agentState.connectionRequested ? 'Reconnecting…' : 'Disconnected'}</span>
+				{#if $agentState.connectionRequested}
 					<button class="agent-quick-action" onmousedown={() => agent.disconnect()}>Disconnect</button>
 				{:else}
 					<button class="agent-quick-action" disabled={$agentState.status === 'connecting'} onmousedown={connect}>Connect</button>
 				{/if}
 				<button class="agent-quick-action" onmousedown={switchToSettings} aria-label="Configure agent connection">Settings</button>
-			</div>
-			{#each chat?.configOptions.filter(option => option !== modelConfig) || [] as option (option.id)}
-				<label class="agent-selector-row">{option.name}
-					{#if option.type === 'select'}
-						<select class="agent-context-select" aria-label={option.name} value={option.currentValue} disabled={isProcessing} onchange={event => agent.setConfig(option.id, event.currentTarget.value)}>
-							{@render configChoices(option.options)}
-						</select>
-					{:else if option.type === 'boolean'}
-						<input type="checkbox" checked={option.currentValue} disabled={isProcessing} onchange={event => agent.setConfig(option.id, event.currentTarget.checked)} />
-					{/if}
-				</label>
-			{/each}
-			{#if !chat?.configOptions.length && chat?.modes}
-				<label class="agent-selector-row">Mode
-					<select class="agent-context-select" aria-label="Agent mode" value={chat.modes.currentModeId} disabled={isProcessing} onchange={event => agent.setMode(event.currentTarget.value)}>
-						{#each chat.modes.availableModes as mode (mode.id)}<option value={mode.id}>{mode.name}</option>{/each}
-					</select>
-				</label>
-			{/if}
-			<div class="agent-target-selector">
-				<div class="agent-selector-row">
-					<label class="agent-context-label" for="agent-context-select">Context:</label>
-					<select id="agent-context-select" aria-label="Browser context" class="agent-context-select" value={target} onchange={event => { selectedTarget = event.currentTarget.value }}>
-						{#each availableTargets as target}
-							<option value={target.id}>{target.name}</option>
-						{/each}
-					</select>
-				</div>
 			</div>
 		</div>
 
@@ -1018,7 +970,8 @@ The current system demonstrates strong performance and security characteristics.
 									<div class="agent-message-actions" class:visible={hoveredMessageId === message.id}>
 										<button
 											class="agent-action-btn"
-											onmousedown={() => thumbsUp(message.id)}
+											onmousedown={event => { if (event.button === 0) thumbsUp(message.id) }}
+											onclick={event => { if (event.detail === 0) thumbsUp(message.id) }}
 											aria-pressed={message.feedback === 'good'}
 											title="Good response"
 											aria-label="Good response"
@@ -1033,7 +986,8 @@ The current system demonstrates strong performance and security characteristics.
 										</button>
 										<button
 											class="agent-action-btn"
-											onmousedown={() => thumbsDown(message.id)}
+											onmousedown={event => { if (event.button === 0) thumbsDown(message.id) }}
+											onclick={event => { if (event.detail === 0) thumbsDown(message.id) }}
 											aria-pressed={message.feedback === 'poor'}
 											title="Poor response"
 											aria-label="Poor response"
@@ -1048,7 +1002,8 @@ The current system demonstrates strong performance and security characteristics.
 										</button>
 										<button
 											class="agent-action-btn"
-											onmousedown={() => copyMessage(message.id)}
+											onmousedown={event => { if (event.button === 0) copyMessage(message.id) }}
+											onclick={event => { if (event.detail === 0) copyMessage(message.id) }}
 											title="Copy message"
 											aria-label="Copy message"
 										>
@@ -1084,25 +1039,35 @@ The current system demonstrates strong performance and security characteristics.
 												class="agent-edit-input"
 												bind:value={editingContent}
 												placeholder="Edit your message..."
+												aria-label="Edit message"
+												onkeydown={event => { if (event.key === 'Escape') cancelMessageEdit() }}
 												rows="2"
 											></textarea>
 											<div class="agent-edit-actions">
-												<button class="agent-edit-btn save" onmousedown={() => saveMessageEdit(message.id)}>Save</button
+												<button class="agent-edit-btn save" disabled={!editingContent.trim()} onmousedown={() => saveMessageEdit(message.id)} onclick={event => { if (event.detail === 0) saveMessageEdit(message.id) }}>Save</button
 												>
-												<button class="agent-edit-btn cancel" onmousedown={cancelMessageEdit}>Cancel</button>
+												<button class="agent-edit-btn cancel" onmousedown={cancelMessageEdit} onclick={event => { if (event.detail === 0) cancelMessageEdit() }}>Cancel</button>
 											</div>
 										</div>
 									{:else}
 										<div class="agent-message-text">
 											{message.content}
 										</div>
-										{#if message.role === 'user'}<button class="agent-action-btn" disabled={isProcessing} onmousedown={() => editMessage(message.id)} aria-label="Edit displayed message">Edit</button>{/if}
 									{/if}
 								</div>
 								<div class="agent-chat-message-time-row">
 									<div class="agent-chat-message-time">
 										{new Date(message.timestamp).toLocaleTimeString('en-GB')}
 									</div>
+									{#if message.role === 'user' && editingMessageId !== message.id}
+										<div class="agent-message-actions" class:visible={hoveredMessageId === message.id}>
+											<button class="agent-action-btn" disabled={isProcessing} onmousedown={event => { if (event.button === 0) editMessage(message.id) }} onclick={event => { if (event.detail === 0) editMessage(message.id) }} aria-label="Edit displayed message" title="Edit message">
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+													<path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931ZM16.862 4.487 19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+												</svg>
+											</button>
+										</div>
+									{/if}
 								</div>
 							</div>
 						{/if}
@@ -1233,6 +1198,30 @@ The current system demonstrates strong performance and security characteristics.
 		{#if conv}<p class="agent-voice-status" role="status">Voice controls enabled. Voice input is not connected yet.</p>{/if}
 		{#if chat?.commands.length}<p class="agent-commands">{chat.commands.map(command => '/' + command.name).join(' · ')}</p>{/if}
 		<div class="agent-chat-input-container">
+			{#if composerOptions.length || showLegacyMode}
+				<div class="agent-composer-options">
+					{#each composerOptions as option (option.id)}
+						<label class="agent-config-control" title={option.description || option.name}>
+							<span>{option.name}</span>
+							{#if option.type === 'select'}
+								<select class="agent-config-select" aria-label={option.name} value={option.currentValue} disabled={isProcessing} onchange={event => agent.setConfig(option.id, event.currentTarget.value)}>
+									{@render configChoices(option.options)}
+								</select>
+							{:else if option.type === 'boolean'}
+								<input type="checkbox" checked={option.currentValue} disabled={isProcessing} onchange={event => agent.setConfig(option.id, event.currentTarget.checked)} />
+							{/if}
+						</label>
+					{/each}
+					{#if showLegacyMode}
+						<label class="agent-config-control">
+							<span>Mode</span>
+							<select class="agent-config-select" aria-label="Agent mode" value={chat.modes.currentModeId} disabled={isProcessing} onchange={event => agent.setMode(event.currentTarget.value)}>
+								{#each chat.modes.availableModes as mode (mode.id)}<option value={mode.id}>{mode.name}</option>{/each}
+							</select>
+						</label>
+					{/if}
+				</div>
+			{/if}
 			<div class="agent-textarea-container">
 				<textarea
 					class="agent-conversation-input"
@@ -1547,49 +1536,60 @@ The current system demonstrates strong performance and security characteristics.
 		color: rgba(255, 255, 255, 0.9);
 	}
 
-	.agent-target-selector {
-		margin-bottom: 0;
+	.agent-composer-options {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 8px;
 	}
 
-	.agent-selector-row {
+	.agent-config-control {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 6px;
+		min-width: 0;
+		max-width: 100%;
+		padding: 4px 6px 4px 9px;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 7px;
+		background: rgba(255, 255, 255, 0.04);
 	}
 
-	.agent-context-label {
+	.agent-config-control > span {
 		font-size: 10px;
 		font-weight: 500;
-		color: rgba(255, 255, 255, 0.5);
-		text-transform: uppercase;
-		letter-spacing: 0.3px;
-		flex-shrink: 0;
+		color: rgba(255, 255, 255, 0.55);
 	}
 
-	.agent-context-select {
-		background: rgba(255, 255, 255, 0.05);
-		border: 1px solid rgba(255, 255, 255, 0.06);
+	.agent-config-select {
+		color-scheme: dark;
+		background: transparent;
+		border: 1px solid transparent;
 		border-radius: 4px;
-		padding: 4px 8px;
-		color: white;
+		padding: 3px 4px;
+		color: rgba(255, 255, 255, 0.9);
+		font-family: inherit;
 		font-size: 11px;
+		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.2s ease;
-		flex: 1;
 		min-width: 0;
 		max-width: 100%;
 	}
 
-	.agent-context-select:hover,
-	:global(.agent-context-select.hover-xe) {
+	.agent-config-select:hover:not(:disabled) {
 		background: rgba(255, 255, 255, 0.08);
-		border-color: rgba(255, 255, 255, 0.12);
 	}
 
-	.agent-context-select:focus {
-		outline: none;
-		background: rgba(255, 255, 255, 0.08);
-		border-color: rgba(255, 255, 255, 0.12);
+	.agent-config-select:focus-visible,
+	.agent-action-btn:focus-visible {
+		outline: 2px solid rgba(255, 255, 255, 0.65);
+		outline-offset: 2px;
+	}
+
+	.agent-config-select:disabled,
+	.agent-action-btn:disabled {
+		opacity: 0.4;
+		cursor: default;
 	}
 
 	.agent-chat-container {
@@ -1682,11 +1682,14 @@ The current system demonstrates strong performance and security characteristics.
 		display: flex;
 		gap: 4px;
 		opacity: 0;
+		pointer-events: none;
 		transition: opacity 0.2s ease;
 	}
 
-	.agent-message-actions.visible {
+	.agent-message-actions.visible,
+	.agent-message-actions:focus-within {
 		opacity: 1;
+		pointer-events: auto;
 	}
 
 	.agent-action-btn {

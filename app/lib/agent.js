@@ -1,14 +1,12 @@
 import { readable } from 'svelte/store'
 import { createAgentClient } from './acp-client.js'
+import { createAgentConnections } from './agent-connections.js'
 import { mcp } from './mcp-service.js'
-import { readAcpSettings } from './acp-settings.js'
 import { createBrowserServer } from './acp-browser-server.js'
 
-export const agent = createAgentClient({
-    getSettings: readAcpSettings,
-    modelStorage: globalThis.localStorage,
-    conversationStorage: globalThis.localStorage,
-    getConversationKey: () => window.darcWindowId ? `acpConversations:${window.darcWindowId}` : null,
+export const agent = createAgentConnections({
+    storage: globalThis.localStorage, session: globalThis.sessionStorage,
+    getWindowId: () => window.darcWindowId, mcp,
     createBrowserServer: (settings, agentInfo) => createBrowserServer({ connection: mcp.openAcp(settings.mcpConnectionId, agentInfo, settings.endpoint) })
 })
 

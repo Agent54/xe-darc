@@ -35,6 +35,7 @@
     import UrlRenderer from './UrlRenderer.svelte'
     import UrlBar from './UrlBar.svelte'
     import TabHoverCard from './TabHoverCard.svelte'
+    import LightboxTabTitle from './LightboxTabTitle.svelte'
     import TabGroupPreview from './TabGroupPreview.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
     import NewTabMenu from './NewTabMenu.svelte'
@@ -2248,6 +2249,7 @@
                                                 </div>
                                             {/if}
                                         {:else if tab.type === 'tab'}
+                                                {@const displayed = data.getDisplayedTab?.(tab.id)}
                                                 <div class="tab-item-container" class:group-activation-target={groupActivationTarget} class:active={tab.id === data.spaceMeta.activeTabId} class:hibernated={data.isTabHibernated(tab.id)} class:space-active-tab={(typeof data.spaces[spaceId]?.activeTabsOrder?.[0] === 'string' ? data.spaces[spaceId]?.activeTabsOrder?.[0] : data.spaces[spaceId]?.activeTabsOrder?.[0]?.id) === tab.id && spaceId !== data.spaceMeta.activeSpace} class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id} data-tab-id={tab.id}
                                                      role="listitem"
                                                      onmouseenter={(e) => handleTabMouseEnter(tab, e)}
@@ -2268,7 +2270,11 @@
                                                             }
                                                         }}>
                                                         <Favicon {tab} showButton={false} />
-                                                        <span class="tab-title">{getTabTitle(data.docs[tab.id] || tab)}</span>
+                                                        {#if displayed && displayed.id !== tab.id}
+                                                            <LightboxTabTitle parent={data.docs[tab.id] || tab} lightbox={displayed} />
+                                                        {:else}
+                                                            <span class="tab-title">{getTabTitle(data.docs[tab.id] || tab)}</span>
+                                                        {/if}
                                                     </button>
                                                     
                                                     <button class="tab-close" aria-label="Close tab"
@@ -2465,7 +2471,7 @@
                         instantMode={instantHovercardsMode}
                         showDevTools={devModeEnabled}
                         availableHeight={window.innerHeight - hovercardPosition.y - 20}
-                        onDevTools={() => openTabDevTools(data, previewTab.id)}
+                        onDevTools={() => openTabDevTools(data, data.getDisplayedTab?.(previewTab.id)?.id ?? previewTab.id)}
                         {onSettings}
                         onGoBack={() => {
                             activateHovercardTab(previewTab)
@@ -2482,7 +2488,7 @@
                         onReload={() => {
                             activateHovercardTab(previewTab)
                             setTimeout(() => {
-                                data.reloadTab(previewTab.id)
+                                data.reloadTab(data.getDisplayedTab?.(previewTab.id)?.id ?? previewTab.id)
                             }, 50)
                         }}
                         onCloseTab={() => closeHovercardTab(previewTab)}

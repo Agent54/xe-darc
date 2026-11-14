@@ -469,12 +469,13 @@
         if (!info.isTopLevel || !info.url || !frameData || !currentTab || (currentTab.archive && currentTab.archive !== 'preview')) {
             return
         }
-        const traversal = frameData.historyTraversal
+        const traversal = frameData.historyTraversal?.expires >= Date.now()
         frameData.historyTraversal = null
         if (!traversal && frameData.committedUrl && frameData.committedUrl !== info.url) {
             data.clearLightboxForward?.(tab.id)
         }
         frameData.committedUrl = info.url
+        data.rememberLightboxOpeningEntry?.(tab.id)
         if (!data.isInternalPage(info.url)) {
             data.updateTab(tab.id, { lastLoadedAt: Date.now(), ...(currentTab.lightbox ? { url: info.url } : {}) })
         }
@@ -1662,7 +1663,7 @@ document.addEventListener('input', function(event) {
         }
         const handleGuestMessage = (message) => {
             // console.log('consolemessage', event)
-            if (message === null) {
+            if (message === null || data.isLightboxFrameRetained?.(mytab.id)) {
                 return
             }
             
@@ -2164,6 +2165,7 @@ document.addEventListener('input', function(event) {
 
             framesObj.frame = controlledFrame
             framesObj.pendingLoad = false
+            framesObj.lightboxOpeningEntry = null
             framesObj.directNavigation = { urls: [mytab.url.split('#')[0]], requestId: null }
 
             controlledFrame.classList.add('frame-instance')
@@ -2217,8 +2219,8 @@ document.addEventListener('input', function(event) {
             controlledFrame.setZoomMode?.('disabled')
             setupRequestHandler(controlledFrame)
             setupMessageListener(controlledFrame)
-            setupContentScripts(controlledFrame)
             setupContextMenu(controlledFrame)
+            setupContentScripts(controlledFrame)
             // controlledFrame.src = usedUrl
         }
         //  console.log('controlledFrame', controlledFrame, { attached, tab.url, addNode })
@@ -2233,7 +2235,7 @@ document.addEventListener('input', function(event) {
         if (frameRegistration?.owns()) {
             const frameData = frameRegistration.frameData
             frameScreenshots.cancel(frameData.frame)
-            if (!detached && !frameData.forceHibernated && !frameData.promoting) {
+            if (!detached && !frameData.forceHibernated && !frameData.promoting && !data.isLightboxFrameRetained?.(tabId)) {
                 delete data.frames[tabId]
             } else {
                 frameRegistration.destroy()
@@ -2304,8 +2306,8 @@ document.addEventListener('input', function(event) {
             frameScreenshots.cancel(controlledFrame)
             if (controlledFrame.parentNode === node && backgroundFrames && anchorFrame) {
                 backgroundFrames.moveBefore(controlledFrame, anchorFrame)
+                detached = true
             }
-            detached = true
         }
 
         delete data.frames[tab.id]?.wrapper

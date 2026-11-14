@@ -12,6 +12,8 @@
         onExpandFull = null,
         onExpandLightbox = null,
         onNavigate = null,
+        onGoBack = null,
+        onGoForward = null,
         onCollapsePreview = null,
         onSettings = null,
         onClose = null,
@@ -24,7 +26,7 @@
     <div class="lightbox-info">
         <Favicon {tab} showButton={false} />
         <div class="lightbox-urlbar">
-            <UrlBar url={tab.url} tabId={tab.id} {onNavigate} variant="hovercard" showCloseButton={false} showSettingsButton={false} />
+            <UrlBar url={tab.url} tabId={tab.id} {onNavigate} {onGoBack} {onGoForward} variant="hovercard" showCloseButton={false} showSettingsButton={false} />
         </div>
     </div>
     {#if showControls}

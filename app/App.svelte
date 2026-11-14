@@ -23,6 +23,7 @@
     import TabDragIndicator from './components/TabDragIndicator.svelte'
     import TabGroupPreview from './components/TabGroupPreview.svelte'
     import TabHoverCard from './components/TabHoverCard.svelte'
+    import LightboxTabTitle from './components/LightboxTabTitle.svelte'
     import TabContextMenu from './components/TabContextMenu.svelte'
     import NewTabMenu from './components/NewTabMenu.svelte'
     import PinMenu from './components/PinMenu.svelte'
@@ -1385,8 +1386,7 @@
     }
 
     function navigateTabHistory(tabId, direction) {
-        const frame = data.frames[tabId]?.frame
-        if (typeof frame?.[direction] !== 'function') return
+        if (!data.navigateTabHistory(tabId, direction)) return
 
         const tab = data.docs[tabId]
         if (tab && !tabDrag.active && !focusModeEnabled) {
@@ -1415,8 +1415,6 @@
             }, 800)
             startHovercardPositionCheck()
         }
-
-        frame[direction]()
     }
 
     function goBack() {
@@ -1441,7 +1439,7 @@
 
     function reloadActiveTab() {
         if (data.spaceMeta.activeTabId) {
-            const activeTab = data.docs[data.spaceMeta.activeTabId]
+            const activeTab = data.getDisplayedTab(data.spaceMeta.activeTabId)
             if (activeTab) {
                 reloadTab(activeTab)
             }
@@ -1589,6 +1587,14 @@
                 clearTimeout(visibilityTimers.get(tabId))
                 visibilityTimers.delete(tabId)
 
+                const tab = data.docs[tabId]
+                const frame = data.frames[tabId]
+                if (entry.isIntersecting && entry.target.isConnected && centerFrameWrappers[tabId] === entry.target &&
+                    tab?.spaceId === data.spaceMeta.activeSpace && !tab.archive && !tab.pinned && !data.isInternalPage(tab.url) &&
+                    !frame?.frame && !frame?.pendingLoad && !data.isTabHibernated(tabId)) {
+                    data.unhibernate(tabId)
+                }
+
                 if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
                     const activation = data.ui.tabActivation
                     const timer = setTimeout(() => {
@@ -1625,7 +1631,7 @@
                 }
             })
         }, {
-            threshold: 0.6,
+            threshold: [0, 0.6],
             root: scrollContainer
         })
     })
@@ -2149,6 +2155,11 @@
     }
     
     function handleFrameFocus(focusedTabId) {
+        if (focusedTabId) {
+            const owner = data.getTabOwner(focusedTabId)
+            if (!owner) return
+            focusedTabId = owner.id
+        }
         const timeSinceLastActivation = Date.now() - lastTabActivationTime
         // console.log('####### 📍 [TAB-FOCUS] handleFrameFocus called | focusedTabId:', focusedTabId, '| currentActive:', data.spaceMeta?.activeTabId, '| timeSinceLastActivation:', timeSinceLastActivation, 'ms')
         
@@ -3542,6 +3553,7 @@
         <ul class="tab-list tabs" data-group-tab-id={currentGroupTabId} data-single-pin={data.docs[currentGroupTabId]?.pinned === 'normal'} data-space-id={data.spaceMeta.activeSpace} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
                 {@const tab = data.docs[unpinned.id]}
+                {@const displayed = data.getDisplayedTab(tab.id)}
                 {#if tab.type === 'divider'}
                     <li class="tab-divider-container" data-tab-id={tab.id}>
                         <div class="tab-divider-vertical"></div>
@@ -3571,7 +3583,11 @@
                             <div class="favicon-wrapper">    
                                 <Favicon {tab} />
                             </div>
-                            <span class="tab-title">{getTabTitle(tab)}</span>
+                            {#if displayed && displayed.id !== tab.id}
+                                <LightboxTabTitle parent={tab} lightbox={displayed} />
+                            {:else}
+                                <span class="tab-title">{getTabTitle(tab)}</span>
+                            {/if}
                             <button class="close-btn" 
                                     aria-label="Close tab"
                                     onmousedown={() => closeTab(tab, event, true)} 
@@ -4357,7 +4373,7 @@
                                   data.activate(tabId)
                               }
                               setTimeout(() => {
-                                  data.reloadTab(tabId)
+                                  data.reloadTab(data.getDisplayedTab(tabId)?.id ?? tabId)
                               }, 50)
                           }}
                           onCloseTab={() => {
@@ -4370,7 +4386,7 @@
                           }}
                           onDevTools={() => {
                                if (!hoveredTab?.id) return
-                               openTabDevTools(data, hoveredTab.id)
+                               openTabDevTools(data, data.getDisplayedTab(hoveredTab.id)?.id ?? hoveredTab.id)
                            }}
                           onSettings={switchToSettings}
                           onOpenTabHistory={(tabId) => {
@@ -4447,8 +4463,8 @@
                       availableHeight={window.innerHeight - navButtonHovercardPosition.y - 20}
                       onGoBack={() => navigateTabHistory(activeTab.id, 'back')}
                       onGoForward={() => navigateTabHistory(activeTab.id, 'forward')}
-                      onReload={() => data.reloadTab(activeTab.id)}
-                      onDevTools={() => openTabDevTools(data, activeTab.id)}
+                      onReload={() => data.reloadTab(data.getDisplayedTab(activeTab.id)?.id ?? activeTab.id)}
+                      onDevTools={() => openTabDevTools(data, data.getDisplayedTab(activeTab.id)?.id ?? activeTab.id)}
                       onSettings={switchToSettings}
                       onCloseTab={() => {
                           closeTab(activeTab)

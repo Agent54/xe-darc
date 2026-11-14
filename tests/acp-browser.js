@@ -8,6 +8,7 @@ import { mockEndpoint } from './acp.test.js'
 const require = createRequire(import.meta.url)
 const { build } = createRequire(require.resolve('vite'))('esbuild')
 const root = new URL('../', import.meta.url).pathname
+const profile = `${root}.cache/acp-chromium-${crypto.randomUUID()}`
 const app = parse(await Deno.readTextFile(`${root}app/App.svelte`), { modern: true })
 const components = []
 function collectComponents(node) {
@@ -101,7 +102,11 @@ try {
             build.onResolve({ filter: /mcp-service\.js$/ }, () => ({ path: 'mcp-service', namespace: 'mcp-service' }))
             build.onLoad({ filter: /.*/, namespace: 'mcp-service' }, () => ({ contents: `
                 import { readable } from 'svelte/store'
-                export const mcp = { state: { connections: [] } }
+                export const mcp = {
+                    state: { connections: [] }, sync() {},
+                    openAcp(id) { return { name: 'darc', proxyIdentity: { id: 'identity', key: 'owner-key' },
+                        reportAgent() {}, close() {}, setMcpUrl() {}, execute() { throw new Error('Unexpected tool call') } } }
+                }
                 export const mcpState = readable(mcp.state)
             `, resolveDir: root }))
             build.onLoad({ filter: /\.svelte$/ }, async args => ({
@@ -112,11 +117,15 @@ try {
     })
     const bundle = outputFiles[0].text
     server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, request => new Response(
-        new URL(request.url).pathname === '/entry.js' ? bundle : `<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#111;color:#ddd;font:13px sans-serif}#app{height:100vh;width:420px;margin:auto}.w-3{width:12px;height:12px}.w-4{width:16px;height:16px}svg{max-width:16px}</style></head><body><div id="app"></div><script type="module" src="/entry.js"></script></body></html>`,
+        new URL(request.url).pathname === '/entry.js' ? bundle : `<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#111;color:#ddd;font:13px sans-serif}#app{height:100vh;width:420px;max-width:100%;margin:auto}.w-3{width:12px;height:12px}.w-4{width:16px;height:16px}svg{max-width:16px}</style></head><body><div id="app"></div><script type="module" src="/entry.js"></script></body></html>`,
         { headers: { 'Content-Type': new URL(request.url).pathname === '/entry.js' ? 'text/javascript' : 'text/html' } }
     ))
-    browser = await puppeteer.launch({ headless: true, userDataDir: `${root}.cache/acp-chromium`, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+    browser = await puppeteer.launch({ headless: true, userDataDir: profile, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
     const page = await browser.newPage()
+    await page.evaluateOnNewDocument(() => {
+        window.darcWindowId = 'acp-test-window'
+        window.waitForDarcWindowId = () => Promise.resolve(window.darcWindowId)
+    })
     await page.setViewport({ width: 480, height: 850 })
     const errors = []
     const voiceRequests = []
@@ -212,7 +221,7 @@ try {
     assert.equal(await page.$('.agent-markdown.streaming'), null)
     assert.equal(await page.evaluate(() => document.body.textContent.includes('SHOULD NOT APPEAR')), false)
     await button('New')
-    assert.deepEqual(await page.$$eval('#agent-context-select option', nodes => nodes.map(node => node.textContent)), ['Current Tab [Test page]', 'Current Space [Unnamed Space]', 'All Spaces [1 spaces]'])
+    assert.equal(await page.$('select[aria-label="Browser context"]'), null)
     await send('cards')
     await page.waitForSelector('.agent-info-card')
     assert.equal(await page.$$eval('.agent-info-card', cards => cards.length), 23)
@@ -240,6 +249,7 @@ try {
     assert.equal(await page.$('.agent-markdown-message'), null)
     await page.evaluate(() => window.showSettings())
     await page.waitForSelector('input[aria-label="ACP endpoint"]')
+    await page.type('input[aria-label="ACP connection name"]', 'Browser agent')
     await page.type('input[aria-label="ACP endpoint"]', host.endpoint)
     await page.type('input[aria-label="ACP bearer token"]', 'browser-token')
 
@@ -248,7 +258,8 @@ try {
     console.log('ACP connection tested')
     assert.equal(host.sessions.size, 0)
     await button('Save connection')
-    assert.equal(await page.evaluate(() => localStorage.getItem('acpBearerToken')), 'browser-token')
+    assert.equal(await page.evaluate(() => localStorage.getItem('acpBearerToken:' + localStorage.getItem('selectedAcpConnection:' + window.darcWindowId))), 'browser-token')
+    await page.evaluate(() => window.agent.start())
     assert.equal(await page.evaluate(() => sessionStorage.getItem('acpBearerToken')), null)
     await page.evaluate(() => window.showAgent())
     await page.waitForSelector('textarea[aria-label="Message agent"]')
@@ -279,8 +290,27 @@ try {
     assert.equal(await page.$('.agent-approval button'), null)
     assert.equal(host.sessions.size, 1)
     assert.equal(host.prompts.length, 0)
-    await page.click('.agent-selector-row input[type="checkbox"]')
+    await page.click('.agent-config-control input[type="checkbox"]')
     await page.waitForFunction(() => window.agentState.conversations[0].configOptions.find(option => option.id === 'fastMode').currentValue === true)
+    for (const width of [480, 320]) {
+        await page.setViewport({ width, height: 850 })
+        assert.equal(await page.$eval('.agent-composer-options', node => {
+            const input = document.querySelector('textarea[aria-label="Message agent"]').getBoundingClientRect()
+            return [...node.querySelectorAll('select')].every(select => {
+                const rect = select.getBoundingClientRect()
+                return rect.bottom <= input.top && rect.left >= 0 && rect.right <= innerWidth
+            })
+        }), true, 'Settings fit above the composer at narrow and wide sidebar widths')
+    }
+    await page.screenshot({ path: `${root}.cache/acp/composer-narrow.png` })
+    await page.setViewport({ width: 480, height: 850 })
+    await page.select('select[aria-label="Thinking effort"]', 'high')
+    await page.waitForFunction(() => window.agentState.conversations[0].configOptions.find(option => option.id === 'effort').currentValue === 'high')
+    await page.focus('select[aria-label="Mode"]')
+    await page.keyboard.press('Space')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(() => window.agentState.conversations[0].configOptions.find(option => option.id === 'mode').currentValue === 'code')
     await page.select('select[aria-label="Agent model"]', 'deep')
     await page.waitForFunction(() => window.agentState.conversations[0].configOptions[0].currentValue === 'deep')
     await send('hello')
@@ -301,7 +331,20 @@ try {
     await page.hover('.agent-markdown-message')
     await clickInTranscript('button[aria-label="Good response"]')
     await page.waitForFunction(() => window.agentState.conversations[0].messages.find(message => message.role === 'assistant').feedback === 'good')
-    await clickInTranscript('button[aria-label="Edit displayed message"]')
+    const editSelector = 'button[aria-label="Edit displayed message"]'
+    await page.hover('textarea[aria-label="Message agent"]')
+    await page.waitForFunction(selector => getComputedStyle(document.querySelector(selector).parentElement).opacity === '0', {}, editSelector)
+    assert.equal(await page.$eval(editSelector, node => node.closest('.agent-chat-message-content')), null, 'Edit belongs in the footer')
+    await page.hover('.agent-chat-message.user')
+    await page.waitForFunction(selector => getComputedStyle(document.querySelector(selector).parentElement).opacity === '1', {}, editSelector)
+    await clickInTranscript(editSelector)
+    assert.equal(await page.$eval('.agent-edit-input', node => node === document.activeElement), true)
+    await page.keyboard.press('Escape')
+    assert.equal(await page.$('.agent-edit-input'), null)
+    await page.hover('textarea[aria-label="Message agent"]')
+    await page.focus(editSelector)
+    await page.waitForFunction(selector => getComputedStyle(document.querySelector(selector).parentElement).opacity === '1', {}, editSelector)
+    await page.keyboard.press('Enter')
     await page.$eval('.agent-edit-input', node => { node.value = 'Edited display'; node.dispatchEvent(new Event('input', { bubbles: true })) })
     await button('Save')
     assert.equal(await page.evaluate(() => window.agentState.conversations[0].messages.find(message => message.role === 'user').content), 'Edited display')
@@ -378,24 +421,35 @@ try {
     await page.screenshot({ path: `${root}.cache/acp/agent.png`, fullPage: true })
     await page.select('select[aria-label="Agent model"]', 'deep')
     await page.waitForFunction(() => window.agentState.conversations[0].configOptions[0].currentValue === 'deep')
+    const beforeReload = await page.evaluate(() => ({ active: window.agentState.activeConversationId,
+        chats: window.agentState.conversations.map(chat => ({ id: chat.id, sessionId: chat.sessionId,
+            messages: chat.messages.map(message => ({ id: message.id, content: message.content })) })) }))
+    const sessionCount = host.sessions.size
     await page.reload({ waitUntil: 'networkidle0' })
     await page.waitForSelector('input[aria-label="ACP endpoint"]')
     await page.evaluate(() => window.showAgent())
-    await button('Connect')
+    await page.waitForFunction(() => window.agentState.status === 'connected')
     await page.waitForFunction(() => document.querySelector('select[aria-label="Agent model"]')?.value === 'deep')
-    assert.equal(host.sessions.size, 2)
+    assert.equal(host.sessions.size, sessionCount)
+    assert.deepEqual(await page.evaluate(() => ({ active: window.agentState.activeConversationId,
+        chats: window.agentState.conversations.map(chat => ({ id: chat.id, sessionId: chat.sessionId,
+            messages: chat.messages.map(message => ({ id: message.id, content: message.content })) })) })), beforeReload)
+    assert(host.loads.includes(beforeReload.chats.find(chat => chat.id === beforeReload.active).sessionId))
+    await button('Disconnect')
+    await page.waitForFunction(() => !window.agentState.connectionRequested)
     await page.evaluate(() => window.showSettings())
     await page.waitForSelector('input[aria-label="ACP endpoint"]')
     assert.equal(await page.$eval('input[aria-label="ACP endpoint"]', node => node.value), host.endpoint)
     await page.screenshot({ path: `${root}.cache/acp/settings.png`, fullPage: true })
     assert.deepEqual(errors, [])
     assert.deepEqual(voiceRequests, [])
-    console.log('Agent UI, local card and Markdown demos, incremental ACP Markdown, voice toggle, queue, configuration, approvals, and XPath passed')
+    console.log('Agent UI, Markdown streaming, browser-owned session recovery, voice toggle, queue, configuration, approvals, and XPath passed')
 } finally {
     releaseMarkdown.resolve()
     releaseDocument.resolve()
     finishDocument.resolve()
     await browser?.close()
+    await Deno.remove(profile, { recursive: true }).catch(() => {})
     await server?.shutdown()
     await host.close()
 }

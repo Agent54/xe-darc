@@ -24,10 +24,13 @@
         statusLightsEnabled = false,
         controlledFrameSupported = false,
         observer,
-        frameWrapper = $bindable(null)
+        frameWrapper = $bindable()
     } = $props()
 
     const tab = $derived(data.docs[tabId])
+    const lightbox = $derived(data.docs[data.previews[tabId]?.lightbox])
+    const showLiveLightbox = $derived(lightbox && !lightbox.archive && tab && !tab.archive && !data.frames[tabId]?.forceHibernated &&
+        (data.isInternalPage(tab.url) || data.frames[tabId]?.frame || data.frames[tabId]?.pendingLoad || data.spaceMeta.activeTabId === tabId))
 
     function lightboxTransition(node, options) {
         return /* node.parentElement.classList.contains('lightbox-effects')
@@ -120,9 +123,6 @@
         }
     })
     
-    // Instant-hide state for lightboxes (prevents slow close and reactivity loops)
-    const closedLightboxes = $state({})
-    
     // Window dimensions for calculating preview aspect ratio
     let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1200)
     let windowHeight = $state(typeof window !== 'undefined' ? window.innerHeight : 800)
@@ -143,13 +143,6 @@
         }
     }
     
-    // Close lightbox with instant hide (prevents reactivity loops and slow closing)
-    function closeLightbox(spaceId, lightboxId) {
-        if (!lightboxId) return
-        closedLightboxes[lightboxId] = true
-        data.closeTab(spaceId, lightboxId)
-    }
-
     // Function to create off-origin tab (lightbox or normal tab based on command key)
     // FIXME: move to proper place
     function createOffOriginLightbox(url, originalOrigin, targetOrigin, useCommandKey = false) {
@@ -630,8 +623,8 @@
                 data.unhibernate(tab.id)
             }}
         >
-            {#if data.previews[tab._id]?.lightbox && data.docs[data.previews[tab._id].lightbox]}
-                {@const lbTab = data.docs[data.previews[tab._id].lightbox]}
+            {#if lightbox && !showLiveLightbox}
+                {@const lbTab = lightbox}
                 <div class="hibernated-lightbox-preview">
                     {#if tab.screenshot}
                         <AttachmentImage src={tab.screenshot} digest={tab._attachments?.screenshot?.digest} alt="" class="hibernated-lightbox-bg" lazy={true} />
@@ -964,8 +957,9 @@
             {/key}
         {/if}
 
-        {#if data.previews[tab._id] && data.docs[data.previews[tab._id]?.lightbox] && !closedLightboxes[data.previews[tab._id]?.lightbox]}
-            {@const lightboxChild = data.docs[data.previews[tab._id].lightbox]}
+    {/if}
+
+    {#each showLiveLightbox ? [lightbox] : [] as lightboxChild (lightboxChild.id)}
             <!-- Remove lightbox-effects to compare the simpler fade without blur. -->
             <div 
                 class="lightbox-backdrop lightbox-effects"
@@ -983,12 +977,13 @@
                 }}
                 onmousedown={(e) => {
                     if (e.target === e.currentTarget) {
-                        closeLightbox(tab.spaceId, lightboxChild?._id)
+                        data.dismissLightbox(lightboxChild?.id)
                     }
                 }}
                 onkeydown={(e) => {
-                    if (e.key === 'Escape') {
-                        closeLightbox(tab.spaceId, lightboxChild?._id)
+                    if (e.key === 'Escape' && !e.defaultPrevented) {
+                        e.stopPropagation()
+                        data.dismissLightbox(lightboxChild?.id)
                     }
                 }}
             >
@@ -1000,7 +995,9 @@
                         onExpandFull={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { closeParent: true })}
                         onCollapsePreview={() => data.promoteLightboxToTab(lightboxChild?._id, tab._id, { toPreview: true })}
                         onSettings={() => {}}
-                        onClose={() => closeLightbox(tab.spaceId, lightboxChild?._id)}
+                        onClose={() => data.dismissLightbox(lightboxChild?.id)}
+                        onGoBack={() => data.navigateTabHistory(lightboxChild?.id, 'back')}
+                        onGoForward={() => data.navigateTabHistory(lightboxChild?.id, 'forward')}
                     />
                     <div class="lightbox-frame">
                         {#key lightboxChild?.id}
@@ -1010,8 +1007,8 @@
                                 class="lightbox-controlledframe"
                                 tabId={lightboxChild?.id}
                                 {headerPartOfMain}
-                                {onFrameFocus}
-                                {onFrameBlur}
+                                onFrameFocus={() => onFrameFocus(tabId)}
+                                onFrameBlur={() => onFrameBlur(tabId)}
                                 {userMods}
                                 {statusLightsEnabled}
                                 bind:hoveredLink
@@ -1025,8 +1022,7 @@
                     </div>
                 </div>
             </div>
-        {/if}
-    {/if}
+    {/each}
 </div>
 
 <style>

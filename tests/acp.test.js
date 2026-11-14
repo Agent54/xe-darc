@@ -3,7 +3,6 @@ import * as acp from '@agentclientprotocol/sdk/unstable'
 import { AcpServer } from '@agentclientprotocol/sdk/experimental/server'
 import { createAgentClient } from '../app/lib/acp-client.js'
 import { createBrowserServer } from '../app/lib/acp-browser-server.js'
-import { captureAgentContext } from '../app/lib/agent-context.js'
 import { pageContentScript } from '../app/lib/page-content.js'
 import { clearProviderSettings, readAcpModelPreference, readAcpSettings, saveAcpSettings, exportableStorage, validateAcpSettings } from '../app/lib/acp-settings.js'
 
@@ -58,7 +57,13 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
         { id: 'model', name: 'Agent model', category: 'model', type: 'select', currentValue: 'fast', options: [
             { group: 'recommended', name: 'Recommended', options: [{ value: 'fast', name: 'Claude Haiku' }, { value: 'deep', name: 'OpenAI O3' }] }
         ] },
-        { id: 'fastMode', name: 'Fast mode', type: 'boolean', currentValue: false }
+        { id: 'fastMode', name: 'Fast mode', type: 'boolean', currentValue: false },
+        { id: 'effort', name: 'Thinking effort', category: 'thought_level', type: 'select', currentValue: 'medium', options: [
+            { value: 'medium', name: 'Medium' }, { value: 'high', name: 'High' }
+        ] },
+        { id: 'mode', name: 'Mode', category: 'mode', type: 'select', currentValue: 'ask', options: [
+            { value: 'ask', name: 'Ask' }, { value: 'code', name: 'Code' }
+        ] }
     ]
     const app = acp.agent({ name: 'mock-agent', version: '1' })
         .onRequest(acp.methods.agent.initialize, ({ params }) => {
@@ -71,7 +76,9 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
         })
         .onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
             for (const server of params.mcpServers.filter(server => server.type === 'acp')) {
-                assert.deepEqual(params._meta['darc/connections'][server.serverId], { id: 'identity', key: 'owner-key' })
+                const identity = params._meta['darc/connections'][server.serverId]
+                assert.equal(typeof identity.id, 'string')
+                assert.equal(typeof identity.key, 'string')
                 const tools = await new acp.McpOverAcpCaller().request(client, server.serverId, 'tools/list')
                 assert.equal(tools.result.tools.length, 9)
             }
@@ -81,7 +88,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
             lastClient = client
             await beforeSessionResponse?.({ sessionId, client })
             return { sessionId, configOptions: config, _meta: { 'darc/mcpUrls': Object.fromEntries(params.mcpServers
-                .filter(server => server.type === 'acp').map(server => [server.serverId, 'https://proxy.example/mcp/identity'])) } }
+                .filter(server => server.type === 'acp').map(server => [server.serverId, `https://proxy.example/mcp/${params._meta['darc/connections'][server.serverId].id}`])) } }
         })
         .onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
             assert(sessions.has(params.sessionId))
@@ -101,6 +108,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
         .onNotification(acp.methods.agent.session.cancel, ({ params }) => pendingTurns.get(params.sessionId)?.())
         .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
             const text = params.prompt.at(-1).text
+            assert.deepEqual(params.prompt, [{ type: 'text', text }], 'Prompts must not inject browser context')
             prompts.push(text)
             const sessionId = params.sessionId
             const send = update => client.notify(acp.methods.client.session.update, { sessionId, update })
@@ -168,6 +176,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
 }
 
 async function run() {
+    globalThis.window = { darcWindowId: 'acp-test-window' }
     const local = memoryStorage({ selectedAiProvider: 'anthropic', aiToken_anthropic: 'old-secret', selectedModel: 'old-model' })
     const session = memoryStorage()
     clearProviderSettings(local)
@@ -194,9 +203,6 @@ async function run() {
     assert.throws(() => validateAcpSettings({ endpoint: 'https://user:secret@agent.example', cwd: '/', token: '' }))
     assert.throws(() => validateAcpSettings({ endpoint: 'https://agent.example', cwd: 'relative', token: '' }))
 
-    const data = browserData()
-    const context = captureAgentContext(data)
-    assert.deepEqual(context.tabs.map(tab => tab.id), ['page'])
     const script = pageContentScript({ selector: '//p[contains(., "quoted")]' })
     assert(script.includes('document.evaluate'))
     new Function(script)
@@ -215,7 +221,7 @@ async function run() {
         assert.equal(client.state.queuePaused, false)
         await client.connect()
         assert.equal(client.state.agentName, 'Mock agent')
-        await Promise.all([client.prepareConversation(), client.submit('hello', context)])
+        await Promise.all([client.prepareConversation(), client.submit('hello')])
         assert.equal(host.sessions.size, 1)
         const chatId = client.state.activeConversationId
         const chat = () => client.state.conversations.find(chat => chat.id === chatId)
@@ -232,7 +238,7 @@ async function run() {
         assert.equal(readAcpModelPreference(host.endpoint, local), 'deep')
         assert.equal(readAcpModelPreference('https://other-agent.example/acp', local), null)
 
-        const permission = client.submit('permission', context)
+        const permission = client.submit('permission')
         await until(() => client.state.approvals.length > 0)
         client.answer(client.state.approvals[0].id, 'opaque-allow-83')
         await permission
@@ -240,9 +246,9 @@ async function run() {
         assert.equal(chat().messages.find(message => message.role === 'approval').status, 'approved')
         assert.equal(client.state.approvals.length, 0)
 
-        const waiting = client.submit('wait', context)
+        const waiting = client.submit('wait')
         await until(() => host.prompts.at(-1) === 'wait')
-        const queued = client.submit('queued', context)
+        const queued = client.submit('queued')
         assert.equal(client.state.queue.length, 1)
         await new Promise(resolve => setTimeout(resolve, 20))
         assert.equal(host.prompts.at(-1), 'wait')
@@ -255,11 +261,11 @@ async function run() {
 
         const before = chat().messages.length
         client.disconnect()
-        await client.submit('after reconnect', context)
+        await client.submit('after reconnect')
         assert(!chat().messages.some(message => message.content.includes('Replay should not duplicate')))
         assert(chat().messages.length > before)
 
-        const lost = client.submit('wait', context)
+        const lost = client.submit('wait')
         await until(() => host.prompts.at(-1) === 'wait')
         client.disconnect()
         await lost
@@ -269,7 +275,7 @@ async function run() {
 
         const restarted = createAgentClient(clientOptions)
         try {
-            await restarted.submit('first prompt after restart', context)
+            await restarted.submit('first prompt after restart')
             const [newChat] = restarted.state.conversations
             assert.equal(newChat.configOptions[0].currentValue, 'deep')
             assert.equal(newChat.messages.find(message => message.role === 'assistant').model, 'deep')
@@ -288,12 +294,12 @@ async function run() {
         reconnectDelay: 10 }
     let recovering = createAgentClient(options)
     try {
-        await recovering.submit('keep this conversation', context)
+        await recovering.submit('keep this conversation')
         await recovering.setConfig('model', 'deep')
         const original = recovering.state.conversations[0]
-        const interrupted = recovering.submit('wait', context)
+        const interrupted = recovering.submit('wait')
         await until(() => recoverable.prompts.at(-1) === 'wait')
-        await recovering.submit('keep this queued', context)
+        await recovering.submit('keep this queued')
         await recoverable.stopBackend()
         await interrupted
         await until(() => recovering.state.status !== 'connected')
@@ -332,6 +338,11 @@ async function run() {
         assert.equal(disconnected.state.status, 'disconnected')
         assert.equal(disconnected.state.conversations[0].sessionId, original.sessionId)
         disconnected.disconnect()
+        const otherWindow = createAgentClient({ ...options, getConversationKey: () => 'acpConversations:other-window' })
+        otherWindow.start()
+        assert.equal(otherWindow.state.conversations.length, 0)
+        assert.equal(otherWindow.state.connectionRequested, false)
+        otherWindow.disconnect()
     } finally {
         recovering.disconnect()
         await recoverable.close()
@@ -341,13 +352,13 @@ async function run() {
     const legacy = memoryStorage({ selectedModel: 'deep' })
     const limitedClient = createAgentClient({ getSettings: () => ({ endpoint: limited.endpoint, cwd: '/', token: '' }), modelStorage: legacy })
     try {
-        await limitedClient.submit('chat only', context)
+        await limitedClient.submit('chat only')
         assert.deepEqual([...limited.sessions.values()][0].mcpServers, [])
         assert.equal(limitedClient.state.conversations[0].configOptions[0].currentValue, 'deep')
         assert.equal(legacy.getItem('selectedModel'), null)
         assert.equal(readAcpModelPreference(limited.endpoint, legacy), 'deep')
         limitedClient.disconnect()
-        await limitedClient.submit('cannot resume', context)
+        await limitedClient.submit('cannot resume')
         assert(limitedClient.state.error.includes('Start a new conversation'))
         assert.equal(limited.prompts.length, 1)
     } finally {

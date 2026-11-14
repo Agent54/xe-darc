@@ -234,9 +234,16 @@ function visibilityHarness () {
     const timers = new Map()
     const targets = new Set()
     const calls = []
+    const loads = []
     const data = {
         ui: { tabActivation: { tabId: 'one', source: 'navigation' } },
         spaceMeta: { activeSpace: 'space', activeTabId: 'one' }, docs: {}, frames: {},
+        isInternalPage: url => url?.startsWith('about:'),
+        isTabHibernated: tabId => !!data.frames[tabId]?.hibernated,
+        unhibernate (tabId) {
+            loads.push(tabId)
+            this.frames[tabId] = { pendingLoad: true }
+        },
         activate (tabId, { source = 'navigation' } = {}) {
             calls.push({ tabId, source })
             this.spaceMeta.activeTabId = tabId
@@ -261,11 +268,11 @@ function visibilityHarness () {
         id => timers.delete(id)
     )
     return {
-        data, calls, visibilityTimers, centerFrameWrappers,
+        data, calls, loads, visibilityTimers, centerFrameWrappers,
         entry (tabId, intersectionRatio = 0.8) {
             const target = { id: `tab_${tabId}`, isConnected: true }
             targets.add(target)
-            data.docs[tabId] = { id: tabId, spaceId: 'space' }
+            data.docs[tabId] = { id: tabId, spaceId: 'space', url: 'https://example.com/' }
             centerFrameWrappers[tabId] = target
             return { target, isIntersecting: intersectionRatio > 0, intersectionRatio }
         },
@@ -279,10 +286,15 @@ function visibilityHarness () {
     }
 }
 
-Deno.test('visibility activation is marked as scroll-origin and releases its pending callback', () => {
+Deno.test('visible unopened tabs start loading before delayed scroll activation', () => {
     const h = visibilityHarness()
-    h.deliver([h.entry('two')])
+    const entry = h.entry('two', 0.2)
+    h.deliver([entry])
+    assert.deepEqual(h.loads, ['two'])
+    assert.deepEqual(h.calls, [])
+    h.deliver([{ ...entry, intersectionRatio: 0.8 }])
     h.advance(450)
+    assert.deepEqual(h.loads, ['two'])
     assert.deepEqual(h.calls, [{ tabId: 'two', source: 'scroll' }])
     assert.equal(h.visibilityTimers.size, 0)
 })

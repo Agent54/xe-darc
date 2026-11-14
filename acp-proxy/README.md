@@ -85,7 +85,9 @@ OpenCode's database, login, cache, config, logs, and temporary files live in
 `data/opencode/`. This is why the start/login tasks need `--allow-write=./data`.
 This directory stores OpenCode runtime data, not a proxy connection registry;
 saved connection identities and permissions remain browser-owned. Reconnects
-retain OpenCode's database/login. Session recovery depends on OpenCode's persistence.
+retain OpenCode's database/login. Darc retains session IDs and transcripts in browser
+storage and reloads sessions after reconnecting. OpenCode must support loading
+those sessions; the proxy does not store agent state or replay interrupted prompts.
 
 ## Browser MCP compatibility
 
@@ -114,13 +116,17 @@ endpoint and credentials for reconnect. Removing the browser connection in Darc
 revokes its endpoint and saved permissions. Offline removals are saved locally and
 retried when Darc starts or reconnects. No automatic time limit is applied.
 HTTP tool requests use the connection ID in the URL and the same host/origin checks
-as `/acp`. The proxy keeps registrations only in memory. After a proxy restart,
-Darc registers its saved identity again to restore the same URL.
+as `/acp`. The browser owns the saved connection IDs, URLs, credentials, permissions,
+and ACP sessions. The proxy keeps registrations and routing state only in memory:
+no connection file or disk-write permission is needed for these registrations.
+It ignores any old `data/mcp-connections.json`.
+After restart, Darc reconnects and registers the same saved IDs. Removing an identity
+from Darc removes its grants and prevents the browser from registering it again.
 The browser retains its owner key for reconnect and removal; tool clients need
 only the URL. ACP connection settings and their bearer token are also
 saved until changed or removed.
 There is no additional MCP tool token or Authorization header. Old saved token
-fields are removed during migration.
+fields are removed from browser storage during migration.
 
 Darc supplies its saved connection identity in `darc/connections` metadata when
 opening or loading a session. The proxy requires this identity and uses its ID
@@ -159,9 +165,12 @@ curl --cacert ../certs/rootCA.pem "$MCP_URL" \
 Darc shows a permission request. **Allow once** returns the spaces; **Deny** returns
 a tool error. Disconnecting ACP makes the same URL return **503 (offline)**.
 Reconnect and repeat the command with the original URL: it works again without
-copying a new URL. Restarting the proxy also preserves the URL; reconnect Darc
-to bring browser tools online. Removing the connection revokes it with **404**.
-An unknown or not-yet-registered connection ID also returns **404**.
+copying a new URL. Restarting the proxy also preserves the URL in the browser;
+Darc reconnects automatically to bring browser tools online. Removing the connection
+revokes its current proxy registration with **404**. A fresh proxy returns **503**
+for an unregistered MCP URL until the browser supplies a live registration; it has
+no stored connection list or deletion history. Removed browser connections are not
+registered again and cannot execute tools.
 Discovery alone needs no browser-data permission and does not prove a tool ran.
 
 For the automated native/fallback permission and URL tests, run from the repo root:

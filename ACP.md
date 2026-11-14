@@ -13,8 +13,10 @@ Test connection initializes ACP without creating a conversation or sending a pro
 Endpoint, working directory, and bearer token are stored locally until changed or
 removed. Credentials are excluded from exports. Existing session-only ACP tokens
 are migrated on read. Obsolete provider keys are removed on startup.
-Conversations live in memory for the current window;
-closing the sidebar preserves them, but reloading the app does not.
+Conversation IDs, transcripts, queued messages, and connection intent are saved in
+the browser per window, with no expiry. Reloading Darc restores them. They are
+excluded from settings exports. Explicit Disconnect stops automatic reconnection
+without deleting the saved settings or conversations.
 
 The original agent sidebar controls and the shared microphone toggle remain in
 place. `Agent.svelte` stays mounted while voice controls are enabled, including
@@ -62,9 +64,10 @@ After opening a conversation through the proxy, the MCP connection entry display
 and copies the full HTTP URL using the existing connection ID. This URL is also available when
 the agent uses native MCP-over-ACP through the proxy. A direct agent connection
 without the proxy has no HTTP URL. Connections have no automatic expiry. Darc saves
-proxy credentials separately from exportable connection settings, and the proxy
-persists its registry in `acp-proxy/data/mcp-connections.json`. Reconnects, browser
-reloads, and proxy restarts reuse the same URL. Tool clients use that URL directly,
+proxy credentials separately from exportable connection settings. The proxy keeps
+only routing information in memory and never writes a connection registry. The
+browser registers its saved identities again after reconnecting, so browser reloads
+and proxy restarts reuse the same URL. Tool clients use that URL directly,
 without a separate MCP token, query parameter, or Authorization header.
 
 Disconnecting ACP cancels pending requests and marks browser tools offline (HTTP
@@ -112,7 +115,10 @@ The agent supplies model/mode/configuration choices and slash commands. One prom
 runs at a time; further messages queue with their captured context. Stop sends
 `session/cancel` and pauses the queue. If cancellation does not finish within five
 seconds, Darc closes the transport. Connection loss never automatically resubmits a
-prompt or repeats a browser action. Reconnect and resume the queue deliberately.
+prompt or repeats a browser action. Darc reconnects automatically with bounded
+backoff, initializes a new ACP transport, and reloads its saved sessions and MCP
+bindings. Queued prompts stay paused until explicitly resumed. Disconnect stops
+retrying; page reload preserves whether the connection was enabled.
 
 An existing conversation can reattach only when the same endpoint and working
 directory support `loadSession`. Otherwise start a new conversation; its old

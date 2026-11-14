@@ -13,10 +13,7 @@ export function getShortcutTab(data, tabId = data.spaceMeta.activeTabId) {
 export function createShortcutActions(data, ui) {
     function closeLightbox(tab) {
         if (!tab?.lightbox || tab.archive) return false
-        const opener = data.docs[tab.opener]
-        if (data.previews[tab.opener]?.lightbox === tab.id) data.previews[tab.opener].lightbox = null
-        data.closeTab(tab.spaceId, tab.id)
-        ui.focusTab?.(opener?.id)
+        data.dismissLightbox(tab.id)
         return true
     }
 
@@ -39,9 +36,11 @@ export function createShortcutActions(data, ui) {
             case 'new-tab-group': ui.openNewTabGroup(); break
             case 'show-shortcuts': ui.showShortcuts(true); break
             case 'hide-shortcuts': ui.showShortcuts(false); break
-            case 'close-tab':
-                if (!closeLightbox(tab) && tab) ui.closeTab(tab, event)
+            case 'close-tab': {
+                const owner = tab && data.getTabOwner(tab.id)
+                if (owner) ui.closeTab(owner, event)
                 break
+            }
             case 'restore-tab': {
                 const closed = data.spaceMeta.closedTabs.find(tab => !tab.deleted && data.spaces[tab.spaceId])
                 if (closed) data.restoreClosedTab(closed.id)

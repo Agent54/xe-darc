@@ -85,7 +85,7 @@ Deno.test('all top and sidebar hovercards wire settings and developer tools to t
     for (const card of cards) {
         const calls = []
         const tab = { id: 'preview', spaceId: 'other-space' }
-        const data = { spaceMeta: { activeTabId: 'unrelated' } }
+        const data = { spaceMeta: { activeTabId: 'unrelated' }, getDisplayedTab: () => tab }
         const handlers = new Function('data', 'hoveredTab', 'activeTab', 'previewTab', 'openTabDevTools', 'switchToSettings', 'onSettings', `
             return { devtools: ${card.onDevTools}, settings: ${card.onSettings} }
         `)(data, tab, tab, tab, (store, id) => calls.push(['devtools', store === data, id]), () => calls.push(['settings']), () => calls.push(['settings']))
@@ -105,6 +105,7 @@ Deno.test('top hovercard reload keeps its original target when activation dismis
         let hoveredTab = { id: 'preview' }
         const data = {
             spaceMeta: { activeTabId: 'unrelated' },
+            getDisplayedTab(id) { return { id } },
             activate(id) { calls.push(['activate', id]); hoveredTab = null },
             reloadTab(id) { calls.push(['reload', id]) }
         }
@@ -121,9 +122,11 @@ Deno.test('navigation hovercard actions address the displayed tab directly', () 
     const calls = []
     const handlers = new Function('activeTab', 'navigateTabHistory', 'data', `
         return { back: ${card.onGoBack}, forward: ${card.onGoForward}, reload: ${card.onReload} }
-    `)({ id: 'preview' }, (id, direction) => calls.push([direction, id]), { reloadTab: id => calls.push(['reload', id]) })
+    `)({ id: 'preview' }, (id, direction) => calls.push([direction, id]), {
+        getDisplayedTab: () => ({ id: 'lightbox' }), reloadTab: id => calls.push(['reload', id])
+    })
     handlers.back()
     handlers.forward()
     handlers.reload()
-    assert.deepEqual(calls, [['back', 'preview'], ['forward', 'preview'], ['reload', 'preview']])
+    assert.deepEqual(calls, [['back', 'preview'], ['forward', 'preview'], ['reload', 'lightbox']])
 })

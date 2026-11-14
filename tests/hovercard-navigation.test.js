@@ -33,7 +33,11 @@ function navigationHarness(tabId = 'tab', zenMode = false) {
     const window = new EventTarget()
     window.innerWidth = 1200
     window.innerHeight = 800
-    const data = { docs: { [tabId]: tab }, frames: { [tabId]: { frame: { back() { actions.push('back') }, forward() { actions.push('forward') } } } } }
+    const data = { docs: { [tabId]: tab }, navigateTabHistory(id, direction) {
+        if (id !== tabId) return false
+        actions.push(direction)
+        return true
+    } }
     api = new Function('data', 'window', 'CustomEvent', 'setTimeout', 'clearTimeout', 'focusModeEnabled', 'isHovercardHovered', `
         let hoveredTab = null, navigationHovercardTabId = null, navigationHovercardTimeout = null
         let hovercardPreviewVisible = true
@@ -89,6 +93,7 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
         const data = { docs: { [tabId]: tab }, frames: { [tabId]: { frame } }, isInternalPage: () => false }
         const userMods = { css: [], js: [] }, select = '', zoomControl = '', contextMenu = ''
         let isCommandKeyDown = false, commandKeyPressed = false
+        let requestedLinkTab = null
         ${bridgeHandlers}
         setupMessageListener(frame)
         setupContentScripts(frame)

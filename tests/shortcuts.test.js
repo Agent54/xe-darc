@@ -265,7 +265,16 @@ function harness() {
         previous() { calls.push(['history']) },
         pin(options) { calls.push(['pin', options]) },
         reloadTab(id) { calls.push(['reload', id]) },
-        closeTab(space, id) { calls.push(['close-lightbox', space, id]) },
+        getTabOwner(id) {
+            let tab = this.docs[id]
+            while (tab?.lightbox) tab = this.docs[tab.opener]
+            return tab
+        },
+        dismissLightbox(id) {
+            const tab = this.docs[id]
+            this.previews[tab.opener].lightbox = null
+            calls.push(['dismiss-lightbox', id])
+        },
         restoreClosedTab(id) { calls.push(['restore', id]) }
     }
     const ui = {
@@ -346,7 +355,7 @@ Deno.test('Cmd+0 resets the targeted frame to 100% without changing spaces', () 
     assert.equal(h.data.spaceMeta.activeSpace, 's1')
 })
 
-Deno.test('location, reload and close target the focused frame or its innermost lightbox', () => {
+Deno.test('location and reload target the innermost lightbox, while Close targets the parent', () => {
     const h = harness()
     h.data.docs.lb = h.tab('lb', { lightbox: true, opener: 'b' })
     h.data.docs.nested = h.tab('nested', { lightbox: true, opener: 'lb' })
@@ -356,15 +365,14 @@ Deno.test('location, reload and close target the focused frame or its innermost 
     h.run('open-location')
     h.run('reload-tab')
     h.run('close-tab')
-    assert.equal(h.data.previews.lb.lightbox, null)
-    assert.deepEqual(h.calls, [['location', 'nested'], ['reload', 'nested'], ['close-lightbox', 's1', 'nested'], ['focus', 'lb']])
+    assert.deepEqual(h.calls, [['location', 'nested'], ['reload', 'nested'], ['close', 'b']])
     h.calls.length = 0
     h.run('reload-tab', null, 'a')
     h.run('close-tab', null, 'a')
     assert.deepEqual(h.calls, [['reload', 'a'], ['close', 'a']])
 })
 
-Deno.test('Escape closes the lightbox, restores parent focus, and leaves ordinary pages alone', () => {
+Deno.test('Escape dismisses the lightbox after other overlays and leaves ordinary pages alone', () => {
     const h = harness()
     assert.equal(h.run('escape'), false)
     h.data.docs.lb = h.tab('lb', { lightbox: true, opener: 'b' })
@@ -374,7 +382,7 @@ Deno.test('Escape closes the lightbox, restores parent focus, and leaves ordinar
     assert.equal(h.calls.length, 0, 'UI overlays get first chance at Escape')
     h.ui.escape = () => false
     assert.equal(h.run('escape'), true)
-    assert.deepEqual(h.calls, [['close-lightbox', 's1', 'lb'], ['focus', 'b']])
+    assert.deepEqual(h.calls, [['dismiss-lightbox', 'lb']])
     assert.equal(h.run('escape'), false)
 })
 
