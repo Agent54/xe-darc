@@ -21,7 +21,7 @@ async function waitFor(predicate) {
 }
 
 for (const native of [true, false]) {
-    Deno.test(`ACP proxy ${native ? 'native passthrough' : 'HTTP fallback'} retains browser permissions and revocation`, async () => {
+    Deno.test(`ACP proxy ${native ? 'native passthrough' : 'HTTP fallback'} requires saved connections and retains browser permissions and revocation`, async () => {
         const f = await mcpFixture()
         const storage = new Map([['mcpConnections', JSON.stringify([...f.connections.values()].map(entry => ({ ...entry, windowId: 'window' }))) ]])
         const manager = createMcpConnections({ data: f.data, getWindowId: () => 'window', defaultBase: 'https://darc.example',
@@ -40,6 +40,11 @@ for (const native of [true, false]) {
             .onRequest(acp.methods.agent.session.new, ({ params }) => {
                 assert.equal(params._meta?.['darc/connections'], undefined)
                 declaration = params.mcpServers[0]; return { sessionId: 'test-session' }
+            })
+            .onRequest(acp.methods.agent.session.load, ({ params }) => {
+                assert.equal(params._meta?.['darc/connections'], undefined)
+                assert.deepEqual(params.mcpServers[0], declaration)
+                return {}
             })
             .connect(backendStream)
         const provider = new acp.McpOverAcpProvider()
@@ -71,13 +76,22 @@ for (const native of [true, false]) {
         try {
             const init = await browser.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientCapabilities: {} })
             assert.equal(init.agentCapabilities.mcpCapabilities.acp, true)
-            const session = await browser.agent.request(acp.methods.agent.session.new, { cwd: '/', mcpServers: [registration.declaration],
-                _meta: { 'darc/connections': { [registration.serverId]: browserServer.proxyIdentity } } })
+            await assert.rejects(browser.agent.request(acp.methods.agent.session.new, {
+                cwd: '/', mcpServers: [registration.declaration]
+            }), /requires its saved connection identity/)
+            const params = { cwd: '/', mcpServers: [registration.declaration],
+                _meta: { 'darc/connections': { [registration.serverId]: browserServer.proxyIdentity } } }
+            const session = await browser.agent.request(acp.methods.agent.session.new, params)
             const fullUrl = session._meta['darc/mcpUrls'][registration.serverId]
             assert.equal(new URL(fullUrl).pathname, '/mcp/first')
-            assert.equal(new URL(fullUrl).search, '')
             browserServer.setMcpUrl(fullUrl)
             assert.equal(manager.state.connections.find(entry => entry.id === 'first').mcpUrl, fullUrl)
+            assert.equal(new URL(fullUrl).search, '')
+            await assert.rejects(browser.agent.request(acp.methods.agent.session.load, {
+                cwd: '/', sessionId: 'test-session', mcpServers: [registration.declaration]
+            }), /requires its saved connection identity/)
+            const loaded = await browser.agent.request(acp.methods.agent.session.load, { ...params, sessionId: 'test-session' })
+            assert.equal(loaded._meta['darc/mcpUrls'][registration.serverId], fullUrl)
             assert.equal((await httpRpc(fullUrl, 'tools/list')).result.tools.length, 9)
             // Same initialize request as the user's curl probe, with no separate credential.
             assert.equal((await httpRpc(fullUrl, 'initialize', { protocolVersion: '2025-06-18', capabilities: {},

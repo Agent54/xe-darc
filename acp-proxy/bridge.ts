@@ -32,10 +32,14 @@ export function connectProxy(stream: Stream, stdio: Stream, gateway: ReturnType<
                 for (const server of params.mcpServers) {
                     if (!acp.isMcpServerAcp(server)) { mcpServers.push(server); continue }
                     if (!nativeMcp && !httpMcp) { throw new Error('This agent supports neither MCP-over-ACP nor HTTP MCP') }
+                    const identity = identities?.[server.serverId]
+                    if (!identity) {
+                        throw acp.RequestError.invalidParams(undefined, 'Browser MCP requires its saved connection identity in darc/connections')
+                    }
                     let endpoint = exported.get(server.serverId)
                     if (!endpoint) {
                         endpoint = await gateway.expose(front.client, caller, server, front.signal, agentInfo,
-                            identities?.[server.serverId])
+                            identity)
                         exported.set(server.serverId, endpoint)
                     }
                     mcpUrls[server.serverId] = endpoint.url

@@ -25,15 +25,13 @@ export function createMcpGateway(origin: string, registry?: McpRegistry) {
     }
     return {
         async expose(client: acp.AgentContext, caller: acp.McpOverAcpCaller, declaration: acp.McpServerAcpDeclaration,
-            signal: AbortSignal, agentInfo: { name: string; version: string }, identity?: { id: string; key: string }) {
-            if (identity !== undefined && (typeof identity?.id !== 'string' || !identity.id || identity.id.length > 256 ||
-                typeof identity.key !== 'string' || identity.key.length < 32 || identity.key.length > 512)) {
+            signal: AbortSignal, agentInfo: { name: string; version: string }, identity: { id: string; key: string }) {
+            if (typeof identity?.id !== 'string' || !identity.id || identity.id.length > 256 ||
+                typeof identity.key !== 'string' || identity.key.length < 32 || identity.key.length > 512) {
                 throw new Error('Invalid saved browser MCP credentials')
             }
-            // Plain MCP-over-ACP declarations predate the optional saved-connection metadata.
-            // Their server IDs belong to one ACP connection, so use a separate HTTP path as before.
-            const id = identity?.id ?? crypto.randomUUID()
-            const ownerKeyHash = identity ? await keyHash(identity.key) : undefined
+            const id = identity.id
+            const ownerKeyHash = await keyHash(identity.key)
             signal.throwIfAborted()
             let record = records.get(id)
             if (record) {
@@ -41,7 +39,7 @@ export function createMcpGateway(origin: string, registry?: McpRegistry) {
                     throw new Error('MCP connection removed or invalid owner credential')
                 }
             } else {
-                record = { id, path: `/mcp/${encodeURIComponent(id)}`, ...(ownerKeyHash ? { ownerKeyHash } : {}) }
+                record = { id, path: `/mcp/${encodeURIComponent(id)}`, ownerKeyHash }
                 save(record)
             }
             const path = `/mcp/${encodeURIComponent(record.id)}`

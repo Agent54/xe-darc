@@ -4,7 +4,7 @@
     import EmojiPicker from './EmojiPicker.svelte'
     import TabActionButtons from './TabActionButtons.svelte'
     import { openTabDevTools } from '../lib/tab-devtools.js'
-    import { snoozeTime } from '../lib/pending-tabs.js'
+    import { parseSnoozeDateTime, snoozeTime } from '../lib/pending-tabs.js'
     
     let {
         menu = { visible: false, x: 0, y: 0, tab: null, index: null },
@@ -16,6 +16,8 @@
         defaultPinScope = 'group',
         partitions = ['persist:1', 'persist:2', 'persist:3', 'ephemeral:1', 'ephemeral:2', 'ephemeral:3'],
         contextMenuOpenTime = 0,
+        onResumePending = null,
+        onClosePending = null,
         onToggleCertificateMonitor = null
     } = $props()
     
@@ -31,8 +33,10 @@
     let snoozeAmount = $state(1)
     let snoozeUnit = $state('hours')
     let snoozeDate = $state('')
+    let snoozeClock = $state('')
     let snoozeError = $state('')
     const isGroup = $derived(menu.tab?.type === 'tabgroup')
+    const pendingItem = $derived(menu.pendingItem)
     const sourceSpaceId = $derived(menu.tab?.spaceId || data.docs[menu.tab?.id]?.spaceId)
     const targetTabs = $derived((isGroup ? menu.tab.tabs : menu.tab ? [menu.tab] : []).map(tab => data.docs[tab.id] || tab))
     const allMuted = $derived(targetTabs.length > 0 && targetTabs.every(tab => tab.muted))
@@ -42,7 +46,7 @@
         const partition = targetTabs[0]?.partition || 'default'
         return targetTabs.every(tab => (tab.partition || 'default') === partition) ? partition : 'Mixed'
     })
-    const customName = $derived(isGroup ? menu.tab?.name : (data.docs[menu.tab?.id] || menu.tab)?.titleOverride)
+    const customName = $derived(isGroup ? menu.tab?.name ?? menu.tab?.metadata?.name : (data.docs[menu.tab?.id] || menu.tab)?.titleOverride)
     const customEmoji = $derived(isGroup ? menu.tab?.metadata?.emoji : (data.docs[menu.tab?.id] || menu.tab)?.emojiOverride)
     const customFavicon = $derived(isGroup ? menu.tab?.metadata?.favicon : (data.docs[menu.tab?.id] || menu.tab)?.faviconOverride)
     const editorTitle = $derived(groupMenuView.startsWith('snooze') ? (isGroup ? 'Snooze group' : 'Snooze tab') : groupMenuView === 'rename' ? (isGroup ? 'Rename group' : 'Rename tab') : (isGroup ? 'Group icon' : 'Tab icon'))
@@ -54,6 +58,10 @@
             snoozeError = ''
         }
     })
+
+    $effect(() => {
+        if (menu.visible && pendingItem && menuElement && groupMenuView === 'menu') menuElement.focus({ preventScroll: true })
+    })
     
     $effect(() => {
         if (menu.visible) {
@@ -61,7 +69,7 @@
             adjustedY = menu.y
             adjustedX = menu.x
             if (menuElement) {
-                requestAnimationFrame(() => {
+                const positionMenu = () => {
                     if (!menuElement) return
                     const menuHeight = menuElement.offsetHeight
                     const viewportHeight = window.innerHeight
@@ -70,7 +78,9 @@
                     if (menu.y + menuHeight + margin > viewportHeight) {
                         adjustedY = Math.max(margin, viewportHeight - menuHeight - margin)
                     }
-                })
+                }
+                if (pendingItem) positionMenu()
+                else requestAnimationFrame(positionMenu)
             }
         }
     })
@@ -99,7 +109,8 @@
     async function snooze(wakeAt, reason = 'snooze') {
         snoozeError = ''
         try {
-            await data.snoozeTab(targetTabs[0].id, wakeAt, { scope: isGroup ? 'group' : 'tab', reason })
+            if (pendingItem) await data.reschedulePendingTabs(targetTabs.map(tab => tab.id), wakeAt, reason)
+            else await data.snoozeTab(targetTabs[0].id, wakeAt, { scope: isGroup ? 'group' : 'tab', reason })
             onHide()
         } catch (error) {
             snoozeError = error.message
@@ -109,13 +120,23 @@
     function saveCustomSnooze(event) {
         event.preventDefault()
         const units = { minutes: 60000, hours: 3600000, days: 86400000 }
-        const wakeAt = snoozeMode === 'absolute' ? new Date(snoozeDate).getTime()
+        const wakeAt = snoozeMode === 'absolute' ? parseSnoozeDateTime(snoozeDate, snoozeClock)
             : Number(snoozeAmount) > 0 ? Date.now() + Number(snoozeAmount) * units[snoozeUnit] : NaN
         if (!Number.isFinite(wakeAt) || wakeAt <= Date.now()) {
-            snoozeError = 'Choose a future date or a positive duration.'
+            snoozeError = snoozeMode === 'absolute' ? 'Enter a future date as D.M.YYYY and a time as HH:MM.' : 'Enter a positive duration.'
             return
         }
         snooze(wakeAt)
+    }
+
+    function selectPending(action) {
+        const item = pendingItem
+        onHide()
+        action(item)
+    }
+
+    function selectPendingOnRelease(event, action) {
+        if (event.button === 0 || (event.button === 2 && Math.hypot(event.clientX - menu.x, event.clientY - menu.y) > 5)) action()
     }
     
     function toggleCertificateMonitor(tab) {
@@ -370,7 +391,7 @@
          }}
          oncontextmenu={(e) => { e.preventDefault(); onHide(); }}></div>
     
-    <div class="context-menu menu-surface"
+    <div class="context-menu menu-surface" class:pending-context-menu={pendingItem}
          bind:this={menuElement}
          role={groupMenuView !== 'menu' ? 'dialog' : 'menu'}
          aria-label={groupMenuView !== 'menu' ? editorTitle : undefined}
@@ -379,6 +400,15 @@
          onclick={(e) => e.stopPropagation()}
          onkeydown={(e) => {
              if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
+             if (pendingItem && groupMenuView === 'menu' && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+                 e.preventDefault()
+                 const items = [...menuElement.querySelectorAll('[role="menuitem"]')]
+                 const index = items.indexOf(document.activeElement)
+                 const next = e.key === 'Home' || (index < 0 && e.key === 'ArrowDown') ? 0
+                     : e.key === 'End' || index < 0 ? items.length - 1
+                     : (index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+                 items[next]?.focus()
+             }
              if (e.key === 'Escape' && groupMenuView !== 'menu') {
                  e.preventDefault()
                  e.stopPropagation()
@@ -406,8 +436,10 @@
                         <option value="absolute">At a date and time</option>
                     </select>
                     {#if snoozeMode === 'absolute'}
-                        <label for="snooze-date">Local date and time</label>
-                        <input id="snooze-date" type="datetime-local" bind:value={snoozeDate} required />
+                        <div class="snooze-date-fields">
+                            <label>Date <input id="snooze-date" type="text" placeholder="D.M.YYYY" bind:value={snoozeDate} required /></label>
+                            <label>Local time <input id="snooze-clock" type="text" placeholder="HH:MM" bind:value={snoozeClock} required /></label>
+                        </div>
                     {:else}
                         <label for="snooze-amount">Duration</label>
                         <div class="group-name-fields">
@@ -443,6 +475,29 @@
                     </div>
                 </form>
             {/if}
+        {:else if pendingItem}
+            <button class="context-menu-item menu-action" role="menuitem" type="button"
+                    onmousedown={(e) => { if (e.button === 0) selectPending(onResumePending) }}
+                    onmouseup={(e) => { if (e.button === 2) selectPendingOnRelease(e, () => selectPending(onResumePending)) }}
+                    onclick={(e) => { if (e.detail === 0) selectPending(onResumePending) }}>
+                {targetTabs.some(tab => Number.isFinite(tab.pending?.wakeAt)) ? 'Unsnooze' : 'Resume'}{isGroup ? ' group' : ' tab'}
+            </button>
+            <button class="context-menu-item menu-action" role="menuitem" type="button"
+                    onmouseup={(e) => selectPendingOnRelease(e, () => showGroupView('snooze'))}
+                    onclick={(e) => { if (e.detail === 0) showGroupView('snooze') }}>Change snooze…</button>
+            <button class="context-menu-item menu-action" role="menuitem" type="button"
+                    onmouseup={(e) => selectPendingOnRelease(e, () => showGroupView('rename'))}
+                    onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>Rename…</button>
+            <button class="context-menu-item menu-action" role="menuitem" type="button"
+                    onmouseup={(e) => selectPendingOnRelease(e, () => showGroupView('emoji'))}
+                    onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>Change icon…</button>
+            {#if !isGroup}
+                <button class="context-menu-item menu-action" role="menuitem" type="button"
+                        onmouseup={(e) => selectPendingOnRelease(e, () => copyTabUrl(menu.tab))}
+                        onclick={(e) => { if (e.detail === 0) copyTabUrl(menu.tab) }}>Copy URL</button>
+            {/if}
+            <button class="context-menu-item menu-action" role="menuitem" type="button"
+                    onclick={() => selectPending(onClosePending)}>Close {isGroup ? 'group' : 'tab'}</button>
         {:else if menu.tab.type !== 'divider'}
             {#if !isGroup}
                 <TabActionButtons variant="menu" {showDevTools} showSettingsButton={!!onSettings}
@@ -535,7 +590,7 @@
                 </span>
                 <span>Remove spacer</span>
             </div>
-        {:else if groupMenuView === 'menu'}
+        {:else if groupMenuView === 'menu' && !pendingItem}
         {#each [[false, 'Pin in scrolling sidebar'], [true, 'Pin above New Tab']] as [fixed, label]}
             <button class="context-menu-item menu-action" type="button" role="menuitem"
                     onmouseup={() => setSidebarPin(fixed)}
@@ -771,6 +826,8 @@
     .snooze-form { width: min(310px, calc(100vw - 20px)); box-sizing: border-box; white-space: normal; }
     .snooze-form select, .snooze-form input { min-width: 0; max-width: 100%; padding: 8px; border: 1px solid #ffffff1f; border-radius: 6px; background: #151515; color: #e5e5e5; font: inherit; color-scheme: dark; }
     .snooze-form .group-name-fields input { flex: 1; width: 80px; }
+    .snooze-date-fields { display: grid; grid-template-columns: 3fr 2fr; gap: 8px; }
+    .snooze-date-fields label { display: grid; gap: 6px; min-width: 0; }
     .snooze-form :is(input, select):focus-visible { outline: 1px solid #a3a3a3; outline-offset: 1px; }
     .snooze-error { margin: 8px 12px; color: #f0a7a7; font-size: 12px; white-space: normal; }
     .context-menu-item.move-space-menu {
@@ -893,6 +950,8 @@
         animation: context-menu-appear 0.1s ease-out;
         white-space: nowrap;
     }
+
+    .pending-context-menu { animation: none; }
 
     @keyframes context-menu-appear {
         from {

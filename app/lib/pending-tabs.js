@@ -15,6 +15,38 @@ export function snoozeTime(option, now = Date.now()) {
     return date.getTime()
 }
 
+export function formatPendingDateTime(timestamp) {
+    const date = new Date(timestamp)
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${date.getDate()}.${date.getMonth() + 1}.${date.getFullYear()}, ${hours}:${minutes}`
+}
+
+export function parseSnoozeDateTime(dateText, timeText) {
+    const dateParts = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(dateText.trim())
+    const timeParts = /^(\d{1,2}):(\d{2})$/.exec(timeText.trim())
+    if (!dateParts || !timeParts) return NaN
+
+    const [, day, month, year] = dateParts.map(Number)
+    const [, hours, minutes] = timeParts.map(Number)
+    const date = new Date(year, month - 1, day, hours, minutes)
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day ||
+        date.getHours() !== hours || date.getMinutes() !== minutes) return NaN
+    return date.getTime()
+}
+
+export function formatPendingRemaining(wakeAt, now) {
+    const seconds = Math.ceil((wakeAt - now) / 1000)
+    if (seconds <= 0) return 'Due'
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+    if (days) return hours % 24 ? `${days}d ${hours % 24}h` : `${days}d`
+    if (hours) return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`
+    return `${minutes}m`
+}
+
 // An action ID keeps independently closed/snoozed members out of whole-group entries.
 export function getArchivedTabItems(tabs = [], docs = {}) {
     const entries = new Map()

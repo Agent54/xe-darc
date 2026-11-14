@@ -1,11 +1,12 @@
 <script>
-    let { children, text, position = 'top', delay = 500 } = $props()
+    import { onDestroy } from 'svelte'
+
+    let { children, text, position = 'top', delay = 500, multiline = false } = $props()
     
     let isVisible = $state(false)
     let targetRef = $state(null)
     let showTimeout = null
     let hideTimeout = null
-    let tooltipEl = null
 
     function dismiss() {
         clearTimeout(showTimeout)
@@ -13,13 +14,19 @@
         showTimeout = null
         hideTimeout = null
         isVisible = false
-        tooltipEl?.remove()
     }
+
+    onDestroy(dismiss)
     
     function handleMouseEnter() {
         if (hideTimeout) {
             clearTimeout(hideTimeout)
             hideTimeout = null
+        }
+
+        if (delay === 0) {
+            isVisible = true
+            return
         }
         
         showTimeout = setTimeout(() => {
@@ -29,6 +36,11 @@
     }
     
     function handleMouseLeave() {
+        if (delay === 0) {
+            dismiss()
+            return
+        }
+
         if (showTimeout) {
             clearTimeout(showTimeout)
             showTimeout = null
@@ -42,9 +54,10 @@
     
     // Portal tooltip to document.body to avoid transform containment issues
     $effect(() => {
-        if (isVisible && text && targetRef) {
-            tooltipEl = document.createElement('div')
-            tooltipEl.textContent = text
+        const target = targetRef
+        if (isVisible && target) {
+            const instant = delay === 0
+            const tooltipEl = document.createElement('div')
             tooltipEl.setAttribute('role', 'tooltip')
             tooltipEl.style.cssText = `
                 position: fixed;
@@ -56,20 +69,26 @@
                 font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
                 -webkit-font-smoothing: subpixel-antialiased;
                 text-rendering: optimizeLegibility;
-                white-space: nowrap;
+                white-space: ${multiline ? 'pre-wrap' : 'nowrap'};
+                ${multiline ? 'width: max-content; max-width: min(360px, calc(100vw - 8px)); overflow-wrap: anywhere; box-sizing: border-box;' : ''}
                 z-index: 100000;
                 pointer-events: none;
                 backdrop-filter: blur(8px);
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-                opacity: 0;
-                transition: opacity 120ms ease-out;
+                opacity: ${instant ? 1 : 0};
+                transition: ${instant ? 'none' : 'opacity 120ms ease-out'};
             `
             document.body.appendChild(tooltipEl)
             
-            requestAnimationFrame(() => {
-                if (!tooltipEl || !targetRef) return
-                const targetRect = targetRef.getBoundingClientRect()
+            $effect(() => {
+                tooltipEl.textContent = text
+                tooltipEl.hidden = !text
+                if (!text) {
+                    return
+                }
+
+                const targetRect = target.getBoundingClientRect()
                 const tooltipRect = tooltipEl.getBoundingClientRect()
                 
                 let top = 0
@@ -108,12 +127,17 @@
                 
                 tooltipEl.style.top = `${top}px`
                 tooltipEl.style.left = `${left}px`
+            })
+
+            const animationFrame = instant ? null : requestAnimationFrame(() => {
                 tooltipEl.style.opacity = '1'
             })
             
             return () => {
-                tooltipEl?.remove()
-                tooltipEl = null
+                if (animationFrame !== null) {
+                    cancelAnimationFrame(animationFrame)
+                }
+                tooltipEl.remove()
             }
         }
     })

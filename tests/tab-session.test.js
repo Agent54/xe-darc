@@ -311,6 +311,11 @@ Deno.test('snoozed groups survive restart and resume at the same manual position
     await restarted.data.refreshPendingTabs()
     assert.deepEqual(restarted.data.spaces[defaultSpace].tabs.map(tab => tab.id), ['outside'])
     assert.equal(restarted.data.spaceMeta.pendingTabs.length, 2)
+    const rescheduledWake = wakeAt + 3 * 3600000
+    const originalBatch = (await restarted.db.get('one')).pending.batchId
+    await restarted.data.reschedulePendingTabs(['one', 'two'], rescheduledWake, 'snooze')
+    assert.ok(restarted.data.spaceMeta.pendingTabs.every(tab => tab.pending.wakeAt === rescheduledWake))
+    assert.equal((await restarted.db.get('two')).pending.batchId, originalBatch)
     await restarted.data.resumePendingTab('one', { activate: false })
     await restarted.data.resumePendingTab('two', { activate: false })
     assert.deepEqual(restarted.data.spaces[defaultSpace].tabs.map(tab => tab.id), ['one', 'two', 'outside'])
@@ -319,6 +324,7 @@ Deno.test('snoozed groups survive restart and resume at the same manual position
     assert.ok(restarted.data.docs.one.lastActivityAt > restarted.data.docs.outside.order)
     assert.ok(restarted.data.docs.one.resumedAt)
     assert.equal(restarted.data.docs.one.pending, null)
+    assert.equal(restarted.data.docs.one.resumedScheduledAt, rescheduledWake)
 })
 
 Deno.test('polling wakes persisted overdue tabs, retains external waits, and observes sync updates', async () => {

@@ -4,9 +4,9 @@
     import { getPendingPermissionRequests, groupPermissionCards } from '../lib/permissions.js'
     import PermissionToast from './PermissionToast.svelte'
 
-    let { visible = true, headerPartOfMain = false, onOpenResources } = $props()
+    let { visible = true, headerPartOfMain = false, onOpenResources, pendingCards } = $props()
     let hiddenRequests = $state(new Set())
-    const pending = $derived(groupPermissionCards(getPendingPermissionRequests(data.permissions, window.darcWindowId)))
+    const pending = $derived(pendingCards ?? groupPermissionCards(getPendingPermissionRequests(data.permissions, window.darcWindowId)))
     const shown = $derived(pending.filter(resource => !hiddenRequests.has(resource.ruleId || resource.requestId)))
 
     // Hiding a toast leaves its request pending in Resources.

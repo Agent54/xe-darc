@@ -932,7 +932,9 @@ The current system demonstrates strong performance and security characteristics.
 									{#if card.awaitingPermission}
 										<div class="agent-info-card-actions">
 											{#each card.options || [] as option (option.optionId)}
-												<button class="agent-permission-btn" onmousedown={() => agent.answer(card.approvalId, option.optionId)}>{option.name}</button>
+												<button class="agent-permission-btn"
+													onmousedown={event => { if (event.button === 0) { agent.answer(card.approvalId, option.optionId) } }}
+													onclick={event => { if (event.detail === 0) { agent.answer(card.approvalId, option.optionId) } }}>{option.name}</button>
 											{/each}
 											{#if !card.approvalId}
 											<button

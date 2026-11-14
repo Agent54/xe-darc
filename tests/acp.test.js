@@ -44,7 +44,7 @@ export async function until(predicate, message = 'Condition timed out') {
     }
 }
 
-export async function mockEndpoint({ acpMcp = true, loadSession = true, afterFirstChunk, afterDocumentChunk } = {}) {
+export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSessionResponse, afterFirstChunk, afterDocumentChunk } = {}) {
     const sessions = new Map()
     const sessionConfigs = new Map()
     const prompts = []
@@ -78,6 +78,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, afterFir
             sessions.set(sessionId, params)
             sessionConfigs.set(sessionId, config)
             lastClient = client
+            await beforeSessionResponse?.({ sessionId, client })
             return { sessionId, configOptions: config, _meta: { 'darc/mcpUrls': Object.fromEntries(params.mcpServers
                 .filter(server => server.type === 'acp').map(server => [server.serverId, 'https://proxy.example/mcp/identity'])) } }
         })

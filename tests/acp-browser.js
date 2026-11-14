@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { compile, parse } from 'svelte/compiler'
 import puppeteer from 'puppeteer'
+import * as acp from '@agentclientprotocol/sdk/unstable'
 import { mockEndpoint } from './acp.test.js'
 
 const require = createRequire(import.meta.url)
@@ -23,7 +24,21 @@ assert(components.some(node => node.name === 'Agent'))
 const releaseMarkdown = Promise.withResolvers()
 const releaseDocument = Promise.withResolvers()
 const finishDocument = Promise.withResolvers()
+let setupPermissionAnswered = false
+let setupPermission
 const host = await mockEndpoint({
+    beforeSessionResponse: ({ sessionId, client }) => {
+        if (setupPermissionAnswered) { return }
+        // HTTP opens the session stream once session/new returns; buffer the request immediately.
+        setupPermission = client.request(acp.methods.client.session.requestPermission, {
+            sessionId, toolCall: { toolCallId: 'setup-tool', title: 'Initialize external tools', status: 'pending' },
+            options: [{ optionId: 'setup-allow', name: 'Allow setup', kind: 'allow_once' }, { optionId: 'setup-deny', name: 'Deny setup', kind: 'reject_once' }]
+        }).then(response => {
+            assert.deepEqual(response, { outcome: { outcome: 'selected', optionId: 'setup-allow' } })
+            setupPermissionAnswered = true
+        })
+        void setupPermission.catch(() => {})
+    },
     afterFirstChunk: text => {
         if (text === 'hello') { return releaseMarkdown.promise }
         if (text === 'long reply') { return releaseDocument.promise }
@@ -252,7 +267,16 @@ try {
     assert.equal(await page.$eval('textarea[aria-label="Message agent"]', node => node.value), 'ask about ')
     await page.$eval('textarea[aria-label="Message agent"]', node => { node.value = ''; node.dispatchEvent(new Event('input', { bubbles: true })) })
     await button('Connect')
+    await page.waitForSelector('.agent-approval button')
+    assert.match(await page.$eval('.agent-approval', node => node.textContent), /Initialize external tools/)
+    assert.equal(await page.evaluate(() => window.agentState.conversations[0].messages[0].status), 'pending')
+    const setupButton = await page.$('.agent-approval button')
+    await setupButton.focus()
+    await page.keyboard.press('Enter')
+    await setupPermission
     await page.waitForSelector('select[aria-label="Agent model"] optgroup[label="Recommended"]')
+    assert(setupPermissionAnswered)
+    assert.equal(await page.$('.agent-approval button'), null)
     assert.equal(host.sessions.size, 1)
     assert.equal(host.prompts.length, 0)
     await page.click('.agent-selector-row input[type="checkbox"]')
@@ -280,7 +304,7 @@ try {
     await clickInTranscript('button[aria-label="Edit displayed message"]')
     await page.$eval('.agent-edit-input', node => { node.value = 'Edited display'; node.dispatchEvent(new Event('input', { bubbles: true })) })
     await button('Save')
-    assert.equal(await page.evaluate(() => window.agentState.conversations[0].messages[0].content), 'Edited display')
+    assert.equal(await page.evaluate(() => window.agentState.conversations[0].messages.find(message => message.role === 'user').content), 'Edited display')
     await page.select('select[aria-label="Agent model"]', 'fast')
     await page.waitForFunction(() => window.agentState.conversations[0].configOptions[0].currentValue === 'fast')
     await page.evaluate(() => window.hideAgent())
@@ -290,11 +314,11 @@ try {
     assert.equal(host.sessions.size, 1)
 
     await send('permission')
-    await page.waitForSelector('.agent-approval')
+    await page.waitForSelector('.agent-approval button')
     await button('Proceed')
     await page.waitForFunction(() => !window.agentState.processing)
     assert.equal(host.calls.at(-1).result.outcome.optionId, 'opaque-allow-83')
-    assert.match(await page.$eval('.agent-approval', node => node.textContent), /Proceed/)
+    assert.match(await page.$$eval('.agent-approval', nodes => nodes.at(-1).textContent), /Proceed/)
     assert.equal(await page.$('.agent-approval button'), null, 'Resolved approval stays in history without live buttons')
     const claudeAvatar = '.assistant-chat .agent-avatar[title="Claude Haiku"]'
     assert.match(await page.$eval(`${claudeAvatar} path`, path => path.getAttribute('d')), /^m4\.714/)

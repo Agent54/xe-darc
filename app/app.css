@@ -146,6 +146,8 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
 }
 
 .sidebar-right {
+    --sidebar-slide-delay: 300ms;
+    --sidebar-slide-transition: 190ms cubic-bezier(.78,-0.01,.34,1.04) var(--sidebar-slide-delay);
     position: fixed;
     top: 35px;
     right: 0;
@@ -153,7 +155,7 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
     height: calc(100vh - 35px);
     z-index: 1000;
     pointer-events: auto;
-    transition: transform 190ms 300ms cubic-bezier(.78,-0.01,.34,1.04), opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45s;
+    transition: transform var(--sidebar-slide-transition), opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45s;
     background-color: rgba(0, 0, 0, 0.802);
     backdrop-filter: blur(7px);
     transform: translateX(30px);
@@ -171,10 +173,11 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
 }
 
 .sidebar-right:hover, :global(.sidebar-right.hover-xe) {
+    --sidebar-slide-delay: 100ms;
+    --sidebar-lights-shift: 14px;
     box-shadow: 0 0 13px 7px #0000003c;
     transform: translateX(0px);
-    transition: transform 190ms 0ms cubic-bezier(.78,-0.01,.34,1.04), opacity 0.05s ease 0.45s, box-shadow 0.05s ease 0.45;
-    transition-delay: 0.1s;
+    transition-delay: var(--sidebar-slide-delay);
     opacity: 1;
 }
 

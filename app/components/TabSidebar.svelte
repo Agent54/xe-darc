@@ -41,7 +41,7 @@
     import { observeScrollEdges } from '../lib/scroll-edges.js'
     import { getSidebarPinnedItems } from '../lib/tab-groups.js'
     import { getActivitySidebarItems, getActivityGroupTabs } from '../lib/tab-activity.js'
-    import { getArchivedTabItems } from '../lib/pending-tabs.js'
+    import { formatPendingDateTime, formatPendingRemaining, getArchivedTabItems } from '../lib/pending-tabs.js'
     import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
     import { createTabGroupPreview } from '../lib/tab-group-preview.svelte.js'
     import { tabDrag, startTabDrag, startCreationDrag, setActivateRafId, didDragOccurred, onGroupExpand } from '../lib/tab-drag.svelte.js'
@@ -58,8 +58,15 @@
     let closedTabsHideTimeout = null
     let pendingHoveredSpace = $state(null)
     let pendingHideTimeout = null
+    let pendingNow = $state(Date.now())
     const closedItems = $derived(getArchivedTabItems(data.spaceMeta.closedTabs, data.docs))
     const pendingItems = $derived(getArchivedTabItems(data.spaceMeta.pendingTabs, data.docs))
+    $effect(() => {
+        if (!pendingHoveredSpace) return
+        pendingNow = Date.now()
+        const timer = setInterval(() => { pendingNow = Date.now() }, 1000)
+        return () => clearInterval(timer)
+    })
     let spaceContextMenuId = $state(null)
     let contextMenuJustOpened = false
     let contextMenuPosition = $state({ x: 0, y: 0 })
@@ -1041,6 +1048,7 @@
     function hidePending() {
         clearTimeout(pendingHideTimeout)
         pendingHideTimeout = setTimeout(() => {
+            if (tabContextMenu.pendingItem) return
             if (hoveredTab && (data.spaceMeta.pendingTabs || []).some(tab => tab.id === hoveredTab.id)) return
             pendingHoveredSpace = null
         }, 200)
@@ -1049,6 +1057,7 @@
     async function restoreArchivedItem(item, pending) {
         closeHovercard()
         if (pending) {
+            closeTabSearch()
             for (const tab of item.tabs) await data.resumePendingTab(tab.id, { activate: false })
             const restored = item.tabs.find(tab => !data.docs[tab.id]?.archive)
             if (restored) activateTab(restored.id, item.spaceId)
@@ -1063,8 +1072,8 @@
         closeHovercard()
         const batchId = item.tabs.length > 1 ? crypto.randomUUID() : null
         for (const tab of item.tabs) {
-            if (pending) data.closeTab(tab.spaceId, tab.id, { batchId })
-            else data.removeClosedTab(tab.id)
+            if (!pending) data.removeClosedTab(tab.id)
+            else if (data.docs[tab.id]?.archive === 'deferred') data.closeTab(tab.spaceId, tab.id, { batchId, createReplacement: false })
         }
     }
     
@@ -1370,7 +1379,8 @@
 
     function showSidebarHovercard(target) {
         if (tabDrag.active || isHorizontalScrolling || !target.element.isConnected) return
-        hovercardAnchor = target.group && !target.group.archived ? target.element.closest('.tab-group-wrapper') : target.element
+        hovercardAnchor = target.element.closest('.pending-tab-row') ||
+            (target.group && !target.group.archived ? target.element.closest('.tab-group-wrapper') : target.element)
         hovercardHistoryBeside = canFitSidebarHovercardHistory(hovercardAnchor.getBoundingClientRect(), window.innerWidth)
         hovercardPosition = getSidebarHovercardPosition(
             hovercardAnchor.getBoundingClientRect(), target.group ? 336 : 328,
@@ -1672,7 +1682,7 @@
         }
     }
 
-    function handleTabContextMenu(event, tab, index) {
+    function handleTabContextMenu(event, tab, index, pendingItem = null) {
         event.preventDefault()
         event.stopPropagation()
         
@@ -1683,19 +1693,27 @@
             return
         }
         
+        if (pendingItem) dismissHovercards()
+        const trigger = pendingItem ? event.currentTarget.querySelector('.closed-tab-item') : null
+        const anchor = !event.clientX && !event.clientY ? trigger?.getBoundingClientRect() : null
         tabContextMenu = {
             visible: true,
-            x: event.clientX,
-            y: event.clientY,
+            x: anchor?.left ?? event.clientX,
+            y: anchor?.bottom ?? event.clientY,
             tab: tab,
-            index: index
+            index: index,
+            pendingItem,
+            trigger
         }
         tabContextMenuOpenTime = Date.now()
         console.log('[DEBUG:TabContextMenu] Menu opened at', event.clientX, event.clientY)
     }
     
-    function hideTabContextMenu() {
+    function hideTabContextMenu(event) {
+        const trigger = tabContextMenu.trigger
         tabContextMenu = { visible: false, x: 0, y: 0, tab: null, index: null }
+        if (event?.key === 'Escape') trigger?.focus()
+        if (trigger && !trigger.closest('.pending-tabs-section')?.matches(':hover, :focus-within')) hidePending()
     }
 
     async function handleCopyUrlClick() {
@@ -1728,9 +1746,22 @@
 {#snippet archivedRows(items, pending = false)}
     {#each items as item (item.id)}
         {#if item.tabs.some(tabMatchesSearch) || (tabSearchQuery && item.title.toLowerCase().includes(tabSearchQuery.toLowerCase()))}
-            <div class="closed-tab-row" data-tab-id={item.tabs[0].id} data-archived-id={item.id}>
+            {@const wakeTimes = pending ? item.tabs.map(tab => tab.pending?.wakeAt).filter(Number.isFinite) : []}
+            {@const wakeAt = wakeTimes.length ? Math.min(...wakeTimes) : null}
+            {@const resumeLabel = wakeAt === null ? 'Resume' : 'Unsnooze'}
+            <div class="closed-tab-row" class:pending-tab-row={pending} data-tab-id={item.tabs[0].id} data-archived-id={item.id}
+                 role={pending ? 'group' : undefined} aria-label={pending ? item.title : undefined}
+                 oncontextmenu={pending ? (e) => handleTabContextMenu(e, item.tabGroupId ? { ...item, type: 'tabgroup' } : item.tabs[0], 0, item) : undefined}>
                 <button class="closed-tab-item" data-tab-id={item.tabs[0].id} data-archived-id={item.id}
-                        onclick={() => restoreArchivedItem(item, pending)}
+                        aria-label={pending ? `${resumeLabel} ${item.title}` : undefined}
+                        onmousedown={pending ? (e) => { if (e.button === 0) restoreArchivedItem(item, true) } : undefined}
+                        onclick={(e) => { if (!pending || e.detail === 0) restoreArchivedItem(item, pending) }}
+                        onkeydown={pending ? (e) => {
+                            if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                                e.preventDefault()
+                                e.currentTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+                            }
+                        } : undefined}
                         onmouseenter={(e) => handleTabMouseEnter(item.tabs[0], e)}
                         onmouseleave={handleTabMouseLeave}>
                     {#if item.tabGroupId}
@@ -1740,10 +1771,28 @@
                         <Favicon tab={item.tabs[0]} showButton={false} />
                         <div class="tab-text">
                             <span class="tab-title">{getTabTitle(data.docs[item.tabs[0].id] || item.tabs[0])}</span>
-                            <span class="tab-space">{pending ? (item.tabs[0].pending?.wakeAt ? new Date(item.tabs[0].pending.wakeAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Waiting for external action') : data.spaces[item.spaceId]?.name || 'Unknown Space'}</span>
+                            {#if !pending || wakeAt === null}
+                                <span class="tab-space">{pending ? 'Waiting for external action' : data.spaces[item.spaceId]?.name || 'Unknown Space'}</span>
+                            {/if}
                         </div>
                     {/if}
                 </button>
+                {#if pending}
+                    <Tooltip text={resumeLabel} position="right" delay={250}>
+                        <button class="pending-tab-resume" type="button" aria-label={`${resumeLabel} ${item.title}`}
+                                onmousedown={(e) => { if (e.button === 0) restoreArchivedItem(item, true) }}
+                                onclick={(e) => { if (e.detail === 0) restoreArchivedItem(item, true) }}>
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M3 9a7 7 0 1 1 2 6m-2-6V4m0 5h5m2-3v4l3 2" />
+                            </svg>
+                        </button>
+                    </Tooltip>
+                    {#if wakeAt !== null}
+                        <Tooltip text={`${wakeTimes.some(time => time !== wakeAt) ? 'Next wake' : 'Wake'} at ${formatPendingDateTime(wakeAt)}`} position="right" delay={250}>
+                            <time class="pending-tab-time" datetime={new Date(wakeAt).toISOString()}>{formatPendingRemaining(wakeAt, pendingNow)}</time>
+                        </Tooltip>
+                    {/if}
+                {/if}
                 <button class="closed-tab-remove" type="button" aria-label={pending ? 'Close pending tabs' : 'Remove from recently closed'}
                         title={pending ? 'Close pending tabs' : 'Remove from recently closed'}
                         onclick={() => removeArchivedItem(item, pending)}
@@ -1755,7 +1804,7 @@
     {/each}
 {/snippet}
 
-<svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
+<svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(e); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 
 {#if tabSidebarVisible}
     <div class="sidebar-window-drag" class:drag-enabled={isDragEnabled && !tabDrag.active && !tabDrag.pending && !isResizingTabSidebar && !tabContextMenu.visible && !headerMenuOpen}
@@ -2296,7 +2345,8 @@
                                              onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) hidePending() }}
                                              ondblclick={(e) => e.stopPropagation()}>
                                             <button class="closed-tabs-header" type="button" aria-expanded={pendingHoveredSpace === spaceId}
-                                                    onclick={() => showPending(spaceId)}>
+                                                    onmousedown={(e) => { if (e.button === 0) showPending(spaceId) }}
+                                                    onclick={(e) => { if (e.detail === 0) showPending(spaceId) }}>
                                                 <span class="closed-tabs-title">Pending</span>
                                                 <span class="closed-tabs-count">{spacePending.length}</span>
                                             </button>
@@ -2459,6 +2509,8 @@
         data.reloadTab(tab.id)
     }}
     {partitions}
+    onResumePending={(item) => restoreArchivedItem(item, true)}
+    onClosePending={(item) => removeArchivedItem(item, true)}
     contextMenuOpenTime={tabContextMenuOpenTime} />
 
 <style>
@@ -4459,9 +4511,37 @@
         z-index: 12;
     }
     :global(.sidebar-box.visible) .closed-tabs-section.pending-tabs-section { width: auto; bottom: auto; }
-    .closed-tabs-content.pending-tabs-content { top: 100%; bottom: auto; border: 1px solid var(--menu-border); border-radius: 0 0 13px 13px; }
-    .closed-tabs-content.pending-tabs-content.expanded { transform: translateY(-4px); }
+    .closed-tabs-content.pending-tabs-content,
+    .closed-tabs-content.pending-tabs-content.expanded {
+        top: calc(100% - 4px);
+        bottom: auto;
+        border: 1px solid var(--menu-border);
+        border-radius: 0 0 13px 13px;
+        transform: none;
+        transition: opacity 150ms ease, visibility 150ms ease;
+    }
     .pending-tabs-content .closed-tabs-list { max-height: min(360px, 45vh); padding: 8px; }
+    .pending-tab-time {
+        color: #afafaf;
+        padding: 4px 3px;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .pending-tab-resume {
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        padding: 3px;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: #888;
+        cursor: pointer;
+    }
+    .pending-tab-resume:hover, .pending-tab-resume:focus-visible { color: #eee; background: #ffffff14; }
+    .pending-tab-resume svg { width: 16px; height: 16px; }
     .closed-tabs-section {
         position: absolute;
         bottom: 8px;
@@ -4673,6 +4753,12 @@
         opacity: 1;
         width: 25px;
         padding: 0 4px;
+    }
+
+    .pending-tab-row .closed-tab-remove {
+        width: 22px;
+        padding: 0 4px;
+        margin-right: 4px;
     }
 
     .closed-tab-remove:hover {

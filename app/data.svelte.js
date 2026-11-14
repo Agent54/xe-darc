@@ -1739,6 +1739,23 @@ const data = {
         return Promise.all([...saves, replacement, activeReplacement]).then(() => pendingScheduler.refresh())
     },
     resumePendingTab: (tabId, { activate: focus = true } = {}) => resumePendingTab(tabId, { focus }),
+    reschedulePendingTabs: async (tabIds, wakeAt, reason) => {
+        if (wakeAt !== null && (!Number.isFinite(wakeAt) || wakeAt <= Date.now())) {
+            throw new Error('Choose a future time to snooze this tab.')
+        }
+        const results = await Promise.allSettled(tabIds.map(async tabId => {
+            await documentUpdateSaveTasks.get(tabId)
+            const tab = await db.get(tabId)
+            if (desiredDocumentUpdates.has(tabId) || tab.archive !== 'deferred' || !tab.pending) {
+                throw new Error('This tab is no longer available to reschedule.')
+            }
+            await putDocument({ ...tab, pending: { ...tab.pending, wakeAt, reason }, modified: Date.now() })
+        }))
+        await pendingScheduler.refresh()
+        if (results.some(result => result.status === 'rejected')) {
+            throw new Error('Some tabs could not be rescheduled. Check Pending and try again.')
+        }
+    },
     refreshPendingTabs: () => pendingScheduler.refresh(),
     restoreClosedItems: async (tabIds) => {
         for (const tabId of tabIds) await data.restoreClosedTab(tabId)

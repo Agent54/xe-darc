@@ -107,6 +107,10 @@ There is no additional MCP tool token or Authorization header. Old saved token
 fields are removed during migration, and previously issued paths remain aliases
 for the same connection until it is removed.
 
+Darc supplies its saved connection identity in `darc/connections` metadata when
+opening or loading a session. The proxy requires this identity and uses its ID
+for the MCP URL.
+
 ## Test browser MCP without a model prompt
 
 1. Start the proxy with `deno task start` and reload Darc with the updated app.

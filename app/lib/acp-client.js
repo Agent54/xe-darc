@@ -76,13 +76,14 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         publish()
     }
 
-    function cancelApprovals() {
+    function cancelApprovals(conversationId) {
         for (const id of pendingApprovals.keys()) {
+            if (conversationId && state.approvals.find(item => item.id === id)?.conversationId !== conversationId) { continue }
             resolveApproval(id, null)
         }
     }
 
-    function askApproval({ title, details, options, signal, conversationId }) {
+    function askApproval({ title, details, options, signal, conversationId, sessionId }) {
         if (signal?.aborted) {
             return Promise.resolve(null)
         }
@@ -90,7 +91,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         return new Promise(resolve => {
             const abort = () => resolveApproval(id, null)
             pendingApprovals.set(id, { resolve, cleanup: () => signal?.removeEventListener('abort', abort) })
-            state.approvals.push({ id, title, details, options, conversationId })
+            state.approvals.push({ id, title, details, options, conversationId, sessionId })
             const chat = state.conversations.find(item => item.id === conversationId)
             if (chat) {
                 addMessage(chat, 'approval', '', { approvalId: id, title, details, options, status: 'pending' })
@@ -142,12 +143,25 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         publish()
     }
 
-    async function setupRequest(peer, method, params) {
-        const timer = setTimeout(() => peer.close(new Error('ACP setup timed out')), setupTimeout)
+    async function setupRequest(peer, method, params, conversationId) {
+        const expire = () => peer.close(new Error('ACP setup timed out'))
+        let timer = setTimeout(expire, setupTimeout)
+        let waitingForPermission = false
+        const watchPermissions = () => {
+            const waiting = state.approvals.some(approval =>
+                (conversationId && approval.conversationId === conversationId) ||
+                (params.sessionId && approval.sessionId === params.sessionId))
+            if (waiting === waitingForPermission) { return }
+            waitingForPermission = waiting
+            clearTimeout(timer)
+            if (!waiting) { timer = setTimeout(expire, setupTimeout) }
+        }
+        listeners.add(watchPermissions)
         try {
             return await peer.agent.request(method, params)
         } finally {
             clearTimeout(timer)
+            listeners.delete(watchPermissions)
         }
     }
 
@@ -229,15 +243,31 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                 .onRequest(acp.methods.client.mcp.message, provider.handleRequest)
                 .onNotification(acp.methods.client.session.update, ({ params }) => handleUpdate(params))
                 .onRequest(acp.methods.client.session.requestPermission, async ({ params, signal }) => {
-                    const chat = state.conversations.find(item => item.sessionId === params.sessionId)
-                    if (!chat || activeTurn?.cancelled) {
+                    let chat = state.conversations.find(item => item.sessionId === params.sessionId)
+                    if (!chat) {
+                        // Some agents ask before session/new returns its session ID.
+                        const opening = state.conversations.filter(item => {
+                            const setup = sessionSetups.get(item)
+                            return !item.sessionId && setup?.peer === connection && (!setup.sessionId || setup.sessionId === params.sessionId)
+                        })
+                        if (opening.length === 1) {
+                            chat = opening[0]
+                            sessionSetups.get(chat).sessionId = params.sessionId
+                        }
+                    }
+                    if (!chat) {
+                        state.error = 'The agent requested permission for an unknown conversation.'
+                        publish()
+                        return { outcome: { outcome: 'cancelled' } }
+                    }
+                    if (activeTurn?.cancelled && activeTurn.chat === chat) {
                         return { outcome: { outcome: 'cancelled' } }
                     }
                     const optionId = await askApproval({
                         title: params.toolCall.title || 'Agent permission', details: JSON.stringify(params.toolCall, null, 2),
-                        options: params.options, signal, conversationId: chat.id
+                        options: params.options, signal, conversationId: chat.id, sessionId: params.sessionId
                     })
-                    return { outcome: optionId ? { outcome: 'selected', optionId } : { outcome: 'cancelled' } }
+                    return { outcome: optionId !== null ? { outcome: 'selected', optionId } : { outcome: 'cancelled' } }
                 })
             const peer = app.connect(createStream(settings.endpoint, {
                 headers: settings.token ? { Authorization: `Bearer ${settings.token}` } : {}, cookies: 'include'
@@ -339,7 +369,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         setup.promise = setupRequest(peer, chat.sessionId ? acp.methods.agent.session.load : acp.methods.agent.session.new, {
             ...(chat.sessionId ? { sessionId: chat.sessionId } : {}), cwd: settings.cwd, mcpServers: declarations,
             ...(persistentMcp ? { _meta: { 'darc/connections': proxyIdentities } } : {})
-        }).then(async response => {
+        }, chat.id).then(async response => {
             if (connection !== peer) {
                 throw new Error('ACP connection changed while opening the conversation')
             }
@@ -419,7 +449,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                     state.queuePaused = true
                 } finally {
                     clearTimeout(turn.cancelTimer)
-                    cancelApprovals()
+                    cancelApprovals(chat.id)
                     for (const message of chat.messages) {
                         if (!message.local) {
                             message.streaming = false

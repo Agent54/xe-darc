@@ -1,5 +1,6 @@
 <script>
     import { getTabTitle } from '../lib/tab-title.js'
+    import { formatPendingDateTime } from '../lib/pending-tabs.js'
     import SecurityIndicator from './SecurityIndicator.svelte'
     import data from '../data.svelte.js'
     import Tooltip from './Tooltip.svelte'
@@ -150,7 +151,7 @@
 {#snippet resumeIndicator()}
     {#if currentTab?.resumedAt && !currentTab.archive}
         <span class="favicon-resumed">
-            <Tooltip position="right" delay={250} text={`${currentTab.resumedReason === 'external' ? 'Returned from waiting for external action' : 'Returned from snooze'} on ${new Date(currentTab.resumedAt).toLocaleString()}`}>
+            <Tooltip position="right" delay={250} text={`${currentTab.resumedReason === 'external' ? 'Returned from waiting for external action' : 'Returned from snooze'} on ${formatPendingDateTime(currentTab.resumedAt)}`}>
                 <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="Returned from Pending"><path d="M12 2a6 6 0 0 0-6 6v4l-2 4h16l-2-4V8a6 6 0 0 0-6-6Zm-3 16a3 3 0 0 0 6 0H9Z" /></svg>
             </Tooltip>
         </span>

@@ -9,6 +9,7 @@
     import Settings from './components/Settings.svelte'
     import { openTabDevTools } from './lib/tab-devtools.js'
     import { closeButtonHistory } from './lib/close-button-history.js'
+    import { afterPaintIdle } from './lib/after-paint-idle.js'
     import { getPendingPermissionRequests, groupPermissionCards } from './lib/permissions.js'
     import resourceTypes from './lib/resourceTypes.js'
     import UserMods from './components/UserMods.svelte'
@@ -26,6 +27,7 @@
     import NewTabMenu from './components/NewTabMenu.svelte'
     import PinMenu from './components/PinMenu.svelte'
     import AppearanceContextMenu from './components/AppearanceContextMenu.svelte'
+    import Tooltip from './components/Tooltip.svelte'
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
     import ShortcutOverlay from './components/ShortcutOverlay.svelte'
@@ -335,20 +337,64 @@
     let blockedRequestActive = $state(false)
     let mockedActivationActive = $state(false)
     let permissionRequestActive = $state(false)
-    const requestPages = $derived(Object.entries(data.frames)
-        .filter(([id, frame]) => frame.frame && data.docs[id] && !data.docs[id].archive && !data.docs[id]._deleted)
-        .map(([id, frame]) => ({ tab: data.docs[id], ...frame.requestActivity })))
-    const networkAccessTooltip = $derived(['Network access', ...requestPages
-        .filter(page => page.allowed > 0)
-        .map(page => `${getTabTitle(page.tab)}: ${page.allowed} allowed ${page.allowed === 1 ? 'request' : 'requests'}`)]
-        .join('\n'))
-    const blockedRequestTooltip = $derived(['Blocked requests', ...requestPages
-        .filter(page => page.blocked > 0)
-        .map(page => `${getTabTitle(page.tab)}: ${page.blocked} blocked`)]
-        .join('\n'))
-    const permissionRequestTooltip = $derived(['Permission requests', ...groupPermissionCards(getPendingPermissionRequests(data.permissions, window.darcWindowId))
+    let networkAccessTooltip = $state('Network access')
+    let blockedRequestTooltip = $state('Blocked requests')
+    let permissionRequestTooltip = $state('Permission requests')
+    const pendingPermissionCards = $derived(groupPermissionCards(getPendingPermissionRequests(data.permissions, window.darcWindowId)))
+    const permissionRequestSummary = $derived(['Permission requests', ...pendingPermissionCards
         .map(request => `${getTabTitle(data.docs[request.tabId]) || request.origin || request.url}: ${resourceTypes[request.type]?.name || request.type}`)]
         .join('\n'))
+
+    function refreshStatusLightTooltips() {
+        const allowed = ['Network access']
+        const blocked = ['Blocked requests']
+        for (const [id, frame] of Object.entries(data.frames)) {
+            const activity = frame.requestActivity
+            if (!frame.frame || !activity || (!activity.allowed && !activity.blocked)) {
+                continue
+            }
+
+            const tab = data.docs[id]
+            if (!tab || tab.archive || tab._deleted) {
+                continue
+            }
+
+            const title = getTabTitle(tab)
+            if (activity.allowed > 0) {
+                allowed.push(`${title}: ${activity.allowed} allowed ${activity.allowed === 1 ? 'request' : 'requests'}`)
+            }
+            if (activity.blocked > 0) {
+                blocked.push(`${title}: ${activity.blocked} blocked`)
+            }
+        }
+
+        networkAccessTooltip = allowed.join('\n')
+        blockedRequestTooltip = blocked.join('\n')
+        permissionRequestTooltip = permissionRequestSummary
+    }
+
+    $effect(() => {
+        if (!statusLightsEnabled) {
+            return
+        }
+
+        // Keep hover and request handling independent of summary formatting.
+        let refreshTimer
+        let cancelRefresh = afterPaintIdle(refresh)
+
+        function refresh() {
+            refreshStatusLightTooltips()
+            refreshTimer = setTimeout(() => {
+                cancelRefresh = afterPaintIdle(refresh)
+            }, 250)
+        }
+
+        return () => {
+            clearTimeout(refreshTimer)
+            cancelRefresh()
+        }
+    })
+
     let globalTabComplete = $state(true)
     let lightboxModeEnabled = $state(true)
     let tabsOpenRight = $state(true)
@@ -4777,18 +4823,26 @@
                     </svg>
                 </div>
             {/if} -->
-            <div class="led-target" role="img" aria-label={networkAccessTooltip} title={networkAccessTooltip}>
-                <div class="led-dot network-access" class:active={networkAccessActive}></div>
-            </div>
-            <div class="led-target" role="img" aria-label={blockedRequestTooltip} title={blockedRequestTooltip}>
-                <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>
-            </div>
-            <div class="led-target" role="img" aria-label="Mocked activation" title="Mocked activation">
-                <div class="led-dot mocked-activation" class:active={mockedActivationActive}></div>
-            </div>
-            <div class="led-target" role="img" aria-label={permissionRequestTooltip} title={permissionRequestTooltip}>
-                <div class="led-dot permission-request" class:active={permissionRequestActive}></div>
-            </div>
+            <Tooltip text={networkAccessTooltip} position="left" delay={0} multiline>
+                <div class="led-target" role="img" aria-label={networkAccessTooltip}>
+                    <div class="led-dot network-access" class:active={networkAccessActive}></div>
+                </div>
+            </Tooltip>
+            <Tooltip text={blockedRequestTooltip} position="left" delay={0} multiline>
+                <div class="led-target" role="img" aria-label={blockedRequestTooltip}>
+                    <div class="led-dot blocked-request" class:active={blockedRequestActive}></div>
+                </div>
+            </Tooltip>
+            <Tooltip text="Mocked activation" position="left" delay={0}>
+                <div class="led-target" role="img" aria-label="Mocked activation">
+                    <div class="led-dot mocked-activation" class:active={mockedActivationActive}></div>
+                </div>
+            </Tooltip>
+            <Tooltip text={permissionRequestTooltip} position="left" delay={0} multiline>
+                <div class="led-target" role="img" aria-label={permissionRequestTooltip}>
+                    <div class="led-dot permission-request" class:active={permissionRequestActive}></div>
+                </div>
+            </Tooltip>
         {/if}
     </div>
     <!-- class:drag-enabled={isDragEnabled} -->
@@ -4809,7 +4863,7 @@
 
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
-<PermissionToasts visible={!openSidebars.has('resources')} {headerPartOfMain} onOpenResources={switchToResources} />
+<PermissionToasts visible={!openSidebars.has('resources')} pendingCards={pendingPermissionCards} {headerPartOfMain} onOpenResources={switchToResources} />
 <TabToasts {headerPartOfMain} />
 
 {#if openSidebars.size > 0}
@@ -5323,11 +5377,8 @@
         -webkit-app-region: no-drag;
         right: 22px;
         bottom: 13px;
-        transition: right 80ms ease;
-    }
-
-    .sidebar-right:hover .led-indicator-array { 
-         right: 8px;
+        transform: translateX(var(--sidebar-lights-shift, 0px));
+        transition: transform var(--sidebar-slide-transition);
     }
 
     .led-target {
@@ -5337,7 +5388,15 @@
         width: 17px;
         height: 11px;
         margin: -2px -5px;
+        position: relative;
         flex-shrink: 0;
+    }
+
+    .led-target::before {
+        /* Keep the same light hovered as the toolbar slides away from the pointer. */
+        content: '';
+        position: absolute;
+        inset: 0 -16px 0 0;
     }
 
     .led-dot {
