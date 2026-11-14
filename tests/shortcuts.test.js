@@ -287,7 +287,6 @@ function harness() {
         activateTab(tab) { data.spaceMeta.activeTabId = tab.id; calls.push(['activate', tab.id]) },
         getTabs: () => spaces.s1.tabs,
         escape: () => false,
-        focusTab: id => calls.push(['focus', id]),
         showOverview: () => calls.push(['overview'])
     }
     return { data, ui, calls, run: createShortcutActions(data, ui), tab }

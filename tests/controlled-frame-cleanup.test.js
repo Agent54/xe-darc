@@ -183,14 +183,37 @@ Deno.test('a new frame starts the search navigation after script registration co
     h.frame.addContentScripts = () => new Promise(resolve => { finishInjection = resolve })
     const setup = h.setupContentScripts(h.frame)
     assert.deepEqual(h.events, [])
+    h.data.docs.page = { ...h.tab, url: 'https://search.example/?q=latest' }
     finishInjection()
     await setup
-    assert.equal(h.frame.src, h.tab.url)
-    assert.deepEqual(h.events, [h.tab.url])
+    assert.equal(h.frame.src, h.data.docs.page.url)
+    assert.deepEqual(h.events, [h.data.docs.page.url])
     h.frame.src = 'https://next.example/'
     finishInjection()
     await Promise.resolve()
-    assert.deepEqual(h.events, [h.tab.url, 'https://next.example/'])
+    assert.deepEqual(h.events, [h.data.docs.page.url, 'https://next.example/'])
+})
+
+Deno.test('a script setup failure blocks navigation and discards an unopened popup', async () => {
+    for (const popup of [false, true]) {
+        for (const addContentScripts of [undefined, () => Promise.reject(new Error('Script registration failed'))]) {
+            const h = harness()
+            const state = h.data.frames.page
+            state.loading = true
+            h.frame.addContentScripts = addContentScripts
+            if (popup) {
+                state.pendingWindow = {
+                    attach() { h.events.push('attached') },
+                    discard() { h.events.push('discarded') }
+                }
+            }
+            await h.setupContentScripts(h.frame)
+            assert.equal(state.scriptSetup, 'failed')
+            assert.equal(state.loading, false)
+            assert.equal(state.pendingWindow, undefined)
+            assert.deepEqual(h.events, popup ? ['discarded'] : [])
+        }
+    }
 })
 
 Deno.test('native popup attachment uses the configured guest instead of navigating away from its opener', async () => {

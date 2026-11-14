@@ -979,7 +979,7 @@
                         : { toPreview: true })
                 }}
                 onmousedown={(e) => {
-                    if (e.target === e.currentTarget) {
+                    if (e.button === 0 && e.target === e.currentTarget) {
                         data.dismissLightbox(lightboxChild?.id)
                     }
                 }}

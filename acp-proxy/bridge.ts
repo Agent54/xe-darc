@@ -59,8 +59,8 @@ export function connectProxy(stream: Stream, stdio: Stream, gateway: ReturnType<
                 params = { ...params, mcpServers, _meta: meta }
             }
             if (options.browserOnly && params && typeof params === 'object') {
-                params = { ...params,
-                    ...('cwd' in params ? { cwd: options.browserOnly.cwd } : {}),
+                // OpenCode must not load local project configuration or additional filesystem roots.
+                params = { ...params, ...('cwd' in params ? { cwd: options.browserOnly.cwd } : {}),
                     ...('additionalDirectories' in params ? { additionalDirectories: [] } : {}) }
             }
             const result = await backend.agent.request(method, params, { cancellationSignal: signal, stopWaitingOnCancel: true })

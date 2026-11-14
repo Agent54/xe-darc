@@ -1281,8 +1281,10 @@ function dismissLightbox(tabId, { rememberForForward = true, restoreWithParent =
     const canReopen = rememberForForward && selected && getTabOwner(opener.id)
     const frameData = frames[tabId]
     const now = Date.now()
+    const committedUrl = frameData?.committedUrl
     const closing = queueDocumentUpdate(tabId, {
-        archive: 'closed-lightbox', closed: true, closedAt: now, modified: now, restoreWithParent
+        archive: 'closed-lightbox', closed: true, closedAt: now, modified: now, restoreWithParent,
+        ...(committedUrl && committedUrl !== tab.url ? { url: committedUrl, title: committedUrl, favicon: null } : {})
     })
     const descendants = (previews[tabId]?.tabs.slice() || []).map(child =>
         child.lightbox ? dismissLightbox(child.id, { rememberForForward: false }) : closeTab(child.spaceId, child.id, { createReplacement: false }))
@@ -1425,7 +1427,8 @@ function closeTab (spaceId, tabId, { createReplacement = true, batchId = null } 
     if (tab.lightbox) return dismissLightbox(tabId)
 
     const frame = frames[tabId]?.frame
-    const discard = !batchId && (tab.url?.startsWith('about:newtab') || tab.url?.startsWith('about:blank')) &&
+    const openLightboxId = previews[tabId]?.lightbox
+    const discard = !batchId && !openLightboxId && (tab.url?.startsWith('about:newtab') || tab.url?.startsWith('about:blank')) &&
         !frame?.canGoBack?.() && !frame?.canGoForward?.()
 
     if (frames[tabId]) {
@@ -1461,7 +1464,6 @@ function closeTab (spaceId, tabId, { createReplacement = true, batchId = null } 
         ensureSpaceHasTab(spaceId, { shouldFocus: spaceMeta.activeSpace === spaceId })
     }
    
-    const openLightboxId = previews[tabId]?.lightbox
     const closingPreviews = [
         ...(previews[tabId]?.tabs.slice().map(prev => {
             if (prev.lightbox) return dismissLightbox(prev.id, { rememberForForward: false, restoreWithParent: !discard && prev.id === openLightboxId })

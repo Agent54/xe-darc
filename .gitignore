@@ -10,7 +10,7 @@ dist-ssr
 server/dist
 public/dist
 data
-# Private OpenCode runtime, created when an ACP client connects.
+# Private OpenCode runtime, credentials, and generated MCP configuration.
 acp-proxy/data/
 secrets.json
 .claude/claude.json

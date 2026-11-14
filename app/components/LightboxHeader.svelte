@@ -114,7 +114,8 @@
                     <button
                         class="lightbox-btn"
                         aria-label="Close lightbox"
-                        onmousedown={onClose}
+                        onmousedown={(event) => { if (event.button === 0) onClose(event) }}
+                        onclick={(event) => { if (event.detail === 0) onClose(event) }}
                     >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="18" y1="6" x2="6" y2="18"></line>

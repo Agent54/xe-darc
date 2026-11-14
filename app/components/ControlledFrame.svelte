@@ -45,6 +45,11 @@
     const scriptSetupFailed = $derived(data.frames[tabId]?.scriptSetup === 'failed' &&
         !isNewTabUrl(tab?.url) && !isTabHistoryUrl(tab?.url))
 
+    const frameSetupError = $derived.by(() => {
+        if (data.permissionState.status === 'error') return 'Permission settings could not be loaded.'
+        return null
+    })
+
     let viewMode = $derived(data.ui.viewMode)
 
     let linkPreviewTimeout = null
@@ -477,7 +482,11 @@
         frameData.committedUrl = info.url
         data.rememberLightboxOpeningEntry?.(tab.id)
         if (!data.isInternalPage(info.url)) {
-            data.updateTab(tab.id, { lastLoadedAt: Date.now(), ...(currentTab.lightbox ? { url: info.url } : {}) })
+            const update = { lastLoadedAt: Date.now() }
+            if (currentTab.lightbox && currentTab.url !== info.url) {
+                Object.assign(update, { url: info.url, title: info.url, favicon: null })
+            }
+            data.updateTab(tab.id, update)
         }
         if (isDirectNavigation(info.url)) {
             data.frames[tab.id].directNavigation = null
@@ -568,8 +577,8 @@
 
         // Clear favicon immediately on navigation start to prevent stale favicons
         // This ensures the globe icon shows while loading instead of old favicon
-        if (event?.url && event.url !== tab.url) {
-            tab.favicon = null
+        if (event?.url && event.url !== currentTab.url) {
+            currentTab.favicon = null
         }
 
         // Fallback off-origin blocking in loadstart (main blocking is in onBeforeRequest)
@@ -1648,6 +1657,7 @@ document.addEventListener('input', function(event) {
 
         frame.onconsolemessage = (event) => handleGuestMessage(readGuestMessage(frame, event.message))
         const handleIPCMessage = (type, payload) => {
+            if (data.isLightboxFrameRetained?.(mytab.id)) return
             if (type !== 'link-enter' && type !== 'link-leave') return
             if (type === 'link-enter' && (typeof payload?.href !== 'string' || !payload.href)) return
             if (linkPreviewTimeout) {
@@ -1664,13 +1674,15 @@ document.addEventListener('input', function(event) {
         }
         const handleGuestMessage = (message) => {
             // console.log('consolemessage', event)
-            if (message === null || data.isLightboxFrameRetained?.(mytab.id)) {
+            if (message === null) {
                 return
             }
             
             if (message === `iwa:ipc-ready:${mytab.id}`) {
                 frame.activeScrolls = 0
                 connectFrameIPC(frame, mytab.id, handleIPCMessage)
+            } else if (data.isLightboxFrameRetained?.(mytab.id)) {
+                return
             } else if (message.startsWith('[IPC]')) {
                 console.log(message, '| tabId:', mytab.id)
             } else if (message === 'iwa:focus') {
@@ -2550,7 +2562,7 @@ document.addEventListener('input', function(event) {
         
         class:window-controls-overlay={headerPartOfMain}
         class:no-pointer-events={isScrolling}
-        class:frame-setup-error={scriptSetupFailed}
+        class:frame-setup-error={!!frameSetupError || scriptSetupFailed}
         class:certificate-error={!!currentCertificateError}
         class:network-error={!!currentNetworkError}
         class:new-tab-page={isNewTabUrl(tab?.url)}
@@ -2575,15 +2587,16 @@ document.addEventListener('input', function(event) {
 
         <div class="hidden" bind:this={anchor}></div>
 
-        {#if data.permissionState.status === 'error'}
+        {#if frameSetupError}
             <div class="permission-load-error" role="alert">
-                <p>Permission settings could not be loaded.</p>
+                <p>{frameSetupError}</p>
                 <button onmousedown={() => window.location.reload()}>Reload Darc</button>
             </div>
         {:else if scriptSetupFailed}
             <div class="permission-load-error" role="alert">
                 <p>Darc could not prepare this tab. The page was blocked.</p>
-                <button onclick={() => data.reloadTab(tabId)}>Reload Tab</button>
+                <button onmousedown={event => { if (event.button === 0) data.reloadTab(tabId) }}
+                    onclick={event => { if (event.detail === 0) data.reloadTab(tabId) }}>Reload Tab</button>
             </div>
         {:else if currentCertificateError}
             <SSLErrorPage

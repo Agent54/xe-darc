@@ -1597,6 +1597,22 @@ Deno.test('reload discards a pending or failed frame and retries the same tab', 
     assert.deepEqual(calls, [])
 })
 
+Deno.test('navigation and reload cannot send a URL to a frame whose script setup is pending or failed', async () => {
+    const { data, refresh } = session({ tabs: [tab('page')], runtime: 'client' })
+    await refresh()
+    const calls = []
+    const frame = { set src(url) { calls.push(url) }, reload() { calls.push('reload') } }
+    for (const scriptSetup of ['pending', 'failed']) {
+        data.frames.page = { frame, scriptSetup }
+        const url = `https://example.com/${scriptSetup}`
+        await data.navigate('page', url)
+        data.reloadTab('page')
+        data.reloadCurrentTab()
+        assert.equal(data.docs.page.url, url)
+        assert.deepEqual(calls, [])
+    }
+})
+
 Deno.test('fresh web tabs stay pending until frame creation and hibernation still clears that intent', async () => {
     const { data, refresh } = session({ tabs: [tab('anchor')], runtime: 'client' })
     await refresh()
@@ -2155,6 +2171,8 @@ Deno.test('lightbox history stays out of Recently Closed before and after refres
         history: ['parent'], runtime: 'client' })
     await h.refresh()
     assert.equal(h.data.spaceMeta.closedTabs.length, 0)
+    h.data.frames.lightbox = { committedUrl: 'https://committed.example/' }
+    await h.data.navigate('lightbox', 'https://loading.example/')
     const closing = h.data.closeTab(defaultSpace, 'lightbox')
     assert.equal(h.data.previews.parent.lightbox, null)
     assert.equal(h.data.spaceMeta.closedTabs.length, 0)
@@ -2168,6 +2186,7 @@ Deno.test('lightbox history stays out of Recently Closed before and after refres
     assert.deepEqual(Array.from(restarted.data.getLightboxHistory('parent'), tab => tab.id).sort(), ['legacy', 'lightbox'])
     assert.equal(restarted.data.navigateTabHistory('parent', 'forward'), true)
     assert.equal(restarted.data.previews.parent.lightbox, 'lightbox')
+    assert.equal(restarted.data.docs.lightbox.url, 'https://committed.example/')
     assert.equal(restarted.data.spaceMeta.activeTabId, 'parent')
 })
 
@@ -2205,7 +2224,7 @@ Deno.test('Back navigates the lightbox and dismisses its first entry, and Forwar
 })
 
 Deno.test('restoring or refreshing multiple saved lightboxes keeps the latest child and parent tab identity', async () => {
-    const h = session({ tabs: [tab('parent'), tab('newer', defaultSpace, { opener: 'parent', lightbox: true, created: 2 }),
+    const h = session({ tabs: [tab('parent', defaultSpace, { url: 'about:newtab' }), tab('newer', defaultSpace, { opener: 'parent', lightbox: true, created: 2 }),
         tab('older', defaultSpace, { opener: 'parent', lightbox: true, created: 1 })], history: ['parent'], runtime: 'client' })
     await h.refresh()
     assert.equal(h.data.previews.parent.lightbox, 'newer')
