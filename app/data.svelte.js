@@ -317,6 +317,15 @@ const permissionStore = createPermissionStore({
         const frame = frames[tabId]
         return { url: frame?.committedUrl || tab?.url, partition: tab?.partition || 'persist:myapp', frame: frame?.frame }
     },
+    onDenied: (tabId, context) => {
+        const frame = frames[tabId]
+        if (!frame?.frame || frame.frame !== context?.frame || (frame.committedUrl || docs[tabId]?.url) !== context.url) {
+            return
+        }
+        frame.requestActivity ??= { allowed: 0, blocked: 0 }
+        frame.requestActivity.blocked += 1
+        ledIndicators.blockedRequest = Date.now()
+    },
     onRevoke: (scope, permission) => {
         if (['download', 'open-tab', 'navigate-off-origin'].includes(permission?.name) || permission?.name?.startsWith('mcp-')) {
             return

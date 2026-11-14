@@ -175,7 +175,7 @@ export function handleFramePermission(data, tabId, event, context) {
     }
 }
 
-export function createPermissionStore({ db, putDocument, permissions, rules, state, instanceId, getContext, getWindowId, onRevoke = () => {} }) {
+export function createPermissionStore({ db, putDocument, permissions, rules, state, instanceId, getContext, getWindowId, onRevoke = () => {}, onDenied = () => {} }) {
     const prefix = `darc:permission:${encodeURIComponent(instanceId)}:`
     const seenByPermission = new Map()
     const permissionDocuments = new Map()
@@ -349,6 +349,14 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
         }
     }
 
+    function setRequestStatus(resource, status) {
+        const denied = status === 'denied' && resource.status !== 'denied'
+        resource.status = status
+        if (denied) {
+            onDenied(resource.tabId, requests.get(resource.requestId)?.context)
+        }
+    }
+
     function settleRequests() {
         for (const group of groups) {
             const current = group.context.current ? group.context.current() : getContext(group.tabId)
@@ -364,7 +372,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
                 for (const id of group.requestIds) {
                     const resource = requests.get(id)?.resource
                     if (resource?.status === 'requested') {
-                        resource.status = granted ? 'granted' : 'denied'
+                        setRequestStatus(resource, granted ? 'granted' : 'denied')
                         resource.unseen = false
                         resource.needsReload = false
                         if (rules[resource.ruleId]) {
@@ -382,7 +390,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
             }
             const record = decisionRecord(resource.type, resource.tabId, resource.url, context, [])
             if (record) {
-                resource.status = record.decision === 'deny' ? 'denied' : 'granted'
+                setRequestStatus(resource, record.decision === 'deny' ? 'denied' : 'granted')
                 resource.lifetime = rules[record.id] ? 'persistent' : 'session'
                 resource.unseen = false
                 if (resource.status === 'denied') {
@@ -404,6 +412,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
             return { granted: true }
         }
         if (decisions.some(record => record?.decision === 'deny')) {
+            onDenied(tabId, context)
             return { granted: false }
         }
         let requestId
@@ -566,7 +575,7 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
                     requestId, frame: pending.context.frame, url: pending.context.url, expires: Date.now() + 60000 })
             }
         }
-        resource.status = value === 'allow' ? 'granted' : value === 'deny' ? 'denied' : 'ignored'
+        setRequestStatus(resource, value === 'allow' ? 'granted' : value === 'deny' ? 'denied' : 'ignored')
         resource.lifetime = lifetime
         if (value !== 'allow') {
             resource.needsReload = false

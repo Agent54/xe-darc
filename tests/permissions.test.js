@@ -6,7 +6,7 @@ import { createPermissionStore, handleFramePermission, permissionDescriptor, per
 function harness(records = new Map(), instanceId = 'installation') {
     const permissions = {}, rules = {}, state = { status: 'loading', error: null }
     const contexts = new Map(['one', 'two'].map(id => [id, { url: 'https://site.example/page', partition: 'persist:myapp', frame: {} }]))
-    const writes = [], revocations = []
+    const writes = [], revocations = [], denials = []
     const reads = { allDocs: 0, get: 0 }
     let failWrite = false, conflicts = 0
     const db = {
@@ -32,8 +32,9 @@ function harness(records = new Map(), instanceId = 'installation') {
         }
     }
     const store = createPermissionStore({ db, putDocument: doc => db.put(doc), permissions, rules, state, instanceId,
-        getWindowId: () => 'window', getContext: id => contexts.get(id), onRevoke: scope => revocations.push(scope) })
-    return { store, records, permissions, rules, state, contexts, writes, revocations, reads,
+        getWindowId: () => 'window', getContext: id => contexts.get(id), onRevoke: scope => revocations.push(scope),
+        onDenied: (tabId, context) => denials.push({ tabId, context }) })
+    return { store, records, permissions, rules, state, contexts, writes, revocations, denials, reads,
         resources: () => Object.values(permissions).flatMap(type => Object.values(type.origins || {}).flatMap(entry => entry.requests)),
         data: { permissionRequest: (id, input, context) => store.request(id, input, context) },
         failWrites() { failWrite = true }, conflictOnce() { conflicts = 1 } }
@@ -265,6 +266,38 @@ Deno.test('cached answers resolve synchronously on the request controller in bot
         const denied = shape.nested ? 'cancel' : 'deny'
         assert.deepEqual(native(h, shape), shape.nested || shape.cancelable === false ? [denied] : ['defer', denied])
         assert.equal(h.resources().length, 0)
+    }
+})
+
+Deno.test('permission denials report each pending request and cached rejection once', async () => {
+    for (const shape of [{}, { nested: true }, { cancelable: false }]) {
+        const h = harness()
+        await h.store.ready
+        native(h, shape)
+        native(h, { ...shape, tabId: 'two' })
+        assert.equal(h.denials.length, 0)
+        await h.store.resolve(h.resources()[0].requestId, 'deny')
+        assert.deepEqual(h.denials.map(item => item.tabId).sort(), ['one', 'two'])
+        assert.deepEqual(h.denials.find(item => item.tabId === 'one').context, h.contexts.get('one'))
+        await h.store.setDecision('geolocation', 'one', 'deny')
+        assert.equal(h.denials.length, 2)
+        native(h, shape)
+        native(h, shape)
+        assert.equal(h.denials.length, 4)
+    }
+})
+
+Deno.test('allowing, ignoring and cancelling permission requests do not report denials', async () => {
+    for (const answer of ['allow', 'ignore', 'cancel']) {
+        const h = harness()
+        await h.store.ready
+        native(h)
+        if (answer === 'cancel') {
+            h.store.cancelFrame(h.contexts.get('one').frame)
+        } else {
+            await h.store.resolve(h.resources()[0].requestId, answer)
+        }
+        assert.equal(h.denials.length, 0)
     }
 })
 
