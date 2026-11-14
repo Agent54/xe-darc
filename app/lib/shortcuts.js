@@ -6,8 +6,8 @@ export const shortcuts = [
     { id: 'restore-tab', key: 't', mod: true, shift: true, label: 'Reopen closed tab', group: 'Tabs' },
     { id: 'reload-tab', key: 'r', mod: true, label: 'Reload page', group: 'Navigation' },
     { id: 'reload-tab', key: 'F5' },
-    { id: 'open-location', key: 'l', mod: true, label: 'Edit current URL', group: 'Navigation' },
-    { id: 'reset-zoom', key: '0', mod: true, label: 'Reset zoom to 100%', group: 'Navigation' },
+    { id: 'open-location', key: 'l', mod: true, label: 'Edit URL', group: 'Navigation' },
+    { id: 'reset-zoom', key: '0', mod: true, label: 'Reset zoom', group: 'Navigation' },
     ...Array.from({ length: 9 }, (_, index) => ({
         id: `space-${index + 1}`, key: String(index + 1), mod: true,
         ...(index === 0 ? { label: 'Switch space', group: 'Spaces & view', displayKey: '1–9' } : {})
@@ -15,10 +15,10 @@ export const shortcuts = [
     { id: 'previous-active-tab', key: 'Tab', ctrl: true, repeat: true, label: 'Previous active tab', group: 'Tabs' },
     { id: 'previous-tab', key: 'ArrowLeft', mod: true, alt: true, repeat: true, label: 'Previous tab', group: 'Tabs' },
     { id: 'next-tab', key: 'ArrowRight', mod: true, alt: true, repeat: true, label: 'Next tab', group: 'Tabs' },
-    { id: 'pin-left', key: 'ArrowLeft', mod: true, alt: true, shift: true, label: 'Pin to the left', group: 'Spaces & view' },
-    { id: 'pin-right', key: 'ArrowRight', mod: true, alt: true, shift: true, label: 'Pin to the right', group: 'Spaces & view' },
-    { id: 'escape', key: 'Escape', label: 'Dismiss overlay or lightbox', group: 'Spaces & view' },
-    { id: 'overview', key: 'F18', label: 'Tab overview', group: 'Spaces & view' }
+    { id: 'pin-left', key: 'ArrowLeft', mod: true, alt: true, shift: true, label: 'Pin left', group: 'Spaces & view' },
+    { id: 'pin-right', key: 'ArrowRight', mod: true, alt: true, shift: true, label: 'Pin right', group: 'Spaces & view' },
+    { id: 'escape', key: 'Escape', label: 'Close overlay or lightbox', group: 'Spaces & view' },
+    { id: 'overview', key: 'F18', label: 'Grid view', group: 'Spaces & view' }
 ]
 
 export const shortcutActionIds = new Set([

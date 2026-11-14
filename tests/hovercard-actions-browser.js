@@ -13,6 +13,7 @@ const modules = {
         import TabHoverCard from './app/components/TabHoverCard.svelte'
         import TabContextMenu from './app/components/TabContextMenu.svelte'
         import ShortcutOverlay from './app/components/ShortcutOverlay.svelte'
+        import GestureOverlay from './app/components/GestureOverlay.svelte'
         import { openTabDevTools } from './app/lib/tab-devtools.js'
         import data from 'fixture-data'
         import { shortcuts, createShortcutMatcher, createShortcutHandler } from './app/lib/shortcuts.js'
@@ -38,6 +39,11 @@ const modules = {
         }
         const cards = {}
         let overlay = null
+        window.showGestures = () => {
+            const gestures = mount(GestureOverlay, { target: document.body, props: {
+                onClose: () => unmount(gestures)
+            } })
+        }
         const handle = createShortcutHandler(createShortcutMatcher(shortcuts, true), id => {
             if (id === 'open-location') cards.single.focusLocation()
             else if (id === 'show-shortcuts') overlay ||= mount(ShortcutOverlay, { target: document.body })
@@ -422,8 +428,35 @@ try {
     await page.waitForFunction(() => !document.querySelector('.shortcut-overlay'))
     await page.keyboard.up('Control')
     assert.equal(await page.evaluate(() => document.activeElement.id), 'focus-reference')
+
+    for (const [size, viewport] of [
+        ['narrow', { width: 390, height: 844 }],
+        ['desktop', { width: 1100, height: 700 }]
+    ]) {
+        await page.setViewport(viewport)
+        await page.evaluate(() => window.showGestures())
+        await page.waitForSelector('.gesture-overlay[open]')
+        assert.equal(await page.$eval('.gesture-sheet', sheet => {
+            const rows = [...sheet.querySelectorAll('.gesture-row')]
+            return sheet.scrollWidth <= sheet.clientWidth && rows.length === 4 && rows.every(row => {
+                const [instructions, drawing] = row.children
+                return drawing.getBoundingClientRect().left >= instructions.getBoundingClientRect().right
+            })
+        }), true, 'gesture diagrams stay to the right of the instructions without horizontal overflow')
+        await page.screenshot({ path: `${root}.cache/gesture-overlay-${size}.png` })
+        if (size === 'narrow') {
+            await page.keyboard.press('Enter')
+        } else {
+            const close = await page.$('.gesture-sheet [aria-label="Close"]')
+            await close.hover()
+            await page.mouse.down()
+            await page.waitForFunction(() => !document.querySelector('.gesture-overlay'))
+            await page.mouse.up()
+        }
+        await page.waitForFunction(() => !document.querySelector('.gesture-overlay'))
+    }
     assert.deepEqual(errors, [])
-    console.log('Held-button menu selection, neutral borderless actions, group mute/hibernate/container actions, mouse URL editing, narrow rows and keyboard shortcuts pass')
+    console.log('Held-button menu selection, neutral borderless actions, group mute/hibernate/container actions, mouse URL editing, narrow rows, keyboard shortcuts and gesture help pass')
 } finally {
     await browser?.close()
     await server.shutdown()
