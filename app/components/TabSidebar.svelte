@@ -5,7 +5,7 @@
 </script>
 
 <script>
-    import { getTabTitle } from '../lib/tab-title.js'
+    import { getTabDisplayLabel, getTabTitle } from '../lib/tab-title.js'
     import { openTabDevTools } from '../lib/tab-devtools.js'
     import { closeButtonHistory } from '../lib/close-button-history.js'
     // Tab sidebar component with Firefox-like hover behavior
@@ -1926,16 +1926,18 @@
                         </button>
                         <!-- NOTE: Tabs are also rendered in App.svelte (top bar) - keep hibernated class in sync there too -->
                         {#each globallyPinnedTabs as tab (tab.id)}
+                            {@const displayed = data.getDisplayedTab?.(tab.id) || data.docs[tab.id] || tab}
+                            {@const label = getTabDisplayLabel(data.docs[tab.id] || tab, displayed)}
                             <button class="pinned-tab" data-tab-id={tab.id} class:hibernated={data.isTabHibernated(tab.id)}
                                     class:active={tab.id === data.spaceMeta.activeTabId}
                                     class:tab-dragging={tabDrag.active && tabDrag.tabId === tab.id}
-                                    title={getTabTitle(data.docs[tab.id] || tab)} aria-label={getTabTitle(data.docs[tab.id] || tab)}
+                                    title={label} aria-label={label}
                                     onmousedown={(e) => startPinDrag(e, tab, data.spaceMeta.activeSpace)}
                                     onclick={(e) => finishPinClick(e, tab, data.spaceMeta.activeSpace)}
                                     oncontextmenu={(e) => handleTabContextMenu(e, tab, 0)}
                                     onmouseenter={(e) => handleTabMouseEnter(tab, e)}
                                     onmouseleave={handleTabMouseLeave}>
-                                <Favicon {tab} showButton={false} />
+                                <Favicon tab={displayed} showButton={false} />
                             </button>
                         {/each}
                     </div>

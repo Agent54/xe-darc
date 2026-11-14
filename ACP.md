@@ -4,17 +4,20 @@ Darc connects to an externally managed agent using ACP v1 over Streamable HTTP.
 Install, launch, and authenticate the agent on its host. If it only supports stdio,
 serve it through an external ACP HTTP adapter; Darc does not launch agent processes.
 
-In Settings → Agent connection, enter the complete HTTP(S) endpoint and an absolute
+In Settings → Agent connections, add a named connection with the complete HTTP(S) endpoint and an absolute
 working directory on the agent host. `/` is the default; use the actual project
 directory when needed. An optional bearer token authenticates the HTTP connection,
-not a model provider. Save the connection, then connect in the Agent sidebar.
+not a model provider. Save the connection, then connect from Settings or the Agent sidebar.
 Test connection initializes ACP without creating a conversation or sending a prompt.
+The dropdowns in Settings and the sidebar select the displayed connection. Each
+connection keeps its own conversations, credentials, and browser permissions;
+switching the dropdown leaves other connected agents and their MCP routes running.
 
 Endpoint, working directory, and bearer token are stored locally until changed or
 removed. Credentials are excluded from exports. Existing session-only ACP tokens
 are migrated on read. Obsolete provider keys are removed on startup.
 Conversation IDs, transcripts, queued messages, and connection intent are saved in
-the browser per window, with no expiry. Reloading Darc restores them. They are
+the browser per window and connection, with no expiry. Reloading Darc restores them. They are
 excluded from settings exports. Explicit Disconnect stops automatic reconnection
 without deleting the saved settings or conversations.
 
@@ -43,15 +46,17 @@ to the transcript and do not resend or modify an ACP agent's conversation.
 
 ## Browser MCP connections
 
-In Settings → MCP connections, choose **Add new MCP connection**, enter a short
-title and optional description, and create the connection. It receives a unique
-identity and starts with no browser permissions. Select that identity in Agent
-connection settings. Darc registers its browser tools using MCP-over-ACP on the
+Each saved ACP connection receives a browser-owned ID and starts with no browser
+permissions. There is no separate MCP setup: the connection's Browser access
+section shows its permissions and legacy MCP URL, using that same ID. Agent-issued
+conversation session IDs remain separate. Darc registers its browser tools using MCP-over-ACP on the
 same ACP connection as the conversation. The owning window executes the tools;
 there is no browser WebSocket bridge or workerd dependency for this transport.
-Existing connection identities and permission scopes are retained on upgrade.
+Existing MCP entries become agent connection entries in place. The previous ACP
+settings attach to their selected identity; IDs and permission scopes are retained.
+Entries without an ACP endpoint can be configured in the same screen.
 
-The agent must advertise `mcpCapabilities.acp`. For agents that only advertise
+Browser tools require `mcpCapabilities.acp`; agents without it can still chat. For agents that only advertise
 HTTP MCP, use the [local ACP proxy](acp-proxy/README.md). It exposes a persistent,
 `/mcp/<connection-id>` endpoint and passes that HTTP declaration to the agent.
 Tool calls travel back over ACP to the same browser executor and permission store.
@@ -60,7 +65,7 @@ handshake through the MCP SDK's stateless compatibility mode. Native MCP-over-AC
 agents pass through unchanged. Agents supporting neither transport cannot use
 browser tools through this proxy.
 
-After opening a conversation through the proxy, the MCP connection entry displays
+After opening a conversation through the proxy, the ACP connection entry displays
 and copies the full HTTP URL using the existing connection ID. This URL is also available when
 the agent uses native MCP-over-ACP through the proxy. A direct agent connection
 without the proxy has no HTTP URL. Connections have no automatic expiry. Darc saves
@@ -71,7 +76,7 @@ and proxy restarts reuse the same URL. Tool clients use that URL directly,
 without a separate MCP token, query parameter, or Authorization header.
 
 Disconnecting ACP cancels pending requests and marks browser tools offline (HTTP
-503); it preserves the URL, credentials, and remembered grants. Removing an MCP
+503); it preserves the URL, credentials, and remembered grants. Removing an ACP
 connection cancels pending requests, removes its grants, and revokes the endpoint
 (HTTP 404). If the proxy is unreachable, Darc saves the revocation and retries at
 the next startup or reconnect. The private owner credential required to reconnect
@@ -112,7 +117,7 @@ the ACP connection cancels outstanding prompts. Completed actions are not undone
 ## Sessions and recovery
 
 The agent supplies model/mode/configuration choices and slash commands. One prompt
-runs at a time; further messages queue with their captured context. Stop sends
+runs at a time per connection; further messages queue. Stop sends
 `session/cancel` and pauses the queue. If cancellation does not finish within five
 seconds, Darc closes the transport. Connection loss never automatically resubmits a
 prompt or repeats a browser action. Darc reconnects automatically with bounded
@@ -123,8 +128,9 @@ retrying; page reload preserves whether the connection was enabled.
 An existing conversation can reattach only when the same endpoint and working
 directory support `loadSession`. Otherwise start a new conversation; its old
 transcript stays viewable. ACP v1 does not replay messages lost during a disconnect,
-so the retained transcript may be incomplete. Saving connection settings disconnects
-the old transport, cancels approvals, and clears queued messages.
+so the retained transcript may be incomplete. Changing a connection's endpoint,
+working directory, or credentials disconnects its old transport, cancels its
+approvals, and clears its queued messages. Other connections remain active.
 
 References: [ACP SDK](https://www.npmjs.com/package/@agentclientprotocol/sdk),
 [HTTP examples](https://github.com/agentclientprotocol/typescript-sdk/tree/main/src/examples),

@@ -49,20 +49,22 @@
 </section>
 
 <style>
-    .mcp-connections { display: grid; gap: 12px; margin-bottom: 28px; color: #ddd }
-    h4 { font-size: 14px; margin: 0 }
-    p { font-size: 12px; line-height: 1.5; color: #aaa; margin: 0; overflow-wrap: anywhere }
-    button { font: inherit; font-size: 12px; color: #ddd; background: #ffffff0c; border: 1px solid #ffffff22; border-radius: 6px; padding: 7px 10px; cursor: pointer; justify-self: start }
-    button:hover { background: #ffffff18 }
-    button:disabled { opacity: .4; cursor: default }
-    textarea { box-sizing: border-box; width: 100%; font: inherit; font-size: 12px; padding: 8px; color: #ddd; background: #ffffff08; border: 1px solid #ffffff22; border-radius: 6px }
+    .mcp-connections { display: grid; gap: 12px; min-width: 0; color: rgba(255, 255, 255, 0.8) }
+    h4 { font-size: 13px; font-weight: 500; line-height: 1.2; margin: 0; color: rgba(255, 255, 255, 0.75) }
+    p { font-size: 12px; line-height: 1.4; color: rgba(255, 255, 255, 0.7); margin: 0; overflow-wrap: anywhere }
+    button { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font: inherit; font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 8px 12px; cursor: pointer; justify-self: start; transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease }
+    button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); color: rgba(255, 255, 255, 0.95) }
+    button:disabled { opacity: .5; cursor: not-allowed }
+    textarea { box-sizing: border-box; width: 100%; min-width: 0; font: 12px 'SF Mono', Consolas, monospace; padding: 8px 10px; color: rgba(255, 255, 255, 0.9); background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 4px }
     textarea { resize: vertical; min-height: 60px }
-    label { display: grid; gap: 7px; font-size: 12px }
-    .mcp-connection-entry { display: grid; gap: 10px; border: 1px solid #ffffff20; border-radius: 8px; padding: 12px }
+    label { display: grid; gap: 6px; min-width: 0; font-size: 12px; font-weight: 500 }
+    .mcp-connection-entry { display: grid; gap: 16px; min-width: 0; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 16px }
     .mcp-connection-heading, .mcp-connection-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
     .mcp-connection-heading h4 { flex: 1 }
-    .mcp-connection-heading span { font-size: 11px; color: #999 }
-    summary { cursor: pointer; font-size: 12px; margin-bottom: 8px }
+    .mcp-connection-heading span { font-size: 11px; color: rgba(255, 255, 255, 0.5) }
+    summary { cursor: pointer; font-size: 12px; font-weight: 500; margin-bottom: 8px }
+    .mcp-connection-permissions { border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 12px }
     details p { margin: 6px 0 }
-    textarea:focus-visible, button:focus-visible { outline: 1px solid #aaa; outline-offset: 2px }
+    textarea:focus-visible { outline: none; border-color: rgba(59, 130, 246, 0.3); background: rgba(255, 255, 255, 0.08) }
+    button:focus-visible, summary:focus-visible { outline: 1px solid rgba(59, 130, 246, 0.7); outline-offset: 2px }
 </style>

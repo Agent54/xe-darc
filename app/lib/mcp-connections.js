@@ -37,7 +37,7 @@ export function createMcpConnections({ data, storage = localStorage, getWindowId
     }
     function snapshot() {
         return { connections: connections.map(entry => ({ ...entry,
-            mcpUrl: saved(proxyKeyPrefix + entry.id, {})[entry.proxyEndpoint]?.url,
+            mcpUrl: saved(proxyKeyPrefix + entry.id, {})[entry.acpEndpoint ?? entry.proxyEndpoint]?.url,
             status: entry.windowId !== getWindowId() ? 'other-window' : [...bindings].some(binding => binding.id === entry.id) ? 'connected' : entry.proxyEndpoint ? 'offline' : 'ready' })) }
     }
     function publish() { for (const listener of listeners) { listener(snapshot()) } }

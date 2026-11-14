@@ -86,6 +86,7 @@
     })
     
     function reloadTab(tab) {
+        tab = data.getDisplayedTab?.(tab.id) || tab
         const frame = data.frames[tab.id]?.frame
         if (!frame) {
             data.unhibernate(tab.id)

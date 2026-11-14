@@ -75,7 +75,7 @@ try {
                     const caller = new acp.McpOverAcpCaller({ clientInfo: { name: 'Pi reported', version: 'test' } })
                     const peer = acp.client().onRequest(acp.methods.client.mcp.message, provider.handleRequest).connect({ readable: a.readable, writable: b.writable })
                     const remote = acp.agent().onNotification(acp.methods.agent.mcp.message, caller.handleNotification).connect({ readable: b.readable, writable: a.writable })
-                    const backend = createBrowserServer({ connection: mcp.openAcp(id, { name: 'Pi reported' }) })
+                    const backend = createBrowserServer({ connection: mcp.openAcp(id, { name: 'Pi reported' }, 'https://agent.example/acp') })
                     backend.setMcpUrl(location.origin + '/mcp/' + id + '?token=browser-test-token')
                     const binding = provider.registerServer(peer.agent, { name: backend.name, handler: backend.handler })
                     backend.signal.addEventListener('abort', () => binding.dispose(), { once: true })

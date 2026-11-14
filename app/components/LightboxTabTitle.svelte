@@ -1,11 +1,11 @@
 <script>
     import Favicon from './Favicon.svelte'
-    import { getTabTitle } from '../lib/tab-title.js'
+    import { getTabDisplayLabel, getTabTitle } from '../lib/tab-title.js'
 
     let { parent, lightbox } = $props()
 </script>
 
-<span class="lightbox-tab-title" title={`${getTabTitle(parent)} · ${getTabTitle(lightbox)}`}>
+<span class="lightbox-tab-title" title={getTabDisplayLabel(parent, lightbox)}>
     <span class="parent-title">{getTabTitle(parent)}</span>
     <span class="divider" aria-hidden="true"></span>
     <Favicon tab={lightbox} showButton={false} />

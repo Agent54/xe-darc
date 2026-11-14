@@ -28,7 +28,10 @@
     } = $props()
 
     const tab = $derived(data.docs[tabId])
-    const lightbox = $derived(data.docs[data.previews[tabId]?.lightbox])
+    const lightbox = $derived.by(() => {
+        const child = data.docs[data.previews[tabId]?.lightbox]
+        return child?.lightbox && !child.archive && !child._deleted ? child : null
+    })
     const showLiveLightbox = $derived(lightbox && !lightbox.archive && tab && !tab.archive && !data.frames[tabId]?.forceHibernated &&
         (data.isInternalPage(tab.url) || data.frames[tabId]?.frame || data.frames[tabId]?.pendingLoad || data.spaceMeta.activeTabId === tabId))
 

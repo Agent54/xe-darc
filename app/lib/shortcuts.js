@@ -2,7 +2,7 @@
 // `mod` is Command on macOS and Control elsewhere; all modifiers match exactly.
 export const shortcuts = [
     { id: 'new-tab', key: 't', mod: true, label: 'New tab in group', group: 'Tabs', holdId: 'new-tab-group', holdLabel: 'New tab group', holdMs: 650 },
-    { id: 'close-tab', key: 'w', mod: true, label: 'Close tab or lightbox', group: 'Tabs' },
+    { id: 'close-tab', key: 'w', mod: true, label: 'Close tab', group: 'Tabs' },
     { id: 'restore-tab', key: 't', mod: true, shift: true, label: 'Reopen closed tab', group: 'Tabs' },
     { id: 'reload-tab', key: 'r', mod: true, label: 'Reload page', group: 'Navigation' },
     { id: 'reload-tab', key: 'F5' },

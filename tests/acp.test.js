@@ -350,7 +350,8 @@ async function run() {
 
     const limited = await mockEndpoint({ acpMcp: false, loadSession: false })
     const legacy = memoryStorage({ selectedModel: 'deep' })
-    const limitedClient = createAgentClient({ getSettings: () => ({ endpoint: limited.endpoint, cwd: '/', token: '' }), modelStorage: legacy })
+    const limitedClient = createAgentClient({ getSettings: () => ({ id: 'chat-only', endpoint: limited.endpoint, cwd: '/', token: '' }), modelStorage: legacy,
+        createBrowserServer() { throw new Error('An agent without MCP support must still be able to chat') } })
     try {
         await limitedClient.submit('chat only')
         assert.deepEqual([...limited.sessions.values()][0].mcpServers, [])

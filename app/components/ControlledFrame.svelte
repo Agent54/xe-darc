@@ -469,7 +469,7 @@
         if (!info.isTopLevel || !info.url || !frameData || !currentTab || (currentTab.archive && currentTab.archive !== 'preview')) {
             return
         }
-        const traversal = frameData.historyTraversal?.expires >= Date.now()
+        const traversal = frameData.historyTraversal
         frameData.historyTraversal = null
         if (!traversal && frameData.committedUrl && frameData.committedUrl !== info.url) {
             data.clearLightboxForward?.(tab.id)
@@ -636,6 +636,7 @@
         tab = currentTab
         const wasLoading = data.frames[tab.id].loading
         data.frames[tab.id].loading = false
+        data.frames[tab.id].historyTraversal = null
         
         const originValue = origin(tab.url)
         const currentNetworkErr = data.origins[originValue]?.networkError
@@ -740,7 +741,7 @@
         }
         const link = requestedLinkTab
         requestedLinkTab = null
-        const sameLightbox = currentTab.lightbox && link?.url === e.targetUrl && link.expires >= Date.now() &&
+        const sameLightbox = currentTab.lightbox && link && link.url === e.targetUrl && link.expires >= Date.now() &&
             ['new_foreground_tab', 'new_background_tab'].includes(e.windowOpenDisposition) && (!e.name || e.name === '_blank')
         if (!hasModifierKey && (sameLightbox || (!currentTab.lightbox && decision === 'same-tab'))) {
             e.window?.discard?.()
@@ -1336,7 +1337,7 @@ document.addEventListener('input', function(event) {
                 || url.hostname.indexOf('appleid.cdn-apple.com') != -1
 
                 // hanlde special tracking for internal domains
-                || url.pathname.indexOf('/track') != -1 && (details.request.method == 'POST' || details.request.method == 'PUT')
+                || url.pathname.indexOf('/track') != -1 && ['POST', 'PUT'].includes(details.request?.method || details.method)
 
             if (block) {
                 if (details.preventDefault) {
@@ -2192,7 +2193,10 @@ document.addEventListener('input', function(event) {
             // fired when navigation has exited before completion.
             controlledFrame.onloadabort = e => handleLoadAbort(mytab, e)
 
-            controlledFrame.onclose = e => handleEvent('onclose', mytab, e)
+            controlledFrame.onclose = e => {
+                if (data.docs[currentTabId]?.lightbox) data.dismissLightbox(currentTabId, { rememberForForward: false })
+                else handleEvent('onclose', mytab, e)
+            }
             controlledFrame.oncontentresize = e => handleEvent('oncontentresize',mytab, e)
             controlledFrame.ondialog = e => handleEvent('ondialog',mytab, e)
             controlledFrame.onexit = e => handleEvent('onexit',mytab, e)

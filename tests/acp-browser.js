@@ -51,6 +51,7 @@ const fixture = compile(`
         import AgentSidebar from './app/components/AgentSidebar.svelte'
         import Agent from './app/components/Agent.svelte'
         import AcpSettings from './app/components/AcpSettings.svelte'
+        import RightSidebar from './app/components/RightSidebar.svelte'
         import data from 'fixture-data'
         let panel = $state('settings')
         let voiceEnabled = $state(false)
@@ -61,7 +62,7 @@ const fixture = compile(`
     </script>
     <button aria-label="Voice Agent" aria-pressed={voiceEnabled} onmousedown={() => { voiceEnabled = !voiceEnabled }}>Voice Agent</button>
     {#if voiceEnabled}<Agent />{/if}
-    {#if panel === 'settings'}<div style="padding:20px"><AcpSettings /></div>{/if}
+    {#if panel === 'settings'}<RightSidebar title="Settings" onClose={() => { panel = null }}><AcpSettings /></RightSidebar>{/if}
     {#if panel === 'agent'}<AgentSidebar bind:conv={voiceEnabled} onClose={() => { panel = null }} switchToSettings={settings} currentTab={data.docs.page} />{/if}
 `, { filename: `${root}acp-fixture.svelte`, generate: 'client', css: 'injected' }).js.code
 
@@ -307,10 +308,11 @@ try {
     await page.select('select[aria-label="Thinking effort"]', 'high')
     await page.waitForFunction(() => window.agentState.conversations[0].configOptions.find(option => option.id === 'effort').currentValue === 'high')
     await page.focus('select[aria-label="Mode"]')
-    await page.keyboard.press('Space')
-    await page.keyboard.press('ArrowDown')
-    await page.keyboard.press('Enter')
+    assert.equal(await page.$eval('select[aria-label="Mode"]', node => node === document.activeElement), true)
+    await page.select('select[aria-label="Mode"]', 'code')
     await page.waitForFunction(() => window.agentState.conversations[0].configOptions.find(option => option.id === 'mode').currentValue === 'code')
+    await page.keyboard.press('Tab')
+    assert.equal(await page.$eval('textarea[aria-label="Message agent"]', node => node === document.activeElement), true)
     await page.select('select[aria-label="Agent model"]', 'deep')
     await page.waitForFunction(() => window.agentState.conversations[0].configOptions[0].currentValue === 'deep')
     await send('hello')

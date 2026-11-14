@@ -1,5 +1,5 @@
 <script>
-    import { getTabTitle } from './lib/tab-title.js'
+    import { getTabDisplayLabel, getTabTitle } from './lib/tab-title.js'
     // import { flip } from 'svelte/animate'
  
     import Frame from './components/Frame.svelte'
@@ -1009,7 +1009,6 @@
             if (tab.id !== data.spaceMeta.activeTabId) activateTab(tab)
         },
         getTabs: () => [...leftPinnedTabs, ...unpinnedTabs, ...rightPinnedTabs],
-        focusTab: (tabId) => data.frames[tabId]?.frame?.focus(),
         escape: handleShortcutEscape,
         showOverview: () => selectViewMode('tile', { fromZoomOrKey: true })
     })
@@ -1381,7 +1380,7 @@
     }
 
     function reloadTab (tab) {
-        data.reloadTab(tab.id)
+        data.reloadTab(data.getDisplayedTab(tab.id)?.id ?? tab.id)
         hideContextMenu()
     }
 
@@ -1418,22 +1417,10 @@
     }
 
     function goBack() {
-        // If mouse is down, navigate spaces instead of frame navigation
-        if (isMouseDown === 0 || isMouseDown === 1) {
-            data.previousSpace()
-            return
-        }
-
         navigateTabHistory(data.spaceMeta.activeTabId, 'back')
     }
 
     function goForward() {
-        // If mouse is down, navigate spaces instead of frame navigation
-        if (isMouseDown === 0 || isMouseDown === 1) {
-            data.nextSpace()
-            return
-        }
-
         navigateTabHistory(data.spaceMeta.activeTabId, 'forward')
     }
 
@@ -3143,10 +3130,13 @@
         block = true
         if (event.state.direction === 1) {
             history.forward()
-            goBack()
+            // Holding a mouse button while using browser history switches spaces.
+            if (isMouseDown === 0 || isMouseDown === 1) data.previousSpace()
+            else goBack()
         } else if (event.state.direction === 3) {
             history.back()
-            goForward()
+            if (isMouseDown === 0 || isMouseDown === 1) data.nextSpace()
+            else goForward()
         } 
     }
 
@@ -3389,6 +3379,8 @@
 
 {#snippet rightPinnedTabItem(rightPinned, i)}
     {@const tab = data.docs[rightPinned.id]}
+    {@const displayed = data.getDisplayedTab(tab.id) || tab}
+    {@const label = getTabDisplayLabel(tab, displayed)}
     {#if tab.type !== 'divider'}
         <li 
             bind:this={tabButtons[tab.id]}
@@ -3403,7 +3395,8 @@
             class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
             role="tab"
             tabindex="0"
-            title={getTabTitle(tab)}
+            title={label}
+            aria-label={label}
             onmousedown={(e) => { if (e.button === 0) { startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, tab.id === data.spaceMeta.activeTabId, 'right') } }}
             onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
@@ -3413,7 +3406,7 @@
             >
             <div class="tab">
                 <div class="favicon-wrapper">    
-                    <Favicon {tab} />
+                    <Favicon tab={displayed} />
                 </div>
             </div>
             <button class="pinned-toggle-btn" 
@@ -3499,6 +3492,8 @@
              class:hidden={focusModeEnabled && !focusModeHovered}>
             {#each leftPinnedTabs as tabPinned, i (tabPinned.id)}
                 {@const tab = data.docs[tabPinned.id]}
+                {@const displayed = data.getDisplayedTab(tab.id) || tab}
+                {@const label = getTabDisplayLabel(tab, displayed)}
                 {#if tab.type !== 'divider'}
                     <li 
                         bind:this={tabButtons[tab.id]}
@@ -3513,7 +3508,8 @@
                         class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
-                        title={getTabTitle(tab)}
+                        title={label}
+                        aria-label={label}
                         onmousedown={(e) => { if (e.button === 0) { startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, tab.id === data.spaceMeta.activeTabId, 'left') } }}
                         onclick={(e) => { if (e.button === 0 && !didDragOccurred()) activateTab(tab, i) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}
@@ -3523,7 +3519,7 @@
                         >
                         <div class="tab">
                             <div class="favicon-wrapper">    
-                                <Favicon {tab} />
+                                <Favicon tab={displayed} />
                             </div>
                         </div>
                         <button class="pinned-toggle-btn" 
@@ -3571,6 +3567,7 @@
                         class:tab-dragging={tabDrag.active && tabDrag.dragType === 'tab' && tabDrag.tabId === tab.id}
                         role="tab"
                         tabindex="0"
+                        aria-label={getTabDisplayLabel(tab, displayed)}
                         onmousedown={(e) => { if (e.button === 0) { const wasActive = tab.id === data.spaceMeta.activeTabId; startTabDrag(tab.id, e.currentTarget, 'topbar', data.spaceMeta.activeSpace, e, wasActive); if (!wasActive) { setActivateRafId(requestAnimationFrame(() => activateTab(tab, i))) } } }}
                         onclick={(e) => { if (e.button === 0 && !didDragOccurred() && tabDrag.wasAlreadyActive) activateTab(tab, i) }}
                         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(tab, i) } }}

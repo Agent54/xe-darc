@@ -557,6 +557,7 @@ function deleteClosedTab(tab) {
 }
 
 function getLightboxHistory(tabId) {
+    if (!tabId) return []
     return Object.values(docs).filter(tab => tab.opener === tabId && (isArchivedLightbox(tab) ||
         (tab.lightboxOpenedAt && !tab.lightbox && !tab.preview && !tab.archive && !tab._deleted)))
         .sort((a, b) => (b.closedAt ?? b.lightboxOpenedAt ?? 0) - (a.closedAt ?? a.lightboxOpenedAt ?? 0))
@@ -805,8 +806,9 @@ window.darcWindowIdPromise
 
 // Cleanup frame instances
 setInterval(() => {
+    const activePageId = getDisplayedTab(spaceMeta.activeTabId)?.id
     Object.entries(frames).sort((a, b) => b[1].active - a[1].active).forEach(([id, frameData], i) => {
-        if (!frameData.frame || docs[id]?.pinned || spaceMeta.activeTabId === id) {
+        if (!frameData.frame || docs[id]?.pinned || spaceMeta.activeTabId === id || activePageId === id) {
             return
         }
 
@@ -1276,7 +1278,7 @@ function dismissLightbox(tabId, { rememberForForward = true, restoreWithParent =
 
     const opener = docs[tab.opener]
     const selected = opener && previews[opener.id]?.lightbox === tabId
-    const canReopen = rememberForForward && selected && !opener.archive
+    const canReopen = rememberForForward && selected && getTabOwner(opener.id)
     const frameData = frames[tabId]
     const now = Date.now()
     const closing = queueDocumentUpdate(tabId, {
@@ -1354,6 +1356,11 @@ function reopenLightbox(tabId) {
         frame.src = tab.url
     }
     frame?.setAudioMuted?.(!!tab.muted)
+    if (frame && getTabOwner(parent.id)?.id === spaceMeta.activeTabId) {
+        tick().then(() => {
+            if (getTabOwner(tabId)?.id === spaceMeta.activeTabId && frames[tabId]?.frame === frame) frame.focus?.()
+        })
+    }
     return opening
 }
 
@@ -1365,7 +1372,7 @@ function navigateTabHistory(tabId, direction) {
     const navigate = () => {
         if (typeof frame?.[direction] !== 'function' || frames[tab.id]?.frame !== frame ||
             getDisplayedTab(tabId)?.id !== tab.id || docs[tab.id]?.archive) return
-        const traversal = { expires: Date.now() + 2000 }
+        const traversal = {}
         if (tab.lightboxForward) frameData.historyTraversal = traversal
         return Promise.resolve().then(() => frame[direction]()).then(result => {
             if (result === false && frameData.historyTraversal === traversal) frameData.historyTraversal = null
@@ -2352,6 +2359,7 @@ const data = {
         }
 
         const frame = frames[tabId] ??= {}
+        frame.historyTraversal = null
         if (frame.frame && !frame.committedUrl) {
             frame.committedUrl = tab.url
         }
@@ -2766,6 +2774,7 @@ const data = {
         if (!frame) return
         frame.frame?.stop()
         frame.loading = false
+        frame.historyTraversal = null
     },
 
     reloadTab: (tabId) => {

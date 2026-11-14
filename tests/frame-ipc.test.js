@@ -38,6 +38,8 @@ function harness(subframe = false, timers = { setTimeout, clearTimeout }) {
     let focusCount = 0
     new Function('frame', 'connectFrameIPC', 'readGuestMessage', 'window', `
         const tab = { id: 'tab' }, untrack = fn => fn()
+        const data = { docs: { tab }, frames: { tab: { frame } } }
+        let requestedLinkTab = null
         const onFrameFocus = () => frame.focus()
         ${source.slice(listener.start, listener.end)}
         setupMessageListener(frame)

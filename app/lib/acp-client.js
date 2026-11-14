@@ -417,10 +417,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         if (chat.sessionId && (chat.endpoint !== identity || !capabilities.loadSession)) {
             throw new Error('This conversation cannot be resumed by this endpoint. Start a new conversation.')
         }
-        if (settings.mcpConnectionId) {
-            if (!capabilities.mcpCapabilities?.acp || !createBrowserServer) {
-                throw new Error('Browser tools require MCP-over-ACP. Connect through the ACP proxy for HTTP-only agents.')
-            }
+        if (settings.mcpConnectionId && capabilities.mcpCapabilities?.acp && createBrowserServer) {
             releaseBrowserServer(chat)
             const backend = createBrowserServer(settings, agentInfo)
             const binding = provider.registerServer(peer.agent, { name: backend.name, handler: backend.handler })

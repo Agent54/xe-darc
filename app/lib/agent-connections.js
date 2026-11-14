@@ -15,14 +15,18 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
         const storageKey = id ? `acpConversations:${windowId}:${id}` : `acpConversations:${windowId}`
         const legacyKey = `acpConversations:${windowId}`
         if (id && id === selectedId && !storage.getItem(storageKey) && storage.getItem(legacyKey)) {
-            const saved = JSON.parse(storage.getItem(legacyKey))
-            const config = connections.find(entry => entry.id === id)
-            const prefix = `${config.endpoint}\n${config.cwd}\n`
-            // Conversations without browser tools gain this connection's identity on upgrade.
-            for (const chat of saved.conversations || []) {
-                if (chat.endpoint === prefix) { chat.endpoint = prefix + id }
-            }
-            storage.setItem(storageKey, JSON.stringify(saved))
+            let value = storage.getItem(legacyKey)
+            try {
+                const saved = JSON.parse(value)
+                const config = connections.find(entry => entry.id === id)
+                const prefix = `${config.endpoint}\n${config.cwd}\n`
+                // Conversations without browser tools gain this connection's identity on upgrade.
+                for (const chat of saved.conversations || []) {
+                    if (chat.endpoint === prefix) { chat.endpoint = prefix + id }
+                }
+                value = JSON.stringify(saved)
+            } catch { /* The client's existing restore path reports invalid saved conversations. */ }
+            storage.setItem(storageKey, value)
             storage.removeItem(legacyKey)
         }
         const client = createClient({
@@ -36,15 +40,17 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
             getConversationKey: () => windowId ? storageKey : null,
             createBrowserServer
         })
-        const runtime = { client }
+        const runtime = { client, state: client.state }
         clients.set(key, runtime)
-        runtime.unsubscribe = client.subscribe(() => publish())
+        runtime.unsubscribe = client.subscribe(state => { runtime.state = state; publish() })
         return client
     }
 
     function snapshot() {
-        return { ...clientFor(selectedId).state, connectionId: selectedId,
-            connections: connections.map(({ token: _token, ...connection }) => connection) }
+        clientFor(selectedId)
+        return { ...clients.get(keyFor(selectedId)).state, connectionId: selectedId,
+            connections: connections.map(({ token: _token, ...connection }) => ({ ...connection,
+                approvals: clients.get(keyFor(connection.id))?.state.approvals.length || 0 })) }
     }
 
     function publish() {
