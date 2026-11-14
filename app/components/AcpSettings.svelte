@@ -54,8 +54,8 @@
         <option value="">None</option>
         {#each $mcpState.connections as connection (connection.id)}<option value={connection.id}>{connection.title}</option>{/each}
     </select></label>
-    <p>The connection token is kept for this window session. Browser tools use MCP-over-ACP. For agents that only support HTTP MCP, connect through the ACP proxy.</p>
-    <div class="acp-settings-actions"><button onmousedown={save} disabled={testing}>Save connection</button><button onmousedown={test} disabled={testing || !endpoint.trim()}>Test connection</button></div>
+    <p>The connection and token stay saved until removed. Browser tools use MCP-over-ACP. For agents that only support HTTP MCP, connect through the ACP proxy.</p>
+    <div class="acp-settings-actions"><button onmousedown={save} disabled={testing}>Save connection</button><button onmousedown={test} disabled={testing || !endpoint.trim()}>Test connection</button><button onclick={reset} disabled={testing || !endpoint.trim()}>Remove connection</button></div>
     {#if status}<p role="status">{status}</p>{/if}
 </section>
 

@@ -7,7 +7,7 @@ import { createBrowserServer } from './acp-browser-server.js'
 export const agent = createAgentClient({
     getSettings: readAcpSettings,
     modelStorage: globalThis.localStorage,
-    createBrowserServer: (settings, agentInfo) => createBrowserServer({ connection: mcp.openAcp(settings.mcpConnectionId, agentInfo) })
+    createBrowserServer: (settings, agentInfo) => createBrowserServer({ connection: mcp.openAcp(settings.mcpConnectionId, agentInfo, settings.endpoint) })
 })
 
 export const agentState = readable(agent.state, set => agent.subscribe(set))

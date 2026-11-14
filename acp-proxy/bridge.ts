@@ -8,7 +8,7 @@ export function connectProxy(stream: Stream, stdio: Stream, gateway: ReturnType<
     let httpMcp = false
     let agentInfo = { name: 'ACP agent', version: '' }
     const caller = new acp.McpOverAcpCaller()
-    const exported = new Map<string, ReturnType<typeof gateway.expose>>()
+    const exported = new Map<string, Awaited<ReturnType<typeof gateway.expose>>>()
     const backend = acp.client({ name: 'darc-acp-proxy' })
         .onRequest('*', ({ method, params, signal }) => front.client.request(method, params, { cancellationSignal: signal, stopWaitingOnCancel: true }))
         .onNotification('*', ({ method, params }) => front.client.notify(method, params))
@@ -19,28 +19,40 @@ export function connectProxy(stream: Stream, stdio: Stream, gateway: ReturnType<
             nativeMcp = !!result.agentCapabilities?.mcpCapabilities?.acp
             httpMcp = !!result.agentCapabilities?.mcpCapabilities?.http
             agentInfo = result.agentInfo || agentInfo
-            return { ...result, agentCapabilities: { ...result.agentCapabilities,
+            return { ...result, _meta: { ...result._meta, 'darc/mcpPersistence': true }, agentCapabilities: { ...result.agentCapabilities,
                 mcpCapabilities: { ...result.agentCapabilities?.mcpCapabilities, acp: nativeMcp || httpMcp } } }
         })
         .onRequest('*', async ({ method, params, signal }) => {
-            if (!nativeMcp && params && typeof params === 'object' && 'mcpServers' in params && Array.isArray(params.mcpServers)) {
-                const mcpServers = params.mcpServers.map(server => {
-                    if (!acp.isMcpServerAcp(server)) { return server }
-                    if (!httpMcp) { throw new Error('This agent supports neither MCP-over-ACP nor HTTP MCP') }
+            const mcpUrls: Record<string, string> = {}
+            if ((method === acp.methods.agent.session.new || method === acp.methods.agent.session.load) &&
+                params && typeof params === 'object' && 'mcpServers' in params && Array.isArray(params.mcpServers)) {
+                const { 'darc/connections': owners, ...meta } = ('_meta' in params ? params._meta || {} : {}) as Record<string, unknown>
+                const identities = owners as Record<string, { id: string; key: string }> | undefined
+                const mcpServers = []
+                for (const server of params.mcpServers) {
+                    if (!acp.isMcpServerAcp(server)) { mcpServers.push(server); continue }
+                    if (!nativeMcp && !httpMcp) { throw new Error('This agent supports neither MCP-over-ACP nor HTTP MCP') }
                     let endpoint = exported.get(server.serverId)
                     if (!endpoint) {
-                        endpoint = gateway.expose(front.client, caller, server, front.signal, agentInfo)
+                        endpoint = await gateway.expose(front.client, caller, server, front.signal, agentInfo,
+                            identities?.[server.serverId])
                         exported.set(server.serverId, endpoint)
                     }
-                    return endpoint
-                })
-                params = { ...params, mcpServers }
+                    mcpUrls[server.serverId] = endpoint.url
+                    mcpServers.push(nativeMcp ? server : endpoint.declaration)
+                }
+                // Owner credentials are for the proxy, never the downstream tool client.
+                params = { ...params, mcpServers, _meta: meta }
             }
-            return backend.agent.request(method, params, { cancellationSignal: signal, stopWaitingOnCancel: true })
+            const result = await backend.agent.request(method, params, { cancellationSignal: signal, stopWaitingOnCancel: true })
+            if (Object.keys(mcpUrls).length && result && typeof result === 'object') {
+                return { ...result, _meta: { ...(result as { _meta?: object })._meta, 'darc/mcpUrls': mcpUrls } }
+            }
+            return result
         })
         .onNotification(acp.methods.agent.mcp.message, context => {
+            if (exported.get(context.params.serverId)?.handleNotification(context)) { return }
             if (nativeMcp) { return backend.agent.notify(context.method, context.params) }
-            caller.handleNotification(context)
         })
         .onNotification('*', ({ method, params }) => backend.agent.notify(method, params))
         .connect(stream)

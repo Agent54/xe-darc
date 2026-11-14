@@ -29,7 +29,7 @@
     }
 
     async function copy(entry) {
-        try { await navigator.clipboard.writeText(entry.id); copied = entry.id } catch { error = 'Could not copy the connection ID' }
+        try { await navigator.clipboard.writeText(entry.mcpUrl); copied = entry.mcpUrl } catch { error = 'Could not copy the MCP URL' }
     }
 </script>
 
@@ -39,19 +39,25 @@
     <button onmousedown={() => { adding = !adding }}>Add new MCP connection</button>
     {#if adding}
         <form class="mcp-connection-form" onsubmit={add}>
+            <div class="mcp-connection-heading"><h4>New MCP connection</h4><button type="button" aria-label="Close new MCP connection" onclick={() => { adding = false }}>Close</button></div>
             <label>Short title<input aria-label="New MCP connection title" bind:value={title} maxlength="96" required placeholder="Pi workspace" /></label>
-            <label>Identifying description<textarea aria-label="New MCP connection description" bind:value={description} maxlength="512" required placeholder="Local Pi agent for this project"></textarea></label>
-            <button type="submit" disabled={busy === 'new' || !title.trim() || !description.trim()}>Create connection</button>
+            <label>Description (optional)<textarea aria-label="New MCP connection description" bind:value={description} maxlength="512" placeholder="Local Pi agent for this project"></textarea></label>
+            <button type="submit" disabled={busy === 'new' || !title.trim()}>Create connection</button>
         </form>
     {/if}
     {#each $mcpState.connections as entry (entry.id)}
         {@const permissions = mcpPermissionResources(data, entry.id)}
         <article class="mcp-connection-entry" data-mcp-connection-id={entry.id}>
             <div class="mcp-connection-heading"><h4>{entry.title}</h4><span>{entry.status === 'other-window' ? 'Another window' : entry.status}</span></div>
-            <p>{entry.description}</p>
-            <label>Connection ID<input aria-label={`MCP connection ID for ${entry.title}`} value={entry.id} readonly /></label>
+            {#if entry.description}<p>{entry.description}</p>{/if}
+            {#if entry.mcpUrl}
+                <label>MCP URL<textarea aria-label={`MCP URL for ${entry.title}`} value={entry.mcpUrl} readonly rows="3"></textarea></label>
+                <p>Saved until removal. Browser tools require an active ACP connection.</p>
+            {:else}
+                <p>Connect through the ACP proxy and open a conversation to get an MCP URL.</p>
+            {/if}
             <div class="mcp-connection-actions">
-                <button onmousedown={() => copy(entry)}>{copied === entry.id ? 'Copied' : 'Copy connection ID'}</button>
+                {#if entry.mcpUrl}<button onclick={() => copy(entry)}>{copied === entry.mcpUrl ? 'Copied' : 'Copy MCP URL'}</button>{/if}
                 <button onmousedown={() => { editing = { id: entry.id, title: entry.title, description: entry.description } }}>Edit</button>
                 <button onclick={() => perform(entry.id, () => mcp.remove(entry.id))} disabled={busy === entry.id}>Remove</button>
             </div>
@@ -61,7 +67,7 @@
                     perform(entry.id, async () => { await mcp.update(entry.id, editing.title, editing.description); editing = null })
                 }}>
                     <label>Short title<input aria-label="Edit MCP connection title" bind:value={editing.title} maxlength="96" required /></label>
-                    <label>Identifying description<textarea aria-label="Edit MCP connection description" bind:value={editing.description} maxlength="512" required></textarea></label>
+                    <label>Description (optional)<textarea aria-label="Edit MCP connection description" bind:value={editing.description} maxlength="512"></textarea></label>
                     <div class="mcp-connection-actions"><button type="submit" disabled={busy === entry.id}>Save</button><button type="button" onmousedown={() => { editing = null }}>Cancel</button></div>
                 </form>
             {/if}

@@ -16,6 +16,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
     const browserServers = new Map()
     const provider = new acp.McpOverAcpProvider()
     let agentInfo = null
+    let persistentMcp = false
     let connection = null
     let connecting = null
     let capabilities = {}
@@ -268,6 +269,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                 capabilities = result.agentCapabilities || {}
                 state.agentName = result.agentInfo?.title || result.agentInfo?.name || 'ACP agent'
                 agentInfo = result.agentInfo
+                persistentMcp = result._meta?.['darc/mcpPersistence'] === true
                 state.status = 'connected'
                 publish()
                 return peer
@@ -313,6 +315,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             return pending.promise
         }
         const declarations = []
+        const proxyIdentities = {}
         const identity = `${settings.endpoint}\n${settings.cwd}\n${settings.mcpConnectionId || ''}`
         if (chat.sessionId && (chat.endpoint !== identity || !capabilities.loadSession)) {
             throw new Error('This conversation cannot be resumed by this endpoint. Start a new conversation.')
@@ -327,13 +330,15 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             browserServers.set(chat, { backend, binding })
             backend.signal?.addEventListener('abort', () => releaseBrowserServer(chat), { once: true })
             declarations.push(binding.declaration)
+            if (persistentMcp) { proxyIdentities[binding.serverId] = backend.proxyIdentity }
         }
         const isNewSession = !chat.sessionId
         const endpoint = settings.endpoint
         chat.loading = !isNewSession
         const setup = { peer }
         setup.promise = setupRequest(peer, chat.sessionId ? acp.methods.agent.session.load : acp.methods.agent.session.new, {
-            ...(chat.sessionId ? { sessionId: chat.sessionId } : {}), cwd: settings.cwd, mcpServers: declarations
+            ...(chat.sessionId ? { sessionId: chat.sessionId } : {}), cwd: settings.cwd, mcpServers: declarations,
+            ...(persistentMcp ? { _meta: { 'darc/connections': proxyIdentities } } : {})
         }).then(async response => {
             if (connection !== peer) {
                 throw new Error('ACP connection changed while opening the conversation')
@@ -342,6 +347,9 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             chat.endpoint = identity
             chat.configOptions = response?.configOptions || []
             chat.modes = response?.modes
+            const browserServer = browserServers.get(chat)
+            const mcpUrl = response?._meta?.['darc/mcpUrls']?.[browserServer?.binding.serverId]
+            if (mcpUrl) { browserServer?.backend.setMcpUrl?.(mcpUrl) }
             if (isNewSession) {
                 await restoreModelPreference(chat, peer, endpoint)
             }

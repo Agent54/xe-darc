@@ -29,7 +29,10 @@ export function readAcpSettings(storage = globalThis.localStorage, session = glo
     } catch {
         config = {}
     }
-    return { endpoint: config.endpoint || '', cwd: config.cwd || '/', token: session?.getItem(tokenKey) || '', mcpConnectionId: config.mcpConnectionId || '' }
+    const token = storage?.getItem(tokenKey) ?? session?.getItem(tokenKey) ?? ''
+    if (token) { storage?.setItem(tokenKey, token) }
+    session?.removeItem(tokenKey)
+    return { endpoint: config.endpoint || '', cwd: config.cwd || '/', token, mcpConnectionId: config.mcpConnectionId || '' }
 }
 
 export function validateAcpSettings(settings) {
@@ -49,14 +52,15 @@ export function saveAcpSettings(settings, storage = globalThis.localStorage, ses
     const config = settings.endpoint.trim() ? validateAcpSettings(settings) : { endpoint: '', cwd: settings.cwd.trim() || '/', token: settings.token.trim(), mcpConnectionId: settings.mcpConnectionId || '' }
     clearProviderSettings(storage)
     storage.setItem(configKey, JSON.stringify({ endpoint: config.endpoint, cwd: config.cwd, mcpConnectionId: config.mcpConnectionId }))
-    if (config.token) {
-        session.setItem(tokenKey, config.token)
+    if (config.endpoint && config.token) {
+        storage.setItem(tokenKey, config.token)
     } else {
-        session.removeItem(tokenKey)
+        storage.removeItem(tokenKey)
     }
+    session?.removeItem(tokenKey)
     return config
 }
 
 export function exportableStorage(storage = globalThis.localStorage) {
-    return Object.fromEntries(Object.entries(storage).filter(([key]) => key !== tokenKey && !key.startsWith('mcpBridgeKey:') && !key.startsWith('aiToken_') && !['selectedAiProvider', 'selectedModel'].includes(key)))
+    return Object.fromEntries(Object.entries(storage).filter(([key]) => key !== tokenKey && key !== 'mcpProxyRevocations' && !key.startsWith('mcpProxyCredentials:') && !key.startsWith('mcpBridgeKey:') && !key.startsWith('aiToken_') && !['selectedAiProvider', 'selectedModel'].includes(key)))
 }

@@ -41,6 +41,17 @@ another origin, including an isolated web app, pass its exact origin:
 deno task start isolated-app://your-app-id
 ```
 
+If Darc itself is served from another origin, pass that exact origin when starting
+the proxy. For example, for a Darc development server on port 6000:
+
+```sh
+deno task start http://127.0.0.1:6000
+```
+
+The origin is the requesting browser page's scheme, host, and port. Match it to
+Darc's actual address before adding it; unrelated local tools can also make
+requests to the proxy. A rejected request from Darc cannot register browser tools.
+
 In another terminal, run `deno task smoke` from this folder. It initializes the
 real OpenCode agent and creates a session over HTTPS/SSE without sending a
 prompt. `deno task check` type-checks both scripts.
@@ -62,9 +73,16 @@ Session recovery across child restarts depends on OpenCode's persistence.
 Create an MCP connection in Darc and select it in Agent connection settings.
 Darc supplies its browser tools over ACP. When the agent advertises native
 MCP-over-ACP support, the proxy forwards that declaration and its traffic unchanged.
-When the agent advertises only HTTP MCP, the proxy substitutes a temporary
-`https://localhost:7331/mcp/<id>` endpoint with a random bearer credential. The
-agent receives both automatically; no separate MCP configuration is needed.
+When the agent advertises only HTTP MCP, the proxy substitutes a persistent
+`https://localhost:7331/mcp/<connection-id>` endpoint. The agent receives this URL
+automatically; no separate MCP configuration or tool token is needed.
+
+After a conversation opens, Darc's MCP connection entry displays the full URL,
+and **Copy MCP URL** copies the entire value. The proxy also
+provides this URL when the agent uses native MCP-over-ACP. The URL remains
+saved until the MCP connection is removed. They survive disconnects, browser
+reloads, and proxy restarts, and are excluded from Darc exports. A direct ACP
+connection without this proxy has no HTTP URL to copy.
 
 HTTP tool calls are forwarded to Darc over the existing ACP connection. Tool
 schemas, execution, scoped permission prompts, remembered grants, and revocation
@@ -73,14 +91,68 @@ It accepts both current MCP requests and older initialization-based clients usin
 the MCP SDK's stateless compatibility mode. Agents with neither HTTP nor native
 ACP MCP support cannot receive these browser tools.
 
-Endpoints and credentials are isolated per ACP connection and browser server.
-Closing the ACP connection removes them and cancels outstanding requests. Removing
-the browser connection in Darc revokes tool execution and its saved permissions.
-HTTP requests require the supplied bearer token and use the same host/origin checks
-as `/acp`. These endpoints are local to the process and do not survive a restart.
+Endpoints and credentials belong to the saved browser connection. Closing ACP
+cancels outstanding requests and marks browser tools offline, retaining the same
+endpoint and credentials for reconnect. Removing the browser connection in Darc
+revokes its endpoint and saved permissions. Offline removals are saved locally and
+retried when Darc starts or reconnects. No automatic time limit is applied.
+HTTP tool requests use the connection ID in the URL and the same host/origin checks
+as `/acp`. The proxy saves registrations in `data/mcp-connections.json`, with
+owner-only file permissions. Keep this file across restarts. Removed registrations
+remain revoked after restart and cannot be recreated with their old owner key.
+The browser retains its owner key for reconnect and removal; tool clients need
+only the URL. ACP connection settings and their bearer token are also
+saved until changed or removed.
+There is no additional MCP tool token or Authorization header. Old saved token
+fields are removed during migration, and previously issued paths remain aliases
+for the same connection until it is removed.
+
+## Test browser MCP without a model prompt
+
+1. Start the proxy with `deno task start` and reload Darc with the updated app.
+2. In Settings → MCP connections, create a connection with a title; the description
+   is optional. Select it in Agent connection settings, using
+   `https://localhost:7331/acp`, and save.
+3. Open the Agent sidebar and click **Connect** to open a conversation without
+   sending a prompt. **Test connection** in Settings only initializes ACP; it does
+   not create an MCP endpoint.
+4. Return to MCP connections and click **Copy MCP URL**. Keep Darc and ACP connected.
+
+In a second terminal, from `acp-proxy`, run `read -r MCP_URL`, paste the copied URL,
+and press Enter. Then list the nine browser tools:
+
+```sh
+curl --cacert ../certs/rootCA.pem "$MCP_URL" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+To test the existing permission flow, request the list of spaces:
+
+```sh
+curl --cacert ../certs/rootCA.pem "$MCP_URL" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"listSpaces","arguments":{}}}'
+```
+
+Darc shows a permission request. **Allow once** returns the spaces; **Deny** returns
+a tool error. Disconnecting ACP makes the same URL return **503 (offline)**.
+Reconnect and repeat the command with the original URL: it works again without
+copying a new URL. Restarting the proxy also preserves the URL; reconnect Darc
+to bring browser tools online. Removing the connection revokes it with **404**.
+An unknown or not-yet-registered connection ID also returns **404**.
+Discovery alone needs no browser-data permission and does not prove a tool ran.
+
+For the automated native/fallback permission and URL tests, run from the repo root:
+
+```sh
+deno test --no-check --allow-env --allow-read --allow-write=.cache --allow-sys --allow-net tests/acp-mcp-proxy.test.js
+```
 
 This is a local, unauthenticated HTTPS demo bound to loopback. Deno handles TLS
-directly. The ACP endpoint itself is unauthenticated; MCP compatibility endpoints
-require their individual bearer credentials. For remote deployment, add ACP
+directly. MCP tool clients use their connection URL and Darc's permission prompts.
+For remote deployment, add ACP
 authentication and WebSocket support.
 Browser local-network restrictions still apply.

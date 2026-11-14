@@ -66,10 +66,11 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, afterFir
             assert(!params.clientCapabilities.fs?.writeTextFile)
             assert(!params.clientCapabilities.terminal)
             assert.deepEqual(params.clientCapabilities.session.configOptions.boolean, {})
-            return { protocolVersion: 1, agentCapabilities: { loadSession, mcpCapabilities: { acp: acpMcp } }, agentInfo: { name: 'Mock agent', version: '1' } }
+            return { protocolVersion: 1, agentCapabilities: { loadSession, mcpCapabilities: { acp: acpMcp } }, agentInfo: { name: 'Mock agent', version: '1' }, _meta: { 'darc/mcpPersistence': true } }
         })
         .onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
             for (const server of params.mcpServers.filter(server => server.type === 'acp')) {
+                assert.deepEqual(params._meta['darc/connections'][server.serverId], { id: 'identity', key: 'owner-key' })
                 const tools = await new acp.McpOverAcpCaller().request(client, server.serverId, 'tools/list')
                 assert.equal(tools.result.tools.length, 9)
             }
@@ -77,7 +78,8 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, afterFir
             sessions.set(sessionId, params)
             sessionConfigs.set(sessionId, config)
             lastClient = client
-            return { sessionId, configOptions: config }
+            return { sessionId, configOptions: config, _meta: { 'darc/mcpUrls': Object.fromEntries(params.mcpServers
+                .filter(server => server.type === 'acp').map(server => [server.serverId, 'https://proxy.example/mcp/identity'])) } }
         })
         .onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
             assert(sessions.has(params.sessionId))
@@ -162,9 +164,20 @@ async function run() {
     assert.equal(local.getItem('selectedModel'), 'old-model')
     saveAcpSettings({ endpoint: 'https://agent.example/acp', cwd: '/project', token: 'connection-secret' }, local, session)
     assert.equal(readAcpSettings(local, session).token, 'connection-secret')
+    assert.equal(readAcpSettings(local, memoryStorage()).token, 'connection-secret')
+    assert.equal(session.getItem('acpBearerToken'), null)
     assert(!JSON.stringify(exportableStorage(local)).includes('secret'))
     local.setItem('mcpBridgeKey:connection', 'private-browser-secret')
     assert(!JSON.stringify(exportableStorage(local)).includes('private-browser-secret'))
+    local.setItem('mcpProxyCredentials:connection', '{"key":"owner-secret","url":"https://proxy/mcp/id?token=tool-secret"}')
+    local.setItem('mcpProxyRevocations', '[{"key":"owner-secret"}]')
+    assert(!JSON.stringify(exportableStorage(local)).includes('secret'))
+    const migrated = memoryStorage()
+    const oldSession = memoryStorage({ acpBearerToken: 'legacy-token' })
+    assert.equal(readAcpSettings(migrated, oldSession).token, 'legacy-token')
+    assert.equal(readAcpSettings(migrated, memoryStorage()).token, 'legacy-token')
+    saveAcpSettings({ endpoint: '', cwd: '/', token: '' }, migrated, oldSession)
+    assert.equal(readAcpSettings(migrated, oldSession).token, '')
     assert.throws(() => validateAcpSettings({ endpoint: 'ws://agent.example', cwd: '/', token: '' }))
     assert.throws(() => validateAcpSettings({ endpoint: 'https://user:secret@agent.example', cwd: '/', token: '' }))
     assert.throws(() => validateAcpSettings({ endpoint: 'https://agent.example', cwd: 'relative', token: '' }))
@@ -177,9 +190,10 @@ async function run() {
     new Function(script)
 
     const host = await mockEndpoint()
+    const browserUrls = []
     const clientOptions = {
         getSettings: () => ({ endpoint: host.endpoint, cwd: '/project', token: 'connection-secret', mcpConnectionId: 'identity' }),
-        createBrowserServer: () => createBrowserServer({ connection: { name: 'darc', reportAgent() {}, close() {}, execute() { throw new Error('Unexpected tool call') } } }),
+        createBrowserServer: () => createBrowserServer({ connection: { name: 'darc', proxyIdentity: { id: 'identity', key: 'owner-key' }, reportAgent() {}, close() {}, setMcpUrl: url => browserUrls.push(url), execute() { throw new Error('Unexpected tool call') } } }),
         modelStorage: local,
         setupTimeout: 2000, cancelTimeout: 100
     }
@@ -199,6 +213,7 @@ async function run() {
         assert(host.headers.every(header => header.auth === 'Bearer connection-secret'))
         assert.equal([...host.sessions.values()][0].cwd, '/project')
         assert.equal([...host.sessions.values()][0].mcpServers[0].type, 'acp')
+        assert.deepEqual(browserUrls, ['https://proxy.example/mcp/identity'])
         assert.equal(chat().configOptions[0].currentValue, 'fast')
         await client.setConfig('model', 'deep')
         assert.equal(chat().configOptions[0].currentValue, 'deep')

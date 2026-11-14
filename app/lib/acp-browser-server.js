@@ -24,6 +24,8 @@ export function createBrowserServer({ connection }) {
     return {
         name: connection.name,
         signal: connection.signal,
+        proxyIdentity: connection.proxyIdentity,
+        setMcpUrl: value => connection.setMcpUrl?.(value),
         handler(operation) {
             connection.reportAgent(operation.clientInfo)
             return backend.handler(operation)

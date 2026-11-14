@@ -11,6 +11,7 @@ await Deno.mkdir(`${output}/tmp`, { recursive: true })
 Deno.env.set('TMPDIR', `${output}/tmp`)
 let browser
 let server
+const removals = []
 
 try {
     const dataCode = compileModule(`
@@ -75,6 +76,7 @@ try {
                     const peer = acp.client().onRequest(acp.methods.client.mcp.message, provider.handleRequest).connect({ readable: a.readable, writable: b.writable })
                     const remote = acp.agent().onNotification(acp.methods.agent.mcp.message, caller.handleNotification).connect({ readable: b.readable, writable: a.writable })
                     const backend = createBrowserServer({ connection: mcp.openAcp(id, { name: 'Pi reported' }) })
+                    backend.setMcpUrl(location.origin + '/mcp/' + id + '?token=browser-test-token')
                     const binding = provider.registerServer(peer.agent, { name: backend.name, handler: backend.handler })
                     backend.signal.addEventListener('abort', () => binding.dispose(), { once: true })
                     runtime = { peer, remote, backend, binding, caller }
@@ -96,11 +98,17 @@ try {
         } }]
     })
     server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, request => {
-        const js = new URL(request.url).pathname === '/entry.js'
+        const path = new URL(request.url).pathname
+        if (request.method === 'DELETE' && path.startsWith('/mcp/') && path.endsWith('/connection')) {
+            removals.push(path)
+            return new Response(null, { status: 204 })
+        }
+        const js = path === '/entry.js'
         return new Response(js ? outputFiles[0].text : '<!doctype html><html><head><style>body{margin:0;background:#111;color:#ddd;font:13px sans-serif}#app{padding:20px;max-width:500px;margin:auto}svg{max-width:16px}</style></head><body><div id="app"></div><script type="module" src="/entry.js"></script></body></html>', { headers: { 'Content-Type': js ? 'text/javascript' : 'text/html' } })
     })
     browser = await puppeteer.launch({ headless: true, userDataDir: `${output}/chromium`, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
     const page = await browser.newPage()
+    await browser.defaultBrowserContext().overridePermissions(`http://127.0.0.1:${server.addr.port}`, ['clipboard-read', 'clipboard-sanitized-write'])
     await page.setViewport({ width: 1000, height: 950 })
     const errors = []
     page.on('pageerror', error => { errors.push(error.message); console.error(error.message) })
@@ -116,16 +124,20 @@ try {
         }
         throw new Error(`Missing button: ${text}`)
     }
-    const add = async title => {
+    await clickText('button', 'Add new MCP connection')
+    await page.click('button[aria-label="Close new MCP connection"]')
+    assert.equal(await page.$('input[aria-label="New MCP connection title"]'), null)
+    const add = async (title, description = '') => {
         await clickText('button', 'Add new MCP connection')
         await page.type('input[aria-label="New MCP connection title"]', title)
-        await page.type('textarea[aria-label="New MCP connection description"]', `${title} development agent`)
+        if (description) { await page.type('textarea[aria-label="New MCP connection description"]', description) }
         await clickText('button', 'Create connection')
         await page.waitForFunction(title => window.mcpState.connections.some(entry => entry.title === title && entry.status === 'ready'), {}, title)
         return page.evaluate(title => window.mcpState.connections.find(entry => entry.title === title), title)
     }
     const first = await add('Pi project')
-    const second = await add('Other agent')
+    assert.equal(first.description, '')
+    const second = await add('Other agent', 'Other development agent')
     assert.notEqual(first.endpoint, second.endpoint)
     const rpc = (connection, name, args = {}) => page.evaluate(({ id, name, args }) => window.mcpCall(id, name, args), { id: connection.id, name, args })
     const firstSelector = `[data-mcp-connection-id="${first.id}"]`
@@ -135,6 +147,12 @@ try {
     assert.equal(await page.$eval(`${firstSelector} .mcp-requester`, node => node.textContent.includes('Pi reported')), true)
     await clickText(`${firstSelector} button`, 'Allow once')
     assert.equal(JSON.parse((await listing).result.content[0].text)[0].spaceId, 'space')
+    const fullUrl = `http://127.0.0.1:${server.addr.port}/mcp/${first.id}`
+    assert.equal(await page.$eval(`${firstSelector} textarea[readonly]`, node => node.value), fullUrl)
+    await clickText(`${firstSelector} button`, 'Copy MCP URL')
+    await page.waitForFunction(selector => [...document.querySelectorAll(`${selector} button`)].some(button => button.textContent === 'Copied'), { timeout: 5000 }, firstSelector)
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), fullUrl)
+    assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('browser-test-token')), false)
     const read = rpc(first, 'readTab', { tabId: 'one' })
     await page.waitForSelector(`${firstSelector} select[aria-label="MCP permission scope"]`)
     await page.$eval(`${firstSelector} select[aria-label="MCP permission scope"]`, node => { node.value = [...node.options].find(option => option.textContent.includes('Tab group')).value; node.dispatchEvent(new Event('change', { bubbles: true })) })
@@ -151,12 +169,15 @@ try {
     assert.equal(JSON.parse((await created).result.content[0].text).tabId, 'new-0')
     await page.waitForFunction(() => window.mcpState.connections.every(entry => entry.agent))
     await page.evaluate(() => window.mcp.stop())
-    await page.waitForFunction(() => window.mcpState.connections.every(entry => entry.status === 'ready'))
+    await page.waitForFunction(() => window.mcpState.connections.every(entry => entry.status === 'offline'))
+    assert.equal(await page.$eval(`${firstSelector} textarea[readonly]`, node => node.value), fullUrl)
     await page.evaluate(() => { window.closeMcp(); window.mcp.start() })
     await page.screenshot({ path: `${output}/connections.png`, fullPage: true })
     assert.deepEqual(errors, [])
     await clickText(`${secondSelector} button`, 'Remove')
     await page.waitForFunction(id => !window.mcpState.connections.some(entry => entry.id === id), {}, second.id)
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('mcpProxyRevocations') || '[]').length === 0)
+    assert.deepEqual(removals, [`/mcp/${second.id}/connection`])
     await page.evaluate(() => window.mcp.stop())
     console.log('MCP-over-ACP Settings, connection identities, existing permission prompts, scoped reads, isolation, HTML creation, and removal passed')
 } finally {

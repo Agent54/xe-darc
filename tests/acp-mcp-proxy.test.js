@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import * as acp from '@agentclientprotocol/sdk/unstable'
 import { connectProxy } from '../acp-proxy/bridge.ts'
 import { createMcpGateway } from '../acp-proxy/mcp-gateway.ts'
+import { fileMcpRegistry } from '../acp-proxy/mcp-store.ts'
 import { createBrowserServer } from '../app/lib/acp-browser-server.js'
 import { createMcpConnections } from '../app/lib/mcp-connections.js'
 import { mcpFixture } from './mcp-permissions.test.js'
@@ -36,7 +37,10 @@ for (const native of [true, false]) {
         const backend = acp.agent()
             .onNotification(acp.methods.agent.mcp.message, caller.handleNotification)
             .onRequest(acp.methods.agent.initialize, () => ({ protocolVersion: 1, agentCapabilities: { mcpCapabilities: { acp: native, http: true } }, agentInfo: { name: 'Test agent', version: '1' } }))
-            .onRequest(acp.methods.agent.session.new, ({ params }) => { declaration = params.mcpServers[0]; return { sessionId: 'test-session' } })
+            .onRequest(acp.methods.agent.session.new, ({ params }) => {
+                assert.equal(params._meta?.['darc/connections'], undefined)
+                declaration = params.mcpServers[0]; return { sessionId: 'test-session' }
+            })
             .connect(backendStream)
         const provider = new acp.McpOverAcpProvider()
         let agentPermission
@@ -50,21 +54,34 @@ for (const native of [true, false]) {
         const registration = provider.registerServer(browser.agent, { name: browserServer.name, handler: browserServer.handler })
         browserServer.signal.addEventListener('abort', () => { void registration.dispose() }, { once: true })
         let serial = 0
-        async function rpc(method, params = {}, signal) {
-            if (native) { return caller.request(backend.client, declaration.serverId, method, params, { signal }) }
-            const response = await fetch(declaration.url, { method: 'POST', signal, headers: {
+        async function httpRpc(url, method, params = {}, signal, headers = {}) {
+            const response = await fetch(url, { method: 'POST', signal, headers: {
                 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream',
-                ...Object.fromEntries(declaration.headers.map(({ name, value }) => [name, value]))
+                ...headers
             }, body: JSON.stringify({ jsonrpc: '2.0', id: ++serial, method, params }) })
             const text = await response.text()
             return response.headers.get('Content-Type')?.includes('text/event-stream')
                 ? text.split('\n').filter(line => line.startsWith('data:')).map(line => JSON.parse(line.slice(5))).find(message => 'result' in message || 'error' in message)
                 : JSON.parse(text)
         }
+        function rpc(method, params = {}, signal) {
+            if (native) { return caller.request(backend.client, declaration.serverId, method, params, { signal }) }
+            return httpRpc(declaration.url, method, params, signal, Object.fromEntries(declaration.headers.map(({ name, value }) => [name, value])))
+        }
         try {
             const init = await browser.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientCapabilities: {} })
             assert.equal(init.agentCapabilities.mcpCapabilities.acp, true)
-            await browser.agent.request(acp.methods.agent.session.new, { cwd: '/', mcpServers: [registration.declaration] })
+            const session = await browser.agent.request(acp.methods.agent.session.new, { cwd: '/', mcpServers: [registration.declaration],
+                _meta: { 'darc/connections': { [registration.serverId]: browserServer.proxyIdentity } } })
+            const fullUrl = session._meta['darc/mcpUrls'][registration.serverId]
+            assert.equal(new URL(fullUrl).pathname, '/mcp/first')
+            assert.equal(new URL(fullUrl).search, '')
+            browserServer.setMcpUrl(fullUrl)
+            assert.equal(manager.state.connections.find(entry => entry.id === 'first').mcpUrl, fullUrl)
+            assert.equal((await httpRpc(fullUrl, 'tools/list')).result.tools.length, 9)
+            // Same initialize request as the user's curl probe, with no separate credential.
+            assert.equal((await httpRpc(fullUrl, 'initialize', { protocolVersion: '2025-06-18', capabilities: {},
+                clientInfo: { name: 'probe', version: '0.0.1' } })).result.protocolVersion, '2025-06-18')
             assert.equal(declaration.type, native ? 'acp' : 'http')
             const permission = { sessionId: 'test-session', toolCall: { toolCallId: 'external-tool', title: 'Agent action' },
                 options: [{ optionId: 'opaque-deny', name: 'Reject', kind: 'reject_once' }] }
@@ -72,9 +89,7 @@ for (const native of [true, false]) {
                 { outcome: { outcome: 'selected', optionId: 'opaque-deny' } })
             assert.deepEqual(agentPermission, permission)
             if (!native) {
-                const unauthorized = await fetch(declaration.url, { method: 'POST', body: '{}' })
-                assert.equal(unauthorized.status, 401)
-                await unauthorized.text()
+                assert.deepEqual(declaration.headers, [])
                 assert.equal((await rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'Legacy agent', version: '1' } })).result.protocolVersion, '2025-11-25')
             }
             assert.equal((await rpc('tools/list')).result.tools.length, 9)
@@ -94,6 +109,7 @@ for (const native of [true, false]) {
             await f.data.allowPermission(request.requestId, 'always')
             assert.equal(JSON.parse((await allowed).result.content[0].text).tabId, 'one')
             assert.equal((await rpc('tools/call', { name: 'readTab', arguments: { tabId: 'one' } })).result.isError, undefined)
+            assert.equal(JSON.parse((await httpRpc(fullUrl, 'tools/call', { name: 'readTab', arguments: { tabId: 'one' } })).result.content[0].text).tabId, 'one')
             const abort = new AbortController()
             const cancelled = rpc('tools/call', { name: 'readTab', arguments: { tabId: 'two' } }, abort.signal).catch(error => error)
             await waitFor(() => f.pending().length === 1)
@@ -104,15 +120,16 @@ for (const native of [true, false]) {
             assert.equal(Object.keys(f.data.permissionRules).length, 0)
             const revoked = await rpc('tools/call', { name: 'readTab', arguments: { tabId: 'one' } }).catch(error => error)
             assert(revoked instanceof Error || revoked.error || revoked.result?.isError)
+            const revokedUrl = await fetch(fullUrl)
+            assert.equal(revokedUrl.status, 404)
+            await revokedUrl.text()
             browser.close()
             // Closing a connection cancels its reader; the HTTP transport also closes its writer.
             await browserStream.writable.close()
             await proxy.closed
-            if (!native) {
-                const closed = await fetch(declaration.url)
-                assert.equal(closed.status, 404)
-                await closed.text()
-            }
+            const closed = await fetch(fullUrl)
+            assert.equal(closed.status, 404)
+            await closed.text()
         } finally {
             browser.close(); backend.close()
             await browserStream.writable.close().catch(() => {})
@@ -122,3 +139,121 @@ for (const native of [true, false]) {
         }
     })
 }
+
+Deno.test('MCP URL survives browser reload, disconnect, and proxy restart; only owner removal revokes it', async () => {
+    const f = await mcpFixture()
+    const storage = new Map([['mcpConnections', JSON.stringify([{ ...f.connections.get('first'), windowId: 'window' }])]])
+    let controlOffline = false
+    const createManager = () => createMcpConnections({ data: f.data, getWindowId: () => 'window', defaultBase: 'https://darc.example',
+        storage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
+        fetcher: (...args) => { if (controlOffline) { throw new TypeError('Proxy unreachable') }; return fetch(...args) } })
+    let manager = createManager()
+    const directory = new URL(`../.cache/mcp-persistence-${crypto.randomUUID()}/`, import.meta.url)
+    const registry = fileMcpRegistry(new URL('connections.json', directory))
+    let gateway
+    const http = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen() {} }, request => gateway.fetch(request))
+    const origin = `http://127.0.0.1:${http.addr.port}`
+    gateway = createMcpGateway(origin, registry)
+    const runtimes = []
+    async function attach() {
+        const [browserStream, frontStream] = pair(), [proxyStream, backendStream] = pair()
+        const proxy = connectProxy(frontStream, proxyStream, gateway)
+        const backend = acp.agent()
+            .onRequest(acp.methods.agent.initialize, () => ({ protocolVersion: 1, agentCapabilities: { mcpCapabilities: { http: true } } }))
+            .onRequest(acp.methods.agent.session.new, ({ params }) => {
+                assert.equal(params._meta?.['darc/connections'], undefined)
+                return { sessionId: crypto.randomUUID() }
+            }).connect(backendStream)
+        const provider = new acp.McpOverAcpProvider()
+        const browser = acp.client().onRequest(acp.methods.client.mcp.message, provider.handleRequest).connect(browserStream)
+        const server = createBrowserServer({ connection: manager.openAcp('first', { name: 'Test agent' }, `${origin}/acp`) })
+        const registration = provider.registerServer(browser.agent, { name: server.name, handler: server.handler })
+        server.signal.addEventListener('abort', () => { void registration.dispose() }, { once: true })
+        const runtime = { async close() {
+            browser.close(); backend.close()
+            await browserStream.writable.close().catch(() => {})
+            await server.close()
+            await proxy.closed
+        } }
+        runtimes.push(runtime)
+        const initialized = await browser.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientCapabilities: {} })
+        assert.equal(initialized._meta['darc/mcpPersistence'], true)
+        const session = await browser.agent.request(acp.methods.agent.session.new, { cwd: '/', mcpServers: [registration.declaration],
+            _meta: { 'darc/connections': { [registration.serverId]: server.proxyIdentity } } })
+        const url = session._meta['darc/mcpUrls'][registration.serverId]
+        server.setMcpUrl(url)
+        return { ...runtime, url, identity: server.proxyIdentity }
+    }
+    async function call(url, name, args = {}) {
+        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) })
+        const body = await response.text()
+        return response.headers.get('Content-Type')?.includes('text/event-stream')
+            ? body.split('\n').filter(line => line.startsWith('data:')).map(line => JSON.parse(line.slice(5))).find(message => message.result || message.error)
+            : JSON.parse(body)
+    }
+    async function status(url, expected, options) {
+        const response = await fetch(url, options)
+        assert.equal(response.status, expected)
+        await response.text()
+    }
+    try {
+        const first = await attach()
+        assert.equal(first.url, `${origin}/mcp/first`)
+        const read = call(first.url, 'readTab', { tabId: 'one' })
+        await waitFor(() => f.pending().length === 1)
+        await f.data.allowPermission(f.pending()[0].requestId, 'always')
+        assert.equal(JSON.parse((await read).result.content[0].text).tabId, 'one')
+        await first.close()
+        await status(first.url, 503)
+        assert.equal(manager.state.connections[0].mcpUrl, first.url)
+        assert.equal(manager.state.connections[0].status, 'offline')
+        manager = createManager()
+        // Migrate the previous registry format without losing its issued URL or saved grants.
+        const [saved] = registry.load()
+        const legacyPath = `/mcp/${crypto.randomUUID()}`
+        const registryPath = new URL('connections.json', directory)
+        await Deno.writeTextFile(registryPath, JSON.stringify([{ ...saved, path: legacyPath, token: 'obsolete-token' }]))
+        gateway = createMcpGateway(origin, registry)
+        assert(!(await Deno.readTextFile(registryPath)).includes('obsolete-token'))
+        assert.equal(manager.state.connections[0].mcpUrl, first.url)
+        await status(first.url, 503)
+        await status(origin + legacyPath, 503)
+        const second = await attach()
+        assert.equal(second.url, first.url)
+        assert.deepEqual(second.identity, first.identity)
+        assert.equal(JSON.parse((await call(first.url, 'readTab', { tabId: 'one' })).result.content[0].text).tabId, 'one')
+        assert.equal(JSON.parse((await call(origin + legacyPath, 'readTab', { tabId: 'one' })).result.content[0].text).tabId, 'one')
+        assert.equal(f.pending().length, 0)
+        const control = new URL(first.url)
+        control.search = ''; control.pathname += '/connection'
+        await status(control, 401, { method: 'DELETE' })
+        await assert.rejects(gateway.expose({}, new acp.McpOverAcpCaller(), { type: 'acp', name: 'impostor', serverId: 'fake' },
+            new AbortController().signal, { name: 'impostor', version: '' }, { id: 'first', key: crypto.randomUUID() }), /invalid owner/)
+        const pending = call(first.url, 'readTab', { tabId: 'two' }).catch(error => error)
+        await waitFor(() => f.pending().length === 1)
+        await second.close()
+        await pending
+        await waitFor(() => f.pending().length === 0)
+        assert.equal(f.data.reads.length, 3)
+        controlOffline = true
+        await manager.remove('first')
+        assert.equal(manager.state.connections.length, 0)
+        assert.equal(Object.keys(f.data.permissionRules).length, 0)
+        assert.equal(storage.has('mcpProxyCredentials:first'), false)
+        assert.equal(JSON.parse(storage.get('mcpProxyRevocations')).length, 1)
+        controlOffline = false
+        manager.start()
+        await waitFor(() => JSON.parse(storage.get('mcpProxyRevocations')).length === 0)
+        await status(first.url, 404)
+        await status(origin + legacyPath, 404)
+        gateway = createMcpGateway(origin, registry)
+        await status(first.url, 404)
+        await assert.rejects(gateway.expose({}, new acp.McpOverAcpCaller(), { type: 'acp', name: 'old', serverId: 'fake' },
+            new AbortController().signal, { name: 'old', version: '' }, first.identity), /removed/)
+    } finally {
+        for (const runtime of runtimes) { await runtime.close() }
+        await http.shutdown()
+        await Deno.remove(directory, { recursive: true }).catch(() => {})
+    }
+})

@@ -2,8 +2,9 @@ import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 import { AcpServer } from "@agentclientprotocol/sdk/experimental/server";
 import { connectProxy } from "./bridge.ts";
 import { createMcpGateway } from "./mcp-gateway.ts";
+import { fileMcpRegistry } from "./mcp-store.ts";
 
-const gateway = createMcpGateway("https://localhost:7331");
+const gateway = createMcpGateway("https://localhost:7331", fileMcpRegistry(new URL("./data/mcp-connections.json", import.meta.url)));
 
 // Add a custom Darc origin with: deno task start isolated-app://your-app-id
 const origins = new Set([

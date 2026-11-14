@@ -5,7 +5,7 @@
     "arktype": "npm:arktype@2.2.5"
   },
   "tasks": {
-    "start": "deno run --allow-net=127.0.0.1:7331 --allow-read=../certs/localhost.crt,../certs/device.key --allow-run=opencode main.ts",
+    "start": "deno run --allow-net=127.0.0.1:7331 --allow-read=../certs/localhost.crt,../certs/device.key,./data --allow-write=./data --allow-run=opencode main.ts",
     "check": "deno check main.ts smoke.ts",
     "smoke": "deno run --cert=../certs/rootCA.pem --allow-net=localhost:7331 smoke.ts"
   }

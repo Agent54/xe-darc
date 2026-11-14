@@ -10,9 +10,10 @@ directory when needed. An optional bearer token authenticates the HTTP connectio
 not a model provider. Save the connection, then connect in the Agent sidebar.
 Test connection initializes ACP without creating a conversation or sending a prompt.
 
-Endpoint and working directory are stored locally. The bearer token uses session
-storage and is excluded from exports. Existing provider keys and model selections
-are removed on startup. Conversations live in memory for the current window;
+Endpoint, working directory, and bearer token are stored locally until changed or
+removed. Credentials are excluded from exports. Existing session-only ACP tokens
+are migrated on read. Obsolete provider keys are removed on startup.
+Conversations live in memory for the current window;
 closing the sidebar preserves them, but reloading the app does not.
 
 The original agent sidebar controls and the shared microphone toggle remain in
@@ -41,7 +42,7 @@ to the transcript and do not resend or modify an ACP agent's conversation.
 ## Browser MCP connections
 
 In Settings → MCP connections, choose **Add new MCP connection**, enter a short
-title and identifying description, and create the connection. It receives a unique
+title and optional description, and create the connection. It receives a unique
 identity and starts with no browser permissions. Select that identity in Agent
 connection settings. Darc registers its browser tools using MCP-over-ACP on the
 same ACP connection as the conversation. The owning window executes the tools;
@@ -49,19 +50,30 @@ there is no browser WebSocket bridge or workerd dependency for this transport.
 Existing connection identities and permission scopes are retained on upgrade.
 
 The agent must advertise `mcpCapabilities.acp`. For agents that only advertise
-HTTP MCP, use the [local ACP proxy](acp-proxy/README.md). It exposes a temporary,
-bearer-protected `/mcp/<id>` endpoint and passes that HTTP declaration to the agent.
+HTTP MCP, use the [local ACP proxy](acp-proxy/README.md). It exposes a persistent,
+`/mcp/<connection-id>` endpoint and passes that HTTP declaration to the agent.
 Tool calls travel back over ACP to the same browser executor and permission store.
 The proxy supports both the `2026-07-28` protocol and the older initialization
 handshake through the MCP SDK's stateless compatibility mode. Native MCP-over-ACP
 agents pass through unchanged. Agents supporting neither transport cannot use
 browser tools through this proxy.
 
-The HTTP endpoint and its credential last only for that ACP connection and are
-not saved or copied into browser settings. Removing a browser connection cancels
-its pending requests and removes its remembered grants. Disconnecting ACP cancels
-pending requests and removes the proxy's temporary endpoints; saved browser grants
-remain available for a deliberate reconnect. Old workerd MCP endpoints are no
+After opening a conversation through the proxy, the MCP connection entry displays
+and copies the full HTTP URL using the existing connection ID. This URL is also available when
+the agent uses native MCP-over-ACP through the proxy. A direct agent connection
+without the proxy has no HTTP URL. Connections have no automatic expiry. Darc saves
+proxy credentials separately from exportable connection settings, and the proxy
+persists its registry in `acp-proxy/data/mcp-connections.json`. Reconnects, browser
+reloads, and proxy restarts reuse the same URL. Tool clients use that URL directly,
+without a separate MCP token, query parameter, or Authorization header.
+
+Disconnecting ACP cancels pending requests and marks browser tools offline (HTTP
+503); it preserves the URL, credentials, and remembered grants. Removing an MCP
+connection cancels pending requests, removes its grants, and revokes the endpoint
+(HTTP 404). If the proxy is unreachable, Darc saves the revocation and retries at
+the next startup or reconnect. The private owner credential required to reconnect
+or remove an endpoint is kept in Darc and is never sent to
+the downstream agent. Old workerd MCP endpoints are no
 longer connected to this browser client. CDP services remain separate.
 
 Tools:
