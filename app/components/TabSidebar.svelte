@@ -3604,7 +3604,10 @@
         overflow-x: hidden;
         overflow-anchor: none;
         overscroll-behavior-y: contain;
+        padding-right: 8px;
+        margin-right: -8px; /* Offset scrollbar position */
         scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
         position: relative;
         isolation: isolate;
     }
@@ -3751,10 +3754,6 @@
         overscroll-behavior-y: contain; /* Prevent vertical scroll chaining to background views */
         padding-top: 8px;
         padding-bottom: 0; /* Bottom spacer element handles scroll space */
-        padding-right: 8px;
-        margin-right: -8px; /* Offset scrollbar position */
-        scrollbar-width: thin;
-        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
     }
     
     .tab-content-container.searching:not(.multi-space) .tabs-list {
@@ -3768,20 +3767,20 @@
     }
 
     
-    .tabs-list::-webkit-scrollbar {
+    .space-tabs-sections::-webkit-scrollbar {
         width: 6px;
     }
 
-    .tabs-list::-webkit-scrollbar-track {
+    .space-tabs-sections::-webkit-scrollbar-track {
         background: transparent;
     }
 
-    .tabs-list::-webkit-scrollbar-thumb {
+    .space-tabs-sections::-webkit-scrollbar-thumb {
         background: rgba(255, 255, 255, 0.2);
         border-radius: 3px;
     }
 
-    .tabs-list::-webkit-scrollbar-thumb:hover {
+    .space-tabs-sections::-webkit-scrollbar-thumb:hover {
         background: rgba(255, 255, 255, 0.3);
     }
     
