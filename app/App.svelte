@@ -3325,12 +3325,9 @@
         return openSidebars.size * data.spaceMeta.config.rightSidebarWidth
     })
     
-    // Width of left pinned tabs section in header (30px per tab + 4px gap)
-    let leftPinnedTabsWidth = $derived.by(() => {
-        const count = leftPinnedTabs.length
-        if (count === 0) return 0
-        return count * 30 + 8 // 26px button + 4px gap per tab, plus padding
-    })
+    // Reserve the rendered pin strip, including its gaps, plus separation from normal tabs.
+    let leftPinnedTabsContentWidth = $state(0)
+    let leftPinnedTabsWidth = $derived(leftPinnedTabs.length > 0 ? leftPinnedTabsContentWidth + 8 : 0)
     
     // Width of right pinned tabs section in header (30px per tab + 4px gap)
     let rightPinnedTabsWidth = $derived.by(() => {
@@ -3368,11 +3365,12 @@
     <button
         type="button"
         class="sidepin-hide-button"
-        title="Hide sidepin"
+        title="Hide"
         aria-label="Hide sidepin"
-        onclick={() => togglePinHidden(tab.id)}>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M10 4 6 8l4 4M4 4v8" transform={tab.pinned === 'right' ? 'translate(16 0) scale(-1 1)' : undefined} stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        onmousedown={(event) => { if (event.button === 0) togglePinHidden(tab.id) }}
+        onclick={(event) => { if (event.detail === 0) togglePinHidden(tab.id) }}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 8L8 8L13 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
     </button>
 {/snippet}
@@ -3489,6 +3487,7 @@
     <!-- Left pinned tabs section (favicon only, fixed left of scrolling tabs) -->
     {#if leftPinnedTabs.length > 0}
         <div class="fixed-pinned-tabs fixed-pinned-tabs-left" 
+             bind:clientWidth={leftPinnedTabsContentWidth}
              class:hidden={focusModeEnabled && !focusModeHovered}>
             {#each leftPinnedTabs as tabPinned, i (tabPinned.id)}
                 {@const tab = data.docs[tabPinned.id]}

@@ -1874,34 +1874,58 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .sidepin-hide-button {
     position: absolute;
-    top: -7px;
-    right: -5px;
+    top: -5px;
+    right: -3px;
     z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 16px;
     padding: 0;
-    border: 1px solid rgb(255 255 255 / 18%);
-    border-radius: 50%;
-    background: #242424;
-    color: #bcbcbc;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: rgb(255 255 255 / 60%);
+    box-shadow: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease, background 0.1s ease, color 0.1s ease;
     cursor: pointer;
     -webkit-app-region: no-drag;
 }
 
+.sidepin-frame:hover .sidepin-hide-button,
+.sidepin-hide-button:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
 .sidepin-hide-button:hover,
-.sidepin-hide-button:active {
-    background: #383838;
-    color: #fff;
+.sidepin-hide-button:focus-visible {
+    background: rgb(255 255 255 / 10%);
+    color: rgb(255 255 255 / 90%);
 }
 
 .sidepin-hide-button:focus-visible {
-    outline: 2px solid #bcbcbc;
-    outline-offset: 2px;
-    color: #fff;
+    outline: none;
+}
+
+.sidepin-hide-button path {
+    d: path('M3 8L8 8L13 8');
+    transition: d 0.15s ease;
+}
+
+.sidepin-hide-button:hover path,
+.sidepin-hide-button:focus-visible path {
+    d: path('M3 10L8 5L13 10');
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidepin-hide-button,
+    .sidepin-hide-button path {
+        transition: none;
+    }
 }
 
 .pinned-frames-left {
