@@ -28,8 +28,11 @@
     onfocusout={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) focused = false
     }}>
-    <PermissionCard {resource} {onOpen} dismissible />
-    <ToastCountdown {remaining} {duration} />
+    <PermissionCard {resource} {onOpen} dismissible>
+        {#snippet dismissCountdown()}
+            <ToastCountdown {remaining} {duration} />
+        {/snippet}
+    </PermissionCard>
 </section>
 
 <style>

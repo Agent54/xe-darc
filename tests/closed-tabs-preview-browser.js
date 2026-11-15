@@ -31,6 +31,15 @@ await withSidebarFixture('closed-tabs-preview', async ({ page }) => {
     await page.evaluate(() => window.closePreviewFixtureTab('preview-first'))
     assert.deepEqual(await closedRows(), ['preview-first'], 'the toast must exclude older history')
     assert.deepEqual(await headings(), ['Recently closed tabs'])
+    assert.equal(await page.$eval('.tab-toasts', el => el.getBoundingClientRect().left), 279, 'the toast clears the pinned left sidebar')
+    await page.evaluate(() => window.flushSync(() => { window.data.ui.sidebarWidth = 320 }))
+    assert.equal(await page.$eval('.tab-toasts', el => el.getBoundingClientRect().left), 336, 'the toast follows sidebar resizing')
+    await page.evaluate(() => window.flushSync(() => { window.data.ui.sidebarWidth = 263 }))
+    assert.equal(await page.$eval('.tab-toast .dismiss', button => {
+        const bounds = button.getBoundingClientRect()
+        const ring = button.querySelector('.toast-countdown').getBoundingClientRect()
+        return ring.width === bounds.width && ring.height === bounds.height && ring.x === bounds.x && ring.y === bounds.y
+    }), true, 'the countdown surrounds the dismiss button')
     const countdown = () => page.$eval('.tab-toast .toast-countdown .remaining', ring => Number(ring.getAttribute('stroke-dashoffset')))
     assert.ok(await countdown() < 0.2, 'a fresh toast starts with a nearly full countdown ring')
     assert.equal(await page.$eval('.closed-tabs-content', el => el.classList.contains('expanded')), false, 'closing a tab must no longer expand the sidebar history')
@@ -142,6 +151,7 @@ await withSidebarFixture('closed-tabs-preview', async ({ page }) => {
     import TabToasts from './app/components/TabToasts.svelte'
     data.spaceMeta.recentTabMoves = []
     mount(TabToasts, { target: document.body, props: {
-        get headerPartOfMain() { return !!data.ui.toastHeader }
+        get headerPartOfMain() { return !!data.ui.toastHeader },
+        get sidebarWidth() { return data.ui.sidebarVisible ? data.ui.sidebarWidth : 0 }
     } })
 `)

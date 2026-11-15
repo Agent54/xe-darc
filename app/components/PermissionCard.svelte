@@ -5,7 +5,7 @@
     import { onMount } from 'svelte'
     import { permissionOrigin, permissionTargetKey } from '../lib/permissions.js'
 
-    let { resource, sectionId = 'requested', onResolved = () => {}, onOpen = null, dismissible = false } = $props()
+    let { resource, sectionId = 'requested', onResolved = () => {}, onOpen = null, dismissible = false, dismissCountdown } = $props()
     const unknownPermissionIcon = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519a3 3 0 1 1 5.242 2.962c-.8.64-1.621 1.24-1.621 2.269v.75m-1.5 3h.008v.008H12V16.5Z" /></svg>'
     const knownType = $derived(Object.hasOwn(resourceTypes, resource.type) ? resourceTypes[resource.type] : null)
     const resourceType = $derived(knownType?.icon ? knownType : { name: knownType?.name || resource.type || 'Unknown permission', icon: unknownPermissionIcon, description: knownType?.description || 'Permission requested by this page' })
@@ -177,6 +177,7 @@
     {#if dismissible}
         <button class="permission-card-dismiss" aria-label={`Ignore ${resourceType.name} permission request`} title="Ignore request" disabled={savingRequest !== null}
             onmousedown={() => ignoreResource(resource)} onclick={event => { if (event.detail === 0) { ignoreResource(resource) } }}>
+            {@render dismissCountdown?.()}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" d="m6 6 12 12M6 18 18 6" /></svg>
         </button>
     {/if}
@@ -366,14 +367,19 @@
     }
     .resource-card.toast:hover { background: rgb(255 255 255 / 7%); border-color: rgb(255 255 255 / 16%); }
     .resource-card.toast.unseen { border-left: 2px solid rgb(59 130 246 / 60%); }
-    .toast .resource-header { padding-right: 44px; }
+    .toast .resource-header { padding-right: 30px; }
     .toast .resource-actions { flex-wrap: wrap; }
     .permission-card-open { position: absolute; inset: 0; z-index: 1; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
     .permission-card-open:focus-visible { outline: 2px solid #8ab4f8; outline-offset: -2px; }
-    .permission-card-dismiss { position: absolute; right: 28px; top: 8px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: #aaa; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.15s ease, background-color 0.15s ease; }
-    .resource-card:hover .permission-card-dismiss, .resource-card:focus-within .permission-card-dismiss { opacity: 1; pointer-events: auto; }
+    .permission-card-dismiss { position: absolute; right: 8px; top: 8px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 4px; border: 0; border-radius: 50%; background: transparent; color: #aaa; cursor: pointer; pointer-events: none; transition: background-color 0.15s ease; }
+    .permission-card-dismiss > svg { opacity: 0; transition: opacity 0.15s ease; }
+    .resource-card:hover .permission-card-dismiss, .resource-card:focus-within .permission-card-dismiss { pointer-events: auto; }
+    .resource-card:hover .permission-card-dismiss > svg, .resource-card:focus-within .permission-card-dismiss > svg { opacity: 1; }
     .permission-card-dismiss:hover { background: rgb(255 255 255 / 12%); color: #fff; }
-    @media (hover: none) { .permission-card-dismiss { opacity: 1; pointer-events: auto; } }
+    @media (hover: none) {
+        .permission-card-dismiss { pointer-events: auto; }
+        .permission-card-dismiss > svg { opacity: 1; }
+    }
     button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     .resource-card {
         position: relative;
