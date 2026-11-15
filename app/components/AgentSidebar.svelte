@@ -8,6 +8,8 @@
     import { clickToScroll } from '../lib/click-to-scroll.js'
     import { readAcpSettings } from '../lib/acp-settings.js'
     import { configValues, demoModels, getModelConfig, modelAvatar } from '../lib/agent-models.js'
+    import ToolValue from './ToolValue.svelte'
+    import { toolPhase, toolPhaseLabels, toolOutputValues } from '../lib/agent-tool-display.js'
     import * as smd from 'streaming-markdown'
 
     let {
@@ -27,6 +29,7 @@
     let queueAnnouncement = $state('')
     let queueDragFrame
     let hoveredMessageId = $state(null)
+    let expandedToolCards = $state({})
     let editingMessageId = $state(null)
     let editingContent = $state('')
     let connectionError = $state('')
@@ -77,10 +80,20 @@
                 return { ...message, role: 'info-cards', cards: [{
                     action: 'grant-permission', title: message.title, details: message.details,
                     awaitingPermission: message.status === 'pending', status: message.status,
+                    phase: message.status === 'pending' ? 'waiting' : null,
                     approvalId: message.approvalId, options: message.options, result: message.content
                 }] }
             }
-            return message
+            if (message.role !== 'tool') { return message }
+            const phase = toolPhase(message, chat.messages)
+            return { ...message, cards: [{
+                type: 'tool', phase,
+                action: ({ read: 'read-tab', search: 'web-search', execute: 'execute-js', edit: 'modify-content' })[message.kind] || 'tool-call',
+                title: message.title || 'Tool', toolCallId: message.toolCallId,
+                status: phase === 'failed' ? 'error' : phase,
+                details: message.rawInput, hasDetails: message.rawInput !== undefined,
+                resultValues: toolOutputValues(message)
+            }] }
         })
         const history = []
         for (const message of messages) {
@@ -870,7 +883,7 @@ The current system demonstrates strong performance and security characteristics.
 	{devModeEnabled}
 >
 	{#snippet children()}
-		<div class="agent-panel" use:clickToScroll={'.agent-markdown-content, .agent-tool-result, .agent-info-card.tool .agent-info-card-details, .agent-history-dropdown-content, pre, textarea'}>
+		<div class="agent-panel" use:clickToScroll={'.agent-markdown-content, .agent-tool-result, .agent-info-card.tool .agent-info-card-details, .agent-approval .agent-info-card-details, .agent-history-dropdown-content, pre:not(.tool-value), textarea'}>
 		<div class="agent-sticky-header">
 			{#if chatHistoryList.length > 0}
 			<div class="agent-header-row">
@@ -900,44 +913,16 @@ The current system demonstrates strong performance and security characteristics.
 			{#if chatHistory.length > 0 || messageQueue.length > 0}
 				<div class="agent-chat-history">
 					{#each chatHistory as message (message.id)}
-						{#if message.role === 'working'}
-							<details class="agent-working" data-working-id={message.id}>
-								<summary onmousedown={event => {
-									if (event.button === 0) {
-										event.preventDefault()
-										const section = event.currentTarget.parentElement
-										section.open = !section.open
-									}
-								}} onclick={event => { if (event.detail !== 0) { event.preventDefault() } }}>
-									<span>working</span>
-									<span class="agent-working-count">{message.messages.length}</span>
-								</summary>
-								<div class="agent-working-items">
-									{#each message.messages as item (item.id)}
-										<section class="agent-working-item" data-message-id={item.id} data-tool-call-id={item.toolCallId} aria-label={item.role === 'thought' ? 'Thinking' : item.title || 'Tool call'}>
-											<div class="agent-working-header">
-												<span>{item.role === 'thought' ? 'Thinking' : item.title || 'Tool call'}</span>
-												{#if item.status}<span class="agent-working-status">{item.status.replaceAll('_', ' ')}</span>{/if}
-												<time datetime={item.timestamp} title={new Date(item.timestamp).toLocaleString('de-DE')}>{new Date(item.timestamp).toLocaleTimeString('en-GB')}</time>
-											</div>
-											{#if item.role === 'thought'}
-												<div class="agent-working-thought agent-markdown-content" use:streamingMarkdown={item}></div>
-											{:else}
-												{#if item.rawInput !== undefined}
-													<pre class="agent-tool-parameters">{JSON.stringify(item.rawInput, null, 2)}</pre>
-												{/if}
-												{#if item.content}<pre class="agent-tool-result">{item.content}</pre>{/if}
-												{#if item.rawOutput !== undefined}<pre class="agent-tool-result">{JSON.stringify(item.rawOutput, null, 2)}</pre>{/if}
-											{/if}
-										</section>
-									{/each}
-								</div>
-							</details>
-						{:else if message.role === 'info-cards'}
+						{#snippet infoCards(message)}
 							<div class="agent-info-cards">
-								{#each message.cards as card}
+								{#each message.cards as card, cardIndex}
+									{@const cardKey = `${message.id}:${cardIndex}`}
+									{@const expandable = (card.type === 'tool' || card.approvalId) && (card.hasDetails || card.details || card.resultValues?.length || card.result)}
+									{@const expanded = !expandable || !!expandedToolCards[cardKey]}
 									<div
 										class="agent-info-card"
+										class:agent-working-item={message.role === 'tool'}
+										data-message-id={message.role === 'tool' ? message.id : undefined} data-tool-call-id={card.toolCallId}
 										class:agent-approval={!!card.approvalId}
 										class:context={card.type === 'context'}
 										class:tool={card.type === 'tool'}
@@ -1190,9 +1175,25 @@ The current system demonstrates strong performance and security characteristics.
 											{/if}
 										</div>
 										<div class="agent-info-card-text">
-											<div class="agent-info-card-title">{card.title}</div>
-											{#if card.details}
-												<div class="agent-info-card-details">{card.details}</div>
+											<div class="agent-info-card-heading" class:agent-working-header={message.role === 'tool'}>
+												<div class="agent-info-card-title">{card.title}</div>
+												{#if message.role === 'tool'}<time datetime={message.timestamp} title={new Date(message.timestamp).toLocaleString('de-DE')}>{new Date(message.timestamp).toLocaleTimeString('en-GB')}</time>{/if}
+												{#if expandable}
+													<button class="agent-action-btn agent-tool-expand" aria-expanded={expanded}
+														aria-label={`${expanded ? 'Collapse' : 'Expand'} ${card.title} details`}
+														onmousedown={event => { if (event.button === 0) expandedToolCards[cardKey] = !expanded }}
+														onclick={event => { if (event.detail === 0) expandedToolCards[cardKey] = !expanded }}>
+														<svg class="w-3 h-3" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+															<path stroke-linecap="round" stroke-linejoin="round" d={expanded ? 'm6 9 6 6 6-6' : 'm9 6 6 6-6 6'} />
+														</svg>
+													</button>
+												{/if}
+											</div>
+											{#if card.phase}<div class="agent-tool-phase" data-phase={card.phase} role="status">{toolPhaseLabels[card.phase]}</div>{/if}
+											{#if expanded && (card.hasDetails || card.details)}
+												<div class="agent-info-card-details">
+													{#if card.type === 'tool' || card.approvalId}<ToolValue value={card.details} />{:else}{card.details}{/if}
+												</div>
 											{:else if card.url}
 												<div class="agent-info-card-url">{card.url}</div>
 											{/if}
@@ -1248,16 +1249,50 @@ The current system demonstrates strong performance and security characteristics.
 												{card.status === 'approved' ? 'Approved' : 'Denied'}
 											</div>
 										</div>
-									{:else if card.result}
+									{:else if expanded && (card.resultValues?.length || card.result)}
 										<div class="agent-info-card-result">
 											<div class="agent-tool-result">
-												Result: {card.result}
+												{#if card.resultValues}
+													{#each card.resultValues as value}<ToolValue {value} />{/each}
+												{:else}<ToolValue value={card.result} />{/if}
 											</div>
 										</div>
 									{/if}
 									</div>
 								{/each}
 							</div>
+						{/snippet}
+						{#if message.role === 'working'}
+							<details class="agent-working" data-working-id={message.id}>
+								<summary onmousedown={event => {
+									if (event.button === 0) {
+										event.preventDefault()
+										const section = event.currentTarget.parentElement
+										section.open = !section.open
+									}
+								}} onclick={event => { if (event.detail !== 0) { event.preventDefault() } }}>
+									<span>working</span>
+									<span class="agent-working-count">{message.messages.length}</span>
+								</summary>
+								<div class="agent-working-items">
+									{#each message.messages as item (item.id)}
+										{#if item.role === 'tool'}
+											{@render infoCards(item)}
+										{:else}
+											<section class="agent-working-item" data-message-id={item.id} aria-label="Thinking">
+												<div class="agent-working-header">
+													<span>Thinking</span>
+													{#if item.status}<span class="agent-working-status">{item.status.replaceAll('_', ' ')}</span>{/if}
+													<time datetime={item.timestamp} title={new Date(item.timestamp).toLocaleString('de-DE')}>{new Date(item.timestamp).toLocaleTimeString('en-GB')}</time>
+												</div>
+												<div class="agent-working-thought agent-markdown-content" use:streamingMarkdown={item}></div>
+											</section>
+										{/if}
+									{/each}
+								</div>
+							</details>
+						{:else if message.role === 'info-cards'}
+							{@render infoCards(message)}
 						{:else if message.role === 'assistant' || message.role === 'assistant-doc'}
 							{@const avatar = modelAvatar(message.model, message.modelName)}
 							{@const documentLayout = message.role === 'assistant-doc' || message.content.split('\n', 17).length > 16}
@@ -1379,9 +1414,6 @@ The current system demonstrates strong performance and security characteristics.
 									{#if message.attachments?.length}{@render attachedFiles(message.attachments)}{/if}
 								</div>
 								<div class="agent-chat-message-time-row">
-									<div class="agent-chat-message-time">
-										{new Date(message.timestamp).toLocaleTimeString('en-GB')}
-									</div>
 									{#if message.role === 'user' && editingMessageId !== message.id}
 										<div class="agent-message-actions" class:visible={hoveredMessageId === message.id}>
 											<button class="agent-action-btn" disabled={isProcessing} onmousedown={event => { if (event.button === 0) { event.preventDefault(); editMessage(message.id) } }} onclick={event => { if (event.detail === 0) editMessage(message.id) }} aria-label="Edit displayed message" title="Edit message">
@@ -1389,8 +1421,16 @@ The current system demonstrates strong performance and security characteristics.
 													<path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931ZM16.862 4.487 19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
 												</svg>
 											</button>
+											<button class="agent-action-btn" onmousedown={event => { if (event.button === 0) copyMessage(message.id) }} onclick={event => { if (event.detail === 0) copyMessage(message.id) }} aria-label="Copy message" title="Copy message">
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M9 9h10v12H9zM15 9V3H3v12h6" />
+												</svg>
+											</button>
 										</div>
 									{/if}
+									<div class="agent-chat-message-time">
+										{new Date(message.timestamp).toLocaleTimeString('en-GB')}
+									</div>
 								</div>
 							</div>
 						{/if}
@@ -1590,7 +1630,7 @@ The current system demonstrates strong performance and security characteristics.
 					oninput={() => { commandIndex = 0; dismissedCommandQuery = null }}
 					onkeydown={handleKeyDown}
 					placeholder="We can do anything..."
-					rows="3"
+					rows="2"
 				></textarea>
 				{#if !conversation}
 					<span class="agent-input-hint" aria-hidden="true">use / # @ ! for special commands</span>
@@ -1731,7 +1771,7 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-working-thought :global(p) { margin: 6px 0; }
 	.agent-working-item pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 ui-monospace, monospace; max-height: 240px; overflow-y: auto; }
 	.agent-panel { display: flex; flex-direction: column; min-height: 100%; color: #ddd }
-	.agent-panel :global(:is(.agent-markdown-content, .agent-tool-result, .agent-info-card.tool .agent-info-card-details, .agent-history-dropdown-content, pre, textarea):not([data-scroll-active])) {
+	.agent-panel :global(:is(.agent-markdown-content, .agent-tool-result, .agent-info-card.tool .agent-info-card-details, .agent-approval .agent-info-card-details, .agent-history-dropdown-content, pre:not(.tool-value), textarea):not([data-scroll-active])) {
 		overflow: hidden;
 	}
 	.agent-connection-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px }
@@ -2088,6 +2128,10 @@ The current system demonstrates strong performance and security characteristics.
 		justify-content: space-between;
 	}
 
+	.agent-chat-message.user:not(.queued) .agent-chat-message-time-row {
+		justify-content: flex-end;
+	}
+
 	.agent-chat-message-time {
 		font-size: 11px;
 		color: rgba(255, 255, 255, 0.5);
@@ -2359,6 +2403,8 @@ The current system demonstrates strong performance and security characteristics.
 
 	.agent-conversation-input {
 		width: 100%;
+		box-sizing: border-box;
+		field-sizing: content;
 		background: rgba(255, 255, 255, 0.05);
 		border: 1px solid rgba(255, 255, 255, 0.06);
 		border-radius: 10px;
@@ -2368,7 +2414,7 @@ The current system demonstrates strong performance and security characteristics.
 		line-height: 1.4;
 		font-family: inherit;
 		resize: none;
-		min-height: 20px;
+		min-height: calc(2lh + 37px);
 		max-height: 120px;
 		transition: all 0.2s ease;
 	}
@@ -2586,6 +2632,10 @@ The current system demonstrates strong performance and security characteristics.
 		flex: 1;
 	}
 
+	.agent-info-card-heading { display: flex; align-items: center; gap: 6px }
+	.agent-info-card-heading .agent-info-card-title { flex: 1; min-width: 0 }
+	.agent-tool-expand { flex-shrink: 0 }
+
 	.agent-info-card-title {
 		font-weight: 500;
 		color: rgba(255, 255, 255, 0.9);
@@ -2593,6 +2643,12 @@ The current system demonstrates strong performance and security characteristics.
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+
+	.agent-tool-phase { font-size: 11px; color: #aaa; margin: 3px 0 5px }
+	.agent-tool-phase[data-phase='waiting'] { color: #f3c78a }
+	.agent-tool-phase[data-phase='running'] { color: #93c5fd }
+	.agent-tool-phase[data-phase='completed'] { color: #a7d7aa }
+	.agent-tool-phase[data-phase='failed'], .agent-tool-phase[data-phase='denied'] { color: #fca5a5 }
 
 	.agent-info-card-details,
 	.agent-info-card-url {
@@ -2603,7 +2659,8 @@ The current system demonstrates strong performance and security characteristics.
 		text-overflow: ellipsis;
 	}
 
-	.agent-info-card.tool .agent-info-card-details {
+	.agent-info-card.tool .agent-info-card-details,
+	.agent-info-card.agent-approval .agent-info-card-details {
 		white-space: pre-wrap;
 		font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 		font-size: 10px;

@@ -3,6 +3,7 @@ const icon = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="curre
 export default Object.fromEntries([
     ['mcp-list-spaces', 'MCP: List spaces', 'List the names and IDs of browser spaces'],
     ['mcp-list-tabs', 'MCP: List tabs', 'List tab metadata in the requested browser scope'],
-    ['mcp-open-tab', 'MCP: Open tabs', 'Open URLs or create HTML pages in the requested space or tab group'],
+    ['mcp-open-tab', 'MCP: Open tabs', 'Open URLs or create HTML pages in the current tab group or an agent-created background group'],
+    ['mcp-activate-tab', 'MCP: Activate tab', 'Bring the requested tab and its space into the foreground'],
     ['mcp-read-tabs', 'MCP: Read pages', 'Read page text or HTML from the requested tabs']
 ].map(([key, name, description]) => [key, { name, description, icon, availability: async () => ({ available: true, error: null }), mcp: true }]))

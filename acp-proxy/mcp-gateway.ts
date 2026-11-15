@@ -1,7 +1,7 @@
 import * as acp from '@agentclientprotocol/sdk/unstable'
-import { createMcpHandler, McpServer } from '@modelcontextprotocol/server'
+import { createMcpHandler, McpServer, type StandardSchemaWithJSON } from '@modelcontextprotocol/server'
 import { timingSafeEqual } from 'node:crypto'
-import { mcpTools } from '../app/lib/mcp-tool-defs.js'
+import { mcpTools, mcpServerInstructions } from '../app/lib/mcp-tool-defs.js'
 
 type McpRegistration = { id: string; path: string; ownerKeyHash?: string; deleted?: boolean }
 
@@ -44,9 +44,9 @@ export function createMcpGateway(origin: string) {
             const lifetime = AbortSignal.any([signal, controller.signal])
             const pending = new Set<string>()
             const handler = createMcpHandler(() => {
-                const server = new McpServer({ name: 'darc-browser', version: '1.0.0' })
+                const server = new McpServer({ name: 'darc-browser', version: '1.0.0' }, { instructions: mcpServerInstructions })
                 for (const [name, definition] of Object.entries(mcpTools)) {
-                    server.registerTool(name, definition, async (args, ctx) => {
+                    server.registerTool<StandardSchemaWithJSON, StandardSchemaWithJSON>(name, definition, async (args, ctx) => {
                         const requestId = crypto.randomUUID()
                         pending.add(requestId)
                         try {

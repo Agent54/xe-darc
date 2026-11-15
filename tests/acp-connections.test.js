@@ -17,7 +17,7 @@ Deno.test('ACP profiles reuse MCP identities and grants, keep separate live sess
         acpBearerToken: 'first-secret',
         'acpConversations:window': JSON.stringify({ conversations: [{ id: 'old-chat', title: 'Existing chat', messages: [], sessionId: null }], activeConversationId: 'old-chat', queue: [], wantConnection: false })
     })
-    const read = f.call('first', 'readTab', { tabId: 'one' })
+    const read = f.call('first', 'readTabs', { tabIds: ['one'] })
     await until(() => f.pending().length === 1)
     await f.data.allowPermission(f.pending()[0].requestId, 'always')
     await read
@@ -43,7 +43,7 @@ Deno.test('ACP profiles reuse MCP identities and grants, keep separate live sess
         assert.equal(mcp.state.connections[0].mcpUrl, 'https://proxy.example/mcp/first')
         const access = mcp.openAcp('first', { name: 'First agent' }, firstHost.endpoint)
         try {
-            assert.equal((await access.execute({ name: 'readTab', args: { tabId: 'one' } })).tabId, 'one')
+            assert.equal((await access.execute({ name: 'readTabs', args: { tabIds: ['one'] } }))[0].tabId, 'one')
             assert.equal(f.pending().length, 0)
         } finally { access.close() }
 

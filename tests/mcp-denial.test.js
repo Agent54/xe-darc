@@ -14,14 +14,14 @@ Deno.test('prompted MCP denials and saved deny rules flash the blocked-request l
     const frames = { one: { frame: {}, committedUrl: 'https://one.example', requestActivity: { allowed: 2, blocked: 3 } } }
     const lights = { blockedRequest: 0 }
     const f = await mcpFixture({ onDenied: createDenialHandler(frames, {}, lights) })
-    const rejected = assert.rejects(f.call('first', 'readTab', { tabId: 'one' }), /denied/)
+    const rejected = assert.rejects(f.call('first', 'readTabs', { tabIds: ['one'] }), /denied/)
     await until(() => f.pending().length === 1)
     assert.equal(lights.blockedRequest, 0, 'Waiting for permission is not a denial')
     await f.data.denyPermission(f.pending()[0].requestId)
     await rejected
     assert.ok(lights.blockedRequest > 0)
     lights.blockedRequest = 0
-    await assert.rejects(f.call('first', 'readTab', { tabId: 'one' }), /denied/)
+    await assert.rejects(f.call('first', 'readTabs', { tabIds: ['one'] }), /denied/)
     assert.ok(lights.blockedRequest > 0, 'Saved deny rules also flash red')
     assert.equal(f.pending().length, 0)
     assert.deepEqual(frames.one.requestActivity, { allowed: 2, blocked: 3 }, 'MCP denials do not count as page requests')

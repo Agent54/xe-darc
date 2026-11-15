@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { mcpServerInstructions } from '../app/lib/mcp-tool-defs.js'
 
 const require = createRequire(import.meta.url)
 const { build } = createRequire(require.resolve('vite'))('esbuild')
@@ -40,8 +41,9 @@ try {
     }
     const discover = await rpc('server/discover')
     assert.deepEqual(discover.result?.supportedVersions, [protocolVersion], JSON.stringify(discover))
+    assert.equal(discover.result.instructions, mcpServerInstructions)
     const listed = await rpc('tools/list')
-    assert.equal(listed.result.tools.length, 9)
+    assert.equal(listed.result.tools.length, 6)
     const legacy = await worker.dispatchFetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++serial, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'Old client', version: '1' } } }) })
     assert.equal(legacy.status, 400)
     assert.equal((await responseBody(legacy)).error.code, -32022)
