@@ -2297,11 +2297,13 @@
                                                             }
                                                         }}>
                                                         <Favicon {tab} showButton={false} />
-                                                        {#if displayed && displayed.id !== tab.id}
-                                                            <LightboxTabTitle parent={data.docs[tab.id] || tab} lightbox={displayed} />
-                                                        {:else}
-                                                            <span class="tab-title">{getTabTitle(data.docs[tab.id] || tab)}</span>
-                                                        {/if}
+                                                        <span class="tab-title" class:divided={displayed && displayed.id !== tab.id}>
+                                                            {#if displayed && displayed.id !== tab.id}
+                                                                <LightboxTabTitle parent={data.docs[tab.id] || tab} lightbox={displayed} />
+                                                            {:else}
+                                                                {getTabTitle(data.docs[tab.id] || tab)}
+                                                            {/if}
+                                                        </span>
                                                     </button>
                                                     
                                                     <button class="tab-close" aria-label="Close tab"
@@ -3912,6 +3914,11 @@
         -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
         min-width: 0;
         max-width: 100%;
+    }
+
+    .tab-title.divided {
+        mask: none;
+        -webkit-mask: none;
     }
     
 

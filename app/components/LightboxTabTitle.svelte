@@ -17,19 +17,20 @@
         display: flex;
         align-items: center;
         gap: 6px;
-        flex: 1;
         min-width: 0;
-        text-align: left;
-        line-height: 1.2;
-        white-space: nowrap;
+        overflow: hidden;
     }
 
     .parent-title {
         flex: 0 1 38%;
+    }
+
+    .parent-title,
+    .page-title {
         min-width: 0;
         overflow: hidden;
-        opacity: 0.72;
-        mask-image: linear-gradient(to right, black calc(100% - 12px), transparent);
+        mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
+        -webkit-mask: linear-gradient(to right, black 0%, black 85%, transparent 100%);
     }
 
     .divider {
@@ -42,8 +43,5 @@
 
     .page-title {
         flex: 1;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
     }
 </style>
