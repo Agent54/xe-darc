@@ -16,6 +16,7 @@ const promptFixture = compile(`
         import PermissionToasts from './app/components/PermissionToasts.svelte'
         import ResourcesPanel from './app/components/ResourcesPanel.svelte'
         let openSidebars = $state(new Set())
+        let sidebarWidth = $state(330)
         let isSwitchingSidebars = false
         const persistOpenSidebars = () => { window.sidebarWrites++ }
         const updateSidebarState = () => {}
@@ -25,10 +26,11 @@ const promptFixture = compile(`
         window.promptFixture = {
             get sidebarOpen() { return openSidebars.has('resources') },
             open() { switchToResources() },
+            setSidebars(names, width) { openSidebars = new Set(names); sidebarWidth = width },
             close() { openSidebars = new Set() }
         }
     </script>
-    <PermissionToasts visible={!openSidebars.has('resources')} onOpenResources={switchToResources} />
+    <PermissionToasts visible={!openSidebars.has('resources')} sidebarWidth={openSidebars.size * sidebarWidth} onOpenResources={switchToResources} />
     {#if openSidebars.has('resources')}
         <ResourcesPanel onClose={() => { openSidebars = new Set() }} {openSidebars} />
     {/if}
@@ -218,6 +220,15 @@ try {
     assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false)
     assert.equal(await page.evaluate(() => window.sidebarWrites), 0)
     const toast = type => `.permission-toasts .resource-card[data-permission-type="${type}"]`
+    for (const [panels, width] of [[['settings'], 330], [['settings', 'activity'], 330], [['settings', 'activity'], 360], [[], 330]]) {
+        await page.evaluate(({ panels, width }) => window.flushSync(() => window.promptFixture.setSidebars(panels, width)), { panels, width })
+        assert.equal(await page.$eval('.permission-toasts', el => innerWidth - el.getBoundingClientRect().right), panels.length * width + 16, 'permission toasts clear the combined width of open right panels')
+    }
+    assert.equal(await page.$eval(`${toast('download')} .permission-card-dismiss`, button => {
+        const bounds = button.getBoundingClientRect()
+        const ring = button.querySelector('.toast-countdown').getBoundingClientRect()
+        return ring.width === bounds.width && ring.height === bounds.height && ring.x === bounds.x && ring.y === bounds.y && getComputedStyle(button.querySelector('.toast-countdown')).opacity === '1'
+    }), true, 'the visible countdown surrounds the permission dismiss button')
     assert.equal(await page.$eval(`${toast('download')} .resource-origin`, origin => origin.textContent), 'https://site.example')
     assert.match(await page.$eval(`${toast('download')} .resource-status`, status => status.textContent), /2 requests/)
     const buttonStyle = async selector => page.$eval(selector, button => {
@@ -256,9 +267,9 @@ try {
     await page.locator(`${toast('microphone')} .action-btn.deny`).click()
     await page.waitForFunction(() => window.fixture.data.permissionDecision('microphone', 'page') === 'deny')
     await page.mouse.move(0, 0)
-    await page.waitForFunction(() => getComputedStyle(document.querySelector('.permission-card-dismiss')).opacity === '0')
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.permission-card-dismiss > svg:not(.toast-countdown)')).opacity === '0')
     await page.locator(toast('download')).hover()
-    await page.waitForFunction(() => getComputedStyle(document.querySelector('.permission-card-dismiss')).opacity === '1')
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.permission-card-dismiss > svg:not(.toast-countdown)')).opacity === '1')
     await page.locator(`${toast('download')} .permission-card-dismiss`).click()
     await page.waitForFunction(() => document.querySelector('.permission-toasts .resource-card[data-permission-type="download"] .resource-status').textContent.trim() === 'requested')
     await page.locator(`${toast('download')} .accept-btn.main`).click()

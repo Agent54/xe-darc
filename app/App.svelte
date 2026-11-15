@@ -4919,8 +4919,8 @@
 
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
-<PermissionToasts visible={!openSidebars.has('resources')} pendingCards={pendingPermissionCards} {headerPartOfMain} onOpenResources={switchToResources} />
-<TabToasts {headerPartOfMain} />
+<PermissionToasts visible={!openSidebars.has('resources')} pendingCards={pendingPermissionCards} {headerPartOfMain} sidebarWidth={rightSidebarWidth} onOpenResources={switchToResources} />
+<TabToasts {headerPartOfMain} sidebarWidth={tabSidebarVisible ? (customTabSidebarWidth || 263) : 0} />
 
 {#if openSidebars.size > 0}
     <div class="sidebar-container" 

@@ -29,8 +29,11 @@
     onfocusout={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) focused = false
     }}>
-    <PermissionCard {resource} {onOpen} bind:inspecting />
-    <ToastCountdown {remaining} {duration} />
+    <PermissionCard {resource} {onOpen} bind:inspecting>
+        {#snippet dismissCountdown()}
+            <ToastCountdown {remaining} {duration} />
+        {/snippet}
+    </PermissionCard>
 </section>
 
 <style>
@@ -42,5 +45,4 @@
         backdrop-filter: blur(20px);
     }
 
-    .permission-toast :global(.toast-countdown) { right: 38px; }
 </style>

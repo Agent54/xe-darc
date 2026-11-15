@@ -5,19 +5,18 @@
     const progress = $derived(Math.max(0, Math.min(1, timeRemaining / duration)))
 </script>
 
-<svg class="toast-countdown" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle class="track" cx="8" cy="8" r="6" />
-    <circle class="remaining" cx="8" cy="8" r="6" pathLength="1"
-        stroke-dasharray="1" stroke-dashoffset={1 - progress} transform="rotate(-90 8 8)" />
+<svg class="toast-countdown" width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+    <circle class="track" cx="13" cy="13" r="12" />
+    <circle class="remaining" cx="13" cy="13" r="12" pathLength="1"
+        stroke-dasharray="1" stroke-dashoffset={1 - progress} transform="rotate(-90 13 13)" />
 </svg>
 
 <style>
     .toast-countdown {
         position: absolute;
-        top: 12px;
-        right: 12px;
-        width: 14px;
-        height: 14px;
+        inset: 0;
+        width: 100%;
+        height: 100%;
         pointer-events: none;
         stroke-width: 1.5;
     }

@@ -4,7 +4,7 @@
     import { getPendingPermissionRequests, groupPermissionCards } from '../lib/permissions.js'
     import PermissionToast from './PermissionToast.svelte'
 
-    let { visible = true, headerPartOfMain = false, onOpenResources, pendingCards } = $props()
+    let { visible = true, headerPartOfMain = false, sidebarWidth = 0, onOpenResources, pendingCards } = $props()
     let hiddenRequests = $state(new Set())
     const pending = $derived(pendingCards ?? groupPermissionCards(getPendingPermissionRequests(data.permissions, window.darcWindowId)))
     const shown = $derived(pending.filter(resource => !hiddenRequests.has(resource.ruleId || resource.requestId)))
@@ -21,7 +21,7 @@
 </script>
 
 {#if visible && shown.length}
-    <section class="permission-toasts" class:window-controls-overlay={headerPartOfMain} aria-label="Permission requests" aria-live="polite" aria-relevant="additions">
+    <section class="permission-toasts" class:window-controls-overlay={headerPartOfMain} style:--sidebar-width={`${sidebarWidth}px`} aria-label="Permission requests" aria-live="polite" aria-relevant="additions">
         {#each shown as resource (resource.ruleId || resource.requestId)}
             <PermissionToast {resource} onOpen={onOpenResources}
                 onHide={() => { hiddenRequests = new Set([...hiddenRequests, resource.ruleId || resource.requestId]) }} />
@@ -33,13 +33,13 @@
     .permission-toasts {
         position: fixed;
         top: calc(16px + env(safe-area-inset-top, 0px));
-        right: calc(16px + env(safe-area-inset-right, 0px));
+        right: calc(var(--sidebar-width) + 16px + env(safe-area-inset-right, 0px));
         z-index: 10002;
         display: flex;
         flex-direction: column;
         gap: 8px;
         width: 350px;
-        max-width: calc(100vw - 32px - env(safe-area-inset-right, 0px));
+        max-width: calc(100vw - var(--sidebar-width) - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
         max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px));
         overflow-y: auto;
         overscroll-behavior: contain;

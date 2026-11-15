@@ -6,7 +6,7 @@
     import { onMount } from 'svelte'
     import { permissionOrigin, permissionTargetKey } from '../lib/permissions.js'
 
-    let { resource, sectionId = 'requested', onResolved = () => {}, onOpen = null, inspecting = $bindable(false) } = $props()
+    let { resource, sectionId = 'requested', onResolved = () => {}, onOpen = null, inspecting = $bindable(false), dismissCountdown } = $props()
     const hovercardId = $props.id()
     let cardElement = $state(null)
     let hoverTimer
@@ -259,7 +259,8 @@
             <Tooltip text="Ignore" position="left" delay={250}>
                 <button class="permission-card-dismiss" aria-label={`Ignore ${resourceType.name} permission request`} disabled={savingRequest !== null}
                     onmousedown={event => { if (event.button === 0) { ignoreResource(resource) } }} onclick={event => { if (event.detail === 0) { ignoreResource(resource) } }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21.342-1.59m-15.14 1.59L4.088 6.21M3 6h18m-12 0V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6m-9 0 .86 14.07A1 1 0 0 0 7.858 21h8.284a1 1 0 0 0 .998-.93L18 6" /></svg>
+                    {@render dismissCountdown?.()}
+                    <svg class="ignore-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21.342-1.59m-15.14 1.59L4.088 6.21M3 6h18m-12 0V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6m-9 0 .86 14.07A1 1 0 0 0 7.858 21h8.284a1 1 0 0 0 .998-.93L18 6" /></svg>
                 </button>
             </Tooltip>
         </div>
@@ -461,15 +462,17 @@
     .resource-card.toast:hover { background: rgb(255 255 255 / 7%); border-color: rgb(255 255 255 / 16%); }
     .resource-card.toast.unseen { border-left: 2px solid rgb(59 130 246 / 60%); }
     .requested .resource-header { padding-right: 24px; }
-    .toast .resource-header { padding-right: 44px; }
+    .toast .resource-header { padding-right: 30px; }
     .toast .resource-actions { flex-wrap: wrap; }
     .permission-card-open { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
     .resource-card.toast { cursor: pointer; }
     .permission-ignore { position: absolute; right: 8px; top: 8px; z-index: 3; }
-    .permission-card-dismiss { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: #aaa; cursor: pointer; opacity: 0; transition: opacity 0.15s ease, background-color 0.15s ease; }
-    .resource-card:hover .permission-card-dismiss, .resource-card:focus-within .permission-card-dismiss { opacity: 1; pointer-events: auto; }
+    .permission-card-dismiss { position: relative; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: #aaa; cursor: pointer; transition: background-color 0.15s ease; }
+    .toast .permission-card-dismiss { width: 26px; height: 26px; border-radius: 50%; }
+    .ignore-icon { opacity: 0; transition: opacity 0.15s ease; }
+    .resource-card:hover .ignore-icon, .resource-card:focus-within .ignore-icon { opacity: 1; }
     .permission-card-dismiss:hover { background: rgb(255 255 255 / 12%); color: #fff; }
-    @media (hover: none) { .permission-card-dismiss { opacity: 1; pointer-events: auto; } }
+    @media (hover: none) { .ignore-icon { opacity: 1; } }
     button:focus-visible, .resource-card:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     .resource-card {
         position: relative;

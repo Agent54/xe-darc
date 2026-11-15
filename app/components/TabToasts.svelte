@@ -6,7 +6,7 @@
     import Favicon from './Favicon.svelte'
     import ToastCountdown from './ToastCountdown.svelte'
 
-    let { headerPartOfMain = false } = $props()
+    let { headerPartOfMain = false, sidebarWidth = 0 } = $props()
     const mountedAt = Date.now()
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let now = $state(mountedAt)
@@ -85,6 +85,7 @@
 
 {#if visible}
     <section class="tab-toasts" class:window-controls-overlay={headerPartOfMain}
+        style:--sidebar-width={`${sidebarWidth}px`}
         aria-label="Tab notifications" aria-live="polite" aria-relevant="additions"
         onmouseenter={() => { hovered = true }}
         onmouseleave={() => { hovered = false; if (previewUntil) reveal() }}
@@ -97,8 +98,8 @@
         }}
         transition:fade={{ duration: reducedMotion ? 0 : 150 }}>
         <div class="tab-toast">
-            <ToastCountdown remaining={hideAt - now} duration={3000} />
             <button class="dismiss" aria-label="Dismiss tab notifications" title="Dismiss" onclick={dismiss}>
+                <ToastCountdown remaining={hideAt - now} duration={3000} />
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" d="m6 6 12 12M6 18 18 6" /></svg>
             </button>
             {#each movedSections as section (section.spaceId)}
@@ -145,10 +146,10 @@
     .tab-toasts {
         position: fixed;
         top: calc(16px + env(safe-area-inset-top, 0px));
-        left: calc(16px + env(safe-area-inset-left, 0px));
+        left: calc(var(--sidebar-width) + 16px + env(safe-area-inset-left, 0px));
         z-index: 10002;
         width: 350px;
-        max-width: calc(100vw - 32px - env(safe-area-inset-left, 0px));
+        max-width: calc(100vw - var(--sidebar-width) - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
         max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px));
         overflow-y: auto;
         overscroll-behavior: contain;
@@ -166,7 +167,7 @@
         padding: 12px;
         background: rgb(0 0 0 / 95%);
         border: 1px solid rgb(255 255 255 / 8%);
-        border-radius: 6px;
+        border-radius: 12px;
         backdrop-filter: blur(20px);
     }
     .toast-section + .toast-section {
@@ -175,7 +176,7 @@
         padding-top: 10px;
     }
     h2 {
-        margin: 0 44px 8px 0;
+        margin: 0 30px 8px 0;
         color: rgb(255 255 255 / 75%);
         font-size: 13px;
         font-weight: 500;
@@ -199,13 +200,13 @@
         width: 100%;
         min-width: 0;
         text-align: left;
-        border-radius: 4px;
+        border-radius: 6px;
         font-size: 12px;
     }
     .tab-text { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .tab-count { flex-shrink: 0; color: rgb(255 255 255 / 45%); font-size: 10px; }
     .dismiss, .remove { display: flex; align-items: center; justify-content: center; border-radius: 3px; padding: 4px; }
-    .dismiss { position: absolute; top: 8px; right: 28px; }
+    .dismiss { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%; }
     .closed-toast-row { display: flex; align-items: center; }
     .closed-toast-row .tab-toast-item { flex: 1; }
     .remove { flex-shrink: 0; opacity: 0; }
