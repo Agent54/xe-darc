@@ -72,7 +72,7 @@ await withSidebarFixture('sidebar-pins', async ({ page }) => {
     await page.click('[data-pin-scope="global"] [data-tab-id="pin-one"]')
     await page.waitForFunction(() => window.data.spaceMeta.activeTabId === 'pin-one')
     await beginPinDrag('[data-tab-id="outside"] .tab-item-main')
-    await moveToPinTarget('.pinned-tabs-divider[data-pin-scope="sidebar"]')
+    await moveToPinTarget('.scrolling-pin-drop-anchor[data-pin-scope="sidebar"]')
     assert.equal(await page.evaluate(() => window.tabDrag.dropTarget?.pinScope), 'sidebar')
     assert.equal(await page.evaluate(() => window.tabDrag.indicator.height), 2)
     await page.mouse.up()
@@ -81,6 +81,7 @@ await withSidebarFixture('sidebar-pins', async ({ page }) => {
     await page.waitForSelector('.sidebar-pinned-tabs [data-tab-id="outside"] .tab-title')
     assert.equal(await page.$eval('.sidebar-pinned-tabs .tab-title', title => title.textContent), 'outside')
     assert.equal(await page.$('.tabs-list [data-tab-id="outside"]'), null, 'sidebar pins must not also appear in normal tabs')
+    await page.$eval('.space-tabs-sections', space => { space.scrollTop = 0 })
     assert.equal(await page.$eval('.pinned-tabs-divider', divider => {
         const newTab = document.querySelector('.new-tab-row').getBoundingClientRect()
         const pins = document.querySelector('.sidebar-pinned-tabs').getBoundingClientRect()

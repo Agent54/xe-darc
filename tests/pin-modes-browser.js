@@ -30,9 +30,9 @@ await withSidebarFixture('pin-modes', async ({ page }) => {
     const originalNewTabTop = await page.$eval('.new-tab-row', element => element.getBoundingClientRect().top)
     await page.mouse.move(group.x, group.y)
     await page.mouse.down()
-    const divider = await page.$eval('.pinned-tabs-divider', element => {
+    const divider = await page.$eval('.scrolling-pin-drop-anchor', element => {
         const rect = element.getBoundingClientRect()
-        return { x: rect.left + 40, y: rect.top }
+        return { x: rect.left + 40, y: rect.top + 4 }
     })
     await page.mouse.move(divider.x, divider.y, { steps: 5 })
     await page.waitForFunction(() => window.tabDrag.dropTarget?.pinScope === 'sidebar')
