@@ -5081,6 +5081,25 @@
     {/if}
 {/if}
 
+{#if tabDrag.active && tabDrag.sidepinZone && !tabDrag.indicator.visible}
+    {@const leftInset = tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}
+    {@const rightInset = rightSidebarWidth}
+    <div class="sidepin-drop-overlay {tabDrag.sidepinZone}" style="--left-inset: {leftInset}px; --right-inset: {rightInset}px;">
+        <div class="sidepin-drop-zone">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                {#if tabDrag.sidepinZone === 'left'}
+                    <rect x="3" y="3" width="7" height="18" rx="2" />
+                    <rect x="14" y="3" width="7" height="18" rx="2" opacity="0.3" />
+                {:else}
+                    <rect x="3" y="3" width="7" height="18" rx="2" opacity="0.3" />
+                    <rect x="14" y="3" width="7" height="18" rx="2" />
+                {/if}
+            </svg>
+            <span>Pin {tabDrag.sidepinZone}</span>
+        </div>
+    </div>
+{/if}
+
 <style>
     @import "app.css";
     
