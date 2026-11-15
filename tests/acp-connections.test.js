@@ -35,7 +35,7 @@ Deno.test('ACP profiles reuse MCP identities and grants, keep separate live sess
         assert.equal(agents.state.activeConversationId, 'old-chat')
         assert.equal(storage.getItem('acpConnection'), null)
         assert.equal(storage.getItem('acpBearerToken'), null)
-        assert.equal(readAcpConnections(storage, options.session, 'window')[0].token, 'first-secret')
+        assert.equal(readAcpConnections(storage, options.session, 'window')[0].token, undefined)
         assert.equal(JSON.parse(storage.getItem('mcpConnections'))[0].endpoint, oldIdentity.endpoint)
         assert.deepEqual(Object.keys(f.data.permissionRules), grants)
         await agents.submit('first conversation', {})
@@ -47,7 +47,7 @@ Deno.test('ACP profiles reuse MCP identities and grants, keep separate live sess
             assert.equal(f.pending().length, 0)
         } finally { access.close() }
 
-        const second = agents.saveConnection({ title: 'Second agent', description: '', endpoint: secondHost.endpoint, cwd: '/second', token: 'second-secret' })
+        const second = agents.saveConnection({ title: 'Second agent', description: '', endpoint: secondHost.endpoint, cwd: '/second' })
         assert.notEqual(second.id, 'first')
         assert.equal(second.id, second.mcpConnectionId)
         await agents.submit('second conversation', {})
@@ -55,8 +55,8 @@ Deno.test('ACP profiles reuse MCP identities and grants, keep separate live sess
         assert.notEqual(secondSession, firstSession)
         assert(mcp.state.connections.every(entry => entry.status === 'connected'))
         assert.equal(mcp.state.connections.find(entry => entry.id === second.id).mcpUrl, `https://proxy.example/mcp/${second.id}`)
-        assert(firstHost.headers.every(entry => entry.auth === 'Bearer first-secret'))
-        assert(secondHost.headers.every(entry => entry.auth === 'Bearer second-secret'))
+        assert(firstHost.headers.every(entry => entry.auth === null))
+        assert(secondHost.headers.every(entry => entry.auth === null))
         assert(!JSON.stringify(exportableStorage(storage)).includes('secret'))
         agents.selectConnection('first')
         assert.equal(agents.state.status, 'connected')

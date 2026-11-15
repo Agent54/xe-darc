@@ -38,7 +38,7 @@ function fixture({ permissionDuringSetup = false } = {}) {
         .onNotification(acp.methods.agent.session.cancel, () => {})
         .connect({ readable: toAgent.readable, writable: toClient.writable })
     const client = createAgentClient({
-        getSettings: () => ({ endpoint: 'https://agent.example/acp', cwd: '/', token: '' }),
+        getSettings: () => ({ endpoint: 'https://agent.example/acp', cwd: '/' }),
         createStream: () => stream, setupTimeout: 100, cancelTimeout: 100
     })
     return { client, backend, replies, async close() {

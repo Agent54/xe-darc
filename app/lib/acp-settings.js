@@ -26,8 +26,6 @@ export function readAcpConnections(storage = globalThis.localStorage, session = 
         }
         entry.acpEndpoint ??= legacy.endpoint
         entry.cwd ??= legacy.cwd || '/'
-        const token = storage?.getItem(tokenKey) ?? session?.getItem(tokenKey)
-        if (token) { storage.setItem(`${tokenKey}:${entry.id}`, token) }
         storage.setItem(connectionsKey, JSON.stringify(entries))
         storage.setItem(`selectedAcpConnection:${entry.windowId}`, entry.id)
         storage.removeItem(configKey)
@@ -37,7 +35,7 @@ export function readAcpConnections(storage = globalThis.localStorage, session = 
     return entries.filter(entry => entry.windowId === windowId).map(entry => ({
         id: entry.id, title: entry.title, description: entry.description || '', windowId: entry.windowId,
         endpoint: entry.acpEndpoint ?? entry.proxyEndpoint ?? '', cwd: entry.cwd || '/',
-        token: storage?.getItem(`${tokenKey}:${entry.id}`) || '', mcpConnectionId: entry.id
+        mcpConnectionId: entry.id
     }))
 }
 
@@ -84,10 +82,7 @@ export function readAcpSettings(storage = globalThis.localStorage, session = glo
     } catch {
         config = {}
     }
-    const token = storage?.getItem(tokenKey) ?? session?.getItem(tokenKey) ?? ''
-    if (token) { storage?.setItem(tokenKey, token) }
-    session?.removeItem(tokenKey)
-    return { id: '', title: '', description: '', endpoint: config.endpoint || '', cwd: config.cwd || '/', token, mcpConnectionId: config.mcpConnectionId || '' }
+    return { id: '', title: '', description: '', endpoint: config.endpoint || '', cwd: config.cwd || '/', mcpConnectionId: config.mcpConnectionId || '' }
 }
 
 export function validateAcpSettings(settings) {
@@ -101,12 +96,14 @@ export function validateAcpSettings(settings) {
         throw new Error('The working directory must be an absolute path on the agent host')
     }
     return { id: settings.id || '', title: settings.title || '', description: settings.description || '',
-        endpoint: url.href, cwd, token: settings.token.trim(), mcpConnectionId: settings.id || settings.mcpConnectionId || '' }
+        endpoint: url.href, cwd, mcpConnectionId: settings.id || settings.mcpConnectionId || '' }
 }
 
 export function saveAcpSettings(settings, storage = globalThis.localStorage, session = globalThis.sessionStorage, windowId = currentWindow()) {
     if (!windowId) { throw new Error('Browser window identity is not ready') }
-    const config = settings.endpoint.trim() ? validateAcpSettings(settings) : { ...settings, endpoint: '', cwd: settings.cwd.trim() || '/', token: settings.token.trim() }
+    const config = settings.endpoint.trim() ? validateAcpSettings(settings) : {
+        id: settings.id || '', title: settings.title || '', description: settings.description || '',
+        endpoint: '', cwd: settings.cwd.trim() || '/', mcpConnectionId: settings.id || settings.mcpConnectionId || '' }
     clearProviderSettings(storage)
     readAcpConnections(storage, session, windowId)
     const entries = readJson(storage, connectionsKey, [])
@@ -120,11 +117,7 @@ export function saveAcpSettings(settings, storage = globalThis.localStorage, ses
     Object.assign(entry, { title, description, acpEndpoint: config.endpoint, cwd: config.cwd })
     storage.setItem(connectionsKey, JSON.stringify(entries))
     storage.setItem(`selectedAcpConnection:${windowId}`, id)
-    if (config.endpoint && config.token) {
-        storage.setItem(`${tokenKey}:${id}`, config.token)
-    } else {
-        storage.removeItem(`${tokenKey}:${id}`)
-    }
+    storage.removeItem(`${tokenKey}:${id}`)
     storage.removeItem(configKey)
     storage.removeItem(tokenKey)
     session?.removeItem(tokenKey)

@@ -26,6 +26,11 @@ export async function mcpFixture() {
         allowPermission: (id, lifetime = 'once', target) => store.resolve(id, 'allow', lifetime === 'always' ? 'persistent' : lifetime === 'session' ? 'session' : 'once', target),
         denyPermission: id => store.resolve(id, 'deny'), cancelPermissionRequest: id => store.cancelRequest(id), removeMcpPermissions: id => store.removeSubject(id),
         getTabGroups: spaceId => getTabGroups(Object.values(docs).filter(tab => tab.spaceId === spaceId)),
+        getCurrentGroupTabId() { return this.spaceMeta.activeTabId },
+        getGroupActiveTab(group, spaceId) {
+            const selectedId = this.spaces[spaceId].activeTabsOrder?.find(id => group.tabs.some(tab => tab.id === id))
+            return group.tabs.find(tab => tab.id === selectedId) || group.tabs[0]
+        },
         async readPage(id, options) { this.reads.push({ id, options }); return `Page content: ${id}` },
         async newTab(spaceId, options) {
             const tab = { id: crypto.randomUUID(), type: 'tab', spaceId, ...options, tabGroupId: docs[options.groupTabId]?.tabGroupId }
@@ -33,7 +38,12 @@ export async function mcpFixture() {
             this.created.push(tab)
             return tab
         },
-        activateSpace(id) { this.spaceMeta.activeSpace = id }, activate(id) { this.spaceMeta.activeTabId = id }
+        activateSpace(id) { this.spaceMeta.activeSpace = id },
+        activate(id) {
+            this.spaceMeta.activeTabId = id
+            const space = this.spaces[this.spaceMeta.activeSpace]
+            space.activeTabsOrder = [id, ...(space.activeTabsOrder || []).filter(entry => entry !== id)]
+        }
     }
     const connections = new Map(['first', 'second'].map(id => [id, { id, title: `${id} agent`, description: `Agent ${id}`, endpoint: `https://darc.example/mcp/${id}` }]))
     const executors = new Map([...connections.keys()].map(id => [id, createMcpBrowserExecutor({ data, getConnection: () => connections.get(id) })]))
@@ -48,6 +58,69 @@ async function pending(fixture, count = 1) {
     }
     throw new Error(`Expected ${count} pending MCP permission requests`)
 }
+
+Deno.test('browser results distinguish focused tabs, current groups, and selections in inactive groups', async () => {
+    const f = await mcpFixture()
+    f.data.docs.four = { id: 'four', type: 'tab', title: 'Four', url: 'https://four.example', spaceId: 'space', order: 3 }
+    f.data.activate('two')
+    const allowCall = async (name, args = {}) => {
+        const call = f.call('first', name, args)
+        const [request] = await pending(f)
+        await f.data.allowPermission(request.requestId)
+        return call
+    }
+    const flags = tab => [tab.isActiveSpace, tab.isActiveTabGroup, tab.isActiveTab, tab.isActiveInTabGroup]
+    const spaces = await allowCall('listSpaces')
+    assert.deepEqual(spaces.map(space => [space.spaceId, space.isActiveSpace]), [['space', true], ['other', false]])
+    const tabs = await allowCall('listTabs')
+    assert.deepEqual(Object.fromEntries(tabs.map(tab => [tab.tabId, flags(tab)])), {
+        one: [true, true, false, false], two: [true, true, true, true],
+        three: [false, false, false, true], four: [true, false, false, true]
+    })
+    for (const [name, args] of [
+        ['listSpaceTabs', { spaceId: 'space' }],
+        ['listTabGroupTabs', { spaceId: 'space', tabGroupId: 'group:group' }],
+        ['readSpaceTabs', { spaceId: 'space' }],
+        ['readTabGroupTabs', { spaceId: 'space', tabGroupId: 'group:group' }]
+    ]) {
+        const results = await allowCall(name, args)
+        assert.deepEqual(flags(results.find(tab => tab.tabId === 'two')), [true, true, true, true], name)
+        assert.deepEqual(flags(results.find(tab => tab.tabId === 'one')), [true, true, false, false], name)
+    }
+    assert.deepEqual(flags(await allowCall('readTab', { tabId: 'three' })), [false, false, false, true])
+    for (const [name, args] of [
+        ['openTab', { spaceId: 'space', tabGroupId: 'group:group', url: 'https://new.example' }],
+        ['displayHtml', { spaceId: 'other', html: '<p>Hello</p>' }]
+    ]) {
+        const result = await allowCall(name, args)
+        assert.deepEqual(flags(result), [true, true, true, true], name)
+        if (name === 'displayHtml') assert.equal(Object.hasOwn(result, 'url'), false)
+    }
+})
+
+Deno.test('browser markers use current state after permission and preserve the group when a side pin has focus', async () => {
+    const f = await mcpFixture()
+    f.data.docs.pin = { id: 'pin', type: 'tab', pinned: true, pinScope: 'global', spaceId: 'other', url: 'https://pin.example' }
+    const call = f.call('first', 'listTabs')
+    const [request] = await pending(f)
+    f.data.activateSpace('other')
+    f.data.activate('three')
+    f.data.activate('pin')
+    f.data.getCurrentGroupTabId = () => 'three'
+    await f.data.allowPermission(request.requestId)
+    const tabs = await call
+    const three = tabs.find(tab => tab.tabId === 'three')
+    assert.equal(three.isActiveSpace, true)
+    assert.equal(three.isActiveTabGroup, true)
+    assert.equal(three.isActiveTab, false)
+    assert.equal(three.isActiveInTabGroup, true)
+    const pin = tabs.find(tab => tab.tabId === 'pin')
+    assert.equal(pin.isActiveTab, true)
+    assert.equal(pin.tabGroupId, null)
+    assert.equal(pin.isActiveTabGroup, false)
+    assert.equal(pin.isActiveInTabGroup, false)
+    assert.equal(tabs.find(tab => tab.tabId === 'one').isActiveSpace, false)
+})
 
 Deno.test('new MCP identities have no grants; header labels do not share persistent permissions', async () => {
     const f = await mcpFixture()

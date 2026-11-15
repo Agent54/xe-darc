@@ -182,9 +182,10 @@ async function run() {
     clearProviderSettings(local)
     assert.equal(local.getItem('aiToken_anthropic'), null)
     assert.equal(local.getItem('selectedModel'), 'old-model')
-    saveAcpSettings({ endpoint: 'https://agent.example/acp', cwd: '/project', token: 'connection-secret' }, local, session)
-    assert.equal(readAcpSettings(local, session).token, 'connection-secret')
-    assert.equal(readAcpSettings(local, memoryStorage()).token, 'connection-secret')
+    const saved = saveAcpSettings({ endpoint: 'https://agent.example/acp', cwd: '/project' }, local, session)
+    local.setItem(`acpBearerToken:${saved.id}`, 'unused-secret')
+    assert.equal(readAcpSettings(local, session).token, undefined)
+    assert.equal(readAcpSettings(local, memoryStorage()).token, undefined)
     assert.equal(session.getItem('acpBearerToken'), null)
     assert(!JSON.stringify(exportableStorage(local)).includes('secret'))
     local.setItem('mcpBridgeKey:connection', 'private-browser-secret')
@@ -195,13 +196,13 @@ async function run() {
     assert(!JSON.stringify(exportableStorage(local)).includes('secret'))
     const migrated = memoryStorage()
     const oldSession = memoryStorage({ acpBearerToken: 'legacy-token' })
-    assert.equal(readAcpSettings(migrated, oldSession).token, 'legacy-token')
-    assert.equal(readAcpSettings(migrated, memoryStorage()).token, 'legacy-token')
-    saveAcpSettings({ endpoint: '', cwd: '/', token: '' }, migrated, oldSession)
-    assert.equal(readAcpSettings(migrated, oldSession).token, '')
-    assert.throws(() => validateAcpSettings({ endpoint: 'ws://agent.example', cwd: '/', token: '' }))
-    assert.throws(() => validateAcpSettings({ endpoint: 'https://user:secret@agent.example', cwd: '/', token: '' }))
-    assert.throws(() => validateAcpSettings({ endpoint: 'https://agent.example', cwd: 'relative', token: '' }))
+    assert.equal(readAcpSettings(migrated, oldSession).token, undefined)
+    assert.equal(readAcpSettings(migrated, memoryStorage()).token, undefined)
+    saveAcpSettings({ endpoint: '', cwd: '/' }, migrated, oldSession)
+    assert.equal(oldSession.getItem('acpBearerToken'), null)
+    assert.throws(() => validateAcpSettings({ endpoint: 'ws://agent.example', cwd: '/' }))
+    assert.throws(() => validateAcpSettings({ endpoint: 'https://user:secret@agent.example', cwd: '/' }))
+    assert.throws(() => validateAcpSettings({ endpoint: 'https://agent.example', cwd: 'relative' }))
 
     const script = pageContentScript({ selector: '//p[contains(., "quoted")]' })
     assert(script.includes('document.evaluate'))
@@ -228,7 +229,7 @@ async function run() {
         assert.equal(chat().messages.find(message => message.role === 'assistant').content, 'Hello **ACP**')
         assert.equal(chat().messages.find(message => message.toolCallId === 'status-tool').status, 'completed')
         assert.equal(chat().plan[0].status, 'completed')
-        assert(host.headers.every(header => header.auth === 'Bearer connection-secret'))
+        assert(host.headers.every(header => header.auth === null))
         assert.equal([...host.sessions.values()][0].cwd, '/project')
         assert.equal([...host.sessions.values()][0].mcpServers[0].type, 'acp')
         assert.deepEqual(browserUrls, ['https://proxy.example/mcp/identity'])
@@ -290,7 +291,7 @@ async function run() {
     const recoverable = await mockEndpoint()
     const conversations = memoryStorage()
     const options = { ...clientOptions, conversationStorage: conversations, getConversationKey: () => 'acpConversations:window',
-        getSettings: () => ({ endpoint: recoverable.endpoint, cwd: '/project', token: 'connection-secret', mcpConnectionId: 'identity' }),
+        getSettings: () => ({ endpoint: recoverable.endpoint, cwd: '/project', mcpConnectionId: 'identity' }),
         reconnectDelay: 10 }
     let recovering = createAgentClient(options)
     try {
@@ -350,7 +351,7 @@ async function run() {
 
     const limited = await mockEndpoint({ acpMcp: false, loadSession: false })
     const legacy = memoryStorage({ selectedModel: 'deep' })
-    const limitedClient = createAgentClient({ getSettings: () => ({ id: 'chat-only', endpoint: limited.endpoint, cwd: '/', token: '' }), modelStorage: legacy,
+    const limitedClient = createAgentClient({ getSettings: () => ({ id: 'chat-only', endpoint: limited.endpoint, cwd: '/' }), modelStorage: legacy,
         createBrowserServer() { throw new Error('An agent without MCP support must still be able to chat') } })
     try {
         await limitedClient.submit('chat only')

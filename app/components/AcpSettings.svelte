@@ -8,9 +8,9 @@
     let title = $state(initial.title)
     let description = $state(initial.description)
     let adding = $state(!initial.id)
+    let editing = $state(false)
     let endpoint = $state(initial.endpoint)
     let cwd = $state(initial.cwd)
-    let token = $state(initial.token)
     let status = $state('')
     let testing = $state(false)
     let removeButton
@@ -19,32 +19,35 @@
 
     function load(config = readAcpSettings()) {
         id = config.id; title = config.title; description = config.description
-        endpoint = config.endpoint; cwd = config.cwd; token = config.token
+        endpoint = config.endpoint; cwd = config.cwd
         status = ''
     }
 
     $effect(() => {
         const selected = $agentState.connectionId
-        if (!adding && selected !== id) { load() }
+        if (!adding && selected !== id) { editing = false; load() }
     })
 
-    function select(event) {
-        agent.selectConnection(event.currentTarget.value)
+    function select(connectionId) {
+        agent.selectConnection(connectionId)
         adding = false
+        editing = true
         load()
     }
 
     function add() {
         adding = true
-        load({ id: '', title: '', description: '', endpoint: '', cwd: '/', token: '' })
+        editing = false
+        load({ id: '', title: '', description: '', endpoint: '', cwd: '/' })
     }
 
-    function cancel() { adding = false; load() }
+    function cancel() { adding = false; editing = false; load() }
 
     function save() {
         try {
-            const config = agent.saveConnection({ id, title, description, endpoint, cwd, token })
+            const config = agent.saveConnection({ id, title, description, endpoint, cwd })
             adding = false
+            editing = false
             load(config)
             status = 'Connection saved.'
             return config
@@ -63,7 +66,7 @@
         testing = true
         status = 'Connecting…'
         try {
-            status = await testAgentConnection({ endpoint, cwd, token })
+            status = await testAgentConnection({ endpoint, cwd })
         } catch (error) {
             status = error.message
         } finally {
@@ -83,34 +86,36 @@
     }
 </script>
 
-<svelte:window onkeydown={event => { if (event.key === 'Escape') { if (removePressed) removeCancelled = true; if (adding) cancel() } }}
+<svelte:window onkeydown={event => { if (event.key === 'Escape') { if (removePressed) removeCancelled = true; if (adding || editing) cancel() } }}
     onmouseup={event => { if (!removeButton?.contains(event.target)) removePressed = false }} />
 
 <section class="acp-settings setting-section" aria-labelledby="acp-settings-title">
     <h3 class="section-title" id="acp-settings-title">Agent connections</h3>
     <div class="acp-settings-cards">
-    {#if $agentState.connections.length || !adding}
-        <div class="acp-settings-card acp-connection-picker">
-            {#if $agentState.connections.length}
-                <label>Saved connection<select aria-label="Saved ACP connection" value={$agentState.connectionId} onchange={select} disabled={testing || adding}>
-                    {#each $agentState.connections as connection (connection.id)}<option value={connection.id}>{connection.title}{connection.approvals ? ' — permission requested' : ''}</option>{/each}
-                </select></label>
-            {/if}
-            <button onmousedown={add} onclick={event => { if (event.detail === 0) add() }} disabled={testing || adding}>Add new connection</button>
+    {#if !adding && !editing}
+        {#each $agentState.connections as connection (connection.id)}
+            <button class="acp-connection-summary" aria-label={`Edit ${connection.title}`} onmousedown={() => select(connection.id)} onclick={event => { if (event.detail === 0) select(connection.id) }} disabled={testing}>
+                <span class="acp-connection-title">{connection.title}</span>
+                {#if connection.description}<span class="acp-connection-description">{connection.description}</span>{/if}
+                <span class="acp-connection-endpoint">{connection.endpoint}</span>
+                {#if connection.approvals}<span class="acp-connection-approval">Permission requested</span>{/if}
+            </button>
+        {/each}
+        <div class="acp-settings-actions">
+            <button onmousedown={add} onclick={event => { if (event.detail === 0) add() }} disabled={testing}>Add new connection</button>
         </div>
     {/if}
-    {#if adding || id}
+    {#if adding || editing}
     <div class="acp-settings-card">
     <div class="acp-settings-heading">
         <h4>{adding ? 'New agent connection' : 'Connection details'}</h4>
-        {#if adding}<button aria-label="Close new agent connection" onmousedown={cancel} onclick={event => { if (event.detail === 0) cancel() }}>Close</button>{/if}
+        <button aria-label={adding ? 'Close new agent connection' : 'Close connection details'} onmousedown={cancel} onclick={event => { if (event.detail === 0) cancel() }} disabled={testing}>Close</button>
     </div>
     <p>Connect to an installed agent served over ACP HTTP. Manage the agent and its model credentials on the agent host.</p>
     <label>Name<input aria-label="ACP connection name" bind:value={title} maxlength="96" placeholder="OpenCode project" /></label>
     <label>Description (optional)<textarea aria-label="ACP connection description" bind:value={description} maxlength="512"></textarea></label>
     <label>ACP endpoint<input aria-label="ACP endpoint" type="url" bind:value={endpoint} placeholder="https://localhost:7331/acp" /></label>
     <label>Working directory on agent host<input aria-label="Agent working directory" bind:value={cwd} placeholder="/" /></label>
-    <label>Connection bearer token<input aria-label="ACP bearer token" type="password" bind:value={token} autocomplete="off" /></label>
     <p class="acp-settings-note">This connection owns its browser permissions. The ACP proxy exposes the same ID as a legacy MCP URL. Connections stay saved until removed.</p>
     <div class="acp-settings-actions">
         <button class="primary" onmousedown={save} onclick={event => { if (event.detail === 0) save() }} disabled={testing || !title.trim() || !endpoint.trim()}>Save connection</button>
@@ -121,7 +126,7 @@
     </div>
     {/if}
     {#if status}<p role="status">{status}</p>{/if}
-    {#if id && !adding}<McpConnections connectionId={id} />{/if}
+    {#if id && editing}<McpConnections connectionId={id} />{/if}
     </div>
 </section>
 
@@ -132,14 +137,17 @@
     h4 { font-size: 13px; font-weight: 500; line-height: 1.2; margin: 0; color: rgba(255, 255, 255, 0.75) }
     p { font-size: 12px; color: rgba(255, 255, 255, 0.7); line-height: 1.4; margin: 0; overflow-wrap: anywhere }
     label { display: grid; gap: 6px; min-width: 0; font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.8) }
-    input, select, textarea { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 4px; padding: 8px 10px; background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.9); font: inherit; font-size: 12px; font-weight: 400 }
-    input[type="url"], input[type="password"], input[aria-label="Agent working directory"] { font-family: 'SF Mono', Consolas, monospace }
-    select { color-scheme: dark }
+    input, textarea { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 4px; padding: 8px 10px; background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.9); font: inherit; font-size: 12px; font-weight: 400 }
+    input[type="url"], input[aria-label="Agent working directory"] { font-family: 'SF Mono', Consolas, monospace }
     textarea { resize: vertical; min-height: 60px }
     input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.4) }
     .acp-settings-actions, .acp-settings-heading { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
     .acp-settings-heading h4 { flex: 1 }
-    .acp-connection-picker button { justify-self: start }
+    button.acp-connection-summary { display: grid; gap: 6px; justify-content: stretch; box-sizing: border-box; width: 100%; padding: 14px 16px; text-align: left; border-radius: 8px; overflow-wrap: anywhere }
+    .acp-connection-title { font-size: 13px; font-weight: 500 }
+    .acp-connection-description { font-size: 12px; font-weight: 400; color: rgba(255, 255, 255, 0.65) }
+    .acp-connection-endpoint { font-size: 11px; font-weight: 400; color: rgba(255, 255, 255, 0.5) }
+    .acp-connection-approval { font-size: 11px; color: rgb(251, 191, 36) }
     .acp-settings-note { border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 12px; font-size: 11px; color: rgba(255, 255, 255, 0.5) }
     button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; padding: 8px 12px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.8); font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease }
     button:disabled { opacity: .5; cursor: not-allowed }
@@ -148,6 +156,6 @@
     button.primary:hover:not(:disabled) { background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.3); color: rgb(59, 130, 246) }
     button.danger { background: rgba(239, 68, 68, 0.06); border-color: rgba(239, 68, 68, 0.2); color: rgba(239, 68, 68, 0.7) }
     button.danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.35); color: rgba(239, 68, 68, 0.9) }
-    input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; border-color: rgba(59, 130, 246, 0.3); background: rgba(255, 255, 255, 0.08) }
+    input:focus-visible, textarea:focus-visible { outline: none; border-color: rgba(59, 130, 246, 0.3); background: rgba(255, 255, 255, 0.08) }
     button:focus-visible { outline: 1px solid rgba(59, 130, 246, 0.7); outline-offset: 2px }
 </style>

@@ -29,8 +29,10 @@
     const chatHistoryList = $derived($agentState.conversations)
     const modelConfig = $derived(getModelConfig(chat?.configOptions))
     const selectedModel = $derived(modelConfig?.currentValue || demoModel)
-    const composerOptions = $derived(chat?.configOptions.filter(option => option !== modelConfig) || [])
-    const showLegacyMode = $derived(chat?.modes && !chat?.configOptions.some(option => option.category === 'mode' || option.id === 'mode'))
+    const showConnection = $derived($agentState.connections?.length > 1)
+    const showModel = $derived((modelConfig ? configValues(modelConfig) : demoModels).length > 1)
+    const composerOptions = $derived(chat?.configOptions.filter(option => option !== modelConfig && (option.type !== 'select' || configValues(option).length > 1)) || [])
+    const showLegacyMode = $derived(chat?.modes?.availableModes.length > 1 && !chat?.configOptions.some(option => option.category === 'mode' || option.id === 'mode'))
     const messageQueue = $derived($agentState.queue.map(item => ({ ...item, userMessage: item.text, status: 'queued' })))
     const chatHistory = $derived.by(() => {
         const messages = (chat?.messages || []).map(message => {
@@ -567,6 +569,7 @@ The current system demonstrates strong performance and security characteristics.
 	{#snippet children()}
 		<div class="agent-panel" use:clickToScroll={'.agent-markdown-content, .agent-tool-result, .agent-info-card.tool .agent-info-card-details, .agent-history-dropdown-content, pre, textarea'}>
 		<div class="agent-sticky-header">
+			{#if chatHistoryList.length > 0}
 			<div class="agent-header-row">
 				<select class="agent-model-select" aria-label="Conversation" value={selectedHistoryId} disabled={isProcessing} onchange={handleHistoryChange}>
 					<option value="current">Current chat</option>
@@ -579,31 +582,14 @@ The current system demonstrates strong performance and security characteristics.
 						<option value="show-all">Show all {chatHistoryList.length} chats...</option>
 					{/if}
 				</select>
-
-				<select class="agent-model-select" aria-label={modelConfig?.name || 'Demo model'} value={selectedModel} disabled={isProcessing} onchange={handleModelChange}>
-					{#if modelConfig}
-						{@render configChoices(modelConfig.options)}
-					{:else}
-						<optgroup label="Demo models">{@render configChoices(demoModels)}</optgroup>
-					{/if}
-				</select>
 			</div>
-
-			{#if $agentState.connections?.length}
-				<label class="agent-selector-row">Connection
-					<select class="agent-model-select" aria-label="Agent connection" value={$agentState.connectionId} onchange={event => { agent.selectConnection(event.currentTarget.value); connectionError = '' }}>
-						{#each $agentState.connections as connection (connection.id)}<option value={connection.id}>{connection.title}{connection.approvals ? ' — permission requested' : ''}</option>{/each}
-					</select>
-				</label>
 			{/if}
+
 			<div class="agent-connection-row">
 				<span role="status">{$agentState.status === 'connected' ? $agentState.agentName : $agentState.status === 'connecting' ? 'Connecting…' : $agentState.connectionRequested ? 'Reconnecting…' : 'Disconnected'}</span>
-				{#if $agentState.connectionRequested}
-					<button class="agent-quick-action" onmousedown={() => agent.disconnect()}>Disconnect</button>
-				{:else}
+				{#if !$agentState.connectionRequested}
 					<button class="agent-quick-action" disabled={$agentState.status === 'connecting'} onmousedown={connect}>Connect</button>
 				{/if}
-				<button class="agent-quick-action" onmousedown={switchToSettings} aria-label="Configure agent connection">Settings</button>
 			</div>
 		</div>
 
@@ -1198,13 +1184,38 @@ The current system demonstrates strong performance and security characteristics.
 		{#if conv}<p class="agent-voice-status" role="status">Voice controls enabled. Voice input is not connected yet.</p>{/if}
 		{#if chat?.commands.length}<p class="agent-commands">{chat.commands.map(command => '/' + command.name).join(' · ')}</p>{/if}
 		<div class="agent-chat-input-container">
+			{#if showConnection || showModel}
+			<div class="agent-composer-options agent-connection-options">
+				{#if showConnection}
+					<label class="agent-config-control">
+						<span>Connection</span>
+						<select class="agent-config-select" aria-label="Agent connection" value={$agentState.connectionId} onchange={event => { agent.selectConnection(event.currentTarget.value); connectionError = '' }}>
+							{#each $agentState.connections as connection (connection.id)}<option value={connection.id}>{connection.title}{connection.approvals ? ' — permission requested' : ''}</option>{/each}
+						</select>
+					</label>
+				{/if}
+				{#if showModel}
+				<label class="agent-config-control">
+					<span>Model</span>
+					<select class="agent-config-select" aria-label={modelConfig?.name || 'Demo model'} value={selectedModel} disabled={isProcessing} onchange={handleModelChange}>
+						{#if modelConfig}
+							{@render configChoices(modelConfig.options)}
+						{:else}
+							<optgroup label="Demo models">{@render configChoices(demoModels)}</optgroup>
+						{/if}
+					</select>
+				</label>
+				{/if}
+			</div>
+			{/if}
 			{#if composerOptions.length || showLegacyMode}
 				<div class="agent-composer-options">
 					{#each composerOptions as option (option.id)}
-						<label class="agent-config-control" title={option.description || option.name}>
-							<span>{option.name}</span>
+						{@const optionName = option.category === 'mode' || option.id === 'mode' ? 'Agent' : option.name}
+						<label class="agent-config-control" title={option.description || optionName}>
+							<span>{optionName}</span>
 							{#if option.type === 'select'}
-								<select class="agent-config-select" aria-label={option.name} value={option.currentValue} disabled={isProcessing} onchange={event => agent.setConfig(option.id, event.currentTarget.value)}>
+								<select class="agent-config-select" aria-label={optionName} value={option.currentValue} disabled={isProcessing} onchange={event => agent.setConfig(option.id, event.currentTarget.value)}>
 									{@render configChoices(option.options)}
 								</select>
 							{:else if option.type === 'boolean'}
@@ -1214,8 +1225,8 @@ The current system demonstrates strong performance and security characteristics.
 					{/each}
 					{#if showLegacyMode}
 						<label class="agent-config-control">
-							<span>Mode</span>
-							<select class="agent-config-select" aria-label="Agent mode" value={chat.modes.currentModeId} disabled={isProcessing} onchange={event => agent.setMode(event.currentTarget.value)}>
+							<span>Agent</span>
+							<select class="agent-config-select" aria-label="Agent" value={chat.modes.currentModeId} disabled={isProcessing} onchange={event => agent.setMode(event.currentTarget.value)}>
 								{#each chat.modes.availableModes as mode (mode.id)}<option value={mode.id}>{mode.name}</option>{/each}
 							</select>
 						</label>
@@ -1278,7 +1289,7 @@ The current system demonstrates strong performance and security characteristics.
 							/>
 						</svg>
 					</button>
-				{/if}
+				{:else}
 				<button
 					class="agent-send-button"
 					onmouseup={sendMessage}
@@ -1294,6 +1305,7 @@ The current system demonstrates strong performance and security characteristics.
 						/>
 					</svg>
 				</button>
+				{/if}
 			</div>
 
 			<div class="agent-action-buttons">
@@ -1642,11 +1654,13 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	.agent-chat-message.user .agent-chat-message-content {
+		border-top-right-radius: 0;
 		background: rgba(255, 255, 255, 0.2);
 		color: white;
 	}
 
 	.agent-chat-message.assistant .agent-chat-message-content {
+		border-top-left-radius: 0;
 		background: rgba(255, 255, 255, 0.1);
 		color: white;
 	}
@@ -1985,7 +1999,7 @@ The current system demonstrates strong performance and security characteristics.
 		transition: all 0.2s ease;
 		z-index: 2;
 		bottom: 11px;
-		right: 40px;
+		right: 5px;
 	}
 
 	.agent-send-button:hover:not(:disabled) {
@@ -2345,7 +2359,7 @@ The current system demonstrates strong performance and security characteristics.
 		width: 100%;
 		background: rgba(0, 0, 0, 0.4);
 		border: 1px solid rgba(255, 255, 255, 0.08);
-		border-radius: 6px;
+		border-radius: 0 6px 6px 6px;
 		padding: 12px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		line-height: 1.5;
@@ -2363,7 +2377,7 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-markdown-message.assistant-chat .agent-markdown-content {
 		background: rgba(255, 255, 255, 0.1);
 		border: none;
-		border-radius: 12px;
+		border-radius: 0 12px 12px 12px;
 		padding: 8px 12px;
 		font-size: 14px;
 		line-height: 1.4;

@@ -6,16 +6,16 @@ serve it through an external ACP HTTP adapter; Darc does not launch agent proces
 
 In Settings → Agent connections, add a named connection with the complete HTTP(S) endpoint and an absolute
 working directory on the agent host. `/` is the default; use the actual project
-directory when needed. An optional bearer token authenticates the HTTP connection,
-not a model provider. Save the connection, then connect from Settings or the Agent sidebar.
+directory when needed. Save the connection, then connect from Settings or the Agent sidebar.
+Provider login is managed by the agent; there is no ACP bearer-token setting.
 Test connection initializes ACP without creating a conversation or sending a prompt.
-The dropdowns in Settings and the sidebar select the displayed connection. Each
-connection keeps its own conversations, credentials, and browser permissions;
-switching the dropdown leaves other connected agents and their MCP routes running.
+Click a saved connection card in Settings to edit it. The sidebar dropdown selects
+the displayed connection. Each connection keeps its own conversations and browser
+permissions; selecting another leaves connected agents and their MCP routes running.
 
-Endpoint, working directory, and bearer token are stored locally until changed or
-removed. Credentials are excluded from exports. Existing session-only ACP tokens
-are migrated on read. Obsolete provider keys are removed on startup.
+Endpoint and working directory are stored locally until changed or removed.
+Previously saved ACP bearer tokens are ignored and remain excluded from exports.
+Obsolete provider keys are removed on startup.
 Conversation IDs, transcripts, queued messages, and connection intent are saved in
 the browser per window and connection, with no expiry. Reloading Darc restores them. They are
 excluded from settings exports. Explicit Disconnect stops automatic reconnection
@@ -100,6 +100,13 @@ Tab listing does not grant content access. Listings return IDs that subsequent
 scoped calls can use. Reads default to HTML, accept `textOnly: true` for text and
 an optional XPath `selector`, and require active frames. New tabs accept HTTP(S)
 or `about:newtab`; `displayHtml` creates a data-URL page.
+
+Space listings mark the current space with `isActiveSpace`. All tab results
+(list, read, and open) include `isActiveSpace`, `isActiveTabGroup` (the current
+group in the current space), `isActiveTab` (the focused tab), and
+`isActiveInTabGroup` (the selected tab within its group, including inactive
+groups and spaces). Tabs outside a group have both group flags set to false.
+These markers use the browser's current window state when the operation runs.
 
 All access uses the existing permission store, Resources panel, and permission
 toasts, with Allow once, Allow until closing this window, Always allow, Deny,

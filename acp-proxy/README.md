@@ -2,20 +2,40 @@
 
 Requires Deno and OpenCode v2 on PATH (tested with 2.3.0). This proxy uses a
 private OpenCode profile in the git-ignored `acp-proxy/data/opencode/` directory.
-If prompts report "provider authentication required", run `deno task login`
-from this folder before connecting. Provider API keys from the environment
-remain available; the profile does not reuse your normal OpenCode login/config.
+Provider API keys from the environment remain available; the profile uses its own
+saved credentials and config rather than your system OpenCode profile.
 
 ```sh
 cd acp-proxy
 deno task start
 ```
 
+To open OpenCode's terminal UI for this exact proxy profile:
+
+```sh
+cd /Users/jan/Dev/xe/stacks/darc/acp-proxy
+deno task tui
+```
+
+This starts `opencode --standalone` with the same database, configuration,
+workspace, and environment overrides as the ACP process. It does not attach to
+your system OpenCode service. Use `/connect` to manage this profile's provider
+accounts and `/models` to choose a model for the TUI conversation. Darc
+conversations keep their own model selection.
+
+The editable profile configuration is
+`data/opencode/config/opencode/opencode.json`. Your changes survive proxy
+reconnections and restarts; `opencode.json` only seeds a new profile. The proxy
+updates only `mcp.servers.darc` with the connected browser's endpoint and removes
+only that entry when clearing a stale binding. Other MCP servers, MCP options,
+and all other profile settings are preserved.
+Opening the TUI preserves an existing browser binding.
+Reconnect Darc after changing profile settings so its ACP process reloads them.
+
 In Darc's Agent connection settings:
 
 - Endpoint: `https://localhost:7331/acp`
 - Working directory: ignored by this restricted proxy; it uses its private workspace
-- Bearer token: leave empty
 
 HTTPS uses the same `../certs/localhost.crt` and `../certs/device.key` as Darc's
 Vite server. Your browser must trust the project's `../certs/rootCA.pem`. Use
@@ -72,8 +92,9 @@ Requests, notifications, cancellation, and permission replies are forwarded
 through the SDK. DELETE or server shutdown terminates that child. Multiple ACP
 profiles belong to the browser; each proxy instance has only one active client.
 
-`opencode.json` defines the restricted browser agent. It denies local tools,
-skills, plugins, and other MCP servers. The bridge replaces incoming working
+`opencode.json` defines the initial restricted browser agent. Its defaults deny
+local tools, skills, plugins, and other MCP servers. Existing profiles use their
+saved configuration. The bridge replaces incoming working
 directories with `data/opencode/workspace/` and disables project/Claude config
 discovery. It writes the exact browser MCP URL to
 `data/opencode/config/opencode/opencode.json` before forwarding session creation
@@ -82,7 +103,8 @@ Additional MCP declarations are rejected. The existing browser permission
 prompts still authorize each browser operation.
 
 OpenCode's database, login, cache, config, logs, and temporary files live in
-`data/opencode/`. This is why the start/login tasks need `--allow-write=./data`.
+`data/opencode/`. This is why the start/tui tasks need read/write access to
+`./data`.
 This directory stores OpenCode runtime data, not a proxy connection registry;
 saved connection identities and permissions remain browser-owned. Reconnects
 retain OpenCode's database/login. Darc retains session IDs and transcripts in browser
@@ -123,8 +145,9 @@ It ignores any old `data/mcp-connections.json`.
 After restart, Darc reconnects and registers the same saved IDs. Removing an identity
 from Darc removes its grants and prevents the browser from registering it again.
 The browser retains its owner key for reconnect and removal; tool clients need
-only the URL. ACP connection settings and their bearer token are also
-saved until changed or removed.
+only the URL. ACP connection settings are saved until changed or removed.
+There is no user-configured ACP bearer token. ACP session IDs identify conversations;
+they do not authenticate new connections to this local proxy.
 There is no additional MCP tool token or Authorization header. Old saved token
 fields are removed from browser storage during migration.
 

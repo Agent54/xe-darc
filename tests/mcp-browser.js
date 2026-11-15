@@ -40,6 +40,8 @@ try {
             changePermission:resource=>store.reset(resource),cancelPermissionRequest:id=>store.cancelRequest(id),removeMcpPermissions:id=>store.removeSubject(id),
             markPermissionSeen:resource=>store.markSeen(resource),
             getTabGroups:spaceId=>getTabGroups(Object.values(docs).filter(tab=>tab.spaceId===spaceId)),
+            getCurrentGroupTabId(){return this.spaceMeta.activeTabId},
+            getGroupActiveTab(group){return group.tabs.find(tab=>tab.id===this.spaceMeta.activeTabId)||group.tabs[0]},
             async readPage(id,options){this.reads.push({id,options});return 'Real content for '+id},
             async newTab(spaceId,options){const tab={id:'new-'+this.created.length,type:'tab',spaceId,...options};this.created.push(tab);docs[tab.id]=tab;return tab},
             activateSpace(id){this.spaceMeta.activeSpace=id},activate(id){this.spaceMeta.activeTabId=id}
