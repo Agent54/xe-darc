@@ -34,7 +34,15 @@ export function createMcpBrowserExecutor({ data, getConnection, activity = agent
         })
         const metadata = tab => {
             const group = data.getTabGroups(tab.spaceId).find(group => group.tabs.some(member => member.id === tab.id))
-            return { tabId: tab.id, spaceId: tab.spaceId, tabGroupId: group?.id || null, title: getTabTitle(tab), url: tab.url?.startsWith('data:') ? `${tab.url.split(',')[0]},…` : tab.url }
+            const isActiveSpace = tab.spaceId === data.spaceMeta.activeSpace
+            return {
+                tabId: tab.id, spaceId: tab.spaceId, tabGroupId: group?.id || null, title: getTabTitle(tab),
+                url: tab.url?.startsWith('data:') ? `${tab.url.split(',')[0]},…` : tab.url,
+                isActiveSpace,
+                isActiveTabGroup: isActiveSpace && !!group?.tabs.some(member => member.id === data.getCurrentGroupTabId(tab.spaceId)),
+                isActiveTab: tab.id === data.spaceMeta.activeTabId,
+                isActiveInTabGroup: !!group && data.getGroupActiveTab(group, tab.spaceId)?.id === tab.id
+            }
         }
 
         if (name === 'listSpaces') {
@@ -42,7 +50,7 @@ export function createMcpBrowserExecutor({ data, getConnection, activity = agent
             const spaces = Object.entries(data.spaces).filter(([, space]) => !space.archive && !space._deleted)
             access.touch({ spaces: spaces.map(([id]) => id) })
             return spaces
-                .map(([spaceId, space]) => ({ spaceId, title: space.name || space.title || spaceId }))
+                .map(([spaceId, space]) => ({ spaceId, title: space.name || space.title || spaceId, isActiveSpace: spaceId === data.spaceMeta.activeSpace }))
         }
         if (name === 'listTabs') {
             await authorize('mcp-list-tabs', all)
@@ -87,7 +95,8 @@ export function createMcpBrowserExecutor({ data, getConnection, activity = agent
             access.touch({ tabs: [tab.id] })
             data.activateSpace(args.spaceId)
             data.activate(tab.id)
-            return { tabId: tab.id, spaceId: args.spaceId, tabGroupId: group?.id || null, title: getTabTitle(tab), ...(name === 'openTab' ? { url: tab.url } : {}) }
+            const { url: tabUrl, ...tabMetadata } = metadata(tab)
+            return { ...tabMetadata, ...(name === 'openTab' ? { url: tabUrl } : {}) }
         }
 
         let tabs
@@ -123,14 +132,15 @@ export function createMcpBrowserExecutor({ data, getConnection, activity = agent
         for (const item of selected) {
             signal?.throwIfAborted()
             if (!active() || !valid()) { throw new Error('A selected tab was closed, moved, or navigated; request access again') }
+            const tabMetadata = metadata(data.docs[item.tabId])
             try {
                 const content = await data.readPage(item.tabId, { textOnly: args.textOnly, selector: args.selector })
                 signal?.throwIfAborted()
                 if (!active() || !valid()) { throw new Error('A selected tab changed while reading') }
-                results.push({ tabId: item.tabId, url: item.url, content })
+                results.push({ ...tabMetadata, url: item.url, content })
             } catch (error) {
                 if (name === 'readTab') { throw error }
-                results.push({ tabId: item.tabId, error: error.message })
+                results.push({ ...tabMetadata, error: error.message })
             }
         }
         return name === 'readTab' ? results[0] : results

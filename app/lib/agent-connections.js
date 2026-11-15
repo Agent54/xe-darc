@@ -86,7 +86,7 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
         }
         const client = createClient({
             getSettings: () => {
-                if (!id) { return { endpoint: '', cwd: '/', token: '' } }
+                if (!id) { return { endpoint: '', cwd: '/' } }
                 const config = readAcpConnections(storage, session, windowId).find(entry => entry.id === id)
                 if (!config) { throw new Error('Agent connection removed') }
                 return config
@@ -104,7 +104,7 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
     function snapshot() {
         clientFor(selectedId)
         return { ...clients.get(keyFor(selectedId)).state, connectionId: selectedId,
-            connections: connections.map(({ token: _token, ...connection }) => {
+            connections: connections.map(connection => {
                 const state = clients.get(keyFor(connection.id))?.state
                 const chat = state?.conversations.find(chat => chat.id === state.activeConversationId)
                 return { ...connection, agentName: state?.agentName, configOptions: chat?.configOptions || [],
@@ -177,7 +177,7 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
             const config = saveAcpSettings(settings, storage, session, getWindowId())
             mcp.sync()
             refresh()
-            if (previous && ['endpoint', 'cwd', 'token'].some(key => previous[key] !== config[key])) { clientFor(config.id).configure() }
+            if (previous && ['endpoint', 'cwd'].some(key => previous[key] !== config[key])) { clientFor(config.id).configure() }
             return config
         },
         async removeConnection(id = selectedId) {

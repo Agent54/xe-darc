@@ -10,15 +10,31 @@ export function prepareOpenCode(directory = openCodeData) {
     const folders = ['home/', 'config/opencode/', 'data/', 'cache/', 'state/', 'tmp/', 'workspace/']
     for (const folder of folders) { Deno.mkdirSync(new URL(folder, directory), { recursive: true, mode: 0o700 }) }
     const configFile = new URL('config/opencode/opencode.json', directory)
+    try {
+        Deno.writeTextFileSync(configFile, JSON.stringify(baseConfig, null, 2) + '\n', { createNew: true, mode: 0o600 })
+    } catch (error) {
+        if (!(error instanceof Deno.errors.AlreadyExists)) { throw error }
+    }
     function configure(mcpUrl?: string) {
-        const config = { ...baseConfig, mcp: { servers: mcpUrl ? {
-            darc: { type: 'remote', url: mcpUrl, oauth: false, codemode: false }
-        } : {} } }
+        const config = JSON.parse(Deno.readTextFileSync(configFile))
+        if (!config || typeof config !== 'object' || Array.isArray(config)) {
+            throw new Error(`OpenCode profile config must be a JSON object: ${fileURLToPath(configFile)}`)
+        }
+        for (const [name, value] of [['mcp', config.mcp], ['mcp.servers', config.mcp?.servers]]) {
+            if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value))) {
+                throw new Error(`OpenCode profile ${name} must be a JSON object: ${fileURLToPath(configFile)}`)
+            }
+        }
+        if (mcpUrl) {
+            config.mcp ??= {}
+            config.mcp.servers ??= {}
+            config.mcp.servers.darc = { type: 'remote', url: mcpUrl, oauth: false, codemode: false }
+        } else {
+            if (!config.mcp?.servers || !Object.hasOwn(config.mcp.servers, 'darc')) { return }
+            delete config.mcp.servers.darc
+        }
         Deno.writeTextFileSync(configFile, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 })
     }
-    // Reconnects keep OpenCode's database/login, but never reuse an offline MCP binding.
-    // A stale URL is never registered before the browser supplies its live binding again.
-    configure()
     return {
         cwd: fileURLToPath(new URL('workspace/', directory)),
         env: {
@@ -68,6 +84,9 @@ export function createOpenCodeAgent(gateway: ReturnType<typeof createMcpGateway>
             }
             try {
                 const runtime = prepareOpenCode(directory)
+                // Reconnects keep OpenCode's database/login, but never reuse an offline MCP binding.
+                // A stale URL is never registered before the browser supplies its live binding again.
+                runtime.configure()
                 child = new Deno.Command('opencode', { args: ['acp'], cwd: runtime.cwd, env: runtime.env,
                     stdin: 'piped', stdout: 'piped', stderr: 'inherit' }).spawn()
                 const stdio = ndJsonStream(child.stdin, child.stdout)
@@ -102,9 +121,9 @@ export function createOpenCodeAgent(gateway: ReturnType<typeof createMcpGateway>
 }
 
 if (import.meta.main) {
-    if (Deno.args[0] !== 'login') { throw new Error('Usage: deno task login') }
+    if (Deno.args[0] !== 'tui') { throw new Error('Usage: deno task tui') }
     const runtime = prepareOpenCode()
-    const child = new Deno.Command('opencode', { args: ['acp', '--login'], cwd: runtime.cwd, env: runtime.env,
+    const child = new Deno.Command('opencode', { args: ['--standalone'], cwd: runtime.cwd, env: runtime.env,
         stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }).spawn()
     Deno.exit((await child.status).code)
 }

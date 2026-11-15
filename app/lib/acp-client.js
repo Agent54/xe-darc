@@ -334,9 +334,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                     })
                     return { outcome: optionId !== null ? { outcome: 'selected', optionId } : { outcome: 'cancelled' } }
                 })
-            const peer = app.connect(createStream(settings.endpoint, {
-                headers: settings.token ? { Authorization: `Bearer ${settings.token}` } : {}, cookies: 'include'
-            }))
+            const peer = app.connect(createStream(settings.endpoint, { cookies: 'include' }))
             connection = peer
             peer.closed.then(() => {
                 if (connection !== peer) {

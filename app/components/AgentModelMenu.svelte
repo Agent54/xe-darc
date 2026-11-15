@@ -201,10 +201,10 @@
         </div>
         <div class="model-footer">
             <span>{starred ? 'Starred models' : isDemo ? 'Demo models' : harnessName}</span>
-            {#if mode}
-                <label title={mode.description || mode.name}>
+            {#if mode && configValues(mode).length > 1}
+                <label title={mode.description || 'Agent'}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-                    <select aria-label={mode.name} value={mode.currentValue} disabled={disabled} onchange={event => onConfig(mode.id, event.currentTarget.value)}>
+                    <select aria-label="Agent" value={mode.currentValue} disabled={disabled} onchange={event => onConfig(mode.id, event.currentTarget.value)}>
                         {#each configValues(mode) as choice (choice.value)}<option value={choice.value}>{choice.name}</option>{/each}
                     </select>
                 </label>

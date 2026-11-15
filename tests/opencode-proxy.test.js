@@ -9,7 +9,7 @@ function pair() {
     return [{ readable: a.readable, writable: b.writable }, { readable: b.readable, writable: a.writable }]
 }
 
-Deno.test('OpenCode configuration uses repo-local paths and only the exact browser MCP endpoint', async () => {
+Deno.test('OpenCode configuration preserves the profile and changes only the darc MCP entry', async () => {
     const directory = new URL(`../.cache/opencode-config-${crypto.randomUUID()}/`, import.meta.url)
     try {
         const runtime = prepareOpenCode(directory)
@@ -33,8 +33,44 @@ Deno.test('OpenCode configuration uses repo-local paths and only the exact brows
         assert.equal(runtime.env.OPENCODE_CONFIG_PROJECT_DISABLE, 'true')
         assert.equal(runtime.env.OPENCODE_DISABLE_CLAUDE_CODE, 'true')
         assert.equal(runtime.env.OPENCODE_FILEWATCHER_DISABLE, 'true')
-        assert.equal(prepareOpenCode(directory).env.OPENCODE_DB, runtime.env.OPENCODE_DB)
-        assert.deepEqual(JSON.parse(await Deno.readTextFile(runtime.env.OPENCODE_CONFIG)).mcp.servers, {})
+        config.model = 'openai/profile-model'
+        config.provider = { openai: { options: { baseURL: 'https://provider.example/v1' } } }
+        config.mcp.servers.docs = { type: 'remote', url: 'https://docs.example/mcp', oauth: true }
+        config.mcp.customSetting = { enabled: true }
+        await Deno.writeTextFile(runtime.env.OPENCODE_CONFIG, JSON.stringify(config))
+        const reopened = prepareOpenCode(directory)
+        assert.deepEqual(reopened.env, runtime.env)
+        assert.equal(reopened.cwd, runtime.cwd)
+        assert.deepEqual(JSON.parse(await Deno.readTextFile(runtime.env.OPENCODE_CONFIG)), config)
+        reopened.configure()
+        const withoutDarc = structuredClone(config)
+        delete withoutDarc.mcp.servers.darc
+        assert.deepEqual(JSON.parse(await Deno.readTextFile(runtime.env.OPENCODE_CONFIG)), withoutDarc)
+        reopened.configure(url)
+        assert.deepEqual(JSON.parse(await Deno.readTextFile(runtime.env.OPENCODE_CONFIG)), config)
+        const nextUrl = 'https://localhost:7331/mcp/another-browser-connection'
+        reopened.configure(nextUrl)
+        config.mcp.servers.darc.url = nextUrl
+        assert.deepEqual(JSON.parse(await Deno.readTextFile(runtime.env.OPENCODE_CONFIG)), config)
+        const withoutMcp = structuredClone(config)
+        delete withoutMcp.mcp
+        const originalText = JSON.stringify(withoutMcp)
+        await Deno.writeTextFile(runtime.env.OPENCODE_CONFIG, originalText)
+        reopened.configure()
+        assert.equal(await Deno.readTextFile(runtime.env.OPENCODE_CONFIG), originalText)
+        reopened.configure(url)
+        assert.deepEqual(JSON.parse(await Deno.readTextFile(runtime.env.OPENCODE_CONFIG)), {
+            ...withoutMcp, mcp: { servers: { darc: { type: 'remote', url, oauth: false, codemode: false } } }
+        })
+        for (const mcp of [null, [], 'invalid', { servers: [] }, { servers: null }]) {
+            const text = JSON.stringify({ ...withoutMcp, mcp })
+            await Deno.writeTextFile(runtime.env.OPENCODE_CONFIG, text)
+            assert.throws(() => reopened.configure(url), /must be a JSON object/)
+            assert.equal(await Deno.readTextFile(runtime.env.OPENCODE_CONFIG), text)
+        }
+        await Deno.writeTextFile(runtime.env.OPENCODE_CONFIG, '{broken')
+        assert.throws(() => reopened.configure(), SyntaxError)
+        assert.equal(await Deno.readTextFile(runtime.env.OPENCODE_CONFIG), '{broken')
     } finally { await Deno.remove(directory, { recursive: true }).catch(() => {}) }
 })
 
