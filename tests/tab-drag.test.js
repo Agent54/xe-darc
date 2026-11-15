@@ -72,13 +72,13 @@ function pinList (scope, children = []) {
     return list
 }
 
-Deno.test('webpage sidepin targets use white lines and do not reorder header pins', () => {
+Deno.test('webpage sidepin targets use the frame overlay and do not reorder header pins', () => {
     for (const [side, x] of [['left', 10], ['right', 1390]]) {
         const harness = dragHarness()
         harness.start('source', element('source', 400, 20, 100, 36))
         harness.move(x, 300)
-        assert.equal(harness.tabDrag.indicator.width, 2)
-        assert.ok(harness.tabDrag.indicator.height > 100)
+        assert.equal(harness.tabDrag.sidepinZone, side)
+        assert.equal(harness.tabDrag.indicator.visible, false)
         harness.release()
         assert.equal(harness.drops[0].type, 'sidepin')
         assert.equal(harness.drops[0].side, side)

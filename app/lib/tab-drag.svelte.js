@@ -396,12 +396,12 @@ function handleMouseMove(e) {
         if (mx <= areaLeft + zoneWidth && pending?.pinnedSide !== 'left') {
             state.sidepinZone = 'left'
             state.dropTarget = { type: 'sidepin', side: 'left' }
-            Object.assign(state.indicator, { visible: true, x: areaLeft + 8, y: (areaTop + window.innerHeight) / 2, width: 2, height: window.innerHeight - areaTop - 16 })
+            hideIndicator()
             return
         } else if (mx >= areaRight - zoneWidth && pending?.pinnedSide !== 'right') {
             state.sidepinZone = 'right'
             state.dropTarget = { type: 'sidepin', side: 'right' }
-            Object.assign(state.indicator, { visible: true, x: areaRight - 8, y: (areaTop + window.innerHeight) / 2, width: 2, height: window.innerHeight - areaTop - 16 })
+            hideIndicator()
             return
         }
     }
