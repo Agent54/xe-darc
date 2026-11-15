@@ -1,6 +1,6 @@
 const nativeTypes = new Set(['geolocation', 'pointerLock', 'download', 'filesystem', 'fullscreen', 'hid', 'clipboardReadWrite', 'clipboardSanitizedWrite'])
 const navigationTypes = new Set(['open-tab', 'navigate-off-origin'])
-export const mcpPermissionTypes = new Set(['mcp-list-spaces', 'mcp-list-tabs', 'mcp-open-tab', 'mcp-read-tabs'])
+export const mcpPermissionTypes = new Set(['mcp-list-spaces', 'mcp-list-tabs', 'mcp-open-tab', 'mcp-activate-tab', 'mcp-read-tabs'])
 
 export function permissionTargetKey(target) {
     return target ? [target.kind, target.spaceId || '', target.id || ''].map(encodeURIComponent).join(':') : ''

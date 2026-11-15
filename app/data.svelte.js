@@ -2428,13 +2428,13 @@ const data = {
         removal.catch(error => console.error('Failed to remove divider:', error))
     },
     
-    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned, pinScope = 'group', groupTabId, pendingWindow } = {}) => {
+    newTab: async (spaceId, { url, title, opener, preview, lightbox, shouldFocus, pinned, pinScope = 'group', groupTabId, newTabGroupId, pendingWindow } = {}) => {
         // console.time('updt')
         const _id = `darc:tab_${crypto.randomUUID()}`
         const firstItem = getSidebarItems(spaces[spaceId]?.tabs).at(-1)
         const isGroupMember = !preview && !lightbox && (!pinned || pinScope === 'group')
         const group = isGroupMember ? getTabGroup(spaces[spaceId]?.tabs, groupTabId) : null
-        const tabGroupId = group ? group.tabs[0].tabGroupId || crypto.randomUUID() : null
+        const tabGroupId = group ? group.tabs[0].tabGroupId || crypto.randomUUID() : isGroupMember ? newTabGroupId || null : null
         const canvasPosition = group ? groupCanvasPosition(group.tabs, spaceId) : null
         let tabGroupOrder = null
         if (group) {

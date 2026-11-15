@@ -2,6 +2,7 @@ import * as acp from '@agentclientprotocol/sdk/unstable'
 import { createHttpStream } from '@agentclientprotocol/sdk/experimental/http-client'
 import { readAcpModelPreference, saveAcpModelPreference, validateAcpSettings } from './acp-settings.js'
 import { configValues, getModelConfig } from './agent-models.js'
+import { findBrowserToolMessage, toolPhase } from './agent-tool-display.js'
 
 export function createAgentClient({ getSettings, createBrowserServer, modelStorage, conversationStorage, getConversationKey = () => 'acpConversations',
     createStream = createHttpStream, setupTimeout = 15000, cancelTimeout = 5000, reconnectDelay = 1000 }) {
@@ -40,6 +41,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             state.conversations = saved.conversations.filter(chat => typeof chat.id === 'string' && Array.isArray(chat.messages))
                 .map(({ context: _context, ...chat }) => ({ ...chat, generation: null, loading: false, messages: chat.messages.map(message => ({ ...message,
                     streaming: false, ...(message.role === 'approval' && message.status === 'pending' ? { status: 'cancelled' } : {}) })) }))
+            for (const chat of state.conversations) cancelToolMessages(chat)
             state.activeConversationId = state.conversations.some(chat => chat.id === saved.activeConversationId)
                 ? saved.activeConversationId : state.conversations[0]?.id || null
             state.queue = Array.isArray(saved.queue) ? saved.queue.filter(item => state.conversations.some(chat => chat.id === item.conversationId))
@@ -99,6 +101,15 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         return message
     }
 
+    function cancelToolMessages(chat) {
+        for (const message of chat.messages) {
+            if (message.role === 'tool' && ['preparing', 'waiting', 'running'].includes(toolPhase(message, chat.messages))) {
+                message.status = 'cancelled'
+                message.browserPhase = 'cancelled'
+            }
+        }
+    }
+
     function updateCurrentChatTimestamp(chat) {
         chat.timestamp = new Date().toISOString()
         const index = state.conversations.indexOf(chat)
@@ -135,7 +146,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         }
     }
 
-    function askApproval({ title, details, options, signal, conversationId, sessionId }) {
+    function askApproval({ title, details, options, signal, conversationId, sessionId, toolCallId }) {
         if (signal?.aborted) {
             return Promise.resolve(null)
         }
@@ -146,7 +157,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             state.approvals.push({ id, title, details, options, conversationId, sessionId })
             const chat = state.conversations.find(item => item.id === conversationId)
             if (chat) {
-                addMessage(chat, 'approval', '', { approvalId: id, title, details, options, status: 'pending' })
+                addMessage(chat, 'approval', '', { approvalId: id, title, details, options, status: 'pending', toolCallId })
             }
             signal?.addEventListener('abort', abort, { once: true })
             publish()
@@ -177,12 +188,14 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                     addMessage(chat, role, text, { sourceMessageId, streaming: true })
                 }
             } else if (['tool_call', 'tool_call_update'].includes(update.sessionUpdate)) {
-                let message = chat.messages.find(item => item.toolCallId === update.toolCallId)
+                let message = chat.messages.find(item => item.role === 'tool' && item.toolCallId === update.toolCallId)
                 if (!message) {
                     message = addMessage(chat, 'tool', '', { toolCallId: update.toolCallId })
                 }
                 const previousContent = message.content
-                Object.assign(message, Object.fromEntries(Object.entries(update).filter(([key, value]) => key !== 'content' && value != null)))
+                Object.assign(message, Object.fromEntries(Object.entries(update).filter(([key, value]) => key !== 'content' &&
+                    (value != null || key === 'rawInput' || key === 'rawOutput'))))
+                if (update.content) message.toolContent = update.content
                 message.content = update.content ? update.content.map(item => item.type === 'content' && item.content.type === 'text' ? item.content.text : item.type === 'diff' ? `${item.path}\n${item.newText || ''}` : `[${item.type}]`).join('\n') : previousContent
             } else if (update.sessionUpdate === 'plan') {
                 chat.plan = update.entries
@@ -271,6 +284,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         connecting = null
         releaseBrowserServers()
         cancelApprovals()
+        for (const chat of state.conversations) cancelToolMessages(chat)
         if (activeTurn) {
             activeTurn.cancelled = true
             state.queuePaused = true
@@ -326,7 +340,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                     }
                     const optionId = await askApproval({
                         title: params.toolCall.title || 'Agent permission', details: JSON.stringify(params.toolCall, null, 2),
-                        options: params.options, signal, conversationId: chat.id, sessionId: params.sessionId
+                        options: params.options, signal, conversationId: chat.id, sessionId: params.sessionId, toolCallId: params.toolCall.toolCallId
                     })
                     return { outcome: optionId !== null ? { outcome: 'selected', optionId } : { outcome: 'cancelled' } }
                 })
@@ -417,7 +431,18 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         }
         if (settings.mcpConnectionId && capabilities.mcpCapabilities?.acp && createBrowserServer) {
             releaseBrowserServer(chat)
-            const backend = createBrowserServer(settings, agentInfo)
+            const backend = createBrowserServer(settings, agentInfo, ({ name, args, serverName, inputSchema }) => {
+                const message = findBrowserToolMessage(chat.messages, serverName, name, args, inputSchema) ||
+                    addMessage(chat, 'tool', '', { toolCallId: `browser:${crypto.randomUUID()}`, title: `Browser: ${name}`, rawInput: args })
+                message.browserPhase = 'preparing'
+                publish()
+                return ({ phase, result, error }) => {
+                    message.browserPhase = phase
+                    if (result !== undefined) message.rawOutput = result
+                    if (error) message.content = error
+                    publish()
+                }
+            })
             const binding = provider.registerServer(peer.agent, { name: backend.name, handler: backend.handler })
             browserServers.set(chat, { backend, binding })
             backend.signal?.addEventListener('abort', () => releaseBrowserServer(chat), { once: true })
@@ -538,6 +563,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         if (turn) {
             browserServers.get(turn.chat)?.backend.cancelPending?.()
             turn.cancelled = true
+            cancelToolMessages(turn.chat)
             if (turn.chat.sessionId && connection) {
                 connection.agent.notify(acp.methods.agent.session.cancel, { sessionId: turn.chat.sessionId }).catch(error => disconnect(error.message))
             }

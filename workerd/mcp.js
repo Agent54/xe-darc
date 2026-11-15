@@ -1,5 +1,5 @@
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server'
-import { mcpTools } from '../app/lib/mcp-tool-defs.js'
+import { mcpTools, mcpServerInstructions } from '../app/lib/mcp-tool-defs.js'
 
 const limit = 1024 * 1024
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -94,7 +94,7 @@ export class McpConnection {
         this.pending = new Map()
         this.ready = state.storage.get('connection').then(config => { this.config = config })
         this.handler = createMcpHandler(({ requestInfo }) => {
-            const server = new McpServer({ name: 'darc-browser', version: '1.0.0' })
+            const server = new McpServer({ name: 'darc-browser', version: '1.0.0' }, { instructions: mcpServerInstructions })
             for (const [name, definition] of Object.entries(mcpTools)) {
                 server.registerTool(name, definition, async (args, ctx) => {
                     try {

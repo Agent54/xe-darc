@@ -26,7 +26,9 @@ Deno.test('OpenCode configuration preserves the profile and changes only the dar
             assert(config.policies.some(rule => rule.action === action && rule.resource === '*' && rule.effect === 'deny'))
         }
         assert.equal(config.default_agent, 'browser')
-        for (const name of ['build', 'plan', 'general', 'explore']) { assert.equal(config.agents[name].disabled, true) }
+        assert.equal(Object.hasOwn(config.agents.browser, 'system'), false)
+        for (const name of ['build', 'general', 'explore']) { assert.equal(config.agents[name].disabled, true) }
+        assert.equal(config.agents.plan.disabled, false)
         for (const name of ['XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME', 'TMPDIR', 'OPENCODE_TEST_HOME', 'OPENCODE_DB']) {
             assert(runtime.env[name].startsWith(directory.pathname))
         }

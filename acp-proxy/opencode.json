@@ -17,11 +17,10 @@
   "agents": {
     "browser": {
       "description": "Use the connected Darc browser through its MCP tools",
-      "mode": "primary",
-      "system": "Use the darc MCP tools for browser tasks. Browser access is authorized by Darc's existing permission prompts. No local filesystem, shell, skills, or other MCP servers are available."
+      "mode": "primary"
     },
     "build": { "disabled": true },
-    "plan": { "disabled": true },
+    "plan": { "disabled": false },
     "general": { "disabled": true },
     "explore": { "disabled": true }
   },

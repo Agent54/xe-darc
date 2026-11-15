@@ -43,7 +43,7 @@ export async function until(predicate, message = 'Condition timed out') {
     }
 }
 
-export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSessionResponse, afterFirstChunk, afterDocumentChunk } = {}) {
+export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSessionResponse, afterFirstChunk, afterDocumentChunk, onPrompt } = {}) {
     const sessions = new Map()
     const sessionConfigs = new Map()
     const prompts = []
@@ -80,7 +80,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
                 assert.equal(typeof identity.id, 'string')
                 assert.equal(typeof identity.key, 'string')
                 const tools = await new acp.McpOverAcpCaller().request(client, server.serverId, 'tools/list')
-                assert.equal(tools.result.tools.length, 9)
+                assert.equal(tools.result.tools.length, 6)
             }
             const sessionId = crypto.randomUUID()
             sessions.set(sessionId, params)
@@ -112,6 +112,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
             prompts.push(text)
             const sessionId = params.sessionId
             const send = update => client.notify(acp.methods.client.session.update, { sessionId, update })
+            if (onPrompt) return onPrompt({ text, params, client, send, session: sessions.get(sessionId) })
             if (text === 'wait' || text === 'ignore-cancel') {
                 await new Promise(resolve => { releaseTurns.add(resolve); pendingTurns.set(sessionId, text === 'wait' ? resolve : () => {}) })
                 pendingTurns.delete(sessionId)

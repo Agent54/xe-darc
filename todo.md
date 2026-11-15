@@ -3459,3 +3459,5 @@ fix spacial memory by adjusting zoom without breaks and subboxes like ff tab can
 
 agent grouping as suggestoins
 
+reject eval feature for tab eg closing tab for comp research. show previous visits and other open tabs in context everywhere, duploicates
+

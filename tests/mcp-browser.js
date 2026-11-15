@@ -43,7 +43,7 @@ try {
             getCurrentGroupTabId(){return this.spaceMeta.activeTabId},
             getGroupActiveTab(group){return group.tabs.find(tab=>tab.id===this.spaceMeta.activeTabId)||group.tabs[0]},
             async readPage(id,options){this.reads.push({id,options});return 'Real content for '+id},
-            async newTab(spaceId,options){const tab={id:'new-'+this.created.length,type:'tab',spaceId,...options};this.created.push(tab);docs[tab.id]=tab;return tab},
+            async newTab(spaceId,options){const anchor=docs[options.groupTabId];if(anchor&&!anchor.tabGroupId)anchor.tabGroupId=crypto.randomUUID();const tab={id:'new-'+this.created.length,type:'tab',spaceId,...options,tabGroupId:anchor?.tabGroupId||options.newTabGroupId};this.created.push(tab);docs[tab.id]=tab;if(options.shouldFocus&&spaceId===this.spaceMeta.activeSpace)this.activate(tab.id);return tab},
             activateSpace(id){this.spaceMeta.activeSpace=id},activate(id){this.spaceMeta.activeTabId=id}
         }
         export default data
@@ -161,12 +161,12 @@ try {
     await page.waitForFunction(selector => [...document.querySelectorAll(`${selector} button`)].some(button => button.textContent === 'Copied'), { timeout: 5000 }, firstSelector)
     assert.equal(await page.evaluate(() => navigator.clipboard.readText()), fullUrl)
     assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('browser-test-token')), false)
-    const read = rpc(first, 'readTab', { tabId: 'one' })
+    const read = rpc(first, 'readTabs', { tabIds: ['one'] })
     await page.waitForSelector(`${firstSelector} select[aria-label="MCP permission scope"]`)
     await page.$eval(`${firstSelector} select[aria-label="MCP permission scope"]`, node => { node.value = [...node.options].find(option => option.textContent.includes('Tab group')).value; node.dispatchEvent(new Event('change', { bubbles: true })) })
     await clickText(`${firstSelector} .resource-card.requested button`, 'Allow once')
-    assert.equal(JSON.parse((await read).result.content[0].text).tabId, 'one')
-    const denied = rpc(second, 'readTab', { tabId: 'one' })
+    assert.equal(JSON.parse((await read).result.content[0].text)[0].tabId, 'one')
+    const denied = rpc(second, 'readTabs', { tabIds: ['one'] })
     await page.waitForSelector(`${secondSelector} .resource-card.requested`)
     await clickText(`${secondSelector} .resource-card.requested button`, 'Deny')
     assert.equal((await denied).result.isError, true)

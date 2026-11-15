@@ -1,6 +1,6 @@
 import { permissionCardResources } from './permissions.js'
 
-export async function requestMcpPermission(data, { connection, agent, permission, target, parents = [], targets = [], signal, current }) {
+export async function requestMcpPermission(data, { connection, agent, permission, target, parents = [], targets = [], signal, current, onPhase }) {
     await data.permissionsReady
     signal?.throwIfAborted()
     const context = {
@@ -19,12 +19,17 @@ export async function requestMcpPermission(data, { connection, agent, permission
                 settle: resolve
             }, context)
             requestId = result.requestId
+            if (result.pending) { onPhase?.('waiting') }
             if (!result.pending) { resolve(result.granted) }
             signal?.addEventListener('abort', abort, { once: true })
             if (signal?.aborted) { abort() }
         })
         signal?.throwIfAborted()
-        if (!granted || !context.current()) { throw new Error('MCP permission denied, cancelled, or expired') }
+        if (!granted || !context.current()) {
+            onPhase?.('denied')
+            throw new Error('MCP permission denied, cancelled, or expired')
+        }
+        onPhase?.('running')
     } finally {
         signal?.removeEventListener('abort', abort)
     }

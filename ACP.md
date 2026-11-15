@@ -88,18 +88,63 @@ Tools:
 
 | Tool | Requested permission scope |
 | --- | --- |
-| `listSpaces` | List all spaces |
-| `listTabs` | List tab metadata across all spaces |
-| `listSpaceTabs` | List tab metadata in one space |
-| `listTabGroupTabs` | List tab metadata in one tab group |
-| `openTab` / `displayHtml` | Open tabs in a specified space or tab group |
-| `readTab` | Read one tab; the user may expand approval to its group or space |
-| `readSpaceTabs` / `readTabGroupTabs` | Read tabs in the specified space or group |
+| `listSpaces` | Space metadata only; `currentOnly: true` limits the result to the current space |
+| `listTabs` | Tab metadata for the current tab, its tab group, specified spaces, or explicitly all spaces |
+| `openTab` / `displayHtml` | Open in the current group in the foreground, or an agent-created group in the background |
+| `activateTab` | Bring an existing tab, its group, and its space into the foreground; separate activation permission |
+| `readTabs` | Read one or more tab IDs, the current tab or its group, or tabs in specified spaces |
+
+Always use the smallest scope needed for the task. Both `listTabs` and `readTabs`
+default to the focused tab and return arrays. Their scope options are:
+
+| Arguments | Selected tabs |
+| --- | --- |
+| `{ "current": "tab" }` | Focused tab |
+| `{ "current": "tabList" }` | All tabs in the focused tab's group; errors if it has no group |
+| `{ "spaceIds": ["space-a", "space-b"] }` | Open tabs in those spaces |
+| `{ "spaceIds": "*" }` | Open tabs in all spaces; use only when required by the task |
+| `{ "spaceIds": ["space-a"], "tabGroupId": "group:example" }` | One specific group |
+| `{ "tabIds": ["tab-a", "tab-b"] }` | Specific tabs (`readTabs` only) |
+
+Do not combine `current` or `tabIds` with other scope options. Empty ID lists,
+unknown arguments, and incompatible scopes are rejected. Current selections are
+resolved when the call arrives, so changing focus while approving does not switch
+the target. Multi-space requests require permission for each requested space;
+explicit tab reads require permission for those tabs. All permissions must be
+granted before any page content is read.
+
+The former separate space/group listing and reading tools have been removed.
+Reconnect agents to refresh their tool definitions.
 
 Tab listing does not grant content access. Listings return IDs that subsequent
 scoped calls can use. Reads default to HTML, accept `textOnly: true` for text and
 an optional XPath `selector`, and require active frames. New tabs accept HTTP(S)
 or `about:newtab`; `displayHtml` creates a data-URL page.
+
+`openTab` and `displayHtml` accept `background` (default `false`), optional
+`spaceId` (default current space), and optional `tabGroupId` to constrain the
+destination. Foreground opens must target the current group in the current
+space. If that group changes while approval is pending, the request fails.
+With `background: true`, tabs open without changing focus in a separate group
+created for the conversation in that space; later background opens reuse it.
+An explicit group ID must match the current group for foreground opens or the
+conversation's agent-created group for background opens. Permissions target
+that group, including when it is about to be created. Each new conversation or
+reconnected browser binding gets its own background group.
+
+Agents should open research, investigation, and intermediate work with
+`background: true`, and read those tabs by ID without activating them. Use
+foreground opening in the current group only to show something to the user.
+`activateTab({ "tabId": "tab-id" })` presents an existing result or fulfills a
+user's request to switch tabs. It does not open, move, or read tabs. Listing,
+reading, and opening permissions do not grant activation permission. Closed,
+moved, or navigated targets invalidate a pending activation request.
+
+Shared workflow guidance is published through the official MCP server
+`instructions` field on all transports (native MCP-over-ACP, the HTTP proxy,
+and workerd). Tool descriptions document each tool's arguments and behavior.
+OpenCode's profile does not inject a duplicate browser system prompt; ACP setup
+only registers the MCP connection. Reconnect to refresh server instructions.
 
 Space listings mark the current space with `isActiveSpace`. All tab results
 (list, read, and open) include `isActiveSpace`, `isActiveTabGroup` (the current

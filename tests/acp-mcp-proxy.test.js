@@ -5,6 +5,7 @@ import { createMcpGateway } from '../acp-proxy/mcp-gateway.ts'
 import { createBrowserServer } from '../app/lib/acp-browser-server.js'
 import { createMcpConnections } from '../app/lib/mcp-connections.js'
 import { mcpFixture } from './mcp-permissions.test.js'
+import { mcpServerInstructions } from '../app/lib/mcp-tool-defs.js'
 
 function pair() {
     const a = new TransformStream(), b = new TransformStream()
@@ -91,10 +92,12 @@ for (const native of [true, false]) {
             }), /requires its saved connection identity/)
             const loaded = await browser.agent.request(acp.methods.agent.session.load, { ...params, sessionId: 'test-session' })
             assert.equal(loaded._meta['darc/mcpUrls'][registration.serverId], fullUrl)
-            assert.equal((await httpRpc(fullUrl, 'tools/list')).result.tools.length, 9)
+            assert.equal((await httpRpc(fullUrl, 'tools/list')).result.tools.length, 6)
             // Same initialize request as the user's curl probe, with no separate credential.
-            assert.equal((await httpRpc(fullUrl, 'initialize', { protocolVersion: '2025-06-18', capabilities: {},
-                clientInfo: { name: 'probe', version: '0.0.1' } })).result.protocolVersion, '2025-06-18')
+            const initialized = (await httpRpc(fullUrl, 'initialize', { protocolVersion: '2025-06-18', capabilities: {},
+                clientInfo: { name: 'probe', version: '0.0.1' } })).result
+            assert.equal(initialized.protocolVersion, '2025-06-18')
+            assert.equal(initialized.instructions, mcpServerInstructions)
             assert.equal(declaration.type, native ? 'acp' : 'http')
             const permission = { sessionId: 'test-session', toolCall: { toolCallId: 'external-tool', title: 'Agent action' },
                 options: [{ optionId: 'opaque-deny', name: 'Reject', kind: 'reject_once' }] }
@@ -105,33 +108,39 @@ for (const native of [true, false]) {
                 assert.deepEqual(declaration.headers, [])
                 assert.equal((await rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'Legacy agent', version: '1' } })).result.protocolVersion, '2025-11-25')
             }
-            assert.equal((await rpc('tools/list')).result.tools.length, 9)
-            const denied = rpc('tools/call', { name: 'readTab', arguments: { tabId: 'one' } })
+            assert.equal((await rpc('tools/list')).result.tools.length, 6)
+            const discovery = native ? await rpc('server/discover') : await httpRpc(fullUrl, 'server/discover', {
+                _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                    'io.modelcontextprotocol/clientInfo': { name: 'probe', version: '1' }, 'io.modelcontextprotocol/clientCapabilities': {} }
+            }, undefined,
+                { 'MCP-Protocol-Version': '2026-07-28', 'Mcp-Method': 'server/discover' })
+            assert.equal(discovery.result?.instructions, mcpServerInstructions, JSON.stringify(discovery))
+            const denied = rpc('tools/call', { name: 'readTabs', arguments: { tabIds: ['one'] } })
             await waitFor(() => f.pending().length === 1)
             const deniedRequest = f.pending()[0]
             await f.data.denyPermission(deniedRequest.requestId)
             assert.equal((await denied).result.isError, true)
             assert.equal(f.data.reads.length, 0)
             await f.store.reset(deniedRequest)
-            const allowed = rpc('tools/call', { name: 'readTab', arguments: { tabId: 'one' } })
+            const allowed = rpc('tools/call', { name: 'readTabs', arguments: { tabIds: ['one'] } })
             await waitFor(() => f.pending().length === 1)
             const request = f.pending()[0]
             assert.equal(request.subject.id, 'first')
             assert.equal(request.scope.requestingOrigin, 'https://darc.example')
             assert.equal(request.agent.name, 'Test agent')
             await f.data.allowPermission(request.requestId, 'always')
-            assert.equal(JSON.parse((await allowed).result.content[0].text).tabId, 'one')
-            assert.equal((await rpc('tools/call', { name: 'readTab', arguments: { tabId: 'one' } })).result.isError, undefined)
-            assert.equal(JSON.parse((await httpRpc(fullUrl, 'tools/call', { name: 'readTab', arguments: { tabId: 'one' } })).result.content[0].text).tabId, 'one')
+            assert.equal(JSON.parse((await allowed).result.content[0].text)[0].tabId, 'one')
+            assert.equal((await rpc('tools/call', { name: 'readTabs', arguments: { tabIds: ['one'] } })).result.isError, undefined)
+            assert.equal(JSON.parse((await httpRpc(fullUrl, 'tools/call', { name: 'readTabs', arguments: { tabIds: ['one'] } })).result.content[0].text)[0].tabId, 'one')
             const abort = new AbortController()
-            const cancelled = rpc('tools/call', { name: 'readTab', arguments: { tabId: 'two' } }, abort.signal).catch(error => error)
+            const cancelled = rpc('tools/call', { name: 'readTabs', arguments: { tabIds: ['two'] } }, abort.signal).catch(error => error)
             await waitFor(() => f.pending().length === 1)
             abort.abort()
             await cancelled
             await waitFor(() => f.pending().length === 0)
             await manager.remove('first')
             assert.equal(Object.keys(f.data.permissionRules).length, 0)
-            const revoked = await rpc('tools/call', { name: 'readTab', arguments: { tabId: 'one' } }).catch(error => error)
+            const revoked = await rpc('tools/call', { name: 'readTabs', arguments: { tabIds: ['one'] } }).catch(error => error)
             assert(revoked instanceof Error || revoked.error || revoked.result?.isError)
             const revokedUrl = await fetch(fullUrl)
             assert.equal(revokedUrl.status, 404)
@@ -211,10 +220,10 @@ Deno.test('browser-owned MCP URL survives reload and a stateless proxy restart; 
     try {
         const first = await attach()
         assert.equal(first.url, `${origin}/mcp/first`)
-        const read = call(first.url, 'readTab', { tabId: 'one' })
+        const read = call(first.url, 'readTabs', { tabIds: ['one'] })
         await waitFor(() => f.pending().length === 1)
         await f.data.allowPermission(f.pending()[0].requestId, 'always')
-        assert.equal(JSON.parse((await read).result.content[0].text).tabId, 'one')
+        assert.equal(JSON.parse((await read).result.content[0].text)[0].tabId, 'one')
         await first.close()
         await status(first.url, 503)
         assert.equal(manager.state.connections[0].mcpUrl, first.url)
@@ -227,14 +236,14 @@ Deno.test('browser-owned MCP URL survives reload and a stateless proxy restart; 
         const second = await attach()
         assert.equal(second.url, first.url)
         assert.deepEqual(second.identity, first.identity)
-        assert.equal(JSON.parse((await call(first.url, 'readTab', { tabId: 'one' })).result.content[0].text).tabId, 'one')
+        assert.equal(JSON.parse((await call(first.url, 'readTabs', { tabIds: ['one'] })).result.content[0].text)[0].tabId, 'one')
         assert.equal(f.pending().length, 0)
         const control = new URL(first.url)
         control.search = ''; control.pathname += '/connection'
         await status(control, 401, { method: 'DELETE' })
         await assert.rejects(gateway.expose({}, new acp.McpOverAcpCaller(), { type: 'acp', name: 'impostor', serverId: 'fake' },
             new AbortController().signal, { name: 'impostor', version: '' }, { id: 'first', key: crypto.randomUUID() }), /invalid owner/)
-        const pending = call(first.url, 'readTab', { tabId: 'two' }).catch(error => error)
+        const pending = call(first.url, 'readTabs', { tabIds: ['two'] }).catch(error => error)
         await waitFor(() => f.pending().length === 1)
         await second.close()
         await pending
