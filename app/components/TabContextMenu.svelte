@@ -26,9 +26,7 @@
     let adjustedX = $state(0)
     let groupMenuView = $state('menu')
     let groupNameInput = $state(null)
-    let moveSpaceOpen = $state(false)
-    let moveSpaceTrigger = $state(null)
-    let moveSpaceSubmenu = $state(null)
+    let openSubmenuName = $state(null)
     let snoozeMode = $state('relative')
     let snoozeAmount = $state(1)
     let snoozeUnit = $state('hours')
@@ -54,7 +52,7 @@
     $effect(() => {
         if (menu.visible && menu.tab) {
             groupMenuView = 'menu'
-            moveSpaceOpen = false
+            openSubmenuName = null
             snoozeError = ''
         }
     })
@@ -166,12 +164,6 @@
     function toggleSidebarPin(tab) {
         const anchor = isGroup ? tab.tabs[0] : tab
         data.pinSidebarTab({ tabId: anchor.id, pinned: !anchor.sidebarPinned, ...(isGroup ? { scope: 'group' } : {}) })
-        onHide()
-    }
-
-    function setSidebarPin(fixed) {
-        const anchor = targetTabs[0]
-        if (anchor) data.pinSidebarTab({ tabId: anchor.id, fixed, ...(isGroup ? { scope: 'group' } : {}) })
         onHide()
     }
 
@@ -287,6 +279,7 @@
     }
 
     async function showGroupView(view) {
+        openSubmenuName = null
         groupMenuView = view
         await tick()
         if (view === 'rename') {
@@ -341,8 +334,8 @@
         return moving
     }
 
-    function positionMoveSubmenu(node) {
-        const anchor = moveSpaceTrigger.getBoundingClientRect()
+    function positionSubmenu(node) {
+        const anchor = node.parentElement.querySelector('button').getBoundingClientRect()
         const parent = node.parentElement.getBoundingClientRect()
         const rect = node.getBoundingClientRect()
         const left = anchor.right + rect.width + 8 > window.innerWidth ? anchor.left - rect.width : anchor.right
@@ -350,35 +343,108 @@
         node.style.top = `${Math.max(8, Math.min(anchor.top, window.innerHeight - rect.height - 8)) - parent.top}px`
     }
 
-    async function openMoveSubmenu(focus = false) {
-        moveSpaceOpen = true
+    async function openSubmenu(name, element, focus = false) {
+        openSubmenuName = name
         if (focus) {
             await tick()
-            moveSpaceSubmenu?.querySelector('button:not(:disabled)')?.focus()
+            element.querySelector('[role="menu"]')?.querySelector('button:not(:disabled)')?.focus()
         }
     }
 
-    function handleMoveKey(event) {
-        if (event.key === 'ArrowRight' && event.target === moveSpaceTrigger) {
+    function handleSubmenuKey(event, name) {
+        const wrapper = event.currentTarget
+        const trigger = wrapper.querySelector('button')
+        if (event.key === 'ArrowRight' && event.target === trigger) {
             event.preventDefault()
             event.stopPropagation()
-            openMoveSubmenu(true)
-        } else if (moveSpaceOpen && (event.key === 'ArrowLeft' || event.key === 'Escape')) {
+            openSubmenu(name, wrapper, true)
+        } else if (openSubmenuName === name && (event.key === 'ArrowLeft' || event.key === 'Escape')) {
             event.preventDefault()
             event.stopPropagation()
-            moveSpaceOpen = false
-            moveSpaceTrigger?.focus()
-        } else if (moveSpaceOpen && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            openSubmenuName = null
+            trigger.focus()
+        } else if (openSubmenuName === name && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
             event.preventDefault()
             event.stopPropagation()
-            const buttons = [...moveSpaceSubmenu.querySelectorAll('button:not(:disabled)')]
+            const buttons = [...wrapper.querySelector('[role="menu"]').querySelectorAll('button:not(:disabled)')]
             const index = buttons.indexOf(document.activeElement)
             const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 :
                 (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length
             buttons[next]?.focus()
         }
     }
+
+    const icons = {
+        clock: 'M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+        calendar: 'M6.75 3v2.25m10.5-2.25v2.25M3 9h18M5.25 4.5h13.5A2.25 2.25 0 0 1 21 6.75v12A2.25 2.25 0 0 1 18.75 21H5.25A2.25 2.25 0 0 1 3 18.75v-12A2.25 2.25 0 0 1 5.25 4.5Z',
+        wait: 'M8.25 9v6m7.5-6v6m5.25-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+        resume: 'm9 6 9 6-9 6V6Z',
+        rename: 'm16.862 4.487 1.687-1.688a1.875 1.875 0 0 1 2.652 2.652L9.582 17.07a4.5 4.5 0 0 1-1.897 1.13L4.5 19.125l.925-3.185a4.5 4.5 0 0 1 1.13-1.897L16.862 4.487Zm0 0 2.651 2.651M4.5 21h15',
+        image: 'm3 16.5 5.25-5.25 6.75 6.75m-1.5-4.5 3-3 4.5 4.5M3 3h18v18H3V3Zm12 5.25h.008v.008H15V8.25Z',
+        copy: 'M9 9h12v12H9V9ZM15 9V3H3v12h6',
+        close: 'm6 6 12 12M6 18 18 6',
+        up: 'M4.5 4.5h15M12 21V9m-6 6 6-6 6 6',
+        group: 'M3 3h7v7H3V3Zm11 11h7v7h-7v-7ZM14 3h7v7h-7V3ZM3 14h7v7H3v-7Z',
+        pin: 'M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z',
+        space: 'M3 3h18v18H3V3Zm0 6h18M9 9v12',
+        global: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18m-9-9c4 4 4 14 0 18-4-4-4-14 0-18Z',
+        left: 'M3 3h18v18H3V3Zm6 0v18',
+        right: 'M3 3h18v18H3V3Zm12 0v18',
+        menu: 'M3 3h18v18H3V3Zm4.5 6h9m-9 6h9',
+        move: 'M9 3H5.25A2.25 2.25 0 0 0 3 5.25v13.5A2.25 2.25 0 0 0 5.25 21H9m6-16.5L22.5 12 15 19.5M22.5 12H9'
+    }
 </script>
+
+{#snippet menuIcon(name)}
+    <span class="context-menu-icon" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d={icons[name]} /></svg>
+    </span>
+{/snippet}
+
+{#snippet submenu(name, label, icon, children)}
+    <div class="context-menu-item has-submenu submenu-wrapper" class:move-space-menu={name === 'space'} role="presentation"
+         onmouseenter={(event) => openSubmenu(name, event.currentTarget)}
+         onmouseleave={(event) => { if (!event.currentTarget.contains(document.activeElement)) { openSubmenuName = null } }}
+         onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { openSubmenuName = null } }}
+         onkeydown={(event) => handleSubmenuKey(event, name)}>
+        <button class="context-menu-item menu-action" role="menuitem" type="button"
+                aria-haspopup="menu" aria-expanded={openSubmenuName === name}
+                onmousedown={(event) => { if (event.button === 0) { openSubmenu(name, event.currentTarget.parentElement) } }}
+                onmouseup={(event) => openSubmenu(name, event.currentTarget.parentElement)}
+                onclick={(event) => { if (event.detail === 0) { openSubmenu(name, event.currentTarget.parentElement, true) } }}>
+            {@render menuIcon(icon)}
+            <span>{label}</span>
+            <svg class="submenu-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
+        </button>
+        {#if openSubmenuName === name}
+            <div class="context-submenu positioned-submenu menu-surface" class:move-space-submenu={name === 'space'} role="menu" aria-label={label} use:positionSubmenu>
+                {@render children()}
+            </div>
+        {/if}
+    </div>
+{/snippet}
+
+{#snippet snoozeItems()}
+    {#each [['1h', '1 hour'], ['4h', '4 hours'], ['tomorrow', 'Tomorrow morning · 9:00'], ['week', 'Next week · 9:00']] as [option, label]}
+        <button class="context-submenu-item menu-action" type="button" role="menuitem"
+                onmouseup={(event) => selectPendingOnRelease(event, () => snooze(snoozeTime(option)))}
+                onclick={(event) => { if (event.detail === 0) { snooze(snoozeTime(option)) } }}>
+            {@render menuIcon(option.endsWith('h') ? 'clock' : 'calendar')}<span>{label}</span>
+        </button>
+    {/each}
+    <button class="context-submenu-item menu-action" type="button" role="menuitem"
+            onmouseup={(event) => selectPendingOnRelease(event, () => showGroupView('snooze-custom'))}
+            onclick={(event) => { if (event.detail === 0) { showGroupView('snooze-custom') } }}>
+        {@render menuIcon('calendar')}<span>Custom…</span>
+    </button>
+    <div class="context-menu-separator menu-divider"></div>
+    <button class="context-submenu-item menu-action" type="button" role="menuitem"
+            onmouseup={(event) => selectPendingOnRelease(event, () => snooze(null, 'external'))}
+            onclick={(event) => { if (event.detail === 0) { snooze(null, 'external') } }}>
+        {@render menuIcon('wait')}<span>Wait for external action</span>
+    </button>
+    {#if snoozeError}<p class="snooze-error" role="alert">{snoozeError}</p>{/if}
+{/snippet}
 
 {#if menu.visible && menu.tab}
     <div class="context-menu-scrim" 
@@ -403,7 +469,7 @@
              if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
              if (pendingItem && groupMenuView === 'menu' && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
                  e.preventDefault()
-                 const items = [...menuElement.querySelectorAll('[role="menuitem"]')]
+                 const items = [...menuElement.querySelectorAll('[role="menuitem"]')].filter(item => item.closest('[role="menu"]') === menuElement)
                  const index = items.indexOf(document.activeElement)
                  const next = e.key === 'Home' || (index < 0 && e.key === 'ArrowDown') ? 0
                      : e.key === 'End' || index < 0 ? items.length - 1
@@ -421,15 +487,7 @@
             <button class="group-editor-back" type="button"
                     onmouseup={() => showGroupView('menu')}
                     onclick={(e) => { if (e.detail === 0) showGroupView('menu') }}>← {editorTitle}</button>
-            {#if groupMenuView === 'snooze'}
-                {#each [['1h', '1 hour'], ['4h', '4 hours'], ['tomorrow', 'Tomorrow morning · 9:00'], ['week', 'Next week · 9:00']] as [option, label]}
-                    <button class="context-menu-item menu-action" type="button" onclick={() => snooze(snoozeTime(option))}>{label}</button>
-                {/each}
-                <button class="context-menu-item menu-action" type="button" onclick={() => showGroupView('snooze-custom')}>Custom…</button>
-                <div class="context-menu-separator menu-divider"></div>
-                <button class="context-menu-item menu-action" type="button" onclick={() => snooze(null, 'external')}>Wait for external action</button>
-                {#if snoozeError}<p class="snooze-error" role="alert">{snoozeError}</p>{/if}
-            {:else if groupMenuView === 'snooze-custom'}
+            {#if groupMenuView === 'snooze-custom'}
                 <form class="group-name-form snooze-form" onsubmit={saveCustomSnooze}>
                     <label for="snooze-mode">Wake up</label>
                     <select id="snooze-mode" bind:value={snoozeMode}>
@@ -451,7 +509,7 @@
                         </div>
                     {/if}
                     {#if snoozeError}<p class="snooze-error" role="alert">{snoozeError}</p>{/if}
-                    <button class="context-menu-item menu-action" type="submit">Snooze {isGroup ? 'group' : 'tab'}</button>
+                    <button class="context-menu-item menu-action" type="submit">{@render menuIcon('clock')}<span>Snooze {isGroup ? 'group' : 'tab'}</span></button>
                 </form>
             {:else if groupMenuView === 'rename'}
                 <form class="group-name-form" onsubmit={saveGroupName}>
@@ -464,7 +522,7 @@
                 {#if customName}
                     <button class="context-menu-item menu-action" type="button"
                             onmouseup={resetGroupName}
-                            onclick={(e) => { if (e.detail === 0) resetGroupName() }}>{isGroup ? 'Use tab titles' : 'Use page title'}</button>
+                            onclick={(e) => { if (e.detail === 0) resetGroupName() }}>{@render menuIcon('rename')}<span>{isGroup ? 'Use tab titles' : 'Use page title'}</span></button>
                 {/if}
             {:else}
                 <EmojiPicker value={customEmoji} label={isGroup ? 'Group emoji' : 'Tab emoji'} resetLabel={isGroup ? 'Use tab favicons' : 'Use page favicon'} onSelect={saveGroupEmoji} />
@@ -481,24 +539,23 @@
                     onmousedown={(e) => { if (e.button === 0) selectPending(onResumePending) }}
                     onmouseup={(e) => { if (e.button === 2) selectPendingOnRelease(e, () => selectPending(onResumePending)) }}
                     onclick={(e) => { if (e.detail === 0) selectPending(onResumePending) }}>
-                {targetTabs.some(tab => Number.isFinite(tab.pending?.wakeAt)) ? 'Unsnooze' : 'Resume'}{isGroup ? ' group' : ' tab'}
+                {@render menuIcon('resume')}
+                <span>{targetTabs.some(tab => Number.isFinite(tab.pending?.wakeAt)) ? 'Unsnooze' : 'Resume'}{isGroup ? ' group' : ' tab'}</span>
             </button>
-            <button class="context-menu-item menu-action" role="menuitem" type="button"
-                    onmouseup={(e) => selectPendingOnRelease(e, () => showGroupView('snooze'))}
-                    onclick={(e) => { if (e.detail === 0) showGroupView('snooze') }}>Change snooze…</button>
+            {@render submenu('snooze', 'Change snooze…', 'clock', snoozeItems)}
             <button class="context-menu-item menu-action" role="menuitem" type="button"
                     onmouseup={(e) => selectPendingOnRelease(e, () => showGroupView('rename'))}
-                    onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>Rename…</button>
+                    onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>{@render menuIcon('rename')}<span>Rename…</span></button>
             <button class="context-menu-item menu-action" role="menuitem" type="button"
                     onmouseup={(e) => selectPendingOnRelease(e, () => showGroupView('emoji'))}
-                    onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>Change icon…</button>
+                    onclick={(e) => { if (e.detail === 0) showGroupView('emoji') }}>{@render menuIcon('image')}<span>Change icon…</span></button>
             {#if !isGroup}
                 <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={(e) => selectPendingOnRelease(e, () => copyTabUrl(menu.tab))}
-                        onclick={(e) => { if (e.detail === 0) copyTabUrl(menu.tab) }}>Copy URL</button>
+                        onclick={(e) => { if (e.detail === 0) copyTabUrl(menu.tab) }}>{@render menuIcon('copy')}<span>Copy URL</span></button>
             {/if}
             <button class="context-menu-item menu-action" role="menuitem" type="button"
-                    onclick={() => selectPending(onClosePending)}>Close {isGroup ? 'group' : 'tab'}</button>
+                    onclick={() => selectPending(onClosePending)}>{@render menuIcon('close')}<span>Close {isGroup ? 'group' : 'tab'}</span></button>
         {:else if menu.tab.type !== 'divider'}
             {#if !isGroup}
                 <TabActionButtons variant="menu" {showDevTools} showSettingsButton={!!onSettings}
@@ -516,11 +573,9 @@
             {#if data.ui.tabActivityMode}
                 <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={bumpToTop}
-                        onclick={(e) => { if (e.detail === 0) bumpToTop() }}>Bump to top</button>
+                        onclick={(e) => { if (e.detail === 0) bumpToTop() }}>{@render menuIcon('up')}<span>Bump to top</span></button>
             {/if}
-            <button class="context-menu-item menu-action" role="menuitem" type="button"
-                    onmouseup={() => showGroupView('snooze')}
-                    onclick={(e) => { if (e.detail === 0) showGroupView('snooze') }}>Snooze…</button>
+            {@render submenu('snooze', 'Snooze…', 'clock', snoozeItems)}
             <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={() => showGroupView('rename')}
                         onclick={(e) => { if (e.detail === 0) showGroupView('rename') }}>
@@ -537,47 +592,28 @@
                 </span>
                 <span>Change icon…</span>
             </button>
-            <div class="context-menu-item has-submenu move-space-menu" role="presentation"
-                 onmouseenter={() => openMoveSubmenu()}
-                 onmouseleave={(event) => { if (!event.currentTarget.contains(document.activeElement)) { moveSpaceOpen = false } }}
-                 onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { moveSpaceOpen = false } }}
-                 onkeydown={handleMoveKey}>
-                <button class="context-menu-item menu-action" role="menuitem" type="button"
-                        bind:this={moveSpaceTrigger}
-                        aria-haspopup="menu" aria-expanded={moveSpaceOpen}
-                        onmouseup={() => openMoveSubmenu()}
-                        onclick={(event) => { if (event.detail === 0) { openMoveSubmenu(true) } }}>
-                    <span class="context-menu-icon" aria-hidden="true">
-                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5.25A2.25 2.25 0 0 0 3 5.25v13.5A2.25 2.25 0 0 0 5.25 21H9m6-16.5L22.5 12 15 19.5M22.5 12H9" /></svg>
-                    </span>
-                    <span>Move to Space</span>
-                    <span class="submenu-arrow" aria-hidden="true">›</span>
-                </button>
-                {#if moveSpaceOpen}
-                    <div class="context-submenu move-space-submenu menu-surface" role="menu" aria-label="Move to Space"
-                         bind:this={moveSpaceSubmenu} use:positionMoveSubmenu>
-                        {#each data.spaceMeta.spaceOrder as spaceId (spaceId)}
-                            {#if data.spaces[spaceId]}
-                                <button class="context-submenu-item menu-action" type="button" role="menuitem"
-                                        disabled={spaceId === sourceSpaceId}
-                                        onmouseup={() => { if (spaceId !== sourceSpaceId) moveToSpace(spaceId) }}
-                                        onclick={(event) => { if (event.detail === 0) { moveToSpace(spaceId) } }}>
-                                    <span class="space-color" style:background-color={data.spaces[spaceId].color || '#888'} aria-hidden="true"></span>
-                                    <span class="space-name">{data.spaces[spaceId].name || 'Untitled Space'}</span>
-                                    {#if spaceId === sourceSpaceId}<span class="current-space" aria-label="Current space">✓</span>{/if}
-                                </button>
-                            {/if}
-                        {/each}
-                    </div>
-                {/if}
-            </div>
+            {#snippet spaceItems()}
+                {#each data.spaceMeta.spaceOrder as spaceId (spaceId)}
+                    {#if data.spaces[spaceId]}
+                        <button class="context-submenu-item menu-action" type="button" role="menuitem"
+                                disabled={spaceId === sourceSpaceId}
+                                onmouseup={() => { if (spaceId !== sourceSpaceId) moveToSpace(spaceId) }}
+                                onclick={(event) => { if (event.detail === 0) { moveToSpace(spaceId) } }}>
+                            <span class="space-color" style:background-color={data.spaces[spaceId].color || '#888'} aria-hidden="true"></span>
+                            <span class="space-name">{data.spaces[spaceId].name || 'Untitled Space'}</span>
+                            {#if spaceId === sourceSpaceId}<span class="current-space" aria-label="Current space">✓</span>{/if}
+                        </button>
+                    {/if}
+                {/each}
+            {/snippet}
+            {@render submenu('space', 'Move to Space', 'move', spaceItems)}
             {#if menu.tab.type === 'tabgroup'}
                 <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={ungroup}
-                        onclick={(e) => { if (e.detail === 0) ungroup() }}>Ungroup</button>
+                        onclick={(e) => { if (e.detail === 0) ungroup() }}>{@render menuIcon('group')}<span>Ungroup</span></button>
                 <button class="context-menu-item menu-action" role="menuitem" type="button"
                         onmouseup={closeGroup}
-                        onclick={(e) => { if (e.detail === 0) closeGroup() }}>Close all</button>
+                        onclick={(e) => { if (e.detail === 0) closeGroup() }}>{@render menuIcon('close')}<span>Close all</span></button>
             {/if}
         {/if}
         {#if groupMenuView === 'menu' && menu.tab.type === 'divider'}
@@ -592,15 +628,10 @@
                 <span>Remove spacer</span>
             </div>
         {:else if groupMenuView === 'menu' && !pendingItem}
-        {#each [[false, 'Pin in scrolling sidebar'], [true, 'Pin above New Tab']] as [fixed, label]}
-            <button class="context-menu-item menu-action" type="button" role="menuitem"
-                    onmouseup={() => setSidebarPin(fixed)}
-                    onclick={(e) => { if (e.detail === 0) setSidebarPin(fixed) }}>{label}</button>
-        {/each}
         {#if targetTabs.some(tab => tab.sidebarPinned)}
             <button class="context-menu-item menu-action" type="button" role="menuitem"
                     onmouseup={() => toggleSidebarPin(menu.tab)}
-                    onclick={(e) => { if (e.detail === 0) toggleSidebarPin(menu.tab) }}>Unpin from Sidebar</button>
+                    onclick={(e) => { if (e.detail === 0) toggleSidebarPin(menu.tab) }}>{@render menuIcon('pin')}<span>Unpin from Sidebar</span></button>
         {/if}
         {#if !isGroup}
         <div class="context-menu-item menu-action"
@@ -620,14 +651,17 @@
             {#each [['space', 'Pin to Space'], ['global', 'Pin Globally']] as [scope, label]}
                 <button class="context-menu-item menu-action" type="button" role="menuitem"
                         onmouseup={() => setPin(scope, 'normal')}
-                        onclick={(e) => { if (e.detail === 0) setPin(scope, 'normal') }}>{label}</button>
+                        onclick={(e) => { if (e.detail === 0) setPin(scope, 'normal') }}>{@render menuIcon(scope)}<span>{label}</span></button>
             {/each}
         {:else}
             <div class="pin-scope-label">Pin display</div>
-            {#each (data.getPinScope(menu.tab) === 'group' ? [['left', 'Left sidepin'], ['right', 'Right sidepin']] : [['normal', 'Normal'], ['menu', 'Menu'], ['left', 'Left sidepin'], ['right', 'Right sidepin']]) as [mode, label]}
+            {#each (data.getPinScope(menu.tab) === 'group' ? [['left', 'Pin left'], ['right', 'Pin right']] : [['normal', 'Normal'], ['menu', 'Menu'], ['left', 'Pin left'], ['right', 'Pin right']]) as [mode, label]}
                 <button class="context-menu-item menu-action" type="button" role="menuitemradio" aria-checked={menu.tab.pinned === mode || (mode === 'left' && menu.tab.pinned === true)}
                         onmouseup={() => setPin(data.getPinScope(menu.tab), mode)}
-                        onclick={(e) => { if (e.detail === 0) setPin(data.getPinScope(menu.tab), mode) }}>{label}</button>
+                        onclick={(e) => { if (e.detail === 0) setPin(data.getPinScope(menu.tab), mode) }}>
+                    {@render menuIcon(mode === 'normal' ? 'pin' : mode)}<span>{label}</span>
+                    {#if menu.tab.pinned === mode || (mode === 'left' && menu.tab.pinned === true)}<span class="checkmark" aria-hidden="true">✓</span>{/if}
+                </button>
             {/each}
         {/if}
         {#if menu.tab.pinned}
@@ -648,8 +682,9 @@
                 <button class="context-menu-item menu-action" type="button" role="menuitemradio" aria-checked={data.getPinScope(menu.tab) === scope}
                         onmouseup={() => setPinScope(scope)}
                         onclick={(e) => { if (e.detail === 0) setPinScope(scope) }}>
-                    <span class="context-menu-icon" aria-hidden="true">{data.getPinScope(menu.tab) === scope ? '✓' : ''}</span>
+                    {@render menuIcon(scope)}
                     <span>{label}</span>
+                    {#if data.getPinScope(menu.tab) === scope}<span class="checkmark" aria-hidden="true">✓</span>{/if}
                 </button>
             {/each}
         {:else}
@@ -664,7 +699,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
                         </svg>
                     </span>
-                    <span>Left sidepin in {defaultPinScope === 'group' ? 'Tab Group' : 'Space'}</span>
+                    <span>Pin left</span>
                 </div>
                 <div class="context-menu-item context-menu-item-right menu-action"
                      role="menuitem"
@@ -676,7 +711,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
                         </svg>
                     </span>
-                    <span>Right sidepin in {defaultPinScope === 'group' ? 'Tab Group' : 'Space'}</span>
+                    <span>Pin right</span>
                 </div>
             </div>
         {/if}
@@ -831,11 +866,11 @@
     .snooze-date-fields label { display: grid; gap: 6px; min-width: 0; }
     .snooze-form :is(input, select):focus-visible { outline: 1px solid #a3a3a3; outline-offset: 1px; }
     .snooze-error { margin: 8px 12px; color: #f0a7a7; font-size: 12px; white-space: normal; }
-    .context-menu-item.move-space-menu {
+    .context-menu-item.submenu-wrapper {
         padding: 0;
     }
 
-    .context-submenu.move-space-submenu {
+    .context-submenu.positioned-submenu {
         min-width: min(200px, calc(100vw - 16px));
         max-width: min(300px, calc(100vw - 16px));
         max-height: calc(100vh - 16px);
@@ -1057,7 +1092,7 @@
         opacity: 0.8;
     }
 
-    .context-submenu-item .checkmark {
+    .checkmark {
         margin-left: auto;
         color: var(--menu-active-color);
         font-weight: bold;
