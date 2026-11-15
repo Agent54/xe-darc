@@ -150,7 +150,10 @@ try {
     assert.equal(await page.$eval(title, el => el.classList.contains('titles-visible')), false,
         'scrolling tabs down does not reveal space titles')
     await page.mouse.wheel({ deltaY: -120 })
-    await page.waitForFunction(selector => document.querySelector(selector).scrollTop === 0, {}, scroll)
+    await page.waitForFunction(selector => {
+        const node = document.querySelector(selector)
+        return node.scrollTop === node.querySelector('.pinned-tabs-section').getBoundingClientRect().height
+    }, {}, scroll)
     assert.equal(await page.$eval(title, el => el.classList.contains('titles-visible')), false,
         'scrolling tabs up does not reveal space titles')
     await page.mouse.move(900, 700)
@@ -173,6 +176,8 @@ try {
     await waitForTitleOpacity(0)
     await page.$eval('.tab-content-container', el => { el.scrollLeft = 0 })
     await waitForTitleOpacity(0)
+    // These geometry checks exercise dragging with both sections already revealed.
+    await page.$eval(scroll, el => { el.scrollTop = 0 })
 
     const fixed = `${space} [data-pin-scope="sidebar-fixed"]`
     const scrolling = `${space} [data-pin-scope="sidebar"]`
@@ -262,8 +267,8 @@ try {
     await drag('saved', fixed)
     await page.waitForSelector(`${fixed} [data-tab-id="saved"]`)
     await page.evaluate(() => window.unpin('tab-0'))
-    await drag('tab-1', scrolling, { cancel: true, label: 'Pin above divider' })
-    await drag('tab-1', scrolling, { label: 'Pin above divider' })
+    await drag('tab-1', scrolling, { cancel: true, label: 'Pin in scrolling sidebar' })
+    await drag('tab-1', scrolling, { label: 'Pin in scrolling sidebar' })
     await page.waitForSelector(`${scrolling} [data-tab-id="tab-1"]`)
     for (let i = 1; i < 12; i++) await page.evaluate(id => window.pin(id, true), `tab-${i}`)
     assert.equal(await page.$eval(fixed, el => el.scrollHeight > el.clientHeight), true, 'many fixed pins scroll independently')

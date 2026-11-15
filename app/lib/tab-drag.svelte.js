@@ -17,11 +17,15 @@ function autoScrollContainer(container, axis) {
     const end = axis === 'x' ? rect.right : rect.bottom
     const scrollPos = axis === 'x' ? container.scrollLeft : container.scrollTop
     const scrollMax = axis === 'x' ? container.scrollWidth - container.clientWidth : container.scrollHeight - container.clientHeight
+    // Keep the first-pin target under the pointer instead of revealing an empty section.
+    const scrollMin = axis === 'y' && container.classList.contains('space-tabs-sections') && container.querySelector('.scrolling-pin-drop-anchor[data-pin-scope="sidebar"]')
+        ? container.querySelector('.pinned-tabs-section').getBoundingClientRect().height
+        : 0
 
-    if (pos < start + AUTO_SCROLL_EDGE && scrollPos > 0) {
+    if (pos < start + AUTO_SCROLL_EDGE && scrollPos > scrollMin) {
         const intensity = 1 - (pos - start) / AUTO_SCROLL_EDGE
         const delta = -AUTO_SCROLL_SPEED * Math.max(0, Math.min(1, intensity))
-        if (axis === 'x') container.scrollLeft += delta; else container.scrollTop += delta
+        if (axis === 'x') container.scrollLeft += delta; else container.scrollTop = Math.max(scrollMin, scrollPos + delta)
         return true
     } else if (pos > end - AUTO_SCROLL_EDGE && scrollPos < scrollMax) {
         const intensity = 1 - (end - pos) / AUTO_SCROLL_EDGE

@@ -15,6 +15,7 @@ await withSidebarFixture('pending-tabs', async ({ page }) => {
         const scroll = section.closest('.space-tabs-sections')
         return !!scroll && section.nextElementSibling?.matches('.sidebar-pinned-tabs')
     }), true, 'Pending precedes the pins inside the scrolling area')
+    await page.$eval('.space-tabs-sections', space => { space.scrollTop = 0 })
     await page.hover('.pending-tabs-section .closed-tabs-header')
     await page.waitForFunction(() => document.querySelector('.pending-tabs-content').classList.contains('expanded'))
     assert.equal(await page.$$eval('.pending-tabs-content .closed-tab-row', rows => rows.length), 2)

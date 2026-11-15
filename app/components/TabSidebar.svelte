@@ -40,6 +40,8 @@
     import TabContextMenu from './TabContextMenu.svelte'
     import NewTabMenu from './NewTabMenu.svelte'
     import { observeScrollEdges } from '../lib/scroll-edges.js'
+    import { pinnedSectionScroll } from '../lib/pinned-section-scroll.js'
+    import { scrollTension, stretchScrollTension, releaseScrollTension } from '../lib/scroll-tension.js'
     import { getSidebarPinnedItems } from '../lib/tab-groups.js'
     import { getActivitySidebarItems, getActivityGroupTabs } from '../lib/tab-activity.js'
     import { formatPendingDateTime, formatPendingRemaining, getArchivedTabItems } from '../lib/pending-tabs.js'
@@ -475,10 +477,9 @@
         const maxScroll = tabListRef.scrollWidth - tabListRef.clientWidth
         
         // Very stiff spring (0.08 resistance) 
-        const resistance = 0.08
-        const threshold = 47 // Rubber band distance after activation (increased from 35 to prevent accidental triggers)
-        const maxStretch = 50
-        const activationThreshold = 180 // Minimum accumulated deltaX before spring activates (increased from 120)
+        const { threshold, activationThreshold } = scrollTension
+        // Rubber band distance after activation (increased from 35 to prevent accidental triggers)
+        // Minimum accumulated deltaX before spring activates (increased from 120)
         
         // Detect vertical scrolling and disable spring
         if (Math.abs(event.deltaY) > Math.abs(event.deltaX) * 2) {
@@ -524,7 +525,7 @@
                 event.preventDefault()
                 
                 // Accumulate close rubber band offset with same resistance
-                closeRubberBandOffset = Math.min(closeRubberBandOffset + event.deltaX * resistance, maxStretch)
+                closeRubberBandOffset = stretchScrollTension(closeRubberBandOffset, event.deltaX)
                 isCloseRubberBanding = true
                 
                 // If pulled far enough, close multi-space mode (higher threshold than opening)
@@ -536,7 +537,7 @@
                 scheduleCloseSnapBack()
             } else if (atRightEdge && event.deltaX < 0 && closeRubberBandOffset > 0) {
                 // Scrolling back left while rubber banding - reduce offset
-                closeRubberBandOffset = Math.max(0, closeRubberBandOffset + event.deltaX * 0.3)
+                closeRubberBandOffset = Math.max(0, closeRubberBandOffset + event.deltaX * scrollTension.reverseResistance)
                 if (closeRubberBandOffset <= 0) {
                     closeRubberBandOffset = 0
                     isCloseRubberBanding = false
@@ -562,7 +563,7 @@
             event.preventDefault()
             
             // Accumulate rubber band offset with resistance
-            rubberBandOffset = Math.min(rubberBandOffset - event.deltaX * resistance, maxStretch)
+            rubberBandOffset = stretchScrollTension(rubberBandOffset, -event.deltaX)
             isRubberBanding = true
             
             // If pulled far enough, trigger multi-space mode (full screen)
@@ -579,7 +580,7 @@
             }
         } else if (scrollLeft <= 0 && event.deltaX > 0 && rubberBandOffset > 0) {
             // Scrolling back right while rubber banding - reduce offset
-            rubberBandOffset = Math.max(0, rubberBandOffset - event.deltaX * 0.3)
+            rubberBandOffset = Math.max(0, rubberBandOffset - event.deltaX * scrollTension.reverseResistance)
             if (rubberBandOffset <= 0) {
                 rubberBandOffset = 0
                 isRubberBanding = false
@@ -620,8 +621,8 @@
         }
         
         // Very fast snap-back (0.4 decay = very stiff spring)
-        rubberBandOffset = rubberBandOffset * 0.4
-        if (Math.abs(rubberBandOffset) < 0.3) {
+        rubberBandOffset = releaseScrollTension(rubberBandOffset)
+        if (rubberBandOffset === 0) {
             rubberBandOffset = 0
             isRubberBanding = false
             accumulatedDeltaX = 0
@@ -639,7 +640,7 @@
             if (isRubberBanding && rubberBandOffset !== 0) {
                 snapBackRubberBand()
             }
-        }, 80)
+        }, scrollTension.delay)
     }
     
     let closeRubberBandSnapTimeout = null
@@ -650,7 +651,7 @@
             if (isCloseRubberBanding && closeRubberBandOffset !== 0) {
                 snapBackCloseRubberBand()
             }
-        }, 80)
+        }, scrollTension.delay)
     }
     
     function snapBackCloseRubberBand() {
@@ -661,8 +662,8 @@
         }
         
         // Very fast snap-back (0.4 decay = very stiff spring)
-        closeRubberBandOffset = closeRubberBandOffset * 0.4
-        if (Math.abs(closeRubberBandOffset) < 0.3) {
+        closeRubberBandOffset = releaseScrollTension(closeRubberBandOffset)
+        if (closeRubberBandOffset === 0) {
             closeRubberBandOffset = 0
             isCloseRubberBanding = false
             accumulatedCloseDeltaX = 0
@@ -1104,7 +1105,7 @@
         const tabsList = event.currentTarget
         const spaceId = tabsList.closest('[data-space-id]')?.getAttribute('data-space-id')
         if (spaceId) {
-            tabsListScrolled[spaceId] = tabsList.scrollTop > 0
+            tabsListScrolled[spaceId] = tabsList.scrollTop > tabsList.querySelector('.tabs-list-container').offsetTop
             // Check if not scrolled to bottom (can still scroll down)
             const isAtBottom = tabsList.scrollHeight - tabsList.scrollTop <= tabsList.clientHeight + 1
             tabsListScrolledBottom[spaceId] = !isAtBottom
@@ -2347,7 +2348,8 @@
                                             {/if}
                                         {/if}
                                     {/snippet}
-                                <div class="space-tabs-sections" onscroll={handleTabsListScroll}>
+                                <div class="space-tabs-sections" onscroll={handleTabsListScroll} use:pinnedSectionScroll={!tabSearchQuery}>
+                                    <div class="pinned-tabs-section">
                                     {#if spacePending.length}
                                         <div class="closed-tabs-section pending-tabs-section" role="region" aria-label="Pending tabs"
                                              onmouseenter={() => showPending(spaceId)} onmouseleave={hidePending}
@@ -2373,9 +2375,14 @@
                                         {/each}
                                     </div>
                                     {/if}
-                                    <div class="pinned-tabs-divider" role="separator" aria-label="Pinned and normal tabs"
-                                         data-pin-scope={sidebarPins.length ? undefined : 'sidebar'} data-pin-layout="rows" data-pin-hit-padding="8"></div>
+                                    <div class="pinned-tabs-divider" role="separator" aria-label="Pinned and snoozed tabs">
+                                        <Tooltip text="Pinned and snoozed tabs" position="top" delay={300}>
+                                            <div class="tab-divider-line-only"></div>
+                                        </Tooltip>
+                                    </div>
+                                    </div>
                                     <div class="tabs-list-container">
+                                    <div class="scrolling-pin-drop-anchor" data-pin-scope={sidebarPins.length ? undefined : 'sidebar'} data-pin-layout="rows" aria-hidden="true"></div>
                                     <div class="tabs-list-fade-top" class:visible={tabsListScrolled[spaceId]}></div>
                                     <div class="tabs-list">
                                     {#each getActivitySidebarItems(data.getSidebarItems(spaceId), data.docs, data.ui.tabActivityMode) as item, i (item.id)}
@@ -3625,6 +3632,10 @@
         isolation: isolate;
     }
 
+    .pinned-tabs-section {
+        flex-shrink: 0;
+    }
+
     .fixed-pin-drop-anchor {
         position: absolute;
         top: 0;
@@ -3653,10 +3664,28 @@
     }
 
     .pinned-tabs-divider {
+        padding: 10px 8px 0;
+    }
+
+    .pinned-tabs-divider :global(.tooltip-container) {
+        display: flex;
+        align-items: flex-end;
+        width: 100%;
+        height: 11px;
+    }
+
+    .pinned-tabs-divider .tab-divider-line-only {
+        width: auto;
+        flex: 1;
+    }
+
+    .scrolling-pin-drop-anchor {
         flex-shrink: 0;
-        height: 1px;
-        margin: 10px 4px 2px;
-        background: rgb(255 255 255 / 12%);
+        height: 8px;
+    }
+
+    .tab-content-container:not(.searching) .tabs-list-container {
+        min-height: 100%;
     }
 
     .tabs-list-container {
