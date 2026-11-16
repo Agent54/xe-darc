@@ -2,6 +2,39 @@ import assert from 'node:assert/strict'
 import { root, withSidebarFixture } from './sidebar-browser-fixture.js'
 
 await withSidebarFixture('sidebar-groups', async ({ page }) => {
+    await page.evaluate(() => {
+        window.groupActivations = []
+        const activate = window.data.activate
+        window.data.activate = id => { window.groupActivations.push(id); activate(id) }
+        window.data.previous = () => window.groupActivations.push('previous')
+    })
+    await page.hover('.tab-group-main')
+    await page.mouse.down()
+    await page.waitForFunction(() => window.data.spaceMeta.activeTabId === 'group-two')
+    assert.deepEqual(await page.evaluate(() => window.groupActivations), ['group-two'], 'group activation begins on press before release')
+    await page.mouse.up()
+    assert.deepEqual(await page.evaluate(() => window.groupActivations), ['group-two'], 'the following click does not activate twice')
+    await page.evaluate(() => window.flushSync(() => { window.data.spaceMeta.activeTabId = 'outside' }))
+    await page.$eval('.tab-group-main', button => {
+        const rect = button.getBoundingClientRect()
+        button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: rect.left + 10, clientY: rect.top + 10 }))
+        window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: rect.left + 30, clientY: rect.top + 10 }))
+    })
+    await page.waitForFunction(() => window.tabDrag.active)
+    await new Promise(resolve => setTimeout(resolve, 200))
+    assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), 'outside', 'dragging cancels activation')
+    await page.keyboard.press('Escape')
+    await page.focus('.tab-group-main')
+    await page.keyboard.press('Enter')
+    assert.deepEqual(await page.evaluate(() => window.groupActivations), ['group-two', 'group-two'], 'keyboard activation still works')
+    await page.evaluate(() => window.flushSync(() => { window.data.spaceMeta.activeTabId = 'outside' }))
+    await page.click('.tab-group-main', { clickCount: 2 })
+    await new Promise(resolve => setTimeout(resolve, 200))
+    assert.equal(await page.evaluate(() => window.data.spaceMeta.activeTabId), 'group-two', 'double-clicking keeps the group active')
+    assert.equal(await page.evaluate(() => window.groupActivations.includes('previous')), false, 'delayed activation must not switch back after a double-click')
+    assert.equal(await page.$eval('.tab-group-toggle', button => button.getAttribute('aria-expanded')), 'true', 'double-clicking still expands the group')
+    await page.reload()
+    await page.waitForSelector('.tab-group-main')
     await page.$eval('.tab-group-toggle', button => button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })))
     for (const headerPart of ['.tab-group-main', '.tab-group-count', '.tab-group-toggle']) {
         await page.hover(headerPart)
