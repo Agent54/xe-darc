@@ -1,11 +1,17 @@
 <script>
     import resourceTypes from '../lib/resourceTypes.js'
     import Tooltip from './Tooltip.svelte'
+    import PermissionHoverCard from './PermissionHoverCard.svelte'
     import data from '../data.svelte.js'
     import { onMount } from 'svelte'
     import { permissionOrigin, permissionTargetKey } from '../lib/permissions.js'
 
-    let { resource, sectionId = 'requested', onResolved = () => {}, onOpen = null, dismissible = false } = $props()
+    let { resource, sectionId = 'requested', onResolved = () => {}, onOpen = null, inspecting = $bindable(false) } = $props()
+    const hovercardId = $props.id()
+    let cardElement = $state(null)
+    let hoverTimer
+    let hideTimer
+    const controlSelector = 'button, input, select, textarea, a, label, [role="menu"], .permission-hovercard'
     const unknownPermissionIcon = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519a3 3 0 1 1 5.242 2.962c-.8.64-1.621 1.24-1.621 2.269v.75m-1.5 3h.008v.008H12V16.5Z" /></svg>'
     const knownType = $derived(Object.hasOwn(resourceTypes, resource.type) ? resourceTypes[resource.type] : null)
     const resourceType = $derived(knownType?.icon ? knownType : { name: knownType?.name || resource.type || 'Unknown permission', icon: unknownPermissionIcon, description: knownType?.description || 'Permission requested by this page' })
@@ -28,16 +34,26 @@
     onMount(() => {
         window.addEventListener('mousedown', handleMouseDownOutside, true)
         window.addEventListener('click', handleClickOutside, true)
-        const closeMenu = () => { openAcceptDropdown = null }
+        const closeMenu = event => {
+            if (event.target?.closest?.('.permission-hovercard')) {
+                return
+            }
+            openAcceptDropdown = null
+            hideDetails()
+        }
         window.addEventListener('scroll', closeMenu, true)
         window.addEventListener('resize', closeMenu)
         window.addEventListener('darc-controlled-frame-mousedown', closeMenu)
+        window.addEventListener('darc-dismiss-hovercards', closeMenu)
         return () => {
+            clearTimeout(hoverTimer)
+            clearTimeout(hideTimer)
             window.removeEventListener('mousedown', handleMouseDownOutside, true)
             window.removeEventListener('click', handleClickOutside, true)
             window.removeEventListener('scroll', closeMenu, true)
             window.removeEventListener('resize', closeMenu)
             window.removeEventListener('darc-controlled-frame-mousedown', closeMenu)
+            window.removeEventListener('darc-dismiss-hovercards', closeMenu)
         }
     })
 
@@ -141,6 +157,7 @@
     function toggleAcceptDropdown(requestId, event) {
         event.stopPropagation()
         event.preventDefault()
+        hideDetails()
         openAcceptDropdown = openAcceptDropdown === requestId ? null : requestId
     }
     
@@ -155,6 +172,9 @@
         if (!acceptDropdown?.contains(event.target)) {
             openAcceptDropdown = null
         }
+        if (!cardElement?.contains(event.target)) {
+            hideDetails()
+        }
     }
 
     function acknowledgeCard() {
@@ -162,28 +182,100 @@
             void data.markPermissionSeen(resource)
         }
     }
+
+    function hideDetails() {
+        clearTimeout(hoverTimer)
+        clearTimeout(hideTimer)
+        hoverTimer = null
+        inspecting = false
+    }
+
+    function keepDetails() {
+        clearTimeout(hideTimer)
+    }
+
+    function scheduleDetails(event) {
+        if (event.target.closest('.permission-hovercard')) {
+            keepDetails()
+            return
+        }
+        if ((event.target.closest(controlSelector) && !event.target.closest('.permission-card-open')) || openAcceptDropdown) {
+            hideDetails()
+            return
+        }
+        keepDetails()
+        if (!inspecting && !hoverTimer) {
+            hoverTimer = setTimeout(() => { inspecting = true; hoverTimer = null }, 500)
+        }
+    }
+
+    function leaveDetails() {
+        clearTimeout(hoverTimer)
+        hoverTimer = null
+        clearTimeout(hideTimer)
+        hideTimer = setTimeout(hideDetails, 200)
+    }
+
+    function handleCardPress(event) {
+        if (event.target.closest('.permission-hovercard')) {
+            return
+        }
+        hideDetails()
+        if (event.button === 0 && !event.target.closest(controlSelector) && savingRequest === null) {
+            onOpen?.(event)
+        }
+    }
+
+    function handleCardKey(event) {
+        if (event.key === 'Escape' && inspecting) {
+            event.preventDefault()
+            event.stopPropagation()
+            const restoreFocus = event.target.closest('.permission-hovercard')
+            hideDetails()
+            if (restoreFocus) {
+                const target = cardElement.querySelector('.permission-card-open') || cardElement
+                target.focus()
+                hideDetails()
+            }
+        }
+    }
     
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events (The card also captures keyboard activation of its own controls.) -->
+<svelte:window onkeydown={handleCardKey} />
+
+<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions (The card delegates activation while keeping its controls independent.) -->
 <div class="resource-card {sectionId}" class:toast={!!onOpen} class:editing class:unseen={resource.unseen}
+    bind:this={cardElement} role="group" tabindex="-1" aria-label={`${resourceType.name} permission request`}
+    aria-describedby={inspecting ? hovercardId : undefined}
     data-permission-type={resource.type} data-request-id={resource.requestId} data-permission-id={resource.ruleId}
+    onmousedown={handleCardPress}
+    onpointerover={scheduleDetails} onmouseleave={leaveDetails}
+    onfocusin={scheduleDetails} onfocusout={event => { if (!event.currentTarget.contains(event.relatedTarget)) { leaveDetails() } }}
     onmousedowncapture={event => { if (event.button === 0) { acknowledgeCard() } }}
     onclickcapture={event => { if (event.detail === 0) { acknowledgeCard() } }}>
-    {#if onOpen}
-        <button class="permission-card-open" aria-label={`Open ${resourceType.name} request in resources`} disabled={savingRequest !== null}
-            onmousedown={onOpen} onclick={event => { if (event.detail === 0) { onOpen(event) } }}></button>
-    {/if}
-    {#if dismissible}
-        <button class="permission-card-dismiss" aria-label={`Ignore ${resourceType.name} permission request`} title="Ignore request" disabled={savingRequest !== null}
-            onmousedown={() => ignoreResource(resource)} onclick={event => { if (event.detail === 0) { ignoreResource(resource) } }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" d="m6 6 12 12M6 18 18 6" /></svg>
-        </button>
+    {#if sectionId === 'requested'}
+        <div class="permission-ignore">
+            <Tooltip text="Ignore" position="left" delay={250}>
+                <button class="permission-card-dismiss" aria-label={`Ignore ${resourceType.name} permission request`} disabled={savingRequest !== null}
+                    onmousedown={event => { if (event.button === 0) { ignoreResource(resource) } }} onclick={event => { if (event.detail === 0) { ignoreResource(resource) } }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21.342-1.59m-15.14 1.59L4.088 6.21M3 6h18m-12 0V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6m-9 0 .86 14.07A1 1 0 0 0 7.858 21h8.284a1 1 0 0 0 .998-.93L18 6" /></svg>
+                </button>
+            </Tooltip>
+        </div>
     {/if}
     <div class="resource-header">
         <span class="resource-icon">{@html resourceType.icon}</span>
         <div class="resource-info">
-            <h4 class="resource-name">{resourceType.name}</h4>
+            <h4 class="resource-name">
+                {#if onOpen}
+                    <button class="permission-card-open" aria-label={`Open ${resourceType.name} request in resources`} disabled={savingRequest !== null}
+                            onmousedown={event => { if (event.button === 0) { hideDetails(); onOpen(event) } }}
+                            onclick={event => { if (event.detail === 0) { hideDetails(); onOpen(event) } }}>{resourceType.name}</button>
+                {:else}
+                    {resourceType.name}
+                {/if}
+            </h4>
             {#if requestingOrigin}
                 <p class="resource-origin">{requestingOrigin}</p>
                 {#if resource.scope?.topLevelOrigin && resource.scope.topLevelOrigin !== requestingOrigin}
@@ -340,11 +432,13 @@
             </div>
             <button class="action-btn deny" disabled={savingRequest !== null} onmousedown={() => denyResource(resource)} onclick={event => { if (event.detail === 0) { denyResource(resource) } }}>Deny</button>
             <Tooltip text="Not implemented yet"><button class="action-btn mock" disabled>Mock</button></Tooltip>
-            <button class="action-btn ignore" disabled={savingRequest !== null} onmousedown={() => ignoreResource(resource)} onclick={event => { if (event.detail === 0) { ignoreResource(resource) } }}>Ignore</button>
         </div>
         {#if resource.error}<p class="permission-error">{resource.error}</p>{/if}
     {/if}
     {#if actionError}<p class="permission-error" role="alert">{actionError}</p>{/if}
+    {#if inspecting}
+        <PermissionHoverCard {resource} anchor={cardElement} name={resourceType.name} id={hovercardId} onEnter={keepDetails} onLeave={leaveDetails} />
+    {/if}
 </div>
 
 <style>
@@ -366,15 +460,17 @@
     }
     .resource-card.toast:hover { background: rgb(255 255 255 / 7%); border-color: rgb(255 255 255 / 16%); }
     .resource-card.toast.unseen { border-left: 2px solid rgb(59 130 246 / 60%); }
+    .requested .resource-header { padding-right: 24px; }
     .toast .resource-header { padding-right: 44px; }
     .toast .resource-actions { flex-wrap: wrap; }
-    .permission-card-open { position: absolute; inset: 0; z-index: 1; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
-    .permission-card-open:focus-visible { outline: 2px solid #8ab4f8; outline-offset: -2px; }
-    .permission-card-dismiss { position: absolute; right: 28px; top: 8px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: #aaa; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.15s ease, background-color 0.15s ease; }
+    .permission-card-open { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .resource-card.toast { cursor: pointer; }
+    .permission-ignore { position: absolute; right: 8px; top: 8px; z-index: 3; }
+    .permission-card-dismiss { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: #aaa; cursor: pointer; opacity: 0; transition: opacity 0.15s ease, background-color 0.15s ease; }
     .resource-card:hover .permission-card-dismiss, .resource-card:focus-within .permission-card-dismiss { opacity: 1; pointer-events: auto; }
     .permission-card-dismiss:hover { background: rgb(255 255 255 / 12%); color: #fff; }
     @media (hover: none) { .permission-card-dismiss { opacity: 1; pointer-events: auto; } }
-    button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+    button:focus-visible, .resource-card:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     .resource-card {
         position: relative;
         padding-bottom: 30px; /* Make room for change button */
@@ -780,17 +876,6 @@
     .action-btn.mock:disabled {
         background: rgb(255 255 255 / 6%);
         color: #999;
-    }
-
-    .action-btn.ignore {
-        background: rgba(107, 114, 128, 0.15);
-        color: rgba(107, 114, 128, 1);
-    }
-
-    .action-btn.ignore:hover,
-    .action-btn.ignore:focus {
-        background: rgba(107, 114, 128, 0.22);
-        color: rgba(107, 114, 128, 1);
     }
 
     /* Resource Reload Reminder */

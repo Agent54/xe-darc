@@ -29,7 +29,7 @@ export function createMcpBrowserExecutor({ data, getConnection }) {
         const groupTarget = (spaceId, group) => ({ kind: 'tabgroup', id: group.id, spaceId, label: `Tab group: ${group.title || group.name || group.id}` })
         const all = { kind: 'all', label: 'All tabs' }
         const authorize = (permission, target, { parents = [], targets = [], valid = () => true } = {}) => requestMcpPermission(data, {
-            connection, agent, permission, target, parents, targets, signal, current: () => active() && valid()
+            connection, agent, permission, target, parents, targets, signal, toolCall: { name, arguments: args }, current: () => active() && valid()
         })
         const metadata = tab => {
             const group = data.getTabGroups(tab.spaceId).find(group => group.tabs.some(member => member.id === tab.id))

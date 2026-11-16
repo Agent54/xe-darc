@@ -57,7 +57,9 @@ const modules = {
             let menuPin = $state(null)
             let anchor = $state.raw(null)
         </script>
-        <Sidebar {...props} onOpenPinMenu={(id, element) => { anchor = element; menuPin = menuPin === id ? null : id }} />
+        <Sidebar {...props}
+            onHeaderContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); data.menuActions.push({ action: 'sidebar-context' }) }}
+            onOpenPinMenu={(id, element) => { anchor = element; menuPin = menuPin === id ? null : id }} />
         {#if menuPin}
             {#key menuPin}
                 <PinMenu tabId={menuPin} {anchor} onClose={() => { menuPin = null }}>

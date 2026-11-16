@@ -7,9 +7,10 @@
     let remaining = $state(duration)
     let hovered = $state(false)
     let focused = $state(false)
+    let inspecting = $state(false)
 
     $effect(() => {
-        if (hovered || focused) return
+        if (hovered || focused || inspecting) return
         let lastTick = Date.now()
         const interval = setInterval(() => {
             const now = Date.now()
@@ -28,7 +29,7 @@
     onfocusout={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) focused = false
     }}>
-    <PermissionCard {resource} {onOpen} dismissible />
+    <PermissionCard {resource} {onOpen} bind:inspecting />
     <ToastCountdown {remaining} {duration} />
 </section>
 
@@ -40,4 +41,6 @@
         border-radius: 6px;
         backdrop-filter: blur(20px);
     }
+
+    .permission-toast :global(.toast-countdown) { right: 38px; }
 </style>

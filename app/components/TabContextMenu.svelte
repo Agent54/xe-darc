@@ -341,6 +341,21 @@
         return moving
     }
 
+    async function moveToNewSpace() {
+        const tabId = isGroup ? menu.tab.tabs[0]?.id : menu.tab.id
+        const scope = isGroup ? 'group' : 'tab'
+        if (!tabId) {
+            return
+        }
+        onHide()
+        const space = await data.newSpace({ createTab: false })
+        await data.moveTab(tabId, {
+            targetSpaceId: space._id, scope, placement: 'start', preservePins: true
+        })
+        data.activateSpace(space._id)
+        data.activate(tabId)
+    }
+
     function positionMoveSubmenu(node) {
         const anchor = moveSpaceTrigger.getBoundingClientRect()
         const parent = node.parentElement.getBoundingClientRect()
@@ -568,6 +583,15 @@
                                 </button>
                             {/if}
                         {/each}
+                        <div class="menu-divider"></div>
+                        <button class="context-submenu-item menu-action" type="button" role="menuitem"
+                                onmouseup={moveToNewSpace}
+                                onclick={(event) => { if (event.detail === 0) { moveToNewSpace() } }}>
+                            <span class="context-menu-icon" aria-hidden="true">
+                                <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                            </span>
+                            <span>New Space</span>
+                        </button>
                     </div>
                 {/if}
             </div>

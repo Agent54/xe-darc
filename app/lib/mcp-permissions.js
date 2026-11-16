@@ -1,6 +1,6 @@
 import { permissionCardResources } from './permissions.js'
 
-export async function requestMcpPermission(data, { connection, agent, permission, target, parents = [], targets = [], signal, current }) {
+export async function requestMcpPermission(data, { connection, agent, permission, target, parents = [], targets = [], signal, current, toolCall }) {
     await data.permissionsReady
     signal?.throwIfAborted()
     const context = {
@@ -14,7 +14,7 @@ export async function requestMcpPermission(data, { connection, agent, permission
     try {
         const granted = await new Promise(resolve => {
             const result = data.permissionRequest(`mcp:${connection.id}`, {
-                permission, url: connection.endpoint, agent, permissionTargets: targets,
+                permission, url: connection.endpoint, agent, permissionTargets: targets, toolCall,
                 explanation: `${connection.title} requests ${permission.replace('mcp-', '').replaceAll('-', ' ')}: ${target.label}`,
                 settle: resolve
             }, context)

@@ -132,6 +132,7 @@ Deno.test('open-tab permission targets the specified group and never follows the
     const call = f.call('first', 'openTab', { spaceId: 'space', tabGroupId: 'group:group', url: 'https://new.example' })
     const [request] = await pending(f)
     assert.equal(request.target.kind, 'tabgroup')
+    assert.deepEqual(request.toolCall, { name: 'openTab', arguments: { spaceId: 'space', tabGroupId: 'group:group', url: 'https://new.example' } })
     assert.equal(f.data.created.length, 0)
     f.data.spaceMeta.activeSpace = 'other'
     await f.data.allowPermission(request.requestId)
@@ -140,9 +141,11 @@ Deno.test('open-tab permission targets the specified group and never follows the
     assert.equal(f.data.created[0].groupTabId, 'one')
     const html = f.call('first', 'displayHtml', { spaceId: 'other', html: '<h1>Page</h1>' })
     const [htmlRequest] = await pending(f)
+    assert.deepEqual(htmlRequest.toolCall, { name: 'displayHtml', arguments: { spaceId: 'other', html: '<h1>Page</h1>' } })
     await f.data.denyPermission(htmlRequest.requestId)
     await assert.rejects(html, /denied/)
     assert.equal(f.data.created.length, 1)
+    assert([...f.records.values()].every(record => !('toolCall' in record)), 'tool parameters belong to requests, not remembered permission rules')
 })
 
 Deno.test('cancelled requests and stale browser targets never execute after approval', async () => {

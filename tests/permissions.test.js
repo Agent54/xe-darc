@@ -516,6 +516,7 @@ Deno.test('downloads share a card and document across repeated requests and chan
     const [card] = cards()
     assert.equal(cards().length, 1)
     assert.equal(card.pendingCount, 2)
+    assert.deepEqual(card.requests.map(request => request.details.url), ['blob:https://site.example/file', 'https://cdn.example/file.zip'])
     await h.store.resolve(card.requestId, 'allow', 'once')
     assert.deepEqual(first, ['defer', 'allow'])
     assert.deepEqual(second, ['defer'])

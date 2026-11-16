@@ -234,7 +234,7 @@ try {
     assert.ok(bounds.bottom <= 800)
     assert.equal(await page.$eval('.permission-toasts', region => region.firstElementChild.getBoundingClientRect().top >= region.getBoundingClientRect().top), true)
     await page.screenshot({ path: `${root}.cache/permission-toasts.png` })
-    await page.locator(`${toast('geolocation')} .permission-card-open`).click()
+    await page.locator(`${toast('geolocation')} .resource-origin`).click()
     await page.waitForFunction(() => window.promptFixture.sidebarOpen)
     assert.equal(await page.$('.permission-toasts'), null)
     await page.waitForFunction(() => document.querySelector('.sidebar .resource-card[data-permission-type="geolocation"]:not(.unseen)'))
@@ -405,10 +405,83 @@ try {
     await seenPeer.waitForFunction(() => document.querySelector('.resource-card.unseen') === null, { polling: 100 })
     assert.equal(await page.evaluate(() => Object.values(window.fixture.data.permissions.download.origins)[0].requests[0].status), 'requested')
     await seenPeer.close()
+
+    await page.setViewport({ width: 1100, height: 800 })
+    const metadataURL = new URL(promptURL)
+    metadataURL.searchParams.set('db', `permission-metadata-${crypto.randomUUID()}`)
+    await page.goto(metadataURL.href)
+    await page.waitForFunction(() => window.fixtureReady)
+    await page.evaluate(() => {
+        const target = { kind: 'tab', id: 'page', spaceId: 'project', label: 'Example page' }
+        const context = {
+            url: 'https://agent.example/mcp', partition: 'mcp:test-agent',
+            subject: { kind: 'mcp', id: 'test-agent', title: 'Test agent', description: 'Permission inspection test' }, target
+        }
+        context.current = () => context
+        for (const selector of ['main', 'article']) {
+            window.fixture.store.request('mcp:test-agent', {
+                permission: 'mcp-read-tabs', url: context.url,
+                agent: { name: 'Inspector', version: '1.2', headers: { 'user-agent': 'Test client' } },
+                explanation: 'Read the selected page content',
+                toolCall: { name: 'readTab', arguments: { tabId: 'page', selector, textOnly: true, example: '<script>window.permissionInjected = true</script>' } },
+                permissionTargets: [
+                    { target, label: 'This tab' },
+                    { target: { kind: 'space', id: 'project', spaceId: 'project' }, label: 'This space' }
+                ],
+                settle() {}
+            }, context)
+        }
+    })
+    const mcpCard = toast('mcp-read-tabs')
+    await page.waitForSelector(mcpCard)
+    assert.equal(await page.$(`${mcpCard} .action-btn.ignore`), null)
+    await page.locator(`${mcpCard} select`).click()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('ArrowUp')
+    await page.keyboard.press('Enter')
+    assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false, 'the scope selector must not open Resources')
+    await page.locator(`${mcpCard} .accept-btn.dropdown`).click()
+    await page.waitForSelector(`${mcpCard} .dropdown-menu`)
+    assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false, 'the options dropdown must not open Resources')
+    await page.keyboard.press('Escape')
+    await page.locator(`${mcpCard} .resource-origin`).hover()
+    await page.waitForSelector('.permission-hovercard:popover-open')
+    const metadata = await page.$eval('.permission-hovercard', card => ({
+        text: card.textContent,
+        parameters: [...card.querySelectorAll('.tool-call-parameters')].map(element => JSON.parse(element.textContent)),
+        rect: { left: card.getBoundingClientRect().left, right: card.getBoundingClientRect().right, top: card.getBoundingClientRect().top, bottom: card.getBoundingClientRect().bottom },
+        scrollable: card.scrollHeight > card.clientHeight
+    }))
+    assert.deepEqual(metadata.parameters.map(args => args.selector), ['main', 'article'])
+    for (const text of ['Inspector', '1.2', 'Test client', 'Permission inspection test', 'Read the selected page content', 'https://agent.example/mcp']) {
+        assert.ok(metadata.text.includes(text), `permission details include ${text}`)
+    }
+    assert.equal(await page.evaluate(() => window.permissionInjected), undefined, 'tool arguments must be displayed as text')
+    assert.ok(metadata.rect.left >= 0 && metadata.rect.right <= 1100 && metadata.rect.top >= 0 && metadata.rect.bottom <= 800)
+    assert.equal(metadata.scrollable, true)
+    await page.locator('.permission-hovercard header').hover()
+    const beforeInspection = await countdown()
+    await new Promise(resolve => setTimeout(resolve, 350))
+    assert.equal(await countdown(), beforeInspection, 'reading a permission hovercard pauses toast expiry')
+    await page.locator('.permission-hovercard header').click()
+    assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false, 'inspecting details must not open Resources')
+    await page.screenshot({ path: `${root}.cache/permission-hovercard.png` })
+    await page.focus('.permission-hovercard')
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('.permission-hovercard', { hidden: true })
+    await page.locator(`${mcpCard} .accept-btn.main`).click()
+    await page.waitForFunction(() => !document.querySelector('.permission-toasts .resource-status').textContent.includes('2 requests'))
+    assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false)
+    await page.locator(`${mcpCard} .permission-card-dismiss`).hover()
+    await page.waitForFunction(() => [...document.querySelectorAll('[role="tooltip"]')].some(element => element.textContent === 'Ignore'))
+    await page.locator(`${mcpCard} .permission-card-dismiss`).click()
+    await page.waitForSelector('.permission-toasts', { hidden: true })
+    assert.equal(await page.evaluate(() => window.promptFixture.sidebarOpen), false)
     assert.deepEqual(errors, [])
     console.log('Chromium/PouchDB: header settings, cross-window updates, reset, restart persistence, conflict resolution, blocked unknown grants and disabled Mock tooltip pass')
     console.log('Permission toasts: all pending requests, identical sidebar actions, card opening, hover dismissal, permanent/session/once decisions, scroll-safe dropdowns and narrow layouts pass')
     console.log('Permission seen badges: opening preserves markers, card clicks sync by permission, and closing Resources acknowledges existing requests across windows')
+    console.log('Permission inspection: independent controls, Ignore tooltip, grouped tool parameters, escaped metadata, bounded scrolling, paused expiry and Escape dismissal pass')
 } finally {
     await browser?.close()
     await new Promise(resolve => server.close(resolve))

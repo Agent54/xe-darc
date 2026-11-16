@@ -62,6 +62,21 @@
     let pendingNow = $state(Date.now())
     const closedItems = $derived(getArchivedTabItems(data.spaceMeta.closedTabs, data.docs))
     const pendingItems = $derived(getArchivedTabItems(data.spaceMeta.pendingTabs, data.docs))
+    const visibleSpaceOrder = $derived(data.spaceMeta.spaceOrder.filter(spaceId => {
+        const space = data.spaces[spaceId]
+        if (!space) {
+            return false
+        }
+        if (spaceId !== 'darc:space_inbox') {
+            return true
+        }
+        return space.tabs?.some(item => {
+            const tab = data.docs[item.id] || item
+            return tab.type !== 'tab' || tab.pinned || tab.sidebarPinned ||
+                (tab.url && !tab.url.startsWith('about:newtab') && !tab.url.startsWith('about:blank'))
+        }) ||
+            data.getSpacePins(spaceId).length > 0 || pendingItems.some(item => item.spaceId === spaceId)
+    }))
     $effect(() => {
         if (!pendingHoveredSpace) return
         pendingNow = Date.now()
@@ -254,7 +269,7 @@
     
     const hasAnySearchResults = $derived.by(() => {
         if (!tabSearchQuery) return true;
-        return data.spaceMeta.spaceOrder.some(spaceId => spaceHasMatchingTabs(spaceId)) ||
+        return visibleSpaceOrder.some(spaceId => spaceHasMatchingTabs(spaceId)) ||
                data.spaceMeta.closedTabs.some(tab => tabMatchesSearch(tab)) ||
                (data.spaceMeta.pendingTabs || []).some(tab => tabMatchesSearch(tab));
     });
@@ -784,7 +799,7 @@
     // Initialize spaces scroll fade state when spacesListRef is available or spaces change
     $effect(() => {
         if (spacesListRef) {
-            data.spaceMeta.spaceOrder // dependency to re-check when spaces change
+            visibleSpaceOrder // dependency to re-check when spaces change
             setTimeout(updateSpacesScrollFade, 0)
         }
     })
@@ -920,8 +935,8 @@
         const spaceWidth = containerWidth + 20
         const newIndex = Math.floor((scrollLeft + spaceWidth / 2) / spaceWidth)
         
-        if (newIndex >= 0 && newIndex < data.spaceMeta.spaceOrder.length) {
-            currentScrolledSpace = data.spaceMeta.spaceOrder[newIndex]
+        if (newIndex >= 0 && newIndex < visibleSpaceOrder.length) {
+            currentScrolledSpace = visibleSpaceOrder[newIndex]
         }
     }
     
@@ -1193,7 +1208,7 @@
     // Follow navigation and layout changes directly, even when the active tab
     // stays unchanged or is a newly created tab whose vertical reveal is skipped.
     $effect(() => {
-        const currentIndex = data.spaceMeta.spaceOrder.indexOf(data.spaceMeta.activeSpace)
+        const currentIndex = visibleSpaceOrder.indexOf(data.spaceMeta.activeSpace)
         data.spaceMeta.activeTabId
         if (currentIndex !== -1 && tabListRef && !multiSpaceMode && !tabSearchQuery) {
             scrollToCurrentSpace('instant')
@@ -1257,7 +1272,7 @@
 
     // Initialize bottom scroll fade state when tabs lists render or change
     $effect(() => {
-        data.spaceMeta.spaceOrder // dependency on spaces
+        visibleSpaceOrder // dependency on spaces
         setTimeout(() => {
             const tabsLists = document.querySelectorAll('.space-tabs-sections')
             tabsLists.forEach(tabsList => {
@@ -1820,12 +1835,18 @@
      class:multi-space-mode={multiSpaceMode}
      onmouseenter={handleMouseEnter} 
      onmouseleave={handleMouseLeave}
+     oncontextmenu={(event) => {
+         if (!event.defaultPrevented && !event.target.closest('button, input, a, [role="menu"], .space-context-menu-overlay')) {
+             onHeaderContextMenu(event)
+         }
+     }}
      style="width: {multiSpaceMode ? (isClosingMultiSpace ? (customTabSidebarWidth || 263) + 'px' : `calc(100vw - ${closeRubberBandOffset}px)`) : ((customTabSidebarWidth || 263) + rubberBandOffset + (tabSidebarVisible ? 0 : 9)) + 'px'};"
      role="complementary"
      aria-label="Tab Sidebar">
     <div class="sidebar">
         {#if spaceContextMenuId}
-    <div class="space-context-menu-overlay">
+    <div class="space-context-menu-overlay" role="presentation"
+         oncontextmenu={(event) => { event.preventDefault(); event.stopPropagation() }}>
         <div class="space-context-menu-dropdown menu-surface"
             class:open={spaceContextMenuId !== null}
             style="top: {contextMenuPosition.y}px; left: {contextMenuPosition.x}px;">
@@ -1948,17 +1969,17 @@
             {#if !tabSearchQuery}
                 <div class="section">
                     <div class="spaces-container">
-                        <div class="spaces-list-wrapper">
+                        <div class="spaces-list-wrapper" class:single-space={visibleSpaceOrder.length <= 1}>
                         <div class="spaces-list-fade-left" class:visible={spacesScrolledLeft}></div>
                         <div class="spaces-list" bind:this={spacesListRef} onscroll={handleSpacesScroll}>
-                            {#each data.spaceMeta.spaceOrder as spaceId}
+                            {#each visibleSpaceOrder as spaceId}
                                 <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
                                     <button class="space-item" 
                                             class:active={data.spaceMeta.activeSpace === spaceId}
                                             class:scrolled={multiSpaceMode ? hoveredSpaceInMultiMode === spaceId : currentScrolledSpace === spaceId}
                                             data-space-id={spaceId}
                                             onmousedown={(e) => handleSpaceClick(e, spaceId)}
-                                            oncontextmenu={(e) => e.preventDefault()}
+                                            oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation() }}
                                             aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
                                     {#if data.spaces[spaceId]?.glyph}
                                         <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
@@ -2034,7 +2055,7 @@
                         </div>
                     {/if}
                     <div class="tab-content-track" class:multi-space={multiSpaceMode}>
-                        {#each data.spaceMeta.spaceOrder as spaceId, index (spaceId)}
+                        {#each visibleSpaceOrder as spaceId, index (spaceId)}
                             {@const spacePins = data.getSpacePins(spaceId)}
                             {@const spacePending = pendingItems.filter(item => item.spaceId === spaceId)}
                             {@const sidebarPins = getSidebarPinnedItems(data.spaces[spaceId]?.tabs, false, data.spaces[spaceId]?.activeTabsOrder?.map(entry => typeof entry === 'string' ? entry : entry.id), data.docs)}
@@ -2056,6 +2077,7 @@
                                      aria-label="Space tabs">
                                 <div class="space-sticky-tabs">
                                 <div class="space-title-container"
+                                     class:single-space={visibleSpaceOrder.length <= 1}
                                      data-pin-scope={spacePins.length ? undefined : 'space'} data-pin-layout="rows" data-pin-empty-edge="bottom"
                                      class:titles-visible={spaceTitlesVisible || multiSpaceMode || tabSearchQuery.length > 0 || renamingSpaceId === spaceId || colorPickerSpaceId === spaceId || openMenuId === spaceId || spaceContextMenuId === spaceId}
                                      class:title-hovered={hoveredSpaceTitleId === spaceId}
@@ -2072,7 +2094,7 @@
                                         <button class="space-title" 
                                                 class:active={data.spaceMeta.activeSpace === spaceId}
                                                 onmousedown={(e) => handleSpaceClick(e, spaceId)}
-                                                oncontextmenu={(e) => e.preventDefault()}>
+                                                oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation() }}>
                                             {#if data.spaces[spaceId]?.glyph}
                                                 <span class="space-title-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
                                             {:else}
@@ -2952,6 +2974,11 @@
         flex: 1;
         min-width: 0;
     }
+
+    .spaces-list-wrapper.single-space,
+    .space-title-container.single-space .space-title {
+        visibility: hidden;
+    }
     
     .spaces-list-fade-left {
         position: absolute;
@@ -3072,12 +3099,12 @@
         transition: all 150ms ease;
         border: 1px solid transparent;
         opacity: 0;
-        visibility: hidden;
         padding: 0;
         margin: 0;
     }
     
-    .spaces-container:hover .new-space-button {
+    .spaces-container:hover .new-space-button,
+    .spaces-container:focus-within .new-space-button {
         opacity: 1;
         visibility: visible;
     }

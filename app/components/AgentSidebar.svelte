@@ -21,8 +21,15 @@
     let connectionError = $state('')
     let showAllHistory = $state(false)
     let input = $state(null)
+    let inputFocused = $state(false)
+    let commandIndex = $state(0)
+    let dismissedCommandQuery = $state(null)
+    const commandListId = $props.id()
     let demoModel = $state(globalThis.localStorage?.getItem('agentDemoModel') || demoModels[1].value)
     const chat = $derived($agentState.conversations.find(item => item.id === $agentState.activeConversationId))
+    const commandCompletions = $derived(inputFocused && /^\/\S*$/.test(conversation) && dismissedCommandQuery !== conversation
+        ? (chat?.commands || []).filter(command => command.name.toLowerCase().startsWith(conversation.slice(1).toLowerCase())) : [])
+    const selectedCommandIndex = $derived(Math.min(commandIndex, Math.max(0, commandCompletions.length - 1)))
     const isProcessing = $derived($agentState.processing || !!chat?.messages.some(message => message.local && message.streaming))
     const queuePaused = $derived($agentState.queuePaused)
     const selectedHistoryId = $derived($agentState.activeConversationId || 'current')
@@ -130,7 +137,37 @@
         input?.focus()
     }
 
+    async function completeCommand(command) {
+        conversation = `/${command.name} `
+        commandIndex = 0
+        await tick()
+        input?.focus()
+        input?.setSelectionRange(conversation.length, conversation.length)
+    }
+
     function handleKeyDown(event) {
+        if (event.isComposing) {
+            return
+        }
+        if (commandCompletions.length) {
+            if (event.key === 'Escape') {
+                event.preventDefault()
+                event.stopPropagation()
+                dismissedCommandQuery = conversation
+                return
+            }
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault()
+                commandIndex = (selectedCommandIndex + (event.key === 'ArrowDown' ? 1 : -1) + commandCompletions.length) % commandCompletions.length
+                tick().then(() => document.getElementById(`${commandListId}-${commandIndex}`)?.scrollIntoView({ block: 'nearest' }))
+                return
+            }
+            if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey) {
+                event.preventDefault()
+                completeCommand(commandCompletions[selectedCommandIndex])
+                return
+            }
+        }
         if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
             event.preventDefault()
             sendMessage()
@@ -1196,7 +1233,6 @@ The current system demonstrates strong performance and security characteristics.
 		{#if chat?.plan.length}<div class="agent-plan"><h4>Plan</h4>{#each chat.plan as entry}<p>{entry.status}: {entry.content}</p>{/each}</div>{/if}
 		{#if connectionError || $agentState.error}<p class="agent-error" role="alert">{connectionError || $agentState.error}</p>{/if}
 		{#if conv}<p class="agent-voice-status" role="status">Voice controls enabled. Voice input is not connected yet.</p>{/if}
-		{#if chat?.commands.length}<p class="agent-commands">{chat.commands.map(command => '/' + command.name).join(' · ')}</p>{/if}
 		<div class="agent-chat-input-container">
 			{#if composerOptions.length || showLegacyMode}
 				<div class="agent-composer-options">
@@ -1223,11 +1259,29 @@ The current system demonstrates strong performance and security characteristics.
 				</div>
 			{/if}
 			<div class="agent-textarea-container">
+				{#if commandCompletions.length}
+					<div class="agent-command-completions menu-surface" id={commandListId} role="listbox" aria-label="Agent commands">
+						{#each commandCompletions as command, index (command.name)}
+							<button class="agent-command-completion menu-action" class:selected={index === selectedCommandIndex}
+									type="button" role="option" tabindex="-1" id={`${commandListId}-${index}`} aria-selected={index === selectedCommandIndex}
+									onmousedown={event => { if (event.button === 0) { event.preventDefault(); event.stopPropagation(); completeCommand(command) } }}
+									onclick={event => { if (event.detail === 0) { completeCommand(command) } }}>
+								<span>/{command.name}</span>
+								{#if command.description}<span class="agent-command-description">{command.description}</span>{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
 				<textarea
 					class="agent-conversation-input"
 					aria-label="Message agent"
 					bind:this={input}
 					bind:value={conversation}
+					aria-autocomplete="list"
+					aria-controls={commandCompletions.length ? commandListId : undefined}
+					aria-activedescendant={commandCompletions.length ? `${commandListId}-${selectedCommandIndex}` : undefined}
+					onfocus={() => { inputFocused = true }} onblur={() => { inputFocused = false }}
+					oninput={() => { commandIndex = 0; dismissedCommandQuery = null }}
 					onkeydown={handleKeyDown}
 					placeholder="We can do anything..."
 					rows="3"
@@ -1327,7 +1381,7 @@ The current system demonstrates strong performance and security characteristics.
 	}
 	.agent-connection-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px }
 	.agent-connection-row span { flex: 1 }
-	.agent-error, .agent-voice-status, .agent-commands, .agent-plan { font-size: 12px; color: #aaa; padding: 0 20px; overflow-wrap: anywhere }
+	.agent-error, .agent-voice-status, .agent-plan { font-size: 12px; color: #aaa; padding: 0 20px; overflow-wrap: anywhere }
 	.agent-action-btn[aria-pressed="true"] { background: #ffffff25 }
 	.agent-sticky-header {
 		flex-shrink: 0;
@@ -1923,6 +1977,21 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-textarea-container {
 		position: relative;
 	}
+
+	.agent-command-completions {
+		position: absolute;
+		bottom: calc(100% + 6px);
+		left: 0;
+		right: 0;
+		z-index: 20;
+		max-height: 220px;
+		overflow-y: auto;
+		scrollbar-width: thin;
+	}
+
+	.agent-command-completion { width: 100%; text-align: left; display: flex; gap: 10px; }
+	.agent-command-completion.selected { background: rgb(255 255 255 / 8%); }
+	.agent-command-description { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #888; }
 
 	.agent-conversation-input {
 		width: 100%;

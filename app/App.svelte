@@ -270,6 +270,7 @@
     let customRightSidebarWidth = $state(null)
     let customTabSidebarWidth = $state(null)
     let tabSidebarVisible = $state(false)
+    let rightToolbarAutohide = $state(false)
     let isResizingLeft = $state(false)
     let isResizingRight = $state(false)
     let isResizingSidebar = $state(false)
@@ -641,6 +642,7 @@
             if (savedTabSidebarVisible !== null) {
                 tabSidebarVisible = savedTabSidebarVisible === 'true'
             }
+            rightToolbarAutohide = getSidebarPreference('rightToolbarAutohide') === 'true'
             
         } catch (error) {
             console.warn('Failed to load sidebar preferences:', error)
@@ -662,6 +664,19 @@
     function toggleTabSidebar() {
         tabSidebarVisible = !tabSidebarVisible
         persistSidebarPreference('tabSidebarVisible', tabSidebarVisible.toString())
+    }
+
+    function toggleRightToolbarAutohide() {
+        rightToolbarAutohide = !rightToolbarAutohide
+        persistSidebarPreference('rightToolbarAutohide', rightToolbarAutohide.toString())
+    }
+
+    function toggleSidebarAutohide() {
+        const autohide = tabSidebarVisible || !rightToolbarAutohide
+        tabSidebarVisible = !autohide
+        rightToolbarAutohide = autohide
+        persistSidebarPreference('tabSidebarVisible', tabSidebarVisible.toString())
+        persistSidebarPreference('rightToolbarAutohide', rightToolbarAutohide.toString())
     }
 
     // Determine if sidebars are newly opened (but not when switching)
@@ -4070,6 +4085,22 @@
                 <span>URL in Sidebar</span>
                 {#if showSidebarUrl}<span class="checkmark">•</span>{/if}
             </div>
+
+            <button type="button" class="settings-menu-item menu-item menu-action"
+                    class:active={!tabSidebarVisible && rightToolbarAutohide}
+                    role="menuitemcheckbox" aria-checked={!tabSidebarVisible && rightToolbarAutohide}
+                    onmousedown={(event) => event.stopPropagation()}
+                    onmouseup={(event) => { event.stopPropagation(); toggleSidebarAutohide(); closeMenuImmediately() }}
+                    onclick={(event) => { if (event.detail === 0) { toggleSidebarAutohide(); closeMenuImmediately() } }}>
+                <span class="settings-menu-icon-item menu-icon-item">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <path d="M8 4v16m8-16v16" />
+                    </svg>
+                </span>
+                <span>Autohide Sidebars</span>
+                {#if !tabSidebarVisible && rightToolbarAutohide}<span class="checkmark">•</span>{/if}
+            </button>
             
             <div class="settings-menu-separator menu-divider"></div>
 
@@ -4730,7 +4761,10 @@
 {/if}
 
 <!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->
-<div class="sidebar-right" role="region" >
+<div class="sidebar-right" class:autohide={rightToolbarAutohide}
+     class:menu-open={appearanceMenu?.area === 'right-toolbar'} role="region" aria-label="Right toolbar"
+     onmousedowncapture={(event) => { if (event.button === 2) { event.preventDefault(); event.stopPropagation() } }}
+     oncontextmenu={(event) => openAppearanceMenu(event, 'right-toolbar')}>
     <div class="sidebar-buttons">
         <button class="sidebar-button" 
                 class:active={agentEnabled}
@@ -4867,7 +4901,10 @@
         <AppearanceContextMenu menu={appearanceMenu}
             items={appearanceMenu.area === 'status-lights' ? [
                 { id: 'status-lights', label: 'Status Lights', checked: statusLightsEnabled, toggle: toggleStatusLights }
+            ] : appearanceMenu.area === 'right-toolbar' ? [
+                { id: 'right-autohide', label: 'Autohide Right Toolbar', actionLabel: true, checked: rightToolbarAutohide, toggle: toggleRightToolbarAutohide }
             ] : [
+                { id: 'tab-autohide', label: 'Autohide Tab Sidebar', actionLabel: true, checked: !tabSidebarVisible, toggle: toggleTabSidebar },
                 { id: 'header-navigation', label: 'Navigation in Header', checked: showNavigationToolbar, toggle: toggleShowNavigationToolbar },
                 { id: 'sidebar-url', label: 'URL Bar in Sidebar', checked: showSidebarUrl, toggle: toggleShowSidebarUrl }
             ]}

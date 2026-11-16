@@ -29,9 +29,9 @@ export function groupPermissionCards(resources) {
             (!pending && selected.status !== 'requested' && resource.timestamp >= selected.timestamp)) {
             selected = resource
         }
-        cards.set(key, { resource: selected, pendingCount, unseen: card?.unseen || resource.unseen })
+        cards.set(key, { resource: selected, pendingCount, unseen: card?.unseen || resource.unseen, requests: [...(card?.requests || []), resource] })
     }
-    return Array.from(cards.values(), ({ resource, pendingCount, unseen }) => ({ ...resource, pendingCount, unseen }))
+    return Array.from(cards.values(), ({ resource, pendingCount, unseen, requests }) => ({ ...resource, pendingCount, unseen, requests }))
 }
 
 export function permissionCardResources(permissions, rules, matches, activeTabId) {
@@ -135,13 +135,16 @@ export function normalizePermissionEvent(event, context) {
             controller?.cancel?.()
         }
     }
-    return { types, type, url, controller, deny, error }
+    const details = Object.fromEntries(['permission', 'url', 'origin', 'mediaTypes', 'audio', 'video', 'userGesture', 'lastUnlockedBySelf']
+        .map(key => [key, payload?.[key] ?? controller?.[key]])
+        .filter(([, value]) => value !== undefined))
+    return { types, type, url, controller, deny, error, details }
 }
 
 export function handleFramePermission(data, tabId, event, context) {
     const request = normalizePermissionEvent(event, context)
     if (request.error || !request.controller || !permissionOrigin(request.url)) {
-        data.permissionRequest(tabId, { permission: request.type, url: request.url || context?.url, error: request.error || 'The request has no valid origin.' }, context)
+        data.permissionRequest(tabId, { permission: request.type, url: request.url || context?.url, error: request.error || 'The request has no valid origin.', details: request.details }, context)
         request.deny()
         return
     }
@@ -167,7 +170,7 @@ export function handleFramePermission(data, tabId, event, context) {
         }
     }
     const result = data.permissionRequest(tabId, {
-        permission: request.type, types: request.types, url: request.url,
+        permission: request.type, types: request.types, url: request.url, details: request.details,
         settle: deferred ? settle : null
     }, context)
     if (result.granted || !deferred || !result.pending) {
@@ -440,7 +443,10 @@ export function createPermissionStore({ db, putDocument, permissions, rules, sta
                 url: input.url || context?.url || 'about:blank', tabId, status: 'requested', supported: !!supported,
                 error: input.error || (!scope ? 'This origin cannot receive a remembered permission.' : !supported ? 'No permission handler is implemented.' : ''),
                 timestamp: Date.now(), created: eventTime(), instanceId, windowId: getWindowId(), unseen: true,
-                needsReload: !input.settle, explanation: input.explanation || '', requestType: 'foreground',
+                needsReload: !input.settle, explanation: input.explanation || '', requestType: input.requestType || 'foreground',
+                ...(input.requester ? { requester: input.requester } : {}),
+                ...(input.details ? { details: structuredClone(input.details) } : {}),
+                ...(input.toolCall ? { toolCall: structuredClone(input.toolCall) } : {}),
                 ruleId: supported ? key : null,
                 ...(context.subject ? { subject: context.subject, target: context.target,
                     permissionTargets: input.permissionTargets || [], requester: context.subject.title,
