@@ -22,6 +22,10 @@
     let preparingAttachments = $state(false)
     let attachmentError = $state('')
     let attachmentInput
+    let queueDrag = $state(null)
+    let queueDrop = $state(null)
+    let queueAnnouncement = $state('')
+    let queueDragFrame
     let hoveredMessageId = $state(null)
     let editingMessageId = $state(null)
     let editingContent = $state('')
@@ -271,6 +275,89 @@
     function pauseQueueItem(id) { if (!messageQueue.find(item => item.id === id)?.paused) { agent.toggleQueued(id) } }
     function resumeQueueItem(id) { if (messageQueue.find(item => item.id === id)?.paused) { agent.toggleQueued(id) } }
     function stopQueueItem(id) { agent.removeQueued(id) }
+    function cancelQueueDrag() {
+        const drag = queueDrag
+        queueDrag = null
+        queueDrop = null
+        cancelAnimationFrame(queueDragFrame)
+        queueDragFrame = undefined
+        if (drag?.handle.hasPointerCapture(drag.pointerId)) { drag.handle.releasePointerCapture(drag.pointerId) }
+    }
+    function startQueueDrag(event, id) {
+        if (event.button !== 0) { return }
+        event.preventDefault()
+        event.stopPropagation()
+        event.currentTarget.focus({ preventScroll: true })
+        event.currentTarget.setPointerCapture(event.pointerId)
+        queueDrag = { id, connectionId: $agentState.connectionId, handle: event.currentTarget, pointerId: event.pointerId,
+            x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, started: false }
+    }
+    function targetQueueDrop() {
+        const target = document.elementFromPoint(queueDrag.x, queueDrag.y)?.closest('[data-queue-id]')
+        const history = queueDrag.handle.closest('.agent-chat-history')
+        const bounds = target?.getBoundingClientRect()
+        const next = target && history?.contains(target) ? { id: target.dataset.queueId, after: queueDrag.y >= bounds.top + bounds.height / 2 } : null
+        if (next?.id !== queueDrop?.id || next?.after !== queueDrop?.after) { queueDrop = next }
+    }
+    function scrollQueueDrag() {
+        if (!queueDrag?.started) { return }
+        const panel = queueDrag.handle.closest('.agent-panel')
+        const bounds = panel.getBoundingClientRect()
+        const top = Math.max(0, panel.querySelector('.agent-sticky-header').getBoundingClientRect().bottom)
+        const bottom = Math.min(innerHeight, panel.querySelector('.agent-bottom-sticky').getBoundingClientRect().top)
+        const { x, y } = queueDrag
+        if (x >= bounds.left && x <= bounds.right && y >= top && y <= bottom) {
+            const delta = y < top + 30 ? -Math.ceil((top + 30 - y) / 4) : y > bottom - 30 ? Math.ceil((y - bottom + 30) / 4) : 0
+            if (delta) { panel.closest('.sidebar-content').scrollTop += delta }
+        }
+        targetQueueDrop()
+        queueDragFrame = requestAnimationFrame(scrollQueueDrag)
+    }
+    function moveQueueDrag(event) {
+        if (!queueDrag || event.pointerId !== queueDrag.pointerId) { return }
+        queueDrag.x = event.clientX
+        queueDrag.y = event.clientY
+        if (!queueDrag.started && Math.hypot(queueDrag.x - queueDrag.startX, queueDrag.y - queueDrag.startY) > 4) {
+            queueDrag.started = true
+            scrollQueueDrag()
+        }
+        if (queueDrag.started) { targetQueueDrop() }
+    }
+    function moveQueueItem(id, beforeId) {
+        agent.moveQueued(id, beforeId)
+        const index = agent.state.queue.findIndex(item => item.id === id)
+        if (index >= 0) { queueAnnouncement = `Queued message moved to position ${index + 1}.` }
+    }
+    function dropQueueItem(event) {
+        if (!queueDrag || event.pointerId !== queueDrag.pointerId) { return }
+        moveQueueDrag(event)
+        if (queueDrag.started && queueDrag.connectionId === $agentState.connectionId && queueDrop) {
+            event.preventDefault()
+            event.stopPropagation()
+            const id = queueDrop.id
+            const items = messageQueue.filter(item => item.id !== queueDrag.id)
+            if (id !== queueDrag.id) {
+                const beforeId = queueDrop.after ? items[items.findIndex(item => item.id === id) + 1]?.id || null : id
+                moveQueueItem(queueDrag.id, beforeId)
+            }
+        }
+        cancelQueueDrag()
+    }
+    async function reorderQueueWithKeyboard(event, id) {
+        if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) { return }
+        event.preventDefault()
+        event.stopPropagation()
+        const index = messageQueue.findIndex(item => item.id === id)
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? messageQueue.length - 1
+            : Math.max(0, Math.min(messageQueue.length - 1, index + (event.key === 'ArrowUp' ? -1 : 1)))
+        if (next !== index) {
+            const handle = event.currentTarget
+            const others = messageQueue.filter(item => item.id !== id)
+            moveQueueItem(id, others[next]?.id || null)
+            await tick()
+            if (handle.isConnected) { handle.focus({ preventScroll: true }) }
+        }
+    }
     function editQueueItem(id) {
         const item = messageQueue.find(item => item.id === id)
         if (item) { editingMessageId = id; editingContent = item.userMessage }
@@ -706,13 +793,21 @@ The current system demonstrates strong performance and security characteristics.
 
     onMount(() => {
         input?.focus()
-        const unsubscribe = agentState.subscribe(readAgentMessages)
+        const unsubscribe = agentState.subscribe(state => {
+            readAgentMessages(state)
+            if (queueDrag && (queueDrag.connectionId !== state.connectionId || !state.queue.some(item => item.id === queueDrag.id))) {
+                cancelQueueDrag()
+            }
+        })
         return () => {
             unsubscribe()
+            cancelQueueDrag()
             stopSpeech()
         }
     })
 </script>
+
+<svelte:window onkeydown={event => { if (event.key === 'Escape') { cancelQueueDrag() } }} onblur={cancelQueueDrag} />
 
 {#snippet attachedFiles(files, removable = false)}
     <div class="agent-attachments" aria-label={removable ? 'Attached files' : 'Message attachments'}>
@@ -1328,9 +1423,21 @@ The current system demonstrates strong performance and security characteristics.
 					{/if}
 
 					{#if messageQueue.filter((item) => item.status === 'queued').length > 0}
-						{#each messageQueue.filter((item) => item.status === 'queued') as queueItem, index}
-							<div class="agent-chat-message user queued" class:paused={queueItem.paused}>
+						{#each messageQueue.filter((item) => item.status === 'queued') as queueItem, index (queueItem.id)}
+							<div class="agent-chat-message user queued" class:paused={queueItem.paused} data-queue-id={queueItem.id}
+								class:queue-dragging={queueDrag?.id === queueItem.id}
+								class:queue-drop-before={queueDrop?.id === queueItem.id && !queueDrop.after && queueDrag?.id !== queueItem.id}
+								class:queue-drop-after={queueDrop?.id === queueItem.id && queueDrop.after && queueDrag?.id !== queueItem.id}
+								role="group" aria-label={`Queued message ${index + 1}`}>
 								<div class="agent-chat-message-content">
+									<button type="button" class="agent-queue-drag-handle" aria-label={`Reorder queued message ${index + 1}`}
+										title="Drag to reorder · Arrow keys to move" disabled={messageQueue.length < 2}
+										onmousedown={event => event.stopPropagation()} onclick={event => event.stopPropagation()}
+										onpointerdown={event => startQueueDrag(event, queueItem.id)} onpointermove={moveQueueDrag} onpointerup={dropQueueItem}
+										onpointercancel={cancelQueueDrag} onlostpointercapture={cancelQueueDrag}
+										onkeydown={event => reorderQueueWithKeyboard(event, queueItem.id)}>
+										<svg viewBox="0 0 16 20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="4" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="5" cy="10" r="1.2"/><circle cx="11" cy="10" r="1.2"/><circle cx="5" cy="16" r="1.2"/><circle cx="11" cy="16" r="1.2"/></svg>
+									</button>
 									{#if editingMessageId === queueItem.id}
 										<div class="agent-edit-container">
 											<textarea
@@ -1403,6 +1510,7 @@ The current system demonstrates strong performance and security characteristics.
 							</div>
 						{/each}
 					{/if}
+					<span class="agent-queue-announcement" role="status">{queueAnnouncement}</span>
 				</div>
 			{/if}
 
@@ -1581,6 +1689,20 @@ The current system demonstrates strong performance and security characteristics.
 </RightSidebar>
 
 <style>
+	.queued { position: relative; }
+	.queued .agent-chat-message-content { position: relative; }
+	.agent-queue-drag-handle { position: absolute; left: -24px; top: 7px; display: flex; align-items: center; justify-content: center; width: 20px; height: 24px; padding: 2px; border: 0; border-radius: 4px; color: #999; background: transparent; cursor: grab; opacity: 0; touch-action: none; }
+	.agent-queue-drag-handle svg { width: 12px; height: 18px; }
+	.queued:hover .agent-queue-drag-handle, .queued:focus-within .agent-queue-drag-handle, .queue-dragging .agent-queue-drag-handle { opacity: 1; }
+	.agent-queue-drag-handle:hover { background: #ffffff0c; color: white; }
+	.agent-queue-drag-handle:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 1px; }
+	.agent-queue-drag-handle:active { cursor: grabbing; }
+	.agent-queue-drag-handle:disabled { visibility: hidden; }
+	.queue-drop-before::before, .queue-drop-after::after { content: ''; position: absolute; left: 15%; right: 0; height: 2px; background: #8ab4f8; pointer-events: none; }
+	.queue-drop-before::before { top: -7px; }
+	.queue-drop-after::after { bottom: -7px; }
+	.agent-queue-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+	@media (hover: none) { .agent-queue-drag-handle { opacity: 1; } }
 	.agent-working { margin: 8px 0; color: #aaa; font-size: 12px; }
 	.agent-working summary { cursor: pointer; padding: 6px 0; user-select: none; }
 	.agent-working summary:hover { color: #ddd; }

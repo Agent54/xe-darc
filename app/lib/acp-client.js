@@ -624,6 +624,14 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
         pauseQueue() { state.queuePaused = true; publish() },
         resumeQueue() { state.queuePaused = false; publish(); return drainQueue() },
         removeQueued(id) { state.queue = state.queue.filter(item => item.id !== id); publish() },
+        moveQueued(id, beforeId = null) {
+            const item = state.queue.find(item => item.id === id)
+            if (!item || beforeId === id || (beforeId !== null && !state.queue.some(item => item.id === beforeId))) { return }
+            const queue = state.queue.filter(item => item.id !== id)
+            queue.splice(beforeId === null ? queue.length : queue.findIndex(item => item.id === beforeId), 0, item)
+            state.queue = queue
+            publish()
+        },
         updateQueued(id, text) {
             const item = state.queue.find(item => item.id === id)
             if (item && text.trim()) { item.text = text.trim(); publish() }

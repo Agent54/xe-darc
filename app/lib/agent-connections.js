@@ -71,7 +71,7 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
 
     refresh()
     const commands = ['connect', 'disconnect', 'prepareConversation', 'configure', 'newConversation', 'stop', 'selectConversation',
-        'submit', 'addLocalExchange', 'pauseQueue', 'resumeQueue', 'removeQueued', 'updateQueued', 'toggleQueued', 'editMessage', 'rateMessage', 'answer', 'setConfig', 'setMode']
+        'submit', 'addLocalExchange', 'pauseQueue', 'resumeQueue', 'removeQueued', 'moveQueued', 'updateQueued', 'toggleQueued', 'editMessage', 'rateMessage', 'answer', 'setConfig', 'setMode']
     return {
         ...Object.fromEntries(commands.map(name => [name, (...args) => clientFor(selectedId)[name](...args)])),
         get state() { return snapshot() },
