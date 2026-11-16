@@ -2044,8 +2044,8 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	.agent-chat-message.user .agent-chat-message-content {
-		background: rgba(255, 255, 255, 0.2);
-		color: white;
+		background: var(--tab-active-background);
+		color: #e5e5e5;
 	}
 
 	.agent-chat-message.assistant .agent-chat-message-content {
