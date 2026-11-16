@@ -4996,6 +4996,7 @@
                          {devModeEnabled}
                          viewMode={data.ui.viewMode}
                          currentTab={data.docs[data.spaceMeta.activeTabId]}
+                         currentGroup={data.getTabGroup()}
                          bind:conv={agentEnabled} />
             </div>
         {/if}

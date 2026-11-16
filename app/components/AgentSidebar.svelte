@@ -1,5 +1,5 @@
 <script>
-    import { onMount, tick } from 'svelte'
+    import { onMount, tick, untrack } from 'svelte'
     import RightSidebar from './RightSidebar.svelte'
     import AgentModelMenu from './AgentModelMenu.svelte'
     import { readAgentAttachment, validateAgentAttachments } from '../lib/agent-attachments.js'
@@ -13,7 +13,7 @@
     let {
         onClose, openSidebars, switchToResources, switchToSettings, switchToUserMods,
         switchToActivity, switchToAIAgent, switchToDevTools, devModeEnabled = false,
-        viewMode = 'default', currentTab = null, conv = $bindable(false)
+        viewMode = 'default', currentTab = null, currentGroup = null, conv = $bindable(false)
     } = $props()
 
     let conversation = $state('')
@@ -45,6 +45,17 @@
     const commandListId = $props.id()
     let demoModel = $state(globalThis.localStorage?.getItem('agentDemoModel') || demoModels[1].value)
     const chat = $derived($agentState.conversations.find(item => item.id === $agentState.activeConversationId))
+    $effect(() => {
+        const tabId = currentTab?.id
+        const groupId = currentGroup && !currentGroup.id.startsWith('pin:') ? currentTab?.tabGroupId : null
+        const scope = {
+            key: groupId ? `group:${groupId}` : tabId ? `tab:${tabId}` : null,
+            tabKeys: (currentGroup?.tabs || (currentTab ? [currentTab] : [])).map(tab => `tab:${tab.id}`)
+        }
+        untrack(() => {
+            try { agent.setConversationScope(scope) } catch (error) { connectionError = error.message }
+        })
+    })
     const commandCompletions = $derived(inputFocused && /^\/\S*$/.test(conversation) && dismissedCommandQuery !== conversation
         ? (chat?.commands || []).filter(command => command.name.toLowerCase().startsWith(conversation.slice(1).toLowerCase())) : [])
     const selectedCommandIndex = $derived(Math.min(commandIndex, Math.max(0, commandCompletions.length - 1)))
@@ -56,7 +67,8 @@
     const selectedModel = $derived(modelConfig?.currentValue || demoModel)
     const composerOptions = $derived(chat?.configOptions.filter(option => option !== modelConfig && option.category !== 'thought_level' && option.category !== 'mode' && option.id !== 'mode') || [])
     const showLegacyMode = $derived(chat?.modes && !chat?.configOptions.some(option => option.category === 'mode' || option.id === 'mode'))
-    const messageQueue = $derived($agentState.queue.map(item => ({ ...item, userMessage: item.text, status: 'queued' })))
+    const messageQueue = $derived($agentState.queue.filter(item => item.conversationId === $agentState.activeConversationId)
+        .map(item => ({ ...item, userMessage: item.text, status: 'queued' })))
     const chatHistory = $derived.by(() => {
         const messages = (chat?.messages || []).map(message => {
             if (message.role === 'approval') {
@@ -800,6 +812,7 @@ The current system demonstrates strong performance and security characteristics.
             }
         })
         return () => {
+            agent.setConversationScope(null)
             unsubscribe()
             cancelQueueDrag()
             stopSpeech()

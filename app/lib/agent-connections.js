@@ -6,7 +6,62 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
     const listeners = new Set()
     let connections = []
     let selectedId = ''
+    let conversationScope = null
+    let bindingsKey
+    let conversationBindings
     const keyFor = id => `${getWindowId() || ''}:${id}`
+
+    function bindings() {
+        const key = `acpConversations:${getWindowId()}:tabGroups`
+        if (bindingsKey !== key) {
+            conversationBindings = JSON.parse(storage.getItem(key) || '{}')
+            bindingsKey = key
+        }
+        return conversationBindings
+    }
+
+    function rememberConversation() {
+        if (!conversationScope?.key || !getWindowId()) { return }
+        const conversationId = clientFor(selectedId).state.activeConversationId
+        if (!conversationId) { return }
+        const saved = bindings()
+        const previous = saved[conversationScope.key]
+        if (previous?.connectionId === selectedId && previous.conversationId === conversationId) { return }
+        saved[conversationScope.key] = { connectionId: selectedId, conversationId }
+        storage.setItem(bindingsKey, JSON.stringify(saved))
+    }
+
+    function restoreScopedConversation(connectionId) {
+        if (!conversationScope) { return }
+        const saved = bindings()
+        // A standalone tab acquires a group ID when another tab joins it.
+        const keys = [conversationScope.key, ...conversationScope.tabKeys].filter(Boolean)
+        for (const key of keys) {
+            const binding = saved[key]
+            if (!binding || (connectionId !== undefined && binding.connectionId !== connectionId) ||
+                (!binding.connectionId && selectedId) ||
+                (binding.connectionId && !connections.some(entry => entry.id === binding.connectionId))) { continue }
+            const client = clientFor(binding.connectionId)
+            if (!client.state.conversations.some(chat => chat.id === binding.conversationId)) { continue }
+            if (selectedId !== binding.connectionId) {
+                selectAcpConnection(binding.connectionId, storage, session, getWindowId())
+                refresh()
+            }
+            client.selectConversation(binding.conversationId)
+            if (key !== conversationScope.key) {
+                saved[conversationScope.key] = binding
+                delete saved[key]
+                storage.setItem(bindingsKey, JSON.stringify(saved))
+            }
+            return
+        }
+        const client = clientFor(selectedId)
+        const state = client.state
+        const chat = state.conversations.find(chat => chat.id === state.activeConversationId)
+        if (chat && (chat.messages.length || state.processingConversationId === chat.id || state.queue.some(item => item.conversationId === chat.id))) {
+            client.newConversation()
+        }
+    }
 
     function clientFor(id) {
         const key = keyFor(id)
@@ -70,10 +125,37 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
     }
 
     refresh()
-    const commands = ['connect', 'disconnect', 'prepareConversation', 'configure', 'newConversation', 'stop', 'selectConversation',
-        'submit', 'addLocalExchange', 'pauseQueue', 'resumeQueue', 'removeQueued', 'moveQueued', 'updateQueued', 'toggleQueued', 'editMessage', 'rateMessage', 'answer', 'setConfig', 'setMode']
+    const commands = ['connect', 'disconnect', 'prepareConversation', 'configure', 'newConversation', 'stop',
+        'pauseQueue', 'resumeQueue', 'removeQueued', 'moveQueued', 'updateQueued', 'toggleQueued', 'editMessage', 'rateMessage', 'answer', 'setConfig', 'setMode']
     return {
         ...Object.fromEntries(commands.map(name => [name, (...args) => clientFor(selectedId)[name](...args)])),
+        setConversationScope(scope) {
+            const previous = conversationScope
+            conversationScope = scope
+            if (scope && (!previous || previous.key !== scope.key)) {
+                restoreScopedConversation()
+            }
+        },
+        selectConversation(id) {
+            const client = clientFor(selectedId)
+            client.selectConversation(id)
+            const state = client.state
+            const chat = state.conversations.find(chat => chat.id === id)
+            if (chat && state.activeConversationId === id &&
+                (chat.messages.length || state.processingConversationId === id || state.queue.some(item => item.conversationId === id))) {
+                rememberConversation()
+            }
+        },
+        submit(text, options) {
+            const result = clientFor(selectedId).submit(text, options)
+            if (text.trim() || options?.attachments?.length) { rememberConversation() }
+            return result
+        },
+        addLocalExchange(...args) {
+            const result = clientFor(selectedId).addLocalExchange(...args)
+            rememberConversation()
+            return result
+        },
         get state() { return snapshot() },
         subscribe(listener) { listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener) },
         start() {
@@ -85,6 +167,7 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
         selectConnection(id) {
             selectAcpConnection(id, storage, session, getWindowId())
             refresh()
+            restoreScopedConversation(id)
             clientFor(id).start()
         },
         saveConnection(settings) {

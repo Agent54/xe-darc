@@ -55,15 +55,18 @@ const fixture = compile(`
         import data from 'fixture-data'
         let panel = $state('settings')
         let voiceEnabled = $state(false)
+        let currentTab = $state(data.docs.page)
+        let currentGroup = $state(null)
         const settings = () => { panel = 'settings' }
         window.showAgent = () => { panel = 'agent' }
         window.hideAgent = () => { panel = null }
         window.showSettings = settings
+        window.setAgentTab = (tab, group = null) => { currentTab = tab; currentGroup = group }
     </script>
     <button aria-label="Voice Agent" aria-pressed={voiceEnabled} onmousedown={() => { voiceEnabled = !voiceEnabled }}>Voice Agent</button>
     {#if voiceEnabled}<Agent />{/if}
     {#if panel === 'settings'}<RightSidebar title="Settings" onClose={() => { panel = null }}><AcpSettings /></RightSidebar>{/if}
-    {#if panel === 'agent'}<AgentSidebar bind:conv={voiceEnabled} onClose={() => { panel = null }} switchToSettings={settings} currentTab={data.docs.page} />{/if}
+    {#if panel === 'agent'}<AgentSidebar bind:conv={voiceEnabled} onClose={() => { panel = null }} switchToSettings={settings} {currentTab} {currentGroup} />{/if}
 `, { filename: `${root}acp-fixture.svelte`, generate: 'client', css: 'injected' }).js.code
 
 let browser
@@ -759,6 +762,37 @@ try {
     assert.equal(host.promptBlocks.at(-1).length, 1, 'A file can be sent without accompanying text')
     assert.equal(host.promptBlocks.at(-1)[0].type, 'resource')
     console.log('Attachments: mouse/keyboard picker, multiple files, image preview, remove/reselect, transmitted image/PDF bytes and file-only prompts pass')
+    const pageChat = await page.evaluate(() => window.agentState.activeConversationId)
+    const newTab = { id: 'new-group-member', tabGroupId: 'browser-group', spaceId: 'space' }
+    const group = { id: 'group:browser-group', tabs: [{ id: 'page', tabGroupId: 'browser-group' }, newTab] }
+    await page.evaluate(({ tab, group }) => window.setAgentTab(tab, group), { tab: newTab, group })
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem(`acpConversations:${window.darcWindowId}:tabGroups`))['group:browser-group'])
+    assert.equal(await page.evaluate(() => window.agentState.activeConversationId), pageChat, 'A new group member retains the current chat')
+    await page.evaluate(() => window.setAgentTab({ id: 'unbound', spaceId: 'space' }))
+    await page.waitForFunction(id => window.agentState.activeConversationId !== id, {}, pageChat)
+    const emptyChat = await page.evaluate(() => window.agentState.activeConversationId)
+    assert.equal(await page.$('.agent-markdown-message'), null)
+    await page.evaluate(() => window.setAgentTab({ id: 'another-unbound', spaceId: 'space' }))
+    await page.evaluate(() => new Promise(requestAnimationFrame))
+    assert.equal(await page.evaluate(() => window.agentState.activeConversationId), emptyChat)
+    assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem(`acpConversations:${window.darcWindowId}:tabGroups`))).some(key => key.includes('unbound'))), false)
+    await send('This belongs to another tab')
+    await page.waitForFunction(() => !window.agentState.processing && document.querySelector('.agent-markdown-message'))
+    await page.evaluate(() => window.hideAgent())
+    await page.waitForSelector('.agent-panel', { hidden: true })
+    const closedState = await page.evaluate(() => ({ active: window.agentState.activeConversationId, count: window.agentState.conversations.length,
+        bindings: localStorage.getItem(`acpConversations:${window.darcWindowId}:tabGroups`) }))
+    await page.evaluate(({ tab, group }) => window.setAgentTab(tab, group), { tab: newTab, group })
+    await page.evaluate(() => new Promise(requestAnimationFrame))
+    assert.deepEqual(await page.evaluate(() => ({ active: window.agentState.activeConversationId, count: window.agentState.conversations.length,
+        bindings: localStorage.getItem(`acpConversations:${window.darcWindowId}:tabGroups`) })), closedState, 'Tab changes do no session work while the sidebar is closed')
+    await page.evaluate(() => window.showAgent())
+    await page.waitForFunction(id => window.agentState.activeConversationId === id, {}, pageChat)
+    assert.equal(await page.$$eval('.agent-chat-message.user .agent-attachment', nodes => nodes.length), 3)
+    await page.evaluate(() => window.setAgentTab({ id: 'another-unbound', spaceId: 'space' }))
+    await page.waitForFunction(id => window.agentState.activeConversationId === id, {}, emptyChat)
+    assert.match(await page.$eval('.agent-chat-message.user', node => node.textContent), /This belongs to another tab/)
+    console.log('Tab sessions: group promotion, empty reuse, interaction-only bindings, closed-sidebar inactivity and restoration pass')
     await button('Disconnect')
     await page.waitForFunction(() => !window.agentState.connectionRequested)
     await page.evaluate(() => window.showSettings())

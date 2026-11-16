@@ -79,6 +79,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
     function snapshot() {
         return {
             ...state, connectionRequested: wantConnection, promptCapabilities: capabilities.promptCapabilities || {},
+            processingConversationId: activeTurn?.chat.id || null,
             conversations: state.conversations.map(chat => ({ ...chat, messages: chat.messages.map(message => ({ ...message })) })),
             queue: state.queue.map(item => ({ ...item })), approvals: [...state.approvals]
         }
@@ -393,9 +394,6 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
 
     function newConversation() {
         restore()
-        if (state.processing) {
-            return
-        }
         const chat = {
             id: crypto.randomUUID(), title: 'New conversation', timestamp: new Date().toISOString(), sessionId: null,
             endpoint: null, generation: null, messages: [], configOptions: [], plan: [], commands: []
@@ -568,9 +566,10 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             save()
         },
         async prepareConversation() {
-            const peer = await connect()
+            restore()
             const id = state.activeConversationId || newConversation()
             const chat = state.conversations.find(item => item.id === id)
+            const peer = await connect()
             await ensureSession(chat, peer)
         },
         configure() {
@@ -582,7 +581,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             publish()
         },
         selectConversation(id) {
-            if (!state.processing && state.conversations.some(chat => chat.id === id)) {
+            if (state.conversations.some(chat => chat.id === id)) {
                 state.activeConversationId = id
                 publish()
             }
