@@ -1709,7 +1709,7 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-working summary:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; border-radius: 4px; }
 	.agent-working-count { color: #666; margin-left: 6px; font-size: 11px; }
 	.agent-working-items { display: grid; gap: 8px; margin-top: 4px; }
-	.agent-working-item { min-width: 0; padding: 10px; border: 1px solid rgb(255 255 255 / 6%); border-radius: 6px; background: rgb(255 255 255 / 2%); }
+	.agent-working-item { min-width: 0; padding: 10px; border: 1px solid rgb(255 255 255 / 6%); border-radius: 8px; background: rgb(255 255 255 / 2%); }
 	.agent-working-header { display: flex; align-items: baseline; gap: 8px; }
 	.agent-working-header > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; color: #bbb; }
 	.agent-working-item time, .agent-working-status { flex-shrink: 0; color: #777; font-size: 10px; }
@@ -2037,7 +2037,7 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-chat-message-content {
 		max-width: 85%;
 		padding: 8px 12px;
-		border-radius: 12px;
+		border-radius: 14px;
 		font-size: 14px;
 		line-height: 1.4;
 		word-wrap: break-word;
@@ -2345,7 +2345,7 @@ The current system demonstrates strong performance and security characteristics.
 		width: 100%;
 		background: rgba(255, 255, 255, 0.05);
 		border: 1px solid rgba(255, 255, 255, 0.06);
-		border-radius: 8px;
+		border-radius: 10px;
 		padding: 8px 8px 27px 9px;
 		color: white;
 		font-size: 14px;
@@ -2506,7 +2506,7 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-info-card {
 		background: rgba(255, 255, 255, 0.03);
 		border: 1px solid rgba(255, 255, 255, 0.08);
-		border-radius: 6px;
+		border-radius: 8px;
 		padding: 8px 10px;
 		font-size: 12px;
 		max-width: 90%;
@@ -2789,7 +2789,7 @@ The current system demonstrates strong performance and security characteristics.
 		width: 100%;
 		background: rgba(0, 0, 0, 0.4);
 		border: 1px solid rgba(255, 255, 255, 0.08);
-		border-radius: 6px;
+		border-radius: 8px;
 		padding: 12px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		line-height: 1.5;
@@ -2807,7 +2807,7 @@ The current system demonstrates strong performance and security characteristics.
 	.agent-markdown-message.assistant-chat .agent-markdown-content {
 		background: rgba(255, 255, 255, 0.1);
 		border: none;
-		border-radius: 12px;
+		border-radius: 14px;
 		padding: 8px 12px;
 		font-size: 14px;
 		line-height: 1.4;
@@ -2894,7 +2894,7 @@ The current system demonstrates strong performance and security characteristics.
 	/* Document styling for assistant-doc messages */
 	.agent-markdown-message.assistant-doc .agent-markdown-content {
 		background: rgba(0, 0, 0, 0.4);
-		border-radius: 6px;
+		border-radius: 8px;
 		padding: 12px;
 		max-height: 450px;
 		font-size: 12px;
