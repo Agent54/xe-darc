@@ -43,10 +43,11 @@ export async function until(predicate, message = 'Condition timed out') {
     }
 }
 
-export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSessionResponse, afterFirstChunk, afterDocumentChunk } = {}) {
+export async function mockEndpoint({ acpMcp = true, loadSession = true, promptCapabilities = { image: true, embeddedContext: true }, beforeSessionResponse, afterFirstChunk, afterDocumentChunk } = {}) {
     const sessions = new Map()
     const sessionConfigs = new Map()
     const prompts = []
+    const promptBlocks = []
     const loads = []
     const calls = []
     const headers = []
@@ -72,7 +73,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
             assert(!params.clientCapabilities.fs?.writeTextFile)
             assert(!params.clientCapabilities.terminal)
             assert.deepEqual(params.clientCapabilities.session.configOptions.boolean, {})
-            return { protocolVersion: 1, agentCapabilities: { loadSession, mcpCapabilities: { acp: acpMcp } }, agentInfo: { name: 'Mock agent', version: '1' }, _meta: { 'darc/mcpPersistence': true } }
+            return { protocolVersion: 1, agentCapabilities: { loadSession, promptCapabilities, mcpCapabilities: { acp: acpMcp } }, agentInfo: { name: 'Mock agent', version: '1' }, _meta: { 'darc/mcpPersistence': true } }
         })
         .onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
             for (const server of params.mcpServers.filter(server => server.type === 'acp')) {
@@ -107,8 +108,11 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
         })
         .onNotification(acp.methods.agent.session.cancel, ({ params }) => pendingTurns.get(params.sessionId)?.())
         .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
-            const text = params.prompt.at(-1).text
-            assert.deepEqual(params.prompt, [{ type: 'text', text }], 'Prompts must not inject browser context')
+            const text = params.prompt.filter(block => block.type === 'text').map(block => block.text).join('')
+            if (params.prompt.every(block => block.type === 'text')) {
+                assert.deepEqual(params.prompt, [{ type: 'text', text }], 'Prompts must not inject browser context')
+            }
+            promptBlocks.push(params.prompt)
             prompts.push(text)
             const sessionId = params.sessionId
             const send = update => client.notify(acp.methods.client.session.update, { sessionId, update })
@@ -127,12 +131,26 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
             if (text === 'long reply') {
                 await send({ sessionUpdate: 'agent_message_chunk', messageId: 'long-document', content: { type: 'text', text: '# Analysis\n\nA **' } })
                 await afterFirstChunk?.(text)
-                await send({ sessionUpdate: 'tool_call', toolCallId: 'document-tool', title: 'Gather document context', kind: 'read', status: 'completed' })
                 const body = 'streamed reply**\n\n' + Array.from({ length: 17 }, (_, i) => `- Point ${i + 1}\n`).join('')
                 await send({ sessionUpdate: 'agent_message_chunk', messageId: 'long-document', content: { type: 'text', text: body } })
                 await afterDocumentChunk?.()
+                await send({ sessionUpdate: 'tool_call', toolCallId: 'document-tool', title: 'Gather document context', kind: 'read', status: 'completed' })
                 await send({ sessionUpdate: 'agent_message_chunk', messageId: 'document-follow-up', content: { type: 'text', text: 'Separate reply' } })
                 return { stopReason: 'end_turn', usage: { inputTokens: 120, outputTokens: 45, totalTokens: 165 } }
+            }
+            if (text === 'timeline') {
+                await send({ sessionUpdate: 'agent_message_chunk', messageId: 'timeline-reply', content: { type: 'text', text: 'Before the tools.' } })
+                await send({ sessionUpdate: 'agent_thought_chunk', messageId: 'timeline-thought', content: { type: 'text', text: 'Inspecting inputs.' } })
+                await send({ sessionUpdate: 'tool_call', toolCallId: 'timeline-tool', title: 'Inspect inputs', kind: 'read', status: 'in_progress', rawInput: { path: '/project' } })
+                await send({ sessionUpdate: 'agent_thought_chunk', messageId: 'timeline-thought', content: { type: 'text', text: 'Checking the result.' } })
+                await send({ sessionUpdate: 'tool_call', toolCallId: 'timeline-next', title: 'Check result', kind: 'read', status: 'in_progress' })
+                await send({ sessionUpdate: 'agent_message_chunk', messageId: 'timeline-reply', content: { type: 'text', text: 'After the tools.' } })
+                await send({ sessionUpdate: 'tool_call_update', toolCallId: 'timeline-tool', status: 'completed', rawOutput: { files: 3 } })
+                await send({ sessionUpdate: 'tool_call_update', toolCallId: 'timeline-next', status: 'completed' })
+                await send({ sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'One final check.' } })
+                await send({ sessionUpdate: 'tool_call', toolCallId: 'timeline-last', title: 'Final check', status: 'completed' })
+                await send({ sessionUpdate: 'agent_message_chunk', messageId: 'timeline-reply', content: { type: 'text', text: 'Finished.' } })
+                return { stopReason: 'end_turn' }
             }
             await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello **' } })
             await afterFirstChunk?.(text)
@@ -161,7 +179,7 @@ export async function mockEndpoint({ acpMcp = true, loadSession = true, beforeSe
         return new Response(response.body, { status: response.status, headers: responseHeaders })
     })
     return {
-        endpoint: `http://127.0.0.1:${server.addr.port}/acp`, prompts, calls, sessions, headers, loads,
+        endpoint: `http://127.0.0.1:${server.addr.port}/acp`, prompts, promptBlocks, calls, sessions, headers, loads,
         async stopBackend() {
             const closing = transport?.close()
             transport = null
@@ -227,6 +245,18 @@ async function run() {
         const chat = () => client.state.conversations.find(chat => chat.id === chatId)
         assert.equal(chat().messages.find(message => message.role === 'assistant').content, 'Hello **ACP**')
         assert.equal(chat().messages.find(message => message.toolCallId === 'status-tool').status, 'completed')
+        await client.submit('timeline')
+        const timelineStart = chat().messages.findLastIndex(message => message.role === 'user' && message.content === 'timeline')
+        const timeline = chat().messages.slice(timelineStart + 1)
+        assert.deepEqual(timeline.map(message => message.role), ['assistant', 'thought', 'tool', 'thought', 'tool', 'assistant', 'thought', 'tool', 'assistant'])
+        assert.deepEqual(timeline.filter(message => message.role === 'assistant').map(message => message.content), ['Before the tools.', 'After the tools.', 'Finished.'])
+        assert.deepEqual(timeline.filter(message => message.role === 'thought').map(message => message.content), ['Inspecting inputs.', 'Checking the result.', 'One final check.'])
+        const originalTool = timeline.find(message => message.toolCallId === 'timeline-tool')
+        const originalTimestamp = originalTool.timestamp
+        await host.notify(chat().sessionId, { sessionUpdate: 'tool_call_update', toolCallId: 'timeline-tool', title: 'Updated inspection' })
+        await until(() => chat().messages.find(message => message.id === originalTool.id).title === 'Updated inspection')
+        assert.equal(chat().messages[timelineStart + 3].timestamp, originalTimestamp)
+        assert.equal(chat().messages[timelineStart + 3].id, originalTool.id, 'later tool updates must keep the original timeline position')
         assert.equal(chat().plan[0].status, 'completed')
         assert(host.headers.every(header => header.auth === 'Bearer connection-secret'))
         assert.equal([...host.sessions.values()][0].cwd, '/project')

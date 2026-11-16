@@ -2,6 +2,7 @@ import * as acp from '@agentclientprotocol/sdk/unstable'
 import { createHttpStream } from '@agentclientprotocol/sdk/experimental/http-client'
 import { readAcpModelPreference, saveAcpModelPreference, validateAcpSettings } from './acp-settings.js'
 import { configValues, getModelConfig } from './agent-models.js'
+import { validateAgentAttachments } from './agent-attachments.js'
 
 export function createAgentClient({ getSettings, createBrowserServer, modelStorage, conversationStorage, getConversationKey = () => 'acpConversations',
     createStream = createHttpStream, setupTimeout = 15000, cancelTimeout = 5000, reconnectDelay = 1000 }) {
@@ -76,7 +77,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
 
     function snapshot() {
         return {
-            ...state, connectionRequested: wantConnection,
+            ...state, connectionRequested: wantConnection, promptCapabilities: capabilities.promptCapabilities || {},
             conversations: state.conversations.map(chat => ({ ...chat, messages: chat.messages.map(message => ({ ...message })) })),
             queue: state.queue.map(item => ({ ...item })), approvals: [...state.approvals]
         }
@@ -168,16 +169,15 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                 const content = update.content
                 const text = content.type === 'text' ? content.text : content.type === 'resource' && content.resource?.text ? content.resource.text : `[${content.type} content]`
                 const sourceMessageId = update.messageId ?? undefined
-                const previous = sourceMessageId === undefined
-                    ? chat.messages.findLast(message => !message.local)
-                    : chat.messages.findLast(message => message.role === role && message.sourceMessageId === sourceMessageId)
+                const previous = chat.messages.findLast(message => !message.local)
                 if (previous?.role === role && previous.streaming && previous.sourceMessageId === sourceMessageId) {
                     previous.content += text
                 } else {
                     addMessage(chat, role, text, { sourceMessageId, streaming: true })
                 }
             } else if (['tool_call', 'tool_call_update'].includes(update.sessionUpdate)) {
-                let message = chat.messages.find(item => item.toolCallId === update.toolCallId)
+                let message = update.sessionUpdate === 'tool_call_update'
+                    ? chat.messages.findLast(item => item.role === 'tool' && item.toolCallId === update.toolCallId) : null
                 if (!message) {
                     message = addMessage(chat, 'tool', '', { toolCallId: update.toolCallId })
                 }
@@ -481,26 +481,30 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                 state.queue = state.queue.filter(entry => entry.id !== item.id)
                 const chat = state.conversations.find(entry => entry.id === item.conversationId)
                 const turn = { chat, cancelled: false }
+                let sent = false
                 activeTurn = turn
                 try {
                     const peer = await connect()
                     await ensureSession(chat, peer)
                     if (turn.cancelled) {
+                        if (item.attachments?.length) { state.queue.unshift(item) }
                         break
                     }
+                    validateAgentAttachments(item.attachments || [], capabilities.promptCapabilities)
                     for (const message of chat.messages) {
                         if (!message.local) {
                             message.streaming = false
                         }
                     }
-                    addMessage(chat, 'user', item.text)
+                    addMessage(chat, 'user', item.text, { attachments: (item.attachments || []).map(({ content, ...metadata }) => metadata) })
                     if (chat.title === 'New conversation') {
-                        chat.title = item.text.slice(0, 50)
+                        chat.title = (item.text || item.attachments?.[0]?.name || '').slice(0, 50)
                     }
                     publish()
+                    sent = true
                     const result = await peer.agent.request(acp.methods.agent.session.prompt, {
                         sessionId: chat.sessionId,
-                        prompt: [{ type: 'text', text: item.text }]
+                        prompt: [...(item.attachments || []).map(attachment => attachment.content), ...(item.text ? [{ type: 'text', text: item.text }] : [])]
                     })
                     chat.stopReason = result.stopReason
                     const usage = result.usage
@@ -508,6 +512,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                         addMessage(chat, 'response-divider', `${usage.inputTokens} prompt • ${usage.outputTokens} completion`, { usage })
                     }
                 } catch (error) {
+                    if (!sent && item.attachments?.length) { state.queue.unshift(item) }
                     state.error = error.message
                     addMessage(chat, 'error', turn.cancelled ? 'Turn cancelled. Already completed actions cannot be undone.' : error.message)
                     state.queuePaused = true
@@ -579,14 +584,14 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                 publish()
             }
         },
-        submit(text) {
-            if (!text.trim()) {
+        submit(text, { attachments = [] } = {}) {
+            if (!text.trim() && !attachments.length) {
                 return
             }
             if (!state.activeConversationId) {
                 newConversation()
             }
-            state.queue.push({ id: crypto.randomUUID(), text: text.trim(), conversationId: state.activeConversationId, paused: false })
+            state.queue.push({ id: crypto.randomUUID(), text: text.trim(), attachments, conversationId: state.activeConversationId, paused: false })
             publish()
             return drainQueue()
         },

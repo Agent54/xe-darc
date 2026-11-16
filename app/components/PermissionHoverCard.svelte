@@ -28,10 +28,10 @@
 
 <div {id} class="permission-hovercard" popover="manual" use:position tabindex="0"
          role="dialog" aria-label={`${name} permission details`} onmouseenter={onEnter} onmouseleave={onLeave}>
-    <header>
+    <div class="permission-hovercard-heading">
         <h3>{name}</h3>
         <span>Permission details{requests.length > 1 ? ` · ${requests.length} requests` : ''}</span>
-    </header>
+    </div>
     {#each requests as request (request.requestId)}
         <section class="permission-request-details" aria-label={`Request ${request.requestId}`}>
             {#if requests.length > 1}<h4>{request.status} · {new Date(request.created || request.timestamp).toLocaleString('de-DE')}</h4>{/if}
@@ -75,9 +75,9 @@
         user-select: text;
         -webkit-app-region: no-drag;
     }
-    header { margin-bottom: 12px; }
+    .permission-hovercard-heading { margin-bottom: 12px; }
     h3 { margin: 0; font-size: 13px; font-weight: 500; }
-    header span, dt, .detail-label { color: rgb(255 255 255 / 45%); font-size: 11px; }
+    .permission-hovercard-heading span, dt, .detail-label { color: rgb(255 255 255 / 45%); font-size: 11px; }
     h4 { margin: 0 0 8px; font-size: 12px; font-weight: 500; }
     .permission-request-details + .permission-request-details { border-top: 1px solid rgb(255 255 255 / 8%); margin-top: 12px; padding-top: 12px; }
     dl { margin: 0; }

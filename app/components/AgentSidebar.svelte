@@ -1,6 +1,8 @@
 <script>
     import { onMount, tick } from 'svelte'
     import RightSidebar from './RightSidebar.svelte'
+    import AgentModelMenu from './AgentModelMenu.svelte'
+    import { readAgentAttachment, validateAgentAttachments } from '../lib/agent-attachments.js'
     import { getTabTitle } from '../lib/tab-title.js'
     import { agent, agentState } from '../lib/agent.js'
     import { clickToScroll } from '../lib/click-to-scroll.js'
@@ -15,6 +17,11 @@
     } = $props()
 
     let conversation = $state('')
+    let attachments = $state([])
+    let attachmentReads = $state(0)
+    let preparingAttachments = $state(false)
+    let attachmentError = $state('')
+    let attachmentInput
     let hoveredMessageId = $state(null)
     let editingMessageId = $state(null)
     let editingContent = $state('')
@@ -43,7 +50,7 @@
     const chatHistoryList = $derived($agentState.conversations)
     const modelConfig = $derived(getModelConfig(chat?.configOptions))
     const selectedModel = $derived(modelConfig?.currentValue || demoModel)
-    const composerOptions = $derived(chat?.configOptions.filter(option => option !== modelConfig) || [])
+    const composerOptions = $derived(chat?.configOptions.filter(option => option !== modelConfig && option.category !== 'thought_level' && option.category !== 'mode' && option.id !== 'mode') || [])
     const showLegacyMode = $derived(chat?.modes && !chat?.configOptions.some(option => option.category === 'mode' || option.id === 'mode'))
     const messageQueue = $derived($agentState.queue.map(item => ({ ...item, userMessage: item.text, status: 'queued' })))
     const chatHistory = $derived.by(() => {
@@ -55,16 +62,22 @@
                     approvalId: message.approvalId, options: message.options, result: message.content
                 }] }
             }
-            if (message.role !== 'tool') { return message }
-            return { ...message, role: 'info-cards', cards: [{
-                action: ({ read: 'read-tab', search: 'web-search', execute: 'execute-js', edit: 'modify-content' })[message.kind] || 'tool-call',
-                title: message.title || 'Tool', toolCallId: message.toolCallId,
-                status: message.status === 'failed' ? 'error' : message.status === 'completed' ? 'completed' : 'pending',
-                details: message.rawInput ? JSON.stringify(message.rawInput, null, 2) : '',
-                result: message.content || (message.rawOutput ? JSON.stringify(message.rawOutput, null, 2) : '')
-            }] }
+            return message
         })
-        return messages
+        const history = []
+        for (const message of messages) {
+            if (message.role === 'thought' || message.role === 'tool') {
+                const previous = history.at(-1)
+                if (previous?.role === 'working') {
+                    previous.messages.push(message)
+                } else {
+                    history.push({ id: message.id, role: 'working', messages: [message] })
+                }
+            } else {
+                history.push(message)
+            }
+        }
+        return history
     })
 
 	function initializeStreamingMarkdown(element) {
@@ -118,15 +131,51 @@
         try { await agent.prepareConversation() } catch (error) { connectionError = error.message }
     }
 
-    function sendMessage() {
+    async function attachFiles(event) {
+        const files = [...event.currentTarget.files]
+        event.currentTarget.value = ''
+        attachmentError = ''
+        attachmentReads += files.length
+        for (const file of files) {
+            try {
+                attachments = [...attachments, await readAgentAttachment(file)]
+            } catch (error) {
+                attachmentError = `Could not attach ${file.name}: ${error.message}`
+            } finally {
+                attachmentReads--
+            }
+        }
+    }
+
+    async function sendMessage() {
         const text = conversation.trim()
-        if (!text) { return }
-        const command = text.toLowerCase()
+        if ((!text && !attachments.length) || attachmentReads || preparingAttachments) { return }
+        const files = attachments
+        const command = files.length ? null : text.toLowerCase()
         if (!['cards', 'doc', 'test'].includes(command) && !readAcpSettings().endpoint) {
             connectionError = 'Configure an ACP endpoint in Settings before sending a message.'
             return
         }
-        conversation = ''
+        if (files.length) {
+            preparingAttachments = true
+            const connectionId = $agentState.connectionId
+            const conversationId = $agentState.activeConversationId
+            try {
+                await agent.prepareConversation()
+                if (agent.state.connectionId !== connectionId || (conversationId && agent.state.activeConversationId !== conversationId)) {
+                    throw new Error('The active chat changed. Send again to attach the files to this chat.')
+                }
+                validateAgentAttachments(files, agent.state.promptCapabilities)
+            } catch (error) {
+                attachmentError = error.message
+                return
+            } finally {
+                preparingAttachments = false
+            }
+        }
+        if (conversation.trim() === text) { conversation = '' }
+        attachments = attachments.filter(file => !files.some(sent => sent.id === file.id))
+        attachmentError = ''
         connectionError = ''
         switch (command) {
             case 'cards':
@@ -139,7 +188,7 @@
                 showTestMessage()
                 break
             default:
-                agent.submit(text)
+                agent.submit(text, { attachments: files })
         }
         input?.focus()
     }
@@ -181,10 +230,21 @@
         }
     }
 
-    function handleModelChange(event) {
-        if (modelConfig) { agent.setConfig(modelConfig.id, event.currentTarget.value) }
+    async function handleModelChange(value, connectionId) {
+        if (connectionId !== ($agentState.connectionId || '')) {
+            agent.selectConnection(connectionId)
+            try { await agent.prepareConversation() } catch (error) { connectionError = error.message; return }
+        }
+        const state = agent.state
+        if ((state.connectionId || '') !== connectionId) { return }
+        const config = getModelConfig(state.conversations.find(item => item.id === state.activeConversationId)?.configOptions)
+        if ((connectionId && !config) || (config && !configValues(config).some(model => model.value === value))) {
+            connectionError = 'This model is no longer offered by the selected harness.'
+            return
+        }
+        if (config) { await agent.setConfig(config.id, value) }
         else {
-            demoModel = event.currentTarget.value
+            demoModel = value
             localStorage.setItem('agentDemoModel', demoModel)
         }
     }
@@ -654,6 +714,24 @@ The current system demonstrates strong performance and security characteristics.
     })
 </script>
 
+{#snippet attachedFiles(files, removable = false)}
+    <div class="agent-attachments" aria-label={removable ? 'Attached files' : 'Message attachments'}>
+        {#each files as file (file.id)}
+            <div class="agent-attachment" title={`${file.name} · ${file.mimeType} · ${file.size.toLocaleString()} bytes`}>
+                {#if file.content?.type === 'image'}<img src={`data:${file.mimeType};base64,${file.content.data}`} alt={file.name} />{/if}
+                <span>{file.name}</span>
+                {#if removable}
+                    <button type="button" aria-label={`Remove ${file.name}`} title={`Remove ${file.name}`} disabled={preparingAttachments}
+                        onmousedown={event => { if (event.button === 0) { attachments = attachments.filter(item => item.id !== file.id) } }}
+                        onclick={event => { if (event.detail === 0) { attachments = attachments.filter(item => item.id !== file.id) } }}>
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8" /></svg>
+                    </button>
+                {/if}
+            </div>
+        {/each}
+    </div>
+{/snippet}
+
 {#snippet configChoices(options)}
     {#each options as option}
         {#if option.options}
@@ -697,22 +775,8 @@ The current system demonstrates strong performance and security characteristics.
 					{/if}
 				</select>
 
-				<select class="agent-model-select" aria-label={modelConfig?.name || 'Demo model'} value={selectedModel} disabled={isProcessing} onchange={handleModelChange}>
-					{#if modelConfig}
-						{@render configChoices(modelConfig.options)}
-					{:else}
-						<optgroup label="Demo models">{@render configChoices(demoModels)}</optgroup>
-					{/if}
-				</select>
 			</div>
 
-			{#if $agentState.connections?.length}
-				<label class="agent-selector-row">Connection
-					<select class="agent-model-select" aria-label="Agent connection" value={$agentState.connectionId} onchange={event => { agent.selectConnection(event.currentTarget.value); connectionError = '' }}>
-						{#each $agentState.connections as connection (connection.id)}<option value={connection.id}>{connection.title}{connection.approvals ? ' — permission requested' : ''}</option>{/each}
-					</select>
-				</label>
-			{/if}
 			<div class="agent-connection-row">
 				<span role="status">{$agentState.status === 'connected' ? $agentState.agentName : $agentState.status === 'connecting' ? 'Connecting…' : $agentState.connectionRequested ? 'Reconnecting…' : 'Disconnected'}</span>
 				{#if $agentState.connectionRequested}
@@ -728,7 +792,40 @@ The current system demonstrates strong performance and security characteristics.
 			{#if chatHistory.length > 0 || messageQueue.length > 0}
 				<div class="agent-chat-history">
 					{#each chatHistory as message (message.id)}
-						{#if message.role === 'info-cards'}
+						{#if message.role === 'working'}
+							<details class="agent-working" data-working-id={message.id}>
+								<summary onmousedown={event => {
+									if (event.button === 0) {
+										event.preventDefault()
+										const section = event.currentTarget.parentElement
+										section.open = !section.open
+									}
+								}} onclick={event => { if (event.detail !== 0) { event.preventDefault() } }}>
+									<span>working</span>
+									<span class="agent-working-count">{message.messages.length}</span>
+								</summary>
+								<div class="agent-working-items">
+									{#each message.messages as item (item.id)}
+										<section class="agent-working-item" data-message-id={item.id} data-tool-call-id={item.toolCallId} aria-label={item.role === 'thought' ? 'Thinking' : item.title || 'Tool call'}>
+											<div class="agent-working-header">
+												<span>{item.role === 'thought' ? 'Thinking' : item.title || 'Tool call'}</span>
+												{#if item.status}<span class="agent-working-status">{item.status.replaceAll('_', ' ')}</span>{/if}
+												<time datetime={item.timestamp} title={new Date(item.timestamp).toLocaleString('de-DE')}>{new Date(item.timestamp).toLocaleTimeString('en-GB')}</time>
+											</div>
+											{#if item.role === 'thought'}
+												<div class="agent-working-thought agent-markdown-content" use:streamingMarkdown={item}></div>
+											{:else}
+												{#if item.rawInput !== undefined}
+													<pre class="agent-tool-parameters">{JSON.stringify(item.rawInput, null, 2)}</pre>
+												{/if}
+												{#if item.content}<pre class="agent-tool-result">{item.content}</pre>{/if}
+												{#if item.rawOutput !== undefined}<pre class="agent-tool-result">{JSON.stringify(item.rawOutput, null, 2)}</pre>{/if}
+											{/if}
+										</section>
+									{/each}
+								</div>
+							</details>
+						{:else if message.role === 'info-cards'}
 							<div class="agent-info-cards">
 								{#each message.cards as card}
 									<div
@@ -1171,6 +1268,7 @@ The current system demonstrates strong performance and security characteristics.
 											{message.content}
 										</div>
 									{/if}
+									{#if message.attachments?.length}{@render attachedFiles(message.attachments)}{/if}
 								</div>
 								<div class="agent-chat-message-time-row">
 									<div class="agent-chat-message-time">
@@ -1258,6 +1356,7 @@ The current system demonstrates strong performance and security characteristics.
 											{queueItem.userMessage}
 										</div>
 									{/if}
+									{#if queueItem.attachments?.length}{@render attachedFiles(queueItem.attachments)}{/if}
 								</div>
 								<div class="agent-chat-message-time-row">
 									<div class="agent-chat-message-time">
@@ -1313,8 +1412,10 @@ The current system demonstrates strong performance and security characteristics.
 		{#if chat?.plan.length}<div class="agent-plan"><h4>Plan</h4>{#each chat.plan as entry}<p>{entry.status}: {entry.content}</p>{/each}</div>{/if}
 		{#if connectionError || $agentState.error}<p class="agent-error" role="alert">{connectionError || $agentState.error}</p>{/if}
 		{#if speechError}<p class="agent-error" role="alert">{speechError}</p>{/if}
+		{#if attachmentError}<p class="agent-error" role="alert">{attachmentError}</p>{/if}
 		{#if conv}<p class="agent-voice-status" role="status">Voice controls enabled. Voice input is not connected yet.</p>{/if}
 		<div class="agent-chat-input-container">
+			<div class="agent-composer-toolbar">
 			{#if composerOptions.length || showLegacyMode}
 				<div class="agent-composer-options">
 					{#each composerOptions as option (option.id)}
@@ -1339,6 +1440,9 @@ The current system demonstrates strong performance and security characteristics.
 					{/if}
 				</div>
 			{/if}
+				<AgentModelMenu agentStatus={$agentState} {chat} {selectedModel} disabled={isProcessing} onModel={handleModelChange} onLoad={connect}
+					onConnection={id => { agent.selectConnection(id); connectionError = '' }} onConfig={(id, value) => agent.setConfig(id, value)} />
+			</div>
 			<div class="agent-textarea-container">
 				{#if commandCompletions.length}
 					<div class="agent-command-completions menu-surface" id={commandListId} role="listbox" aria-label="Agent commands">
@@ -1370,6 +1474,12 @@ The current system demonstrates strong performance and security characteristics.
 				{#if !conversation}
 					<span class="agent-input-hint" aria-hidden="true">use / # @ ! for special commands</span>
 				{/if}
+				<input class="agent-attachment-input" type="file" multiple bind:this={attachmentInput} onchange={attachFiles} aria-label="Attach files" />
+				<button class="agent-attachment-button" type="button" title="Attach images, PDFs or files" aria-label="Attach images, PDFs or files" disabled={preparingAttachments}
+					onmousedown={event => { if (event.button === 0) { event.preventDefault(); attachmentInput.click() } }}
+					onclick={event => { if (event.detail === 0) { attachmentInput.click() } }}>
+					<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m18.4 6.6-8.8 8.8a3 3 0 0 1-4.2-4.2l9.2-9.1a4.5 4.5 0 0 1 6.3 6.3L9.9 19.3a6 6 0 0 1-8.5-8.5L12 0.2" transform="translate(1 2) scale(.9)" /></svg>
+				</button>
 				<button class="agent-headphone-button" class:low-opacity={!readAloud}
 						type="button" aria-label="Read agent replies aloud" aria-pressed={readAloud} disabled={!speechSupported}
 						title={speechSupported ? (readAloud ? 'Stop reading replies aloud' : 'Read replies aloud') : 'Read aloud is unavailable in this browser'}
@@ -1428,8 +1538,9 @@ The current system demonstrates strong performance and security characteristics.
 				{/if}
 				<button
 					class="agent-send-button"
-					onmouseup={sendMessage}
-					disabled={!conversation.trim()}
+					onmousedown={event => { if (event.button === 0) { event.preventDefault(); sendMessage() } }}
+					onclick={event => { if (event.detail === 0) { sendMessage() } }}
+					disabled={(!conversation.trim() && !attachments.length) || attachmentReads > 0 || preparingAttachments}
 					title="Send (Enter)"
 					aria-label="Send (Enter)"
 				>
@@ -1442,6 +1553,8 @@ The current system demonstrates strong performance and security characteristics.
 					</svg>
 				</button>
 			</div>
+			{#if attachments.length}{@render attachedFiles(attachments, true)}{/if}
+			{#if attachmentReads || preparingAttachments}<span class="agent-attachment-status" role="status">{attachmentReads ? 'Reading attachments…' : 'Preparing attachments…'}</span>{/if}
 
 			<div class="agent-action-buttons">
 				<button class="agent-quick-action" onmousedown={() => handleActionButton('search')}>search</button>
@@ -1468,6 +1581,19 @@ The current system demonstrates strong performance and security characteristics.
 </RightSidebar>
 
 <style>
+	.agent-working { margin: 8px 0; color: #aaa; font-size: 12px; }
+	.agent-working summary { cursor: pointer; padding: 6px 0; user-select: none; }
+	.agent-working summary:hover { color: #ddd; }
+	.agent-working summary:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; border-radius: 4px; }
+	.agent-working-count { color: #666; margin-left: 6px; font-size: 11px; }
+	.agent-working-items { display: grid; gap: 8px; margin-top: 4px; }
+	.agent-working-item { min-width: 0; padding: 10px; border: 1px solid rgb(255 255 255 / 6%); border-radius: 6px; background: rgb(255 255 255 / 2%); }
+	.agent-working-header { display: flex; align-items: baseline; gap: 8px; }
+	.agent-working-header > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; color: #bbb; }
+	.agent-working-item time, .agent-working-status { flex-shrink: 0; color: #777; font-size: 10px; }
+	.agent-working-thought { margin-top: 8px; overflow-wrap: anywhere; }
+	.agent-working-thought :global(p) { margin: 6px 0; }
+	.agent-working-item pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 ui-monospace, monospace; max-height: 240px; overflow-y: auto; }
 	.agent-panel { display: flex; flex-direction: column; min-height: 100%; color: #ddd }
 	.agent-panel :global(:is(.agent-markdown-content, .agent-tool-result, .agent-info-card.tool .agent-info-card-details, .agent-history-dropdown-content, pre, textarea):not([data-scroll-active])) {
 		overflow: hidden;
@@ -1683,11 +1809,18 @@ The current system demonstrates strong performance and security characteristics.
 		color: rgba(255, 255, 255, 0.9);
 	}
 
+	.agent-composer-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
 	.agent-composer-options {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
-		margin-bottom: 8px;
 	}
 
 	.agent-config-control {
@@ -2172,7 +2305,7 @@ The current system demonstrates strong performance and security characteristics.
 		cursor: not-allowed;
 	}
 
-	.agent-mic-button, .agent-headphone-button {
+	.agent-mic-button, .agent-headphone-button, .agent-attachment-button {
 		position: absolute;
 		background: transparent;
 		border: none;
@@ -2190,6 +2323,17 @@ The current system demonstrates strong performance and security characteristics.
 	}
 
 	.agent-headphone-button { right: 75px; }
+	.agent-attachment-button { left: 7px; right: auto; }
+	.agent-attachment-input { display: none; }
+	.agent-attachments { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+	.agent-attachment { display: flex; align-items: center; gap: 5px; padding: 4px 6px; border: 1px solid #ffffff18; border-radius: 6px; background: #ffffff08; max-width: 100%; min-width: 0; font-size: 11px; }
+	.agent-attachment > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.agent-attachment img { width: 24px; height: 24px; object-fit: cover; border-radius: 3px; }
+	.agent-attachment button { display: flex; border: 0; background: transparent; color: #aaa; cursor: pointer; padding: 3px; flex-shrink: 0; }
+	.agent-attachment button svg { width: 12px; height: 12px; }
+	.agent-attachment button:hover { color: white; }
+	.agent-attachment-status { color: #888; font-size: 11px; }
+	.agent-attachment-button:focus-visible, .agent-attachment button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
 	.agent-headphone-button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
 	.agent-headphone-button:disabled { cursor: not-allowed; }
 
@@ -2197,7 +2341,7 @@ The current system demonstrates strong performance and security characteristics.
 		opacity: 0.4;
 	}
 
-	.agent-mic-button:hover, .agent-headphone-button:hover:not(:disabled) {
+	.agent-mic-button:hover, .agent-headphone-button:hover:not(:disabled), .agent-attachment-button:hover:not(:disabled) {
 		background: rgba(255, 255, 255, 0.08);
 		color: white;
 	}

@@ -24,7 +24,27 @@ export function getModelConfig(options = []) {
 }
 
 export function configValues(option) {
-    return option.options.flatMap(value => value.options || [value])
+    return option.options.flatMap(value => value.options ? configValues(value) : [value])
+}
+
+export function providerGlyph(id, name) {
+    const identity = `${id || ''} ${name || ''}`.toLowerCase()
+    if (/\b(claude|anthropic)\b/.test(identity)) { return { name: 'Anthropic', icon: claudeIcon } }
+    if (/\b(openai|gpt|chatgpt|codex|o[134])\b/.test(identity)) { return { name: 'OpenAI', icon: openaiIcon } }
+    return { name: 'Model', icon: agentIcon }
+}
+
+export function harnessIcon(name) {
+    const identity = (name || '').toLowerCase()
+    if (/claude|anthropic/.test(identity)) { return claudeIcon }
+    if (/codex|openai/.test(identity)) { return openaiIcon }
+    if (/opencode/.test(identity)) {
+        return '<svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M4 2h16v20H4Zm4 4v12h8V6Z"/><path opacity=".4" d="M8 6h8v6H8Z"/></svg>'
+    }
+    if (/\bpi\b/.test(identity)) {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M8 6v14M17 6v11q0 3 3 3"/></svg>'
+    }
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3m6 0h4"/></svg>'
 }
 
 export function modelAvatar(id, name) {

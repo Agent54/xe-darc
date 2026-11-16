@@ -49,8 +49,12 @@ export function createAgentConnections({ storage, session, getWindowId, mcp, cre
     function snapshot() {
         clientFor(selectedId)
         return { ...clients.get(keyFor(selectedId)).state, connectionId: selectedId,
-            connections: connections.map(({ token: _token, ...connection }) => ({ ...connection,
-                approvals: clients.get(keyFor(connection.id))?.state.approvals.length || 0 })) }
+            connections: connections.map(({ token: _token, ...connection }) => {
+                const state = clients.get(keyFor(connection.id))?.state
+                const chat = state?.conversations.find(chat => chat.id === state.activeConversationId)
+                return { ...connection, agentName: state?.agentName, configOptions: chat?.configOptions || [],
+                    processing: state?.processing || false, approvals: state?.approvals.length || 0 }
+            }) }
     }
 
     function publish() {
