@@ -1,13 +1,14 @@
 import { mcpTools } from './mcp-tool-defs.js'
 import { requestMcpPermission } from './mcp-permissions.js'
 import { getTabTitle } from './tab-title.js'
+import { agentActivity } from './agent-activity.js'
 
 function openTab(tab) {
     return tab?.type === 'tab' && !tab.archive && !tab.closed && !tab.preview && !tab.lightbox && !tab._deleted
 }
 
-export function createMcpBrowserExecutor({ data, getConnection }) {
-    return async ({ name, args, agent, signal }) => {
+export function createMcpBrowserExecutor({ data, getConnection, activity = agentActivity }) {
+    async function execute({ name, args, agent, signal }, access) {
         const definition = mcpTools[name]
         if (!definition) { throw new Error(`Unknown MCP tool: ${name}`) }
         args = definition.inputSchema.assert(args || {})
@@ -38,17 +39,23 @@ export function createMcpBrowserExecutor({ data, getConnection }) {
 
         if (name === 'listSpaces') {
             await authorize('mcp-list-spaces', { ...all, label: 'All spaces' })
-            return Object.entries(data.spaces).filter(([, space]) => !space.archive && !space._deleted)
+            const spaces = Object.entries(data.spaces).filter(([, space]) => !space.archive && !space._deleted)
+            access.touch({ spaces: spaces.map(([id]) => id) })
+            return spaces
                 .map(([spaceId, space]) => ({ spaceId, title: space.name || space.title || spaceId }))
         }
         if (name === 'listTabs') {
             await authorize('mcp-list-tabs', all)
-            return allTabs().map(metadata)
+            const tabs = allTabs()
+            access.touch({ tabs: tabs.map(tab => tab.id), spaces: tabs.map(tab => tab.spaceId) })
+            return tabs.map(metadata)
         }
         if (name === 'listSpaceTabs') {
             const target = spaceTarget(args.spaceId)
             await authorize('mcp-list-tabs', target, { parents: [all], valid: () => !!data.spaces[args.spaceId] && !data.spaces[args.spaceId].archive })
-            return allTabs().filter(tab => tab.spaceId === args.spaceId).map(metadata)
+            const tabs = allTabs().filter(tab => tab.spaceId === args.spaceId)
+            access.touch({ tabs: tabs.map(tab => tab.id), spaces: [args.spaceId] })
+            return tabs.map(metadata)
         }
         if (name === 'listTabGroupTabs') {
             const group = groupFor(args.spaceId, args.tabGroupId)
@@ -56,7 +63,9 @@ export function createMcpBrowserExecutor({ data, getConnection }) {
             await authorize('mcp-list-tabs', target, { parents: [spaceTarget(args.spaceId), all],
                 valid: () => data.getTabGroups(args.spaceId).some(group => group.id === target.id) })
             const members = groupFor(args.spaceId, target.id).tabs.map(tab => tab.id)
-            return allTabs().filter(tab => tab.spaceId === args.spaceId && members.includes(tab.id)).map(metadata)
+            const tabs = allTabs().filter(tab => tab.spaceId === args.spaceId && members.includes(tab.id))
+            access.touch({ tabs: tabs.map(tab => tab.id), spaces: [args.spaceId] })
+            return tabs.map(metadata)
         }
         if (name === 'openTab' || name === 'displayHtml') {
             const space = spaceTarget(args.spaceId)
@@ -72,8 +81,10 @@ export function createMcpBrowserExecutor({ data, getConnection }) {
             await authorize('mcp-open-tab', target, { parents: group ? [space] : [], valid })
             signal?.throwIfAborted()
             if (!valid()) { throw new Error('The target space or tab group changed') }
+            access.touch({ spaces: [args.spaceId] })
             const tab = await data.newTab(args.spaceId, { url, title: args.title, groupTabId: anchorId, shouldFocus: true })
             if (!tab?.id) { throw new Error('Could not create a browser tab') }
+            access.touch({ tabs: [tab.id] })
             data.activateSpace(args.spaceId)
             data.activate(tab.id)
             return { tabId: tab.id, spaceId: args.spaceId, tabGroupId: group?.id || null, title: getTabTitle(tab), ...(name === 'openTab' ? { url: tab.url } : {}) }
@@ -107,12 +118,14 @@ export function createMcpBrowserExecutor({ data, getConnection }) {
             return openTab(tab) && tab.url === item.url && tab.spaceId === item.spaceId && tab.tabGroupId === item.groupId
         }) && !!data.spaces[target.spaceId] && !data.spaces[target.spaceId].archive
         await authorize('mcp-read-tabs', target, { parents, targets, valid })
+        access.touch({ tabs: selected.map(tab => tab.tabId), spaces: [target.spaceId] })
         const results = []
         for (const item of selected) {
             signal?.throwIfAborted()
             if (!active() || !valid()) { throw new Error('A selected tab was closed, moved, or navigated; request access again') }
             try {
                 const content = await data.readPage(item.tabId, { textOnly: args.textOnly, selector: args.selector })
+                signal?.throwIfAborted()
                 if (!active() || !valid()) { throw new Error('A selected tab changed while reading') }
                 results.push({ tabId: item.tabId, url: item.url, content })
             } catch (error) {
@@ -121,5 +134,9 @@ export function createMcpBrowserExecutor({ data, getConnection }) {
             }
         }
         return name === 'readTab' ? results[0] : results
+    }
+    return async request => {
+        const access = activity.begin(request.signal)
+        try { return await execute(request, access) } finally { access.finish() }
     }
 }

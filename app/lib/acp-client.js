@@ -3,6 +3,7 @@ import { createHttpStream } from '@agentclientprotocol/sdk/experimental/http-cli
 import { readAcpModelPreference, saveAcpModelPreference, validateAcpSettings } from './acp-settings.js'
 import { configValues, getModelConfig } from './agent-models.js'
 import { validateAgentAttachments } from './agent-attachments.js'
+import { agentActivity } from './agent-activity.js'
 
 export function createAgentClient({ getSettings, createBrowserServer, modelStorage, conversationStorage, getConversationKey = () => 'acpConversations',
     createStream = createHttpStream, setupTimeout = 15000, cancelTimeout = 5000, reconnectDelay = 1000 }) {
@@ -165,6 +166,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
             chat.modes = { ...chat.modes, currentModeId: update.currentModeId }
         } else if (!chat.loading && !activeTurn?.cancelled) {
             if (update.sessionUpdate === 'agent_message_chunk' || update.sessionUpdate === 'agent_thought_chunk') {
+                agentActivity.pulse()
                 const role = update.sessionUpdate === 'agent_thought_chunk' ? 'thought' : 'assistant'
                 const content = update.content
                 const text = content.type === 'text' ? content.text : content.type === 'resource' && content.resource?.text ? content.resource.text : `[${content.type} content]`
@@ -176,6 +178,7 @@ export function createAgentClient({ getSettings, createBrowserServer, modelStora
                     addMessage(chat, role, text, { sourceMessageId, streaming: true })
                 }
             } else if (['tool_call', 'tool_call_update'].includes(update.sessionUpdate)) {
+                agentActivity.pulse()
                 let message = update.sessionUpdate === 'tool_call_update'
                     ? chat.messages.findLast(item => item.role === 'tool' && item.toolCallId === update.toolCallId) : null
                 if (!message) {

@@ -42,7 +42,7 @@
 <style>
     .group-preview { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
     .preview-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; line-height: 1.2; color: #808080; font-size: 13px; font-weight: 500; mask: linear-gradient(to right, black 0%, black 85%, transparent 100%); }
-    .favicon-viewport { display: block; height: 16px; flex-shrink: 0; overflow: hidden; mask: linear-gradient(to right, black 0%, black 70%, transparent 100%); }
+    .favicon-viewport { display: block; height: 16px; padding-block: 5px; margin-block: -5px; box-sizing: content-box; flex-shrink: 0; overflow: hidden; mask: linear-gradient(to right, black 0%, black 70%, transparent 100%); }
     .favicon-viewport.scrolled { mask: linear-gradient(to right, transparent, black 15%, black 85%, transparent); }
     .favicon-viewport.at-end { mask: none; }
     .favicon-viewport.scrolled.at-end { mask: linear-gradient(to right, transparent, black 15%); }

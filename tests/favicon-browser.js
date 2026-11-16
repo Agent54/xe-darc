@@ -16,7 +16,7 @@ await withSidebarFixture('favicon', async ({ page, requests }) => {
                 return { icon: icon.toJSON(), wrapper: wrapper.toJSON() }
             })
             const { icon, wrapper } = geometry
-            assert.ok(icon.width === 10 && icon.height === 10 && icon.left >= wrapper.left && icon.top >= wrapper.top && icon.right <= wrapper.right && icon.bottom <= wrapper.bottom,
+            assert.ok(Math.abs(icon.width - 10) < 0.01 && Math.abs(icon.height - 10) < 0.01 && icon.left >= wrapper.left && icon.top >= wrapper.top && icon.right <= wrapper.right && icon.bottom <= wrapper.bottom,
                 `${id}: audio overlay must fit inside favicon: ${JSON.stringify(geometry)}`)
             await page.evaluate(id => window.flushSync(() => { window.data.docs[id].muted = true }), id)
             assert.equal(await page.$eval(selector, el => el.getAttribute('aria-label')), 'Tab muted')

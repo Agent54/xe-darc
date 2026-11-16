@@ -17,6 +17,7 @@
     import AgentSidebar from './components/AgentSidebar.svelte'
     import Agent from './components/Agent.svelte'
     import { startMcpConnections } from './lib/mcp-service.js'
+    import { flashAgentActivity } from './lib/agent-activity.js'
     import Excalidraw from './components/Excalidraw.svelte'
     import GridView from './components/GridView.svelte'
     import TabSidebar from './components/TabSidebar.svelte'
@@ -4891,6 +4892,11 @@
                     <div class="led-dot permission-request" class:active={permissionRequestActive}></div>
                 </div>
             </Tooltip>
+            <Tooltip text="Agent and MCP activity" position="left" delay={0}>
+                <div class="led-target" role="img" aria-label="Agent and MCP activity">
+                    <div class="led-dot agent-activity" use:flashAgentActivity></div>
+                </div>
+            </Tooltip>
         {/if}
     </div>
     <!-- class:drag-enabled={isDragEnabled} -->
@@ -5491,6 +5497,11 @@
     .led-dot.permission-request {
         background: #f59e0b;
         border-color: #f59e0b;
+    }
+
+    .led-dot.agent-activity {
+        background: #5aaaff;
+        border-color: #5aaaff;
     }
 
     .led-dot.active {

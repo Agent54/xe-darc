@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import * as acp from '@agentclientprotocol/sdk/unstable'
 import { AcpServer } from '@agentclientprotocol/sdk/experimental/server'
 import { createAgentClient } from '../app/lib/acp-client.js'
+import { agentActivity } from '../app/lib/agent-activity.js'
+import { get } from 'svelte/store'
 import { createBrowserServer } from '../app/lib/acp-browser-server.js'
 import { pageContentScript } from '../app/lib/page-content.js'
 import { clearProviderSettings, readAcpModelPreference, readAcpSettings, saveAcpSettings, exportableStorage, validateAcpSettings } from '../app/lib/acp-settings.js'
@@ -239,7 +241,9 @@ async function run() {
         assert.equal(client.state.queuePaused, false)
         await client.connect()
         assert.equal(client.state.agentName, 'Mock agent')
+        const pulsesBeforeReply = get(agentActivity.pulses)
         await Promise.all([client.prepareConversation(), client.submit('hello')])
+        assert.equal(get(agentActivity.pulses) - pulsesBeforeReply, 4, 'Each live message chunk and tool update should pulse the blue light')
         assert.equal(host.sessions.size, 1)
         const chatId = client.state.activeConversationId
         const chat = () => client.state.conversations.find(chat => chat.id === chatId)

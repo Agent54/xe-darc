@@ -3,7 +3,7 @@ import { createPermissionStore, getPendingPermissionRequests, permissionTargetKe
 import { createMcpBrowserExecutor } from '../app/lib/mcp-browser-tools.js'
 import { getTabGroups } from '../app/lib/tab-groups.js'
 
-export async function mcpFixture() {
+export async function mcpFixture({ activity } = {}) {
     const records = new Map()
     const permissions = {}, rules = {}, state = { status: 'loading', error: null }
     const db = {
@@ -36,7 +36,7 @@ export async function mcpFixture() {
         activateSpace(id) { this.spaceMeta.activeSpace = id }, activate(id) { this.spaceMeta.activeTabId = id }
     }
     const connections = new Map(['first', 'second'].map(id => [id, { id, title: `${id} agent`, description: `Agent ${id}`, endpoint: `https://darc.example/mcp/${id}` }]))
-    const executors = new Map([...connections.keys()].map(id => [id, createMcpBrowserExecutor({ data, getConnection: () => connections.get(id) })]))
+    const executors = new Map([...connections.keys()].map(id => [id, createMcpBrowserExecutor({ data, getConnection: () => connections.get(id), activity })]))
     return { data, store, records, connections, pending: () => getPendingPermissionRequests(permissions, 'window'),
         call: (id, name, args = {}, signal) => executors.get(id)({ name, args, signal, agent: { name: 'Same reported agent', headers: { 'user-agent': 'Pi test' } } }) }
 }

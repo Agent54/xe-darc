@@ -31,6 +31,8 @@
     } = $props()
     import data from '../data.svelte.js'
     import Favicon from './Favicon.svelte'
+    import McpActivityGlow from './McpActivityGlow.svelte'
+    import { mcpAccess } from '../lib/agent-activity.js'
     import Tooltip from './Tooltip.svelte'
     import UrlRenderer from './UrlRenderer.svelte'
     import UrlBar from './UrlBar.svelte'
@@ -1975,6 +1977,7 @@
                             {#each visibleSpaceOrder as spaceId}
                                 <Tooltip text={data.spaces[spaceId].name} position="top" delay={300}>
                                     <button class="space-item" 
+                                            class:mcp-accessed={$mcpAccess.spaces.has(spaceId)}
                                             class:active={data.spaceMeta.activeSpace === spaceId}
                                             class:scrolled={multiSpaceMode ? hoveredSpaceInMultiMode === spaceId : currentScrolledSpace === spaceId}
                                             data-space-id={spaceId}
@@ -1982,9 +1985,9 @@
                                             oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation() }}
                                             aria-label={`Switch to ${data.spaces[spaceId].name} space`}>
                                     {#if data.spaces[spaceId]?.glyph}
-                                        <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
+                                        <span class="space-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{#if $mcpAccess.spaces.has(spaceId)}<McpActivityGlow />{/if}{@html data.spaces[spaceId].glyph}</span>
                                     {:else}
-                                        <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>
+                                        <span class="space-glyph-default" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{#if $mcpAccess.spaces.has(spaceId)}<McpActivityGlow />{/if}</span>
                                     {/if}
                                         </button>
                                 </Tooltip>
@@ -2096,9 +2099,9 @@
                                                 onmousedown={(e) => handleSpaceClick(e, spaceId)}
                                                 oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation() }}>
                                             {#if data.spaces[spaceId]?.glyph}
-                                                <span class="space-title-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{@html data.spaces[spaceId].glyph}</span>
+                                                <span class="space-title-glyph" style="color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{#if $mcpAccess.spaces.has(spaceId)}<McpActivityGlow />{/if}{@html data.spaces[spaceId].glyph}</span>
                                             {:else}
-                                                <span class="space-title-dot" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}"></span>
+                                                <span class="space-title-dot" style="background-color: {data.spaces[spaceId]?.color || 'rgba(255, 255, 255, 0.7)'}">{#if $mcpAccess.spaces.has(spaceId)}<McpActivityGlow />{/if}</span>
                                             {/if}
                                             {data.spaces[spaceId].name}
                                         </button>
@@ -3056,6 +3059,9 @@
         background: transparent;
         opacity: 1;
     }
+
+    .space-item.mcp-accessed { opacity: 1; }
+    .space-glyph, .space-glyph-default, .space-title-glyph, .space-title-dot { position: relative; isolation: isolate; }
     
     .space-glyph {
         font-size: 13px;

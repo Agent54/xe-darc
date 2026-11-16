@@ -4,6 +4,8 @@
     import SecurityIndicator from './SecurityIndicator.svelte'
     import data from '../data.svelte.js'
     import Tooltip from './Tooltip.svelte'
+    import McpActivityGlow from './McpActivityGlow.svelte'
+    import { mcpAccess } from '../lib/agent-activity.js'
     
     let { tab, security = null, showButton = true, size = 'normal' } = $props()
     let failedFaviconSrc = $state(null)
@@ -28,6 +30,7 @@
     const reactiveFavicon = $derived(currentTab?.faviconOverride || currentTab?.favicon)
     const reactiveTitle = $derived(getTabTitle(currentTab))
     const loading = $derived(data.frames[tab?.id]?.loading ?? false)
+    const mcpAccessed = $derived($mcpAccess.tabs.has(currentTab?.id))
     
     // Derive security status if not provided
     const securityStatus = $derived.by(() => {
@@ -161,9 +164,11 @@
 {#if showButton}
     <span 
         class="favicon-display" 
+        class:mcp-accessed={mcpAccessed}
         class:small={size === 'small'}
         title={reactiveTitle || reactiveUrl || ''}
         aria-label="Tab favicon and security status">
+        {#if mcpAccessed}<McpActivityGlow />{/if}
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
         {:else if faviconContent.type === 'emoji'}
@@ -182,7 +187,8 @@
         {@render resumeIndicator()}
     </span>
 {:else}
-    <span class="favicon-wrapper" class:small={size === 'small'}>
+    <span class="favicon-wrapper" class:small={size === 'small'} class:mcp-accessed={mcpAccessed}>
+        {#if mcpAccessed}<McpActivityGlow />{/if}
         {#if faviconContent.type === 'security'}
             <SecurityIndicator {tab} {size} />
         {:else if faviconContent.type === 'emoji'}
@@ -203,6 +209,7 @@
 {/if}
 
 <style>
+    .favicon-display.mcp-accessed, .favicon-wrapper.mcp-accessed { isolation: isolate; overflow: visible; opacity: 1 !important; }
     .favicon-resumed { position: absolute; right: 0; bottom: 0; display: flex; width: 10px; height: 10px; border-radius: 3px; background: #171717; color: #d6bb82; }
     .favicon-resumed :global(svg) { width: 10px !important; height: 10px !important; }
     .favicon-display,
