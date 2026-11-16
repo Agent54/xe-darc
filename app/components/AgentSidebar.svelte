@@ -24,6 +24,13 @@
     let inputFocused = $state(false)
     let commandIndex = $state(0)
     let dismissedCommandQuery = $state(null)
+    const speechSupported = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window
+    let readAloud = $state(false)
+    let speechError = $state('')
+    let speechConversationId = null
+    let speechVersion = 0
+    const spokenMessages = new Set()
+    const utterances = new Set()
     const commandListId = $props.id()
     let demoModel = $state(globalThis.localStorage?.getItem('agentDemoModel') || demoModels[1].value)
     const chat = $derived($agentState.conversations.find(item => item.id === $agentState.activeConversationId))
@@ -571,7 +578,80 @@ The current system demonstrates strong performance and security characteristics.
         }
     }
 
-    onMount(() => { input?.focus() })
+    function stopSpeech() {
+        speechVersion++
+        if (utterances.size) {
+            for (const utterance of utterances) {
+                utterance.onend = null
+                utterance.onerror = null
+            }
+            utterances.clear()
+            window.speechSynthesis.cancel()
+        }
+    }
+
+    function toggleReadAloud() {
+        readAloud = !readAloud
+        speechError = ''
+        if (!readAloud) {
+            stopSpeech()
+        }
+    }
+
+    function speechFailed(reason) {
+        speechError = `Read aloud failed: ${reason}. Toggle the headphones to try again.`
+        readAloud = false
+        stopSpeech()
+    }
+
+    async function speakMessage(message, version) {
+        await tick()
+        if (!readAloud || version !== speechVersion) {
+            return
+        }
+        const rendered = input.closest('.agent-panel').querySelector(`[data-message-id="${CSS.escape(message.id)}"] .agent-markdown`)
+        const text = rendered?.innerText.trim()
+        if (!text) {
+            return
+        }
+        try {
+            const utterance = new SpeechSynthesisUtterance(text)
+            utterances.add(utterance)
+            utterance.onend = () => utterances.delete(utterance)
+            utterance.onerror = event => speechFailed(event.error)
+            window.speechSynthesis.speak(utterance)
+        } catch (error) {
+            speechFailed(error.message)
+        }
+    }
+
+    function readAgentMessages(state) {
+        const current = state.conversations.find(item => item.id === state.activeConversationId)
+        const changedConversation = speechConversationId !== current?.id
+        if (changedConversation) {
+            stopSpeech()
+            speechConversationId = current?.id
+            spokenMessages.clear()
+        }
+        for (const message of current?.messages || []) {
+            if (message.streaming || !['assistant', 'assistant-doc'].includes(message.role) || spokenMessages.has(message.id)) {
+                continue
+            }
+            spokenMessages.add(message.id)
+            if (readAloud && !changedConversation) {
+                void speakMessage(message, speechVersion)
+            }
+        }
+    }
+
+    onMount(() => {
+        input?.focus()
+        const unsubscribe = agentState.subscribe(readAgentMessages)
+        return () => {
+            unsubscribe()
+            stopSpeech()
+        }
+    })
 </script>
 
 {#snippet configChoices(options)}
@@ -1232,6 +1312,7 @@ The current system demonstrates strong performance and security characteristics.
 	<div class="agent-bottom-sticky">
 		{#if chat?.plan.length}<div class="agent-plan"><h4>Plan</h4>{#each chat.plan as entry}<p>{entry.status}: {entry.content}</p>{/each}</div>{/if}
 		{#if connectionError || $agentState.error}<p class="agent-error" role="alert">{connectionError || $agentState.error}</p>{/if}
+		{#if speechError}<p class="agent-error" role="alert">{speechError}</p>{/if}
 		{#if conv}<p class="agent-voice-status" role="status">Voice controls enabled. Voice input is not connected yet.</p>{/if}
 		<div class="agent-chat-input-container">
 			{#if composerOptions.length || showLegacyMode}
@@ -1286,6 +1367,18 @@ The current system demonstrates strong performance and security characteristics.
 					placeholder="We can do anything..."
 					rows="3"
 				></textarea>
+				{#if !conversation}
+					<span class="agent-input-hint" aria-hidden="true">use / # @ ! for special commands</span>
+				{/if}
+				<button class="agent-headphone-button" class:low-opacity={!readAloud}
+						type="button" aria-label="Read agent replies aloud" aria-pressed={readAloud} disabled={!speechSupported}
+						title={speechSupported ? (readAloud ? 'Stop reading replies aloud' : 'Read replies aloud') : 'Read aloud is unavailable in this browser'}
+						onmousedown={event => { if (event.button === 0) { toggleReadAloud() } }}
+						onclick={event => { if (event.detail === 0) { toggleReadAloud() } }}>
+					<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3 14v-3a9 9 0 0 1 18 0v3M5 12H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h1a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2Zm14 0h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Z" />
+					</svg>
+				</button>
 				<button
 					class="agent-mic-button"
 					class:low-opacity={!conv}
@@ -2001,6 +2094,7 @@ The current system demonstrates strong performance and security characteristics.
 		padding: 8px 8px 27px 9px;
 		color: white;
 		font-size: 14px;
+		line-height: 1.4;
 		font-family: inherit;
 		resize: none;
 		min-height: 20px;
@@ -2016,6 +2110,17 @@ The current system demonstrates strong performance and security characteristics.
 
 	.agent-conversation-input::placeholder {
 		color: rgba(255, 255, 255, 0.4);
+	}
+
+	.agent-input-hint {
+		position: absolute;
+		top: 30px;
+		left: 10px;
+		right: 10px;
+		font-size: 11px;
+		line-height: 1.4;
+		color: rgb(255 255 255 / 23%);
+		pointer-events: none;
 	}
 
 	.agent-conversation-input:disabled {
@@ -2054,7 +2159,7 @@ The current system demonstrates strong performance and security characteristics.
 		transition: all 0.2s ease;
 		z-index: 2;
 		bottom: 11px;
-		right: 40px;
+		right: 110px;
 	}
 
 	.agent-send-button:hover:not(:disabled) {
@@ -2067,7 +2172,7 @@ The current system demonstrates strong performance and security characteristics.
 		cursor: not-allowed;
 	}
 
-	.agent-mic-button {
+	.agent-mic-button, .agent-headphone-button {
 		position: absolute;
 		background: transparent;
 		border: none;
@@ -2078,17 +2183,21 @@ The current system demonstrates strong performance and security characteristics.
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: all 0.2s ease;
+		transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
 		z-index: 2;
 		bottom: 11px;
 		right: 40px;
 	}
 
-	.agent-mic-button.low-opacity {
+	.agent-headphone-button { right: 75px; }
+	.agent-headphone-button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+	.agent-headphone-button:disabled { cursor: not-allowed; }
+
+	.agent-mic-button.low-opacity, .agent-headphone-button.low-opacity {
 		opacity: 0.4;
 	}
 
-	.agent-mic-button:hover {
+	.agent-mic-button:hover, .agent-headphone-button:hover:not(:disabled) {
 		background: rgba(255, 255, 255, 0.08);
 		color: white;
 	}

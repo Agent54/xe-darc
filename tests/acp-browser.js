@@ -126,6 +126,10 @@ try {
     await page.evaluateOnNewDocument(() => {
         window.darcWindowId = 'acp-test-window'
         window.waitForDarcWindowId = () => Promise.resolve(window.darcWindowId)
+        window.spokenReplies = []
+        window.speechCancels = 0
+        window.speechSynthesis.speak = utterance => window.spokenReplies.push(utterance)
+        window.speechSynthesis.cancel = () => { window.speechCancels++ }
     })
     await page.setViewport({ width: 480, height: 850 })
     const errors = []
@@ -475,6 +479,60 @@ try {
         chats: window.agentState.conversations.map(chat => ({ id: chat.id, sessionId: chat.sessionId,
             messages: chat.messages.map(message => ({ id: message.id, content: message.content })) })) })), beforeReload)
     assert(host.loads.includes(beforeReload.chats.find(chat => chat.id === beforeReload.active).sessionId))
+
+    const headphones = 'button[aria-label="Read agent replies aloud"]'
+    assert.equal(await page.$eval(headphones, node => node.getAttribute('aria-pressed')), 'false')
+    assert.equal(await page.$eval('.agent-input-hint', node => node.textContent), 'use / # @ ! for special commands')
+    assert.equal(await page.$eval(headphones, node => node.getBoundingClientRect().right <= document.querySelector('.agent-mic-button').getBoundingClientRect().left), true)
+    await page.type(composer, 'draft')
+    assert.equal(await page.$('.agent-input-hint'), null)
+    await setDraft('')
+    await page.focus(headphones)
+    await page.keyboard.press('Enter')
+    assert.equal(await page.$eval(headphones, node => node.getAttribute('aria-pressed')), 'true')
+    assert.equal(await page.evaluate(() => window.spokenReplies.length), 0, 'enabling speech must not replay history')
+    await page.evaluate(() => {
+        window.finishSpeechReply = Promise.withResolvers()
+        window.speechReply = window.agent.addLocalExchange('Read this reply', {
+            role: 'assistant',
+            chunks: (async function* () {
+                yield '**First** '
+                await window.finishSpeechReply.promise
+                yield 'reply.'
+            })()
+        })
+    })
+    await page.waitForSelector('.agent-markdown.streaming strong')
+    assert.equal(await page.evaluate(() => window.spokenReplies.length), 0, 'streaming updates must not read incomplete or duplicate replies')
+    assert.equal(await page.$eval('.agent-stop-button', node => node.getBoundingClientRect().right <= document.querySelector('.agent-headphone-button').getBoundingClientRect().left), true)
+    await page.evaluate(async () => { window.finishSpeechReply.resolve(); await window.speechReply })
+    await page.waitForFunction(() => window.spokenReplies.length === 1)
+    assert.equal(await page.evaluate(() => window.spokenReplies[0].text), 'First reply.')
+    await page.evaluate(() => window.agent.addLocalExchange('Another request', { role: 'assistant-doc', content: 'Second reply.' }))
+    await page.waitForFunction(() => window.spokenReplies.length === 2)
+    assert.deepEqual(await page.evaluate(() => window.spokenReplies.map(reply => reply.text)), ['First reply.', 'Second reply.'])
+    await page.click(headphones)
+    assert.equal(await page.evaluate(() => window.speechCancels), 1, 'disabling speech cancels the current and queued replies')
+    await page.evaluate(() => window.agent.addLocalExchange('Muted request', { role: 'assistant', content: 'Muted reply.' }))
+    await page.click(headphones)
+    assert.equal(await page.evaluate(() => window.spokenReplies.length), 2, 're-enabling must not read replies received while muted')
+    await page.evaluate(() => window.agent.addLocalExchange('Read another', { role: 'assistant', content: 'Third reply.' }))
+    await page.waitForFunction(() => window.spokenReplies.length === 3)
+    await page.evaluate(() => window.spokenReplies.at(-1).onerror({ error: 'synthesis-failed' }))
+    await page.waitForFunction(() => document.querySelector('[aria-label="Read agent replies aloud"]').getAttribute('aria-pressed') === 'false')
+    assert.match(await page.$eval('.agent-error', node => node.textContent), /synthesis-failed/)
+    await page.click(headphones)
+    await page.evaluate(() => window.agent.addLocalExchange('Final request', { role: 'assistant', content: 'Final reply.' }))
+    await page.waitForFunction(() => window.spokenReplies.length === 4)
+    const cancelsBeforeClose = await page.evaluate(() => window.speechCancels)
+    await page.evaluate(() => window.hideAgent())
+    await page.waitForSelector('.agent-panel', { hidden: true })
+    assert.equal(await page.evaluate(() => window.speechCancels), cancelsBeforeClose + 1)
+    await page.evaluate(() => window.showAgent())
+    await page.waitForSelector(headphones)
+    assert.equal(await page.$eval(headphones, node => node.getAttribute('aria-pressed')), 'false')
+    await page.screenshot({ path: `${root}.cache/acp/read-aloud-composer.png` })
+    console.log('Read aloud: completed replies queue once, rendered Markdown, opt-in history boundary, stop/error/cleanup, headphone placement and placeholder hint pass')
     await button('Disconnect')
     await page.waitForFunction(() => !window.agentState.connectionRequested)
     await page.evaluate(() => window.showSettings())
