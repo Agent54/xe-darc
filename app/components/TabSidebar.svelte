@@ -58,11 +58,20 @@
     let newSpaceMenuOpen = $state(false)
     let closedTabsHovered = $state(false)
     let closedTabsHeaderHovered = $state(false)
+    let showAllClosedTabs = $state(false)
     let closedTabsHideTimeout = null
     let pendingHoveredSpace = $state(null)
     let pendingHideTimeout = null
     let pendingNow = $state(Date.now())
     const closedItems = $derived(getArchivedTabItems(data.spaceMeta.closedTabs, data.docs))
+    const spaceClosedItems = $derived(closedItems.filter(item => item.spaceId === data.spaceMeta.activeSpace))
+    const visibleClosedItems = $derived(showAllClosedTabs ? closedItems : spaceClosedItems)
+    const otherClosedItemsCount = $derived(closedItems.length - spaceClosedItems.length)
+    $effect(() => {
+        data.spaceMeta.activeSpace
+        closedTabsHovered
+        showAllClosedTabs = false
+    })
     const pendingItems = $derived(getArchivedTabItems(data.spaceMeta.pendingTabs, data.docs))
     $effect(() => {
         if (!pendingHoveredSpace) return
@@ -1041,6 +1050,12 @@
         closedTabsHovered = true
     }
 
+    function clearVisibleClosedTabs() {
+        if (showAllClosedTabs) data.clearClosedTabs()
+        else for (const item of spaceClosedItems) for (const tab of item.tabs) data.removeClosedTab(tab.id)
+        handleClosedTabsMouseLeave()
+    }
+
     function showPending(spaceId) {
         if (tabDrag.active || tabDrag.pending) return
         clearTimeout(pendingHideTimeout)
@@ -1756,8 +1771,8 @@
                  oncontextmenu={pending ? (e) => handleTabContextMenu(e, item.tabGroupId ? { ...item, type: 'tabgroup' } : item.tabs[0], 0, item) : undefined}>
                 <button class="closed-tab-item" data-tab-id={item.tabs[0].id} data-archived-id={item.id}
                         aria-label={pending ? `${resumeLabel} ${item.title}` : undefined}
-                        onmousedown={pending ? (e) => { if (e.button === 0) restoreArchivedItem(item, true) } : undefined}
-                        onclick={(e) => { if (!pending || e.detail === 0) restoreArchivedItem(item, pending) }}
+                        onmousedown={(e) => { if (e.button === 0) restoreArchivedItem(item, pending) }}
+                        onclick={(e) => { if (e.detail === 0) restoreArchivedItem(item, pending) }}
                         onkeydown={pending ? (e) => {
                             if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
                                 e.preventDefault()
@@ -2315,8 +2330,19 @@
                                                         oncontextmenu={(e) => handleTabContextMenu(e, { ...item, type: 'tabgroup', spaceId }, i)} role="group" aria-label={item.title}>
                                                         <button class="tab-group-main"
                                                             aria-label={item.title}
-                                                            onmousedown={(e) => { if (e.button === 0) { startTabDrag(item.tabs[0].id, e.currentTarget.closest('.tab-group-wrapper'), 'sidebar', spaceId, e, false, null, 'group') } }}
-                                                            onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred())) { activateTab(activationTab.id, spaceId, expansionId) } }}
+                                                            onmousedown={(e) => {
+                                                                if (e.button === 0) {
+                                                                    const wasActive = activationTab.id === data.spaceMeta.activeTabId
+                                                                    startTabDrag(item.tabs[0].id, e.currentTarget.closest('.tab-group-wrapper'), 'sidebar', spaceId, e, wasActive, null, 'group')
+                                                                    if (!wasActive && !multiSpaceMode && !tabSearchQuery) {
+                                                                        const tabId = activationTab.id
+                                                                        setActivateRafId(setTimeout(() => {
+                                                                            if (!didDragOccurred() && data.spaceMeta.activeTabId !== tabId) activateTab(tabId, spaceId, expansionId)
+                                                                        }, 150))
+                                                                    }
+                                                                }
+                                                            }}
+                                                            onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred() && (tabSearchQuery || multiSpaceMode || tabDrag.wasAlreadyActive))) { activateTab(activationTab.id, spaceId, expansionId) } }}
                                                             ondblclick={(e) => { if (!tabSearchQuery && e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(activationTab.id); handleTabGroupToggle(expansionId, expanded) } }}>
                                                             <TabGroupPreview group={{ ...item, tabs: sidebarGroupTabs }} groupId={expansionId} activeTabId={activationTab.id} preview={groupPreview} active={active || spaceActive} disabled={tabDrag.active || tabDrag.pending} />
                                                         </button>
@@ -2420,19 +2446,28 @@
             <div class="closed-tabs-section"
                  onmouseenter={handleClosedTabsMouseEnter}
                  onmouseleave={handleClosedTabsMouseLeave}
+                 onfocusin={handleClosedTabsMouseEnter}
+                 onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) handleClosedTabsMouseLeave() }}
                  role="region"
                  aria-label="Recently closed tabs">
                 <button class="closed-tabs-header"
                         onmouseenter={() => { if (!tabDrag.active && !tabDrag.pending) closedTabsHeaderHovered = true }}
                         onmouseleave={() => { closedTabsHeaderHovered = false }}
-                        onclick={() => { data.clearClosedTabs(); handleClosedTabsMouseLeave() }}
-                        aria-label="Clear all recently closed tabs">
-                    <span class="closed-tabs-title">{closedTabsHeaderHovered ? 'Clear All' : 'Recently Closed'}</span>
-                    <span class="closed-tabs-count">{closedItems.length}</span>
+                        onclick={clearVisibleClosedTabs}
+                        aria-label={showAllClosedTabs ? 'Clear all recently closed tabs' : 'Clear recently closed tabs in this space'}>
+                    <span class="closed-tabs-title">{closedTabsHeaderHovered ? (showAllClosedTabs ? 'Clear All' : 'Clear This Space') : 'Recently Closed'}</span>
+                    <span class="closed-tabs-count">{visibleClosedItems.length}</span>
                 </button>
-                <div class="closed-tabs-content" class:expanded={closedTabsHovered}>
+                <div class="closed-tabs-content" class:expanded={closedTabsHovered} inert={!closedTabsHovered}>
                     <div class="closed-tabs-list">
-                        {@render archivedRows(closedItems)}
+                        {@render archivedRows(visibleClosedItems)}
+                        {#if !showAllClosedTabs && otherClosedItemsCount > 0}
+                            <button class="closed-tab-item closed-tabs-more" type="button"
+                                    onmousedown={(e) => { if (e.button === 0) showAllClosedTabs = true }}
+                                    onclick={(e) => { if (e.detail === 0) showAllClosedTabs = true }}>
+                                <span class="tab-title">{otherClosedItemsCount} more in all spaces</span>
+                            </button>
+                        {/if}
                     </div>
                 </div>
             </div>
