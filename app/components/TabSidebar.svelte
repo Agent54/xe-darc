@@ -1413,7 +1413,7 @@
 
     function showSidebarHovercard(target) {
         if (tabDrag.active || isHorizontalScrolling || !target.element.isConnected) return
-        hovercardAnchor = target.element.closest('.pending-tab-row') ||
+        hovercardAnchor = target.element.closest('.closed-tab-row') ||
             (target.group && !target.group.archived ? target.element.closest('.tab-group-wrapper') : target.element)
         hovercardHistoryBeside = canFitSidebarHovercardHistory(hovercardAnchor.getBoundingClientRect(), window.innerWidth)
         hovercardPosition = getSidebarHovercardPosition(
@@ -4610,9 +4610,22 @@
     }
     
     /* Recently Closed Tabs */
-    .closed-tab-row { display: flex; align-items: center; border-radius: 12px; }
-    .closed-tab-row .closed-tab-item { flex: 1; min-width: 0; }
-    .closed-tab-row:focus-within, .closed-tab-row:hover { background: rgba(255, 255, 255, 0.05); }
+    .closed-tab-row {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+        min-width: 0;
+        height: 44px;
+        padding-right: 4px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        box-sizing: border-box;
+        transition: background-color 150ms ease, border-color 150ms ease;
+    }
+    .closed-tab-row:focus-within, .closed-tab-row:hover {
+        background-color: var(--tab-hover-background);
+        border-color: var(--tab-hover-border);
+    }
     .closed-tab-row button:focus-visible { outline: 1px solid #a3a3a3; outline-offset: -2px; }
     .closed-tabs-section.pending-tabs-section {
         position: relative;
@@ -4642,6 +4655,8 @@
     .pending-tab-resume {
         display: grid;
         place-items: center;
+        flex-shrink: 0;
+        box-sizing: border-box;
         width: 22px;
         height: 22px;
         padding: 3px;
@@ -4722,7 +4737,7 @@
     
     .closed-tabs-content {
         position: absolute;
-        bottom: 100%;
+        bottom: calc(100% - 8px);
         left: 0;
         right: 0;
         background: rgba(0, 0, 0, 0.95);
@@ -4733,8 +4748,7 @@
         box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.5), 0 -8px 28px rgba(0, 0, 0, 0.65);
         opacity: 0;
         visibility: hidden;
-        transform: translateY(10px);
-        transition: opacity 200ms ease, visibility 200ms ease, transform 200ms ease;
+        transition: opacity 200ms ease, visibility 200ms ease;
         pointer-events: none;
         max-height: 400px;
         overflow: hidden;
@@ -4746,9 +4760,7 @@
     .closed-tabs-content.expanded {
         opacity: 1;
         visibility: visible;
-        transform: translateY(8px);
         pointer-events: auto;
-        transition: opacity 200ms ease, visibility 200ms ease, transform 200ms ease;
     }
     
     .closed-tabs-list {
@@ -4788,20 +4800,16 @@
         border-radius: 12px;
         background: transparent;
         cursor: pointer;
-        transition: all 150ms ease;
-        border: 1px solid transparent;
-        height: 44px;
-        flex-shrink: 0;
-        width: 100%;
+        border: none;
+        height: 100%;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
         text-align: left;
         margin: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
         -webkit-font-smoothing: subpixel-antialiased;
         text-rendering: optimizeLegibility;
-    }
-    
-    .closed-tab-item:hover {
-        background: rgba(255, 255, 255, 0.1);
     }
     
     .closed-tab-item :global(.favicon-wrapper) {
@@ -4844,47 +4852,41 @@
         color: rgba(255, 255, 255, 0.3);
         cursor: pointer;
         font-size: 18px;
-        padding: 0;
+        padding: 3px;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 0;
-        height: 20px;
+        width: 22px;
+        height: 22px;
+        box-sizing: border-box;
         border-radius: 4px;
         opacity: 0;
-        margin-right: 8px;
         flex-shrink: 0;
         overflow: hidden;
         line-height: 1;
-        max-width: 28px;
     }
+
+    .closed-tab-remove svg { width: 16px; height: 16px; }
 
     .closed-tab-row:hover .closed-tab-remove,
     .closed-tab-row:focus-within .closed-tab-remove {
         opacity: 1;
-        width: 25px;
-        padding: 0 4px;
-    }
-
-    .pending-tab-row .closed-tab-remove {
-        width: 22px;
-        padding: 0 4px;
-        margin-right: 4px;
     }
 
     .closed-tab-remove:hover {
         color: rgba(255, 255, 255, 0.9);
+        background: #ffffff14;
     }
 
-    .closed-tab-item:hover :global(.favicon-wrapper) {
+    .closed-tab-row:hover :global(.favicon-wrapper) {
         opacity: 0.6;
     }
     
-    .closed-tab-item:hover .tab-title {
+    .closed-tab-row:hover .tab-title {
         color: rgba(255, 255, 255, 0.7);
     }
     
-    .closed-tab-item:hover .tab-space {
+    .closed-tab-row:hover .tab-space {
         color: rgba(255, 255, 255, 0.6);
     }
 

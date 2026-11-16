@@ -2,6 +2,34 @@ import assert from 'node:assert/strict'
 import { root, withSidebarFixture } from './sidebar-browser-fixture.js'
 
 await withSidebarFixture('pending-tabs', async ({ page }) => {
+    async function checkRowLayout(selector) {
+        const geometry = () => page.$eval(selector, row => {
+            const bounds = element => {
+                const { x, y, width, height } = element.getBoundingClientRect()
+                return { x, y, width, height }
+            }
+            return [row, ...row.children].map(bounds)
+        })
+        const before = await geometry()
+        await page.hover(`${selector} .closed-tab-item`)
+        assert.deepEqual(await geometry(), before, 'hovering a tab must not shift its row or controls')
+        await page.hover(`${selector} .closed-tab-remove`)
+        assert.deepEqual(await geometry(), before, 'moving onto close must not shift the row or controls')
+        await page.focus(`${selector} .closed-tab-remove`)
+        assert.deepEqual(await geometry(), before, 'keyboard focus must not shift the row or controls')
+        assert.deepEqual(await page.$eval(selector, row => {
+            const rect = row.getBoundingClientRect()
+            const close = row.querySelector('.closed-tab-remove')
+            const button = close.getBoundingClientRect()
+            return {
+                contained: button.left >= rect.left && button.right <= rect.right && button.top >= rect.top && button.bottom <= rect.bottom,
+                reachable: close.contains(document.elementFromPoint(button.x + button.width / 2, button.y + button.height / 2)),
+                transparent: getComputedStyle(row.querySelector('.closed-tab-item')).backgroundColor === 'rgba(0, 0, 0, 0)'
+            }
+        }), { contained: true, reachable: true, transparent: true }, `${selector}: close stays inside the full-row highlight and remains reachable`)
+        await page.focus(`${selector} .closed-tab-item`)
+    }
+
     async function clickMenu(label) {
         await page.waitForSelector('.context-menu')
         for (const button of await page.$$('.context-menu button')) {
@@ -26,6 +54,8 @@ await withSidebarFixture('pending-tabs', async ({ page }) => {
     assert.equal(await page.$eval(countdown, time => time.parentElement.nextElementSibling.matches('.closed-tab-remove')), true)
     const initialRemaining = await page.$eval(countdown, el => el.textContent)
     await page.waitForFunction((selector, initial) => document.querySelector(selector).textContent !== initial, {}, countdown, initialRemaining)
+    await checkRowLayout(groupRow)
+    await checkRowLayout('.pending-tab-row[data-tab-id="waiting"]')
     await page.hover(countdown)
     await page.waitForSelector('body > [role="tooltip"]')
     assert.match(await page.$eval('body > [role="tooltip"]', el => el.textContent), /^Wake at \d{1,2}\.\d{1,2}\.\d{4}, \d{2}:\d{2}$/)
@@ -71,6 +101,10 @@ await withSidebarFixture('pending-tabs', async ({ page }) => {
     await page.hover('.closed-tabs-section:not(.pending-tabs-section) .closed-tabs-header')
     await page.waitForFunction(() => document.querySelector('.closed-tabs-section:not(.pending-tabs-section) .closed-tabs-content').classList.contains('expanded'))
     assert.equal(await page.$$eval('.closed-tabs-section:not(.pending-tabs-section) .closed-tab-row', rows => rows.length), 4)
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.closed-tabs-section:not(.pending-tabs-section) .closed-tabs-content')).opacity === '1')
+    await page.screenshot({ path: `${root}.cache/closed-tabs-menu.png` })
+    await checkRowLayout('.closed-tab-row[data-tab-id="closed-one"]')
+    await checkRowLayout('.closed-tab-row[data-tab-id="closed-group-one"]')
     await page.evaluate(() => window.flushSync(() => {
         const tab = { ...window.data.docs['closed-one'], id: 'other-closed', spaceId: 'other' }
         window.data.spaceMeta.closedTabs.push(tab)
