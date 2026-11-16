@@ -153,29 +153,27 @@
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
-		transition: all 0.1s ease;
+		transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease;
 		padding: 0;
 		backdrop-filter: blur(4px);
 		border: 1px solid transparent;
 	}
 
 	.sidebar-nav-button:hover {
-		background: rgba(255, 255, 255, 0.12);
+		background: var(--tab-hover-background);
 		color: rgba(255, 255, 255, 0.9);
-		transform: scale(1.05);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-	}
-
-	.sidebar-nav-button:active {
-		transform: scale(0.95);
-		transition: transform 0.1s ease;
+		border-color: var(--tab-hover-border);
 	}
 
 	.sidebar-nav-button.active {
-		background: rgba(255, 255, 255, 0.15);
+		background: var(--tab-active-background);
 		color: rgba(255, 255, 255, 0.9);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-color: var(--tab-active-border);
+	}
+
+	.sidebar-nav-button.active:hover {
+		background: var(--tab-active-hover-background);
+		border-color: var(--tab-active-hover-border);
 	}
 
 	.close-button {
