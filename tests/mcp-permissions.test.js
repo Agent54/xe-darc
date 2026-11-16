@@ -3,7 +3,7 @@ import { createPermissionStore, getPendingPermissionRequests, permissionTargetKe
 import { createMcpBrowserExecutor } from '../app/lib/mcp-browser-tools.js'
 import { getTabGroups } from '../app/lib/tab-groups.js'
 
-export async function mcpFixture({ activity } = {}) {
+export async function mcpFixture({ activity, onDenied } = {}) {
     const records = new Map()
     const permissions = {}, rules = {}, state = { status: 'loading', error: null }
     const db = {
@@ -11,7 +11,7 @@ export async function mcpFixture({ activity } = {}) {
         async get(id) { if (!records.has(id) || records.get(id)._deleted) { throw { status: 404 } }; return structuredClone(records.get(id)) },
         async bulkDocs() { return [] }
     }
-    const store = createPermissionStore({ db, permissions, rules, state, instanceId: 'instance', getWindowId: () => 'window', getContext: () => null,
+    const store = createPermissionStore({ db, permissions, rules, state, onDenied, instanceId: 'instance', getWindowId: () => 'window', getContext: () => null,
         putDocument: async doc => { const rev = `${Number.parseInt(records.get(doc._id)?._rev || '0') + 1}-test`; records.set(doc._id, { ...doc, _rev: rev }); return { rev } } })
     await store.ready
     const docs = {

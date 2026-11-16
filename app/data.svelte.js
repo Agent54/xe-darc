@@ -318,6 +318,10 @@ const permissionStore = createPermissionStore({
         return { url: frame?.committedUrl || tab?.url, partition: tab?.partition || 'persist:myapp', frame: frame?.frame }
     },
     onDenied: (tabId, context) => {
+        if (context?.subject?.kind === 'mcp') {
+            ledIndicators.blockedRequest = Date.now()
+            return
+        }
         const frame = frames[tabId]
         if (!frame?.frame || frame.frame !== context?.frame || (frame.committedUrl || docs[tabId]?.url) !== context.url) {
             return
