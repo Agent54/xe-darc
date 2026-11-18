@@ -3,7 +3,7 @@ lanes_project_id: 2
 lanes_treat_as_stories: lines
 ---
 
-# Intro
+Intro
 This is a todo list that acts mostly as an append only file with just occasional cleanup of tasks as they pop up, so items appearing does not mean they are not already done.
 Items appear potentially multiple times, if they are brought up by users or devs own usecases or requirements. If the item is still scrolled into view instead of duplicate entries the item is usally append an excalmation mark.
 Items can be pre-emphasized with a number of exclamation marks depending on importance for features or excitement in case of research/ exploration tasks, so they dont alwasy correspond to importance and need to be considered in context.
@@ -848,8 +848,8 @@ abandon-unreachable-commits = false
 fetch = ["sync", "origin"]
 
 
-# Cloudflare AI Gateway https://developers.cloudflare.com/ai-gateway/
-# GATEWAY_BASE_URL=https://gateway.ai.cloudflare.com/v1/..
+Cloudflare AI Gateway https://developers.cloudflare.com/ai-gateway/
+GATEWAY_BASE_URL=https://gateway.ai.cloudflare.com/v1/..
 
 
 inactive menu items too bright/ too hard to discern
@@ -3413,4 +3413,51 @@ value: the user agent that is on your side
 take unannounced laptop away after seeing the page or product and ask how they feel and what the product is about
 
 airfoil agency
+
+replace mac native launcher and factor out app-manager (show app icon in dock?)
+
+bup tab to top feature
+
+startpage per space
+
+switch data container per space and open space setup menu on new space create
+
+checkout tracking and long running watch mode docker support in forgejo!
+
+feedback menu without friction
+
+payback system for bug reports and telemetry supply
+
+Air Traffic Control
+
+hud video pip
+
+double click to rename?
+
+activity view gloal/current space
+
+
+new tab in group context menu for tabgroup
+
+tabgroup resize scrollglitch
+
+picture in picture suport
+
+replace ad hoc test compile and puppeteer with xe cdp based real setup!
+
+launcher detect crash and close crashed window reaopen on right desktop and screen!
+
+test:  esc dnd abort, escape menu close, cmd t, cmd long t,  cmd l, zoom reset, cmd w, grid overview gesture, ctl alt, from frame and shell,  cmd r, dismiss hovercards scroll + esc, 
+
+sidebar width tripple width sidebar modes for content area reveal on hover or click togle
+
+point and change message feature cdp
+
+fix spacial memory by adjusting zoom without breaks and subboxes like ff tab candy
+
+
+
+agent grouping as suggestoins
+
+reject eval feature for tab eg closing tab for comp research. show previous visits and other open tabs in context everywhere, duploicates
 

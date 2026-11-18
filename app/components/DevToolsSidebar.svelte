@@ -1,5 +1,8 @@
 <script>
+    import { getTabTitle } from '../lib/tab-title.js'
+    import { onMount, tick } from 'svelte'
     import RightSidebar from './RightSidebar.svelte'
+    import { cdpFetch } from '../lib/cdp.js'
     
     let {
         onClose,
@@ -20,36 +23,51 @@
     let error = $state(null)
     let initialLoad = $state(true)
     let expandedItems = $state(new Set())
+    let contentElement = $state(null)
+    let refreshController = null
+    let destroyed = false
     
-    // Fetch dev tools data on mount
     async function fetchDevToolsData() {
+        // Manual refresh and polling share one request so stale responses cannot win.
+        if (destroyed || refreshController) return
+        const controller = new AbortController()
+        refreshController = controller
+
         try {
             if (initialLoad) {
                 loading = true
                 error = null
             }
             
-            const response = await fetch('/devtools-api/json/list')
+            const response = await cdpFetch('/json/list', { signal: controller.signal })
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`)
             }
             const newData = await response.json()
+            if (controller.signal.aborted) return
             
-            // Update existing items or add new ones without full re-render
+            // Keep the keyed cards and expansion state while updating their data.
+            const scrollContainer = contentElement?.parentElement
+            const scrollTop = scrollContainer?.scrollTop
+            const scrollLeft = scrollContainer?.scrollLeft
             updateDevToolsData(newData)
+            error = null
+            await tick()
             
-            if (initialLoad) {
-                error = null
+            if (!controller.signal.aborted && scrollContainer) {
+                scrollContainer.scrollTop = scrollTop
+                scrollContainer.scrollLeft = scrollLeft
             }
         } catch (err) {
+            if (controller.signal.aborted) return
             if (initialLoad) {
                 error = err.message
-                console.error('Failed to fetch dev tools data:', err)
             } else {
                 // Don't show errors on background updates, just log them
                 console.warn('Background dev tools update failed:', err)
             }
         } finally {
+            refreshController = null
             if (initialLoad) {
                 loading = false
                 initialLoad = false
@@ -97,13 +115,12 @@
     
     function openDevTools(item) {
         if (item.devtoolsFrontendUrl && data && currentSpaceId) {
-            // Replace the remote DevTools frontend with local one while keeping WebSocket params
-            const originalUrl = new URL(item.devtoolsFrontendUrl)
-            const localDevToolsUrl = `https://localhost:5194/devtools-api/devtools/inspector.html?wss=localhost:5194/devtools-api/devtools/${originalUrl.search.split('/devtools/')[1]}`
+            // The API supplies the matching frontend and the launcher's debugger URL.
+            const localDevToolsUrl = item.devtoolsFrontendUrl
             
             data.newTab(currentSpaceId, { 
                 url: localDevToolsUrl, 
-                title: `DevTools - ${item.title || 'Untitled'}`,
+                title: `DevTools - ${getTabTitle(item)}`,
                 shouldFocus: true 
             })
         }
@@ -111,7 +128,7 @@
     
     function closeFrame(item) {
         if (item.id) {
-            fetch(`/devtools-api/json/close/${item.id}`)
+            cdpFetch(`/json/close/${item.id}`)
                 .then(() => {
                     // Refresh the data after closing
                     fetchDevToolsData()
@@ -122,7 +139,7 @@
     
     function focusFrame(item) {
         if (item.id) {
-            fetch(`/devtools-api/json/activate/${item.id}`)
+            cdpFetch(`/json/activate/${item.id}`)
                 .catch(err => console.warn('Failed to focus frame:', err))
         }
     }
@@ -168,13 +185,21 @@
         }
     }
     
-    // Fetch data on component mount
-    fetchDevToolsData()
+    onMount(() => {
+        fetchDevToolsData()
+        const interval = setInterval(fetchDevToolsData, 5000)
+
+        return () => {
+            destroyed = true
+            clearInterval(interval)
+            refreshController?.abort()
+        }
+    })
 </script>
 
-<RightSidebar title="Dev Tools" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
+<RightSidebar title="Dev Tools" padding={false} {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
-        <div class="devtools-content">
+        <div class="devtools-content" bind:this={contentElement}>
             <div class="devtools-header">
                 <div class="section-title"></div>
                 
@@ -194,15 +219,12 @@
                     <span>Loading dev tools...</span>
                 </div>
             {:else if error}
-                <div class="error-state">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-                    </svg>
+                <div class="connection-state" role="status">
                     <div>
-                        <div class="error-title">Connection Failed</div>
-                        <div class="error-message">{error}</div>
+                        <div class="connection-title">Dev Tools unavailable</div>
+                        <div class="connection-message">Dev Tools can’t connect to XE Launcher. Start or restart XE Launcher, then try again.</div>
                         <button class="retry-button" onmousedown={fetchDevToolsData}>
-                            Retry Connection
+                            Try again
                         </button>
                     </div>
                 </div>
@@ -224,7 +246,7 @@
     {/snippet}
     
     {#snippet hierarchyItem(item, depth)}
-        <div class="devtools-item" class:root-item={depth === 0} class:child-item={depth > 0} style="margin-left: {depth * 20}px">
+        <div class="devtools-item" class:root-item={depth === 0} class:child-item={depth > 0} style="margin-left: {depth * 8}px">
             <div class="item-header" 
                  class:clickable={item.children.length > 0} 
                  role={item.children.length > 0 ? "button" : undefined}
@@ -251,7 +273,7 @@
                     {/if}
                 </div>
                 <div class="item-info">
-                    <div class="item-title">{item.title || 'Untitled'}</div>
+                    <div class="item-title">{getTabTitle(item)}</div>
                     <div class="item-details">
                         {#if item.type !== 'other'}
                             <span class="item-type" style="color: {getTypeColor(item.type)}">{item.type}</span>
@@ -268,7 +290,7 @@
                 <div class="item-actions">
                     <button class="action-button" 
                             title="Focus Frame" 
-                            aria-label="Focus frame {item.title || 'Untitled'}"
+                            aria-label="Focus frame {getTabTitle(item)}"
                             onmousedown={(e) => { e.stopPropagation(); focusFrame(item) }}>
                         <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
@@ -278,7 +300,7 @@
                     {#if item.devtoolsFrontendUrl}
                         <button class="action-button" 
                                 title="Open DevTools" 
-                                aria-label="Open DevTools for {item.title || 'Untitled'}"
+                                aria-label="Open DevTools for {getTabTitle(item)}"
                                 onmousedown={(e) => { e.stopPropagation(); openDevTools(item) }}>
                             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
@@ -287,7 +309,7 @@
                     {/if}
                     <button class="action-button close-button" 
                             title="Close Frame" 
-                            aria-label="Close frame {item.title || 'Untitled'}"
+                            aria-label="Close frame {getTabTitle(item)}"
                             onmousedown={(e) => { e.stopPropagation(); closeFrame(item) }}>
                         <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -308,7 +330,7 @@
 <style>
     .devtools-content {
         color: #fff;
-        padding-top: 20px;
+        padding: 20px 8px;
     }
     
     .devtools-header {
@@ -337,7 +359,7 @@
         color: rgba(255, 255, 255, 0.9);
     }
     
-    .loading-state, .error-state, .empty-state {
+    .loading-state, .connection-state, .empty-state {
         display: flex;
         align-items: center;
         gap: 12px;
@@ -360,22 +382,18 @@
         100% { transform: rotate(360deg); }
     }
     
-    .error-state {
+    .connection-state {
         flex-direction: column;
         align-items: flex-start;
         gap: 8px;
     }
     
-    .error-state > svg {
-        color: #ef4444;
-    }
-    
-    .error-title {
+    .connection-title {
         font-weight: 500;
-        color: #ef4444;
     }
     
-    .error-message {
+    .connection-message {
+        margin-top: 4px;
         font-size: 12px;
         color: rgba(255, 255, 255, 0.5);
     }

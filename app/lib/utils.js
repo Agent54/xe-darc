@@ -2,9 +2,20 @@ export function throttle (func, window = 100, { leading = true } = {}) {
   let lastCall = 0
   let timeoutId = null
   let pendingArgs = null
+  let pendingThis = null
   let hasPendingCall = false
 
-  return function (...args) {
+  function invokePending () {
+    if (!hasPendingCall) return
+
+    lastCall = Date.now()
+    func.apply(pendingThis, pendingArgs)
+    hasPendingCall = false
+    pendingArgs = null
+    pendingThis = null
+  }
+
+  function throttled (...args) {
     // console.log('throttle', {leading, window})
     const now = Date.now()
     
@@ -19,21 +30,83 @@ export function throttle (func, window = 100, { leading = true } = {}) {
     
     // Store the latest call arguments
     pendingArgs = args
+    pendingThis = this
     hasPendingCall = true
     
     // If no timeout is set, schedule the trailing call
     if (!timeoutId) {
       timeoutId = setTimeout(() => {
-        if (hasPendingCall) {
-          lastCall = Date.now()
-          func.apply(this, pendingArgs)
-        }
+        invokePending()
         timeoutId = null
-        hasPendingCall = false
-        pendingArgs = null
       }, window - (now - lastCall))
     }
   }
+
+  throttled.flush = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    invokePending()
+  }
+
+  throttled.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    hasPendingCall = false
+    pendingArgs = null
+    pendingThis = null
+  }
+
+  return throttled
+}
+
+export function debounce (func, wait = 100) {
+  let timeoutId = null
+  let pendingArgs = null
+  let pendingThis = null
+
+  function invokePending () {
+    if (!pendingArgs) return
+
+    const args = pendingArgs
+    const context = pendingThis
+    pendingArgs = null
+    pendingThis = null
+    func.apply(context, args)
+  }
+
+  function debounced (...args) {
+    pendingArgs = args
+    pendingThis = this
+
+    if (timeoutId) clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => {
+      timeoutId = null
+      invokePending()
+    }, wait)
+  }
+
+  debounced.flush = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    invokePending()
+  }
+
+  debounced.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    pendingArgs = null
+    pendingThis = null
+  }
+
+  return debounced
 }
 
 export function origin(url) {
@@ -44,6 +117,46 @@ export function origin(url) {
     return new URL(url).origin
   } catch (error) {   
     return 'null'
+  }
+}
+
+// Return a navigable URL, or null when omnibar input should be searched.
+export function detectUrl(input) {
+  const value = input.trim()
+  if (!value) return null
+
+  const authority = value.split(/[/?#]/, 1)[0]
+  const bareIPv6 = !authority.startsWith('[') && authority.split(':').length > 2
+  const scheme = /^([a-z][a-z\d+.-]*):/i.exec(value)
+
+  try {
+    // A dotted host followed by a port and bare IPv6 are not URL schemes.
+    if (scheme && !scheme[1].includes('.') && scheme[1].toLowerCase() !== 'localhost' && !bareIPv6) {
+      return new URL(value).href
+    }
+
+    if (/[\s@\\]/u.test(authority)) return null
+    const address = bareIPv6 ? `[${authority}]${value.slice(authority.length)}` : value
+    const url = new URL(`http://${address}`)
+    const hostname = url.hostname.replace(/\.$/, '')
+
+    // URL validates bracketed IPv6, including compressed and IPv4-mapped forms.
+    if (hostname.startsWith('[')) return url.href
+
+    if (/^[\d.]+$/.test(hostname)) {
+      const host = authority.replace(/:\d+$/, '')
+      const octets = host.split('.')
+      return octets.length === 4 && octets.every(octet => /^(0|[1-9]\d{0,2})$/.test(octet) && Number(octet) <= 255)
+        ? url.href : null
+    }
+
+    const labels = hostname.split('.')
+    const validDomain = labels.length > 1 && hostname.length <= 253
+      && labels.every(label => /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i.test(label))
+      && /^[a-z][a-z\d-]+$/i.test(labels.at(-1))
+    return hostname === 'localhost' || validDomain ? url.href : null
+  } catch {
+    return null
   }
 }
 

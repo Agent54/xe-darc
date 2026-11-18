@@ -1,27 +1,13 @@
 {
-  "name": "my-chat-agent",
+  "name": "darc-services",
   "main": "workerd/worker.ts",
   "compatibility_date": "2025-05-07",
   "compatibility_flags": [
     "nodejs_compat",
     "nodejs_compat_populate_process_env"
   ],
-  // "assets": {
-  //   "directory": "public"
-  // },
-  // "route": "*/agents",
   "durable_objects": {
-    "bindings": [
-      // {
-      //   "name": "Chat",
-      //   "class_name": "Chat"
-      // },
-    ],
+    "bindings": [{ "name": "MCP_CONNECTIONS", "class_name": "McpConnection" }]
   },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["Chat"]
-    }
-  ]
+  "migrations": [{ "tag": "mcp-v1", "new_sqlite_classes": ["McpConnection"] }]
 }
