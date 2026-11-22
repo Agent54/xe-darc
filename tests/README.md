@@ -36,6 +36,8 @@ The former `favicon-browser.js` scenarios now have independent entry points:
 | `tab-title-browser.js` | Shared URL fallback, reactive titles and internal New Tab titles across tab surfaces | |
 | `sidebar-hovercards-browser.js` | Hovercard gaps, responsive history, screenshots and metadata | |
 | `sidebar-groups-browser.js` | Group activation previews, menus and resizing | |
+| `sidebar-activation-browser.js` | Immediate mouseup activation, held presses, drag/Escape cancellation and keyboard activation | |
+| `archived-tabs-menu-browser.js` | Shared pending/closed menu gestures, delayed closing, global history sections, action spacing and loading states | |
 
 Use the independent entry point in place of its former flag. Shared setup and
 cleanup live in `sidebar-browser-fixture.js`.

@@ -122,6 +122,9 @@ const modules = {
         data.getTabLastActiveAt = id => data.docs[id]?.lastActiveAt || 0
         data.getAttachmentUrl = async src => src
         data.removeClosedTab = id => { data.spaceMeta.closedTabs = data.spaceMeta.closedTabs.filter(tab => tab.id !== id) }
+        data.refreshClosedTabs = async () => {}
+        data.refreshPendingTabs = async () => {}
+        data.clearClosedTabs = () => { data.spaceMeta.closedTabs = [] }
         export default data
     `, { generate: 'client' }).js.code,
     empty: 'export default function () {}',

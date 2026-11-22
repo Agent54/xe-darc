@@ -43,6 +43,8 @@
     import TabGroupPreview from './TabGroupPreview.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
     import NewTabMenu from './NewTabMenu.svelte'
+    import ArchivedTabsMenu from './ArchivedTabsMenu.svelte'
+    import { sidebarMenuCloseDelay } from '../lib/sidebar-menu-timing.js'
     import { observeScrollEdges } from '../lib/scroll-edges.js'
     import { pinnedSectionScroll } from '../lib/pinned-section-scroll.js'
     import { scrollTension, stretchScrollTension, releaseScrollTension } from '../lib/scroll-tension.js'
@@ -61,21 +63,11 @@
     let openMenuId = $state(null)
     let newSpaceMenuOpen = $state(false)
     let closedTabsHovered = $state(false)
-    let closedTabsHeaderHovered = $state(false)
-    let showAllClosedTabs = $state(false)
-    let closedTabsHideTimeout = null
     let pendingHoveredSpace = $state(null)
-    let pendingHideTimeout = null
     let pendingNow = $state(Date.now())
     const closedItems = $derived(getArchivedTabItems(data.spaceMeta.closedTabs, data.docs))
     const spaceClosedItems = $derived(closedItems.filter(item => item.spaceId === data.spaceMeta.activeSpace))
-    const visibleClosedItems = $derived(showAllClosedTabs ? closedItems : spaceClosedItems)
-    const otherClosedItemsCount = $derived(closedItems.length - spaceClosedItems.length)
-    $effect(() => {
-        data.spaceMeta.activeSpace
-        closedTabsHovered
-        showAllClosedTabs = false
-    })
+    const otherClosedItems = $derived(closedItems.filter(item => item.spaceId !== data.spaceMeta.activeSpace))
     const pendingItems = $derived(getArchivedTabItems(data.spaceMeta.pendingTabs, data.docs))
     const visibleSpaceOrder = $derived(data.spaceMeta.spaceOrder.filter(spaceId => {
         const space = data.spaces[spaceId]
@@ -336,13 +328,9 @@
             renamingSpaceId = null
             urlBarExpanded = false
             closedTabsHovered = false
-            closedTabsHeaderHovered = false
             pendingHoveredSpace = null
-            clearTimeout(pendingHideTimeout)
             clearTimeout(menuCloseTimeout)
-            clearTimeout(closedTabsHideTimeout)
             menuCloseTimeout = null
-            closedTabsHideTimeout = null
             groupPreview.dismiss()
         }
         window.addEventListener('darc-dismiss-hovercards', dismissHovercards)
@@ -439,7 +427,7 @@
             menuCloseTimeout = setTimeout(() => {
                 newSpaceMenuOpen = false
                 openMenuId = null
-            }, 340)
+            }, sidebarMenuCloseDelay)
         }
     }
     
@@ -926,6 +914,12 @@
         }   
     }
 
+    function finishTabPress(event, tabId, spaceId, expansionId = null) {
+        if (event.button !== 0 || !tabDrag.pending || didDragOccurred() || tabDrag.wasAlreadyActive || multiSpaceMode || tabSearchQuery) return
+        setActivateRafId(null)
+        if (data.spaceMeta.activeTabId !== tabId) activateTab(tabId, spaceId, expansionId)
+    }
+
     function startPinDrag(event, tab, spaceId) {
         if (event.button !== 0) {
             return
@@ -1015,9 +1009,6 @@
     }
     
     function handleClickOutside(event) {
-        if (event.key === 'Escape' || (!event.target.closest('.pending-tabs-section') && !event.target.closest('.tab-hovercard-sidebar'))) {
-            pendingHoveredSpace = null
-        }
         if (event.key === 'Escape' || !event.target.closest('.new-tab-button')) newTabMenuSpaceId = null
         if (openMenuId !== null && !event.target.closest('.space-menu')) {
             openMenuId = null
@@ -1066,36 +1057,6 @@
         }
     }
     
-    function handleClosedTabsMouseEnter() {
-        if (tabDrag.active || tabDrag.pending) return
-        if (closedTabsHideTimeout) {
-            clearTimeout(closedTabsHideTimeout)
-            closedTabsHideTimeout = null
-        }
-        closedTabsHovered = true
-    }
-
-    function clearVisibleClosedTabs() {
-        if (showAllClosedTabs) data.clearClosedTabs()
-        else for (const item of spaceClosedItems) for (const tab of item.tabs) data.removeClosedTab(tab.id)
-        handleClosedTabsMouseLeave()
-    }
-
-    function showPending(spaceId) {
-        if (tabDrag.active || tabDrag.pending) return
-        clearTimeout(pendingHideTimeout)
-        pendingHoveredSpace = spaceId
-    }
-
-    function hidePending() {
-        clearTimeout(pendingHideTimeout)
-        pendingHideTimeout = setTimeout(() => {
-            if (tabContextMenu.pendingItem) return
-            if (hoveredTab && (data.spaceMeta.pendingTabs || []).some(tab => tab.id === hoveredTab.id)) return
-            pendingHoveredSpace = null
-        }, 200)
-    }
-
     async function restoreArchivedItem(item, pending) {
         closeHovercard()
         if (pending) {
@@ -1126,20 +1087,6 @@
         } else {
             restoreArchivedItem(item, pending)
         }
-    }
-    
-    function handleClosedTabsMouseLeave() {
-        if (closedTabsHideTimeout) {
-            clearTimeout(closedTabsHideTimeout)
-            closedTabsHideTimeout = null
-        }
-        closedTabsHideTimeout = setTimeout(() => {
-            // Don't close if hovercard is open for a closed tab
-            if (hoveredTab && data.spaceMeta.closedTabs.some(t => t.id === hoveredTab.id)) {
-                return
-            }
-            closedTabsHovered = false
-        }, 200)
     }
     
     let lastScrolledTabId = $state(null)
@@ -1355,10 +1302,6 @@
     // Cleanup timeouts on component destroy
     $effect(() => {
         return () => {
-            clearTimeout(pendingHideTimeout)
-            if (closedTabsHideTimeout) {
-                clearTimeout(closedTabsHideTimeout)
-            }
             if (hoverTimeout) {
                 clearTimeout(hoverTimeout)
             }
@@ -1764,7 +1707,6 @@
         const trigger = tabContextMenu.trigger
         tabContextMenu = { visible: false, x: 0, y: 0, tab: null, index: null }
         if (event?.key === 'Escape') trigger?.focus()
-        if (trigger && !trigger.closest('.pending-tabs-section')?.matches(':hover, :focus-within')) hidePending()
     }
 
     async function handleCopyUrlClick() {
@@ -1794,7 +1736,7 @@
 
 </script>
 
-{#snippet archivedRows(items, pending = false, activateItem = null, notification = false)}
+{#snippet archivedRows(items, pending = false, activateItem = null, notification = false, showSpace = false)}
     {#each items as item (item.id)}
         {#if notification || item.tabs.some(tabMatchesSearch) || (tabSearchQuery && item.title.toLowerCase().includes(tabSearchQuery.toLowerCase()))}
             {@const wakeTimes = pending ? item.tabs.map(tab => tab.pending?.wakeAt).filter(Number.isFinite) : []}
@@ -1805,7 +1747,7 @@
                  onmouseenter={(e) => handleTabMouseEnter(item.tabs[0], e)}
                  onmouseleave={handleTabMouseLeave}
                  oncontextmenu={pending ? (e) => handleTabContextMenu(e, item.tabGroupId ? { ...item, type: 'tabgroup' } : item.tabs[0], 0, item) : undefined}>
-                <button class="closed-tab-item" data-tab-id={item.tabs[0].id} data-archived-id={item.id}
+                <button class="closed-tab-item" data-archive-action data-tab-id={item.tabs[0].id} data-archived-id={item.id}
                         aria-label={pending ? `${resumeLabel} ${item.title}` : undefined}
                         onmousedown={(e) => { if (e.button === 0) activateArchivedRow(item, pending, activateItem) }}
                         onclick={(e) => { if (e.detail === 0) activateArchivedRow(item, pending, activateItem) }}
@@ -1816,21 +1758,31 @@
                             }
                         } : undefined}>
                     {#if item.tabGroupId}
-                        <TabGroupPreview group={item} />
+                        <div class="tab-text">
+                            <TabGroupPreview group={item} />
+                            {#if showSpace}<span class="tab-space">{data.spaces[item.spaceId]?.name || 'Unknown Space'}</span>{/if}
+                        </div>
                         <span class="closed-tabs-count">{item.tabs.length}</span>
                     {:else}
                         <Favicon tab={item.tabs[0]} showButton={false} />
                         <div class="tab-text">
                             <span class="tab-title">{getTabTitle(data.docs[item.tabs[0].id] || item.tabs[0])}</span>
-                            {#if !pending || wakeAt === null}
+                            {#if showSpace || (pending && wakeAt === null)}
                                 <span class="tab-space">{pending ? 'Waiting for external action' : data.spaces[item.spaceId]?.name || 'Unknown Space'}</span>
                             {/if}
                         </div>
                     {/if}
                 </button>
+                {#if pending && wakeAt !== null}
+                    <Tooltip text={`${wakeTimes.some(time => time !== wakeAt) ? 'Next wake' : 'Wake'} at ${formatPendingDateTime(wakeAt)}`} position="right" delay={250}>
+                        <time class="pending-tab-time" datetime={new Date(wakeAt).toISOString()}>{formatPendingRemaining(wakeAt, pendingNow)}</time>
+                    </Tooltip>
+                {/if}
+                {#if !activateItem}
+                <div class="archived-row-actions">
                 {#if pending}
                     <Tooltip text={resumeLabel} position="right" delay={250}>
-                        <button class="pending-tab-resume" type="button" aria-label={`${resumeLabel} ${item.title}`}
+                        <button class="pending-tab-resume" data-archive-action type="button" aria-label={`${resumeLabel} ${item.title}`}
                                 onmousedown={(e) => { if (e.button === 0) restoreArchivedItem(item, true) }}
                                 onclick={(e) => { if (e.detail === 0) restoreArchivedItem(item, true) }}>
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1838,19 +1790,14 @@
                             </svg>
                         </button>
                     </Tooltip>
-                    {#if wakeAt !== null}
-                        <Tooltip text={`${wakeTimes.some(time => time !== wakeAt) ? 'Next wake' : 'Wake'} at ${formatPendingDateTime(wakeAt)}`} position="right" delay={250}>
-                            <time class="pending-tab-time" datetime={new Date(wakeAt).toISOString()}>{formatPendingRemaining(wakeAt, pendingNow)}</time>
-                        </Tooltip>
-                    {/if}
                 {/if}
-                {#if !activateItem}
-                    <button class="closed-tab-remove" type="button" aria-label={pending ? 'Close pending tabs' : 'Remove from recently closed'}
-                            title={pending ? 'Close pending tabs' : 'Remove from recently closed'}
-                            onclick={() => removeArchivedItem(item, pending)}
-                            use:closeButtonHistory={{ cardVisible: hoveredTab?.id === item.tabs[0].id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
-                    </button>
+                <button class="closed-tab-remove" data-archive-action data-keep-menu-open type="button" aria-label={pending ? 'Close pending tabs' : 'Remove from recently closed'}
+                        title={pending ? 'Close pending tabs' : 'Remove from recently closed'}
+                        onclick={() => removeArchivedItem(item, pending)}
+                        use:closeButtonHistory={{ cardVisible: hoveredTab?.id === item.tabs[0].id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+                </button>
+                </div>
                 {/if}
             </div>
         {/if}
@@ -1871,6 +1818,7 @@
 {/if}
 
 <div class="sidebar-box" 
+     style:--sidebar-menu-close-delay="{sidebarMenuCloseDelay}ms"
      class:hovered={isHovered || hoveredTab || urlBarExpanded || tabContextMenu.visible || headerMenuOpen || ((tabDrag.active || tabDrag.pending) && sidebarOpenedBeforeDrag)}
      class:visible={tabSidebarVisible}
      class:resizing={isResizingTabSidebar}
@@ -2327,10 +2275,13 @@
                                                                 const wasActive = tab.id === data.spaceMeta.activeTabId
                                                                 startTabDrag(tab.id, e.currentTarget.parentElement, 'sidebar', spaceId, e, wasActive)
                                                                 if (!wasActive && !multiSpaceMode && !tabSearchQuery) {
-                                                                    setActivateRafId(setTimeout(() => activateTab(tab.id, spaceId), 150))
+                                                                    setActivateRafId(setTimeout(() => {
+                                                                        if (!didDragOccurred() && data.spaceMeta.activeTabId !== tab.id) activateTab(tab.id, spaceId)
+                                                                    }, 150))
                                                                 }
                                                             }
                                                         }}
+                                                        onmouseup={(e) => finishTabPress(e, tab.id, spaceId, expansionId)}
                                                         onclick={(e) => {
                                                             if (e.detail === 0 || (e.button === 0 && !didDragOccurred() && (tabSearchQuery || multiSpaceMode || tabDrag.wasAlreadyActive))) {
                                                                 activateTab(tab.id, spaceId, expansionId)
@@ -2391,6 +2342,7 @@
                                                                     }
                                                                 }
                                                             }}
+                                                            onmouseup={(e) => finishTabPress(e, activationTab.id, spaceId, expansionId)}
                                                             onclick={(e) => { if (e.detail === 0 || (e.detail === 1 && e.button === 0 && !didDragOccurred() && (tabSearchQuery || multiSpaceMode || tabDrag.wasAlreadyActive))) { activateTab(activationTab.id, spaceId, expansionId) } }}
                                                             ondblclick={(e) => { if (!tabSearchQuery && e.button === 0 && !didDragOccurred()) { e.stopPropagation(); data.activateSpace(spaceId); data.activate(activationTab.id); handleTabGroupToggle(expansionId, expanded) } }}>
                                                             <TabGroupPreview group={{ ...item, tabs: sidebarGroupTabs }} groupId={expansionId} activeTabId={activationTab.id} preview={groupPreview} active={active || spaceActive} disabled={tabDrag.active || tabDrag.pending} />
@@ -2425,22 +2377,13 @@
                                     {/snippet}
                                 <div class="space-tabs-sections" onscroll={handleTabsListScroll} use:pinnedSectionScroll={!tabSearchQuery}>
                                     <div class="pinned-tabs-section">
-                                    {#if spacePending.length}
-                                        <div class="closed-tabs-section pending-tabs-section" role="region" aria-label="Pending tabs"
-                                             onmouseenter={() => showPending(spaceId)} onmouseleave={hidePending}
-                                             onfocusin={() => showPending(spaceId)}
-                                             onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) hidePending() }}
-                                             ondblclick={(e) => e.stopPropagation()}>
-                                            <button class="closed-tabs-header" type="button" aria-expanded={pendingHoveredSpace === spaceId}
-                                                    onmousedown={(e) => { if (e.button === 0) showPending(spaceId) }}
-                                                    onclick={(e) => { if (e.detail === 0) showPending(spaceId) }}>
-                                                <span class="closed-tabs-title">Pending</span>
-                                                <span class="closed-tabs-count">{spacePending.length}</span>
-                                            </button>
-                                            <div class="closed-tabs-content pending-tabs-content" class:expanded={pendingHoveredSpace === spaceId} inert={pendingHoveredSpace !== spaceId}>
-                                                <div class="closed-tabs-list">{@render archivedRows(spacePending, true)}</div>
-                                            </div>
-                                        </div>
+                                    {#if spacePending.length || pendingHoveredSpace === spaceId}
+                                        <ArchivedTabsMenu label="Pending" count={spacePending.length} pending
+                                            open={pendingHoveredSpace === spaceId} onOpenChange={(open) => { pendingHoveredSpace = open ? spaceId : pendingHoveredSpace === spaceId ? null : pendingHoveredSpace }}
+                                            onOpen={() => data.refreshPendingTabs()} disabled={tabDrag.active || tabDrag.pending}
+                                            keepOpen={!!tabContextMenu.pendingItem || !!(hoveredTab && spacePending.some(item => item.tabs.some(tab => tab.id === hoveredTab.id)))}>
+                                            {@render archivedRows(spacePending, true)}
+                                        </ArchivedTabsMenu>
                                     {/if}
                                     {#if sidebarPins.length}
                                     <div class="sidebar-pinned-tabs" data-pin-scope="sidebar" data-pin-layout="rows"
@@ -2491,36 +2434,27 @@
         </div>
         
         
-        {#if data.spaceMeta.closedTabs.length > 0}
-            <div class="closed-tabs-section"
-                 onmouseenter={handleClosedTabsMouseEnter}
-                 onmouseleave={handleClosedTabsMouseLeave}
-                 onfocusin={handleClosedTabsMouseEnter}
-                 onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) handleClosedTabsMouseLeave() }}
-                 role="region"
-                 aria-label="Recently closed tabs">
-                <button class="closed-tabs-header"
-                        onmouseenter={() => { if (!tabDrag.active && !tabDrag.pending) closedTabsHeaderHovered = true }}
-                        onmouseleave={() => { closedTabsHeaderHovered = false }}
-                        onclick={clearVisibleClosedTabs}
-                        aria-label={showAllClosedTabs ? 'Clear all recently closed tabs' : 'Clear recently closed tabs in this space'}>
-                    <span class="closed-tabs-title">{closedTabsHeaderHovered ? (showAllClosedTabs ? 'Clear All' : 'Clear This Space') : 'Recently Closed'}</span>
-                    <span class="closed-tabs-count">{visibleClosedItems.length}</span>
-                </button>
-                <div class="closed-tabs-content" class:expanded={closedTabsHovered} inert={!closedTabsHovered}>
-                    <div class="closed-tabs-list">
-                        {@render archivedRows(visibleClosedItems)}
-                        {#if !showAllClosedTabs && otherClosedItemsCount > 0}
-                            <button class="closed-tab-item closed-tabs-more" type="button"
-                                    onmousedown={(e) => { if (e.button === 0) showAllClosedTabs = true }}
-                                    onclick={(e) => { if (e.detail === 0) showAllClosedTabs = true }}>
-                                <span class="tab-title">{otherClosedItemsCount} more in all spaces</span>
-                            </button>
-                        {/if}
-                    </div>
-                </div>
-            </div>
-        {/if}
+        <ArchivedTabsMenu label="Recently Closed" count={closedItems.length} open={closedTabsHovered}
+            onOpenChange={(open) => { closedTabsHovered = open }} onOpen={() => data.refreshClosedTabs()}
+            disabled={tabDrag.active || tabDrag.pending}
+            keepOpen={!!(hoveredTab && data.spaceMeta.closedTabs.some(tab => tab.id === hoveredTab.id))}>
+            {#if spaceClosedItems.length}
+                <section class="archived-space-section" aria-label="Closed in this space">
+                    <h3 class="archived-section-title">This space</h3>
+                    {@render archivedRows(spaceClosedItems)}
+                </section>
+            {/if}
+            {#if otherClosedItems.length}
+                <section class="archived-space-section" aria-label="Closed in other spaces">
+                    <h3 class="archived-section-title">Other spaces</h3>
+                    {@render archivedRows(otherClosedItems, false, null, false, true)}
+                </section>
+            {/if}
+            {#if closedItems.length}
+                <button class="archived-clear-all" data-archive-action data-keep-menu-open type="button"
+                        onclick={() => { closeHovercard(); data.clearClosedTabs() }}>Clear all recently closed tabs</button>
+            {/if}
+        </ArchivedTabsMenu>
         
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="resize-handle resize-handle-right" 
@@ -2635,7 +2569,7 @@
         bottom: 9px;
         top: 9px;
         left: 0px;
-        transition: transform 190ms 340ms cubic-bezier(.78,-0.01,.34,1.04);
+        transition: transform 190ms var(--sidebar-menu-close-delay) cubic-bezier(.78,-0.01,.34,1.04);
 
         backface-visibility: hidden;
         padding-right: 9px;
@@ -3516,15 +3450,6 @@
     
     .sidebar-box.multi-space-mode .sidebar-content {
         overflow-x: auto;
-    }
-    
-    .sidebar-box.multi-space-mode .closed-tabs-section {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: auto;
-        max-width: 320px;
     }
     
     .sidebar-box.multi-space-mode .spaces-container {
@@ -4634,7 +4559,12 @@
     }
     
     /* Recently Closed Tabs */
+    .archived-space-section { display: flex; flex-direction: column; gap: 4px; }
+    .archived-section-title { margin: 4px 8px; color: #888; font-size: 10px; font-weight: 500; }
+    .archived-clear-all { border: 0; border-radius: 8px; padding: 8px; background: transparent; color: #999; font-size: 11px; text-align: left; cursor: pointer; }
+    .archived-clear-all:hover, .archived-clear-all:focus-visible { color: #ddd; background: #ffffff0d; }
     .closed-tab-row {
+        position: relative;
         display: flex;
         align-items: center;
         flex-shrink: 0;
@@ -4651,24 +4581,12 @@
         border-color: var(--tab-hover-border);
     }
     .closed-tab-row button:focus-visible { outline: 1px solid #a3a3a3; outline-offset: -2px; }
-    .closed-tabs-section.pending-tabs-section {
-        position: relative;
-        inset: auto;
-        width: auto;
-        margin: 4px 0 8px;
-        z-index: 12;
-    }
-    :global(.sidebar-box.visible) .closed-tabs-section.pending-tabs-section { width: auto; bottom: auto; }
-    .closed-tabs-content.pending-tabs-content,
-    .closed-tabs-content.pending-tabs-content.expanded {
-        top: calc(100% - 4px);
-        bottom: auto;
-        border: 1px solid var(--menu-border);
-        border-radius: 0 0 13px 13px;
-        transform: none;
-        transition: opacity 150ms ease, visibility 150ms ease;
-    }
-    .pending-tabs-content .closed-tabs-list { max-height: min(360px, 45vh); padding: 8px; }
+    .archived-row-actions { display: flex; align-items: center; width: 0; overflow: hidden; flex-shrink: 0; opacity: 0; }
+    .closed-tab-row:hover .archived-row-actions,
+    .closed-tab-row:focus-within .archived-row-actions { width: 22px; opacity: 1; }
+    .pending-tab-row:hover .archived-row-actions,
+    .pending-tab-row:focus-within .archived-row-actions { width: 44px; }
+    .archived-row-actions :global(.tooltip-container) { flex-shrink: 0; }
     .pending-tab-time {
         color: #afafaf;
         padding: 4px 3px;
@@ -4692,61 +4610,6 @@
     }
     .pending-tab-resume:hover, .pending-tab-resume:focus-visible { color: #eee; background: #ffffff14; }
     .pending-tab-resume svg { width: 16px; height: 16px; }
-    .closed-tabs-section {
-        position: absolute;
-        bottom: 8px;
-        left: 9px;
-        right: 8px;
-        z-index: 10;
-        pointer-events: auto;
-        display: flex;
-        flex-direction: column;
-        /* width: calc(100% - 17px); */
-        flex-shrink: 0;
-    }
-
-    :global(.sidebar-box.visible .closed-tabs-section)   {
-        /* bottom: 6px; */
-        /* left: 17px; */
-        width: calc(100% - 19px);
-        bottom: 1px;
-    }
-    
-    .closed-tabs-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 8px 12px;
-        cursor: pointer;
-        border-radius: 12px;
-        transition: all 50ms ease;
-        background: rgba(0, 0, 0, 0.8);
-        backdrop-filter: blur(15px);
-        border: none;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-        position: relative;
-        z-index: 11;
-        width: 100%;
-        min-width: 0;
-        border: 1px solid #232323;
-    }
-    
-    .closed-tabs-header:hover {
-        background: rgba(255, 255, 255, 0.1);
-    }
-    
-    .closed-tabs-title {
-        color: rgba(255, 255, 255, 0.6);
-        font-size: 11px;
-        font-weight: 500;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-        -webkit-font-smoothing: subpixel-antialiased;
-        text-rendering: optimizeLegibility;
-        flex: 1;
-        text-align: left;
-        min-width: 0;
-    }
-    
     .closed-tabs-count {
         color: rgba(255, 255, 255, 0.4);
         font-size: 10px;
@@ -4757,63 +4620,6 @@
         border-radius: 8px;
         min-width: 16px;
         text-align: center;
-    }
-    
-    .closed-tabs-content {
-        position: absolute;
-        bottom: calc(100% - 8px);
-        left: 0;
-        right: 0;
-        background: rgba(0, 0, 0, 0.95);
-        border: 1px solid var(--menu-border);
-        border-radius: 13px 13px 0 0;
-        border-bottom: none;
-        backdrop-filter: blur(20px);
-        box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.5), 0 -8px 28px rgba(0, 0, 0, 0.65);
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 200ms ease, visibility 200ms ease;
-        pointer-events: none;
-        max-height: 400px;
-        overflow: hidden;
-        width: 100%;
-        box-sizing: border-box;
-        flex-shrink: 0;
-    }
-    
-    .closed-tabs-content.expanded {
-        opacity: 1;
-        visibility: visible;
-        pointer-events: auto;
-    }
-    
-    .closed-tabs-list {
-        padding: 8px 8px 16px 8px;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        max-height: 360px;
-        overflow-y: auto;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-        flex-shrink: 0;
-    }
-    
-    .closed-tabs-list::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .closed-tabs-list::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .closed-tabs-list::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 3px;
-    }
-
-    .closed-tabs-list::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.3);
     }
     
     .closed-tab-item {
@@ -4884,19 +4690,12 @@
         height: 22px;
         box-sizing: border-box;
         border-radius: 4px;
-        opacity: 0;
         flex-shrink: 0;
         overflow: hidden;
         line-height: 1;
     }
 
     .closed-tab-remove svg { width: 16px; height: 16px; }
-
-    .closed-tab-row:hover .closed-tab-remove,
-    .closed-tab-row:focus-within .closed-tab-remove {
-        opacity: 1;
-    }
-
     .closed-tab-remove:hover {
         color: rgba(255, 255, 255, 0.9);
         background: #ffffff14;
@@ -5207,7 +5006,7 @@
     bottom: 0px !important;
     top: 0px !important;
     overflow: hidden !important;
-    transition: transform 190ms 340ms cubic-bezier(.78,-0.01,.34,1.04) !important;
+    transition: transform 190ms var(--sidebar-menu-close-delay) cubic-bezier(.78,-0.01,.34,1.04) !important;
     padding-right: 15px;
 /*     cursor: grab; */
     transform: translateX(-248px);

@@ -12,7 +12,7 @@ await withSidebarFixture('close-button-history', async ({ page, errors }) => {
             await page.reload()
             await page.waitForSelector(target.row)
             if (target.close === '.closed-tab-remove') {
-                await page.hover('.closed-tabs-header')
+                await page.hover('.archived-menu-arrow')
                 await page.waitForFunction(() => {
                     const content = document.querySelector('.closed-tabs-content')
                     return content.classList.contains('expanded') && content.getAnimations().every(animation => animation.playState === 'finished')
@@ -27,7 +27,7 @@ await withSidebarFixture('close-button-history', async ({ page, errors }) => {
 
         const openWithHistory = async () => {
             if (target.close === '.closed-tab-remove') {
-                await page.hover('.closed-tabs-header')
+                await page.hover('.archived-menu-arrow')
                 await page.waitForFunction(() => {
                     const content = document.querySelector('.closed-tabs-content')
                     return content.classList.contains('expanded') && content.getAnimations().every(animation => animation.playState === 'finished')
