@@ -870,16 +870,21 @@ const refresh = throttle(async function (spaceId) {
     tabRefreshes.add(localTabIds)
     let newDocs
     try {
-        const result = await db.find({
-            selector: {
-                archive: { $lt: 'deleted' },
-                spaceId: spaceId ? spaceId : { $exists: true }
-            },
-            fields: initialLoad ? undefined : ['_id'],
-            sort: sortOrder.map(key => ({ [key]: 'asc' })),
-            limit: 4000
-        })
-        newDocs = result.docs
+        newDocs = []
+        let page
+        do {
+            page = await db.find({
+                selector: {
+                    archive: { $lt: 'deleted' },
+                    spaceId: spaceId ? spaceId : { $exists: true }
+                },
+                fields: initialLoad ? undefined : ['_id'],
+                sort: sortOrder.map(key => ({ [key]: 'asc' })),
+                limit: 1000,
+                skip: newDocs.length
+            })
+            newDocs.push(...page.docs)
+        } while (page.docs.length === 1000)
     } finally {
         tabRefreshes.delete(localTabIds)
     }
@@ -896,10 +901,6 @@ const refresh = throttle(async function (spaceId) {
     // console.log('qry', newDocs.length)
 
     // console.timeLog('updt', 'exec received docs')
-
-    if (newDocs.length > 3000) {
-        console.error('approaching max data size, needs paging and partition support now')
-    }
 
     // console.log({ newDocs, docs })
 
@@ -1795,6 +1796,30 @@ async function resumePendingTab(tabId, { focus = false, expected = null } = {}) 
     return true
 }
 
+let closedTabsRefresh = null
+function refreshClosedTabs() {
+    if (closedTabsRefresh) return closedTabsRefresh
+    closedTabsRefresh = (async () => {
+        const before = new Map(Object.entries(docs).map(([id, doc]) => [id, { doc, rev: doc._rev }]))
+        const closed = []
+        let page
+        do {
+            page = await db.find({ selector: { archive: 'closed', type: 'tab' }, limit: 1000, skip: closed.length })
+            closed.push(...page.docs)
+        } while (page.docs.length === 1000)
+        for (const tab of closed) {
+            const current = docs[tab._id]
+            const previous = before.get(tab._id)
+            // Keep local actions and live changes that arrived while history was loading.
+            if (!desiredDocumentUpdates.has(tab._id) && (!current || (current === previous?.doc && current._rev === previous.rev))) {
+                docs[tab._id] = { ...tab, id: tab._id }
+            }
+        }
+        spaceMeta.closedTabs = Object.values(docs).filter(isRecentlyClosedTab).sort((a, b) => b.modified - a.modified)
+    })().finally(() => { closedTabsRefresh = null })
+    return closedTabsRefresh
+}
+
 const pendingScheduler = createPendingScheduler({
     setTimer: (callback, delay) => setTimeout(callback, delay),
     clearTimer: timer => clearTimeout(timer),
@@ -2023,6 +2048,7 @@ const data = {
         }
     },
     refreshPendingTabs: () => pendingScheduler.refresh(),
+    refreshClosedTabs,
     restoreClosedItems: async (tabIds) => {
         for (const tabId of tabIds) await data.restoreClosedTab(tabId)
     },

@@ -470,7 +470,8 @@ function session({ tabs, history = [], activeSpace = defaultSpace, windowId = 'w
                     (typeof query.selector.type !== 'string' || doc.type === query.selector.type) &&
                     (typeof query.selector.spaceId !== 'string' || doc.spaceId === query.selector.spaceId)
             })
-            return { docs: structuredClone(query.fields ? result.map(({ _id }) => ({ _id })) : result) }
+            const page = result.slice(query.skip || 0, (query.skip || 0) + (query.limit ?? result.length))
+            return { docs: structuredClone(query.fields ? page.map(({ _id }) => ({ _id })) : page) }
         },
         put: async doc => {
             writes.push(doc)
@@ -915,11 +916,46 @@ Deno.test('a partial refresh at startup still restores the active tab from the c
     assert.equal(data.spaceMeta.activeTabId, 'last-active')
     assert.deepEqual(Array.from(data.spaces[defaultSpace].tabs, tab => tab.id), ['first', 'last-active'])
     assert.equal(typeof queries[0].selector.spaceId, 'object')
-    assert.equal(queries[0].limit, 4000)
+    assert.equal(queries[0].limit, 1000)
     assert.equal(queries[0].fields, undefined)
     assert.deepEqual(Array.from(indexes[0].index.fields), ['archive', 'spaceId', 'type', 'sort'])
     assert.deepEqual(JSON.parse(JSON.stringify(queries[0].sort)), [{ archive: 'asc' }, { spaceId: 'asc' }, { type: 'asc' }, { sort: 'asc' }])
     assert.equal(writes.length, 0)
+})
+
+Deno.test('closed history loads every page globally at startup and when opened', async () => {
+    const archived = Array.from({ length: 4105 }, (_, index) => tab(`closed-${index}`, index % 2 ? otherSpace : defaultSpace, { archive: 'closed', modified: index }))
+    const { data, refresh, db, queries } = session({ tabs: [tab('open'), ...archived] })
+    await refresh(defaultSpace)
+    assert.equal(data.spaceMeta.closedTabs.length, archived.length)
+    assert.ok(queries.some(query => query.skip === 4000), 'startup must read past the old 4000-document limit')
+    await db.put(tab('unloaded', otherSpace, { archive: 'closed', modified: 5000 }))
+    const active = data.spaceMeta.activeTabId
+    await data.refreshClosedTabs()
+    assert.equal(data.spaceMeta.closedTabs.length, archived.length + 1)
+    assert.equal(data.docs.unloaded.id, 'unloaded')
+    assert.equal(data.spaceMeta.activeTabId, active, 'loading history must not change the active tab')
+    await refresh(defaultSpace)
+    assert.ok(data.spaceMeta.closedTabs.some(tab => tab.id === 'unloaded'), 'a space refresh retains the fully loaded global history')
+})
+
+Deno.test('opening closed history preserves removals and live changes made during loading', async () => {
+    const { data, refresh, db, emitChange } = session({ tabs: [tab('open'), tab('removed', otherSpace, { archive: 'closed' }), tab('updated', otherSpace, { archive: 'closed' })] })
+    await refresh()
+    const find = db.find
+    let release
+    db.find = async query => {
+        const page = await find(query)
+        if (query.selector.archive === 'closed') await new Promise(resolve => { release = resolve })
+        return page
+    }
+    const loading = data.refreshClosedTabs()
+    while (!release) await Promise.resolve()
+    await data.removeClosedTab('removed')
+    await emitChange({ ...await db.get('updated'), archive: null, _rev: '2-new' })
+    release()
+    await loading
+    assert.equal(data.spaceMeta.closedTabs.length, 0, 'stale query results must not resurrect removed or restored entries')
 })
 
 Deno.test('startup waits for the window identity and uses that window’s saved space and history', async () => {

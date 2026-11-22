@@ -647,6 +647,7 @@ function handleKeyDown(e) {
 }
 
 function handleMouseUp(event, cancelled = false) {
+    if (cancelled) setActivateRafId(null)
     updateGroupHover(null)
     updateJoinHover(null)
     stopAutoScroll()

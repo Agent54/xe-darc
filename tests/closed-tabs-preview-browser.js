@@ -143,11 +143,9 @@ await withSidebarFixture('closed-tabs-preview', async ({ page }) => {
         window.data.ui.sidebarVisible = true
     }))
     await page.waitForFunction(() => document.querySelector('.closed-tabs-header').getBoundingClientRect().left >= 0)
-    await page.hover('.closed-tabs-header')
+    await page.hover('.archived-menu-arrow')
     await page.waitForFunction(() => document.querySelector('.closed-tabs-content').classList.contains('expanded'))
-    assert.equal(await page.$('.closed-tab-item[data-tab-id="closed-two"]'), null, 'history from another space stays hidden by default')
-    await page.click('.closed-tabs-more')
-    assert.ok(await page.$('.closed-tab-item[data-tab-id="closed-two"]'), 'the all-spaces button reveals the full history')
+    assert.ok(await page.$('[aria-label="Closed in other spaces"] .closed-tab-item[data-tab-id="closed-two"]'), 'the menu includes history from other spaces')
     console.log('Chromium: shared tab toasts, section ordering, expiry, hover/focus retention, restoration, dismissal and responsive placement pass')
 }, `
     import TabToasts from './app/components/TabToasts.svelte'
