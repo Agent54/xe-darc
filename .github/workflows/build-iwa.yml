@@ -164,13 +164,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Trigger Xe Launcher version update
+      - name: Trigger Xe Launcher component updates
         run: |
           gh api \
             --method POST \
-            repos/Agent54/xe-computer-launcher/actions/workflows/xe-computer-version-bump.yml/dispatches \
+            repos/Agent54/xe-computer-launcher/actions/workflows/component-updates.yml/dispatches \
             --raw-field ref=int \
-            --raw-field "inputs[version]=${{ steps.version.outputs.version }}"
+            --raw-field 'inputs[component]=all'
         env:
           GH_TOKEN: ${{ secrets.XE_LAUNCHER_TOKEN }}
 
