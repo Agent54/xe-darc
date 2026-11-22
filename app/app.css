@@ -163,16 +163,16 @@ header.focus-mode:hover .nav-toolbar-btn > svg {
     border-left: 1px solid transparent;
     /* opacity: 0; */
 }
-.sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open) {
+.sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open):not(:has(.app-toolbar-menu.open)) {
     transform: translateX(30px);
     --sidebar-lights-shift: 0px;
 }
 
-.sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open) .sidebar-button > svg, .sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open) .sidebar-divider{
+.sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open):not(:has(.app-toolbar-menu.open)) .sidebar-button > svg, .sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open):not(:has(.app-toolbar-menu.open)) .sidebar-divider{
     opacity: 0;
     transition: opacity 0.05s ease 0.45s;
 }
-.sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open) .sidebar-button:not(.sidebar-nav-button), .sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open) .sidebar-button.active:not(.sidebar-nav-button) {
+.sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open):not(:has(.app-toolbar-menu.open)) .sidebar-button:not(.sidebar-nav-button), .sidebar-right.autohide:not(:hover):not(:focus-within):not(.menu-open):not(:has(.app-toolbar-menu.open)) .sidebar-button.active:not(.sidebar-nav-button) {
     border: 1px solid transparent;
     background: transparent;
     transition: border 0.05s ease 0.45s, background 0.05s ease 0.45s;
@@ -676,10 +676,6 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 }
 
 .view-mode-icon {
-    right: 133px;
-}
-
-.help-menu-icon {
     right: 90px;
 }
 
@@ -743,6 +739,8 @@ header.focus-mode:hover  .focus-mode-icon > svg {
 
 .settings-menu-icon {
     right: 47px;
+    border: 0;
+    background: transparent;
 }
 
 .settings-menu {
@@ -2390,12 +2388,6 @@ header.window-controls-overlay + .content-area-scrim {
     visibility: visible;
     pointer-events: auto;
     transition: opacity 0.25s ease, visibility 0.25s ease;
-}
-
-.help-menu-icon:focus-within .help-menu {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
 }
 
 header:hover .hover-menu {

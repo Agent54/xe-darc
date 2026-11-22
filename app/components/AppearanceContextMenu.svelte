@@ -3,6 +3,7 @@
     let root
 
     function positionMenu(node) {
+        root = node
         node.showPopover()
         const rect = node.getBoundingClientRect()
         node.style.left = `${Math.max(8, Math.min(menu.x, window.innerWidth - rect.width - 8))}px`
@@ -53,8 +54,15 @@
             type="button"
             role="menuitemcheckbox"
             aria-checked={item.checked}
-            onmouseup={() => { item.toggle(); onHide() }}
-            onclick={(event) => { if (event.detail === 0) { item.toggle(); onHide() } }}
+            onmousedown={(event) => { if (event.button === 0) { event.preventDefault(); item.toggle(); onHide() } }}
+            onkeydown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    item.toggle()
+                    onHide()
+                }
+            }}
         >
             <span>{item.actionLabel ? item.label : `${item.checked ? 'Hide' : 'Show'} ${item.label}`}</span>
             <span class="checkmark" aria-hidden="true">{item.checked ? '✓' : ''}</span>

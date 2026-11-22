@@ -28,6 +28,8 @@
     import NewTabMenu from './components/NewTabMenu.svelte'
     import PinMenu from './components/PinMenu.svelte'
     import AppearanceContextMenu from './components/AppearanceContextMenu.svelte'
+    import AppToolbarMenu from './components/AppToolbarMenu.svelte'
+    import HeaderOptionsMenu from './components/HeaderOptionsMenu.svelte'
     import Tooltip from './components/Tooltip.svelte'
     import DevToolsSidebar from './components/DevToolsSidebar.svelte'
     import CertificateMonitor from './components/CertificateMonitor.svelte'
@@ -408,6 +410,7 @@
 
     async function closeMenuImmediately() {
         menuForceClose = true
+        window.dispatchEvent(new Event('darc-dismiss-header-options'))
     }
 
     function showShortcutOverview() {
@@ -1075,6 +1078,12 @@
     }
 
     function handleShortcutEscape(event) {
+        if (document.querySelector('.header-options-menu:hover > .header-options-panel:not(.menu-force-close), .header-options-panel.keyboard-open:not(.menu-force-close)')) {
+            return false
+        }
+        if (document.querySelector('.app-toolbar-menu-panel:popover-open')) {
+            return false
+        }
         if (gestureOverviewVisible) {
             gestureOverviewVisible = false
             return true
@@ -3468,7 +3477,7 @@
 
 <header role="toolbar" tabindex="0" class:window-controls-overlay={headerPartOfMain} class:window-background={isWindowBackground} class:focus-mode={focusModeEnabled} class:has-navigation-toolbar={showNavigationToolbar} class:has-tab-sidebar={tabSidebarVisible} style="--tab-sidebar-width: {tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}px;" onmouseenter={() => { if (focusModeEnabled && contentAreaScrimActive) { cancelFocusModeHide(); focusModeHovered = true } }} onmouseleave={() => { if (focusModeEnabled && !contentAreaScrimActive) scheduleFocusModeHide() }}>
     <!-- Main background drag handle -->
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="{devModeEnabled ? 'right: 221px;' : 'right: 180px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="right: 137px;"></div>
     
     <!-- Navigation toolbar -->
     {#if showNavigationToolbar}
@@ -3558,7 +3567,7 @@
         </div>
     {/if}
      
-        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: calc(var(--header-tabs-left) + {leftPinnedTabsWidth}px); width: calc(100% - var(--header-tabs-left) - {(devModeEnabled ? 346 : 316) + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
+        <div class="tab-wrapper" role="tablist" tabindex="0" class:overflowing-right={isTabListOverflowing && !isTabListAtEnd} class:overflowing-left={isTabListOverflowing && !isTabListAtStart} style="left: calc(var(--header-tabs-left) + {leftPinnedTabsWidth}px); width: calc(100% - var(--header-tabs-left) - {273 + leftPinnedTabsWidth + rightPinnedTabsWidth}px);" class:hidden={focusModeEnabled && !focusModeHovered} onmouseenter={handleTabBarMouseEnter} onmouseleave={handleTabBarMouseLeave}>
        <!-- transition:flip={{duration: 100}} -->
         <ul class="tab-list tabs" data-group-tab-id={currentGroupTabId} data-single-pin={data.docs[currentGroupTabId]?.pinned === 'normal'} data-space-id={data.spaceMeta.activeSpace} style="padding: 0; margin: 0;" onscroll={handleTabListScroll} >
             {#each unpinnedTabs as unpinned, i (unpinned.id)}
@@ -3674,12 +3683,12 @@
     <div class="header-drag-handle header-drag-handle-left" class:drag-enabled={isDragEnabled}></div>
 
     <!-- Right drag handle (width adjusts for right pinned tabs) -->
-    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {115 - rightPinnedTabsWidth}px; left: unset; {devModeEnabled ? 'right: 233px;' : 'right: 201px;'}"></div>
+    <div class="header-drag-handle" class:drag-enabled={isDragEnabled} style="width: {115 - rightPinnedTabsWidth}px; left: unset; right: 158px;"></div>
 
     <!-- Zen mode hover trigger zone - covers area above toolbar buttons, no drag behavior -->
     {#if focusModeEnabled}
         <div class="zen-hover-trigger" 
-             style="right: 0; width: {devModeEnabled ? '221px' : '180px'};"
+             style="right: 0; width: 137px;"
              onmouseenter={() => { if (hasLeftToggle) { cancelFocusModeHide(); focusModeHovered = true; contentAreaScrimActive = true; } }}></div>
     {/if}
 
@@ -3800,7 +3809,7 @@
     </div>
 
     <div class="new-tab-button-wrapper" 
-         style="right: {devModeEnabled ? 217 : 176}px;"
+         style="right: 133px;"
          class:visible={showFixedNewTabButton && (!focusModeEnabled || focusModeHovered)}
          onmouseenter={() => handleNewTabButtonMouseEnter(false)}
          onmouseleave={handleNewTabButtonMouseLeave}
@@ -3885,28 +3894,21 @@
         {/if}
     </div>
 
-    <div class="header-icon-button help-menu-icon hover-menu-button"
-        role="button"
-        tabindex="0"
-        title="Help"
-        aria-label="Help"
-        aria-haspopup="true"
-        class:hidden={focusModeEnabled && !focusModeHovered}
-        onmouseenter={() => menuForceClose = false}
-        onfocus={() => menuForceClose = false}
-        onmousedown={(e) => { e.stopPropagation(); closeMenuImmediately() }}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showShortcutOverview() } }}>
+    {#snippet helpMenu()}
+    <HeaderOptionsMenu label="Help" submenu forceClose={menuForceClose}
+        onOpen={() => menuForceClose = false} onClose={closeMenuImmediately}>
+        {#snippet icon()}
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9a2.25 2.25 0 1 1 3.81 1.62C12.5 11.3 12 11.75 12 13.5M12 16.5h.01" />
         </svg>
-        <div class="settings-menu help-menu hover-menu menu-surface" class:menu-force-close={menuForceClose}>
+        {/snippet}
+        {#snippet children(select)}
             <div class="menu-header menu-caption">Help</div>
-            <button type="button" class="settings-menu-item menu-item menu-action"
-                onmousedown={(e) => e.stopPropagation()}
-                onmouseup={(e) => { e.stopPropagation(); showShortcutOverview() }}
-                onclick={(e) => { if (e.detail === 0) { e.stopPropagation(); showShortcutOverview() } }}
-                onkeydown={(e) => e.stopPropagation()}>
+            <button type="button" class="settings-menu-item menu-item menu-action" data-menu-action role="menuitem"
+                onmousedown={(event) => select(event, showShortcutOverview)}
+                onmouseup={(event) => select(event, showShortcutOverview)}
+                onkeydown={(event) => select(event, showShortcutOverview)}>
                 <span class="menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                         <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -3915,11 +3917,10 @@
                 </span>
                 <span>Keyboard shortcuts</span>
             </button>
-            <button type="button" class="settings-menu-item menu-item menu-action"
-                onmousedown={(e) => e.stopPropagation()}
-                onmouseup={(e) => { e.stopPropagation(); showGestureOverview() }}
-                onclick={(e) => { if (e.detail === 0) { e.stopPropagation(); showGestureOverview() } }}
-                onkeydown={(e) => e.stopPropagation()}>
+            <button type="button" class="settings-menu-item menu-item menu-action" data-menu-action role="menuitem"
+                onmousedown={(event) => select(event, showGestureOverview)}
+                onmouseup={(event) => select(event, showGestureOverview)}
+                onkeydown={(event) => select(event, showGestureOverview)}>
                 <span class="menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                         <rect x="3" y="7" width="18" height="14" rx="3" />
@@ -3928,21 +3929,20 @@
                 </span>
                 <span>Gestures</span>
             </button>
-        </div>
-    </div>
+        {/snippet}
+    </HeaderOptionsMenu>
+    {/snippet}
 
-    <div class="header-icon-button settings-menu-icon hover-menu-button" 
-        role="button"
-        tabindex="0"
-        title="Settings"
-        class:hidden={focusModeEnabled && !focusModeHovered}
-        onmouseenter={() => menuForceClose = false}
-        onmousedown={(e) => { e.stopPropagation(); toggleSidebar('settings'); closeMenuImmediately() }}>
+    <HeaderOptionsMenu label="Options" class="header-icon-button settings-menu-icon"
+        hidden={focusModeEnabled && !focusModeHovered} forceClose={menuForceClose}
+        primaryAction={() => toggleSidebar('settings')}
+        onOpen={() => menuForceClose = false} onClose={closeMenuImmediately}>
+        {#snippet icon()}
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            <path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
-        <div class="settings-menu hover-menu menu-surface" class:menu-force-close={menuForceClose}>
+        {/snippet}
+        {#snippet children(select)}
             <div class="settings-menu-header menu-header menu-caption">
                 <span>Options</span>
                 <span class="settings-menu-version" title={`Darc IWA version ${iwaVersion}`}>v{iwaVersion}</span>
@@ -3967,8 +3967,10 @@
                  class:active={globalTabComplete}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleGlobalTabComplete(); closeMenuImmediately() }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleGlobalTabComplete() } }}>
+                 data-menu-action
+                 onmousedown={(event) => select(event, toggleGlobalTabComplete)}
+                 onmouseup={(event) => select(event, toggleGlobalTabComplete)}
+                 onkeydown={(event) => select(event, toggleGlobalTabComplete)}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5 7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
@@ -4029,8 +4031,10 @@
                 class:active={devModeEnabled}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleDevMode(); closeMenuImmediately() }}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleDevMode() } }}>
+                data-menu-action
+                onmousedown={(event) => select(event, toggleDevMode)}
+                onmouseup={(event) => select(event, toggleDevMode)}
+                onkeydown={(event) => select(event, toggleDevMode)}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9.75 16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 1 3.75 6v12A2.25 2.25 0 0 1 6 20.25Z" />
@@ -4059,8 +4063,10 @@
                  class:active={showNavigationToolbar}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleShowNavigationToolbar(); closeMenuImmediately() }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleShowNavigationToolbar() } }}>
+                 data-menu-action
+                 onmousedown={(event) => select(event, toggleShowNavigationToolbar)}
+                 onmouseup={(event) => select(event, toggleShowNavigationToolbar)}
+                 onkeydown={(event) => select(event, toggleShowNavigationToolbar)}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
@@ -4074,8 +4080,10 @@
                  class:active={showSidebarUrl}
                  role="button"
                  tabindex="0"
-                 onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleShowSidebarUrl(); closeMenuImmediately() }}
-                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleShowSidebarUrl() } }}>
+                 data-menu-action
+                 onmousedown={(event) => select(event, toggleShowSidebarUrl)}
+                 onmouseup={(event) => select(event, toggleShowSidebarUrl)}
+                 onkeydown={(event) => select(event, toggleShowSidebarUrl)}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
@@ -4088,9 +4096,10 @@
             <button type="button" class="settings-menu-item menu-item menu-action"
                     class:active={!tabSidebarVisible && rightToolbarAutohide}
                     role="menuitemcheckbox" aria-checked={!tabSidebarVisible && rightToolbarAutohide}
-                    onmousedown={(event) => event.stopPropagation()}
-                    onmouseup={(event) => { event.stopPropagation(); toggleSidebarAutohide(); closeMenuImmediately() }}
-                    onclick={(event) => { if (event.detail === 0) { toggleSidebarAutohide(); closeMenuImmediately() } }}>
+                    data-menu-action
+                    onmousedown={(event) => select(event, toggleSidebarAutohide)}
+                    onmouseup={(event) => select(event, toggleSidebarAutohide)}
+                    onkeydown={(event) => select(event, toggleSidebarAutohide)}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
                         <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -4107,8 +4116,10 @@
                 class:active={secondScreenActive}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleSecondScreen(); closeMenuImmediately() }}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSecondScreen() } }}>
+                data-menu-action
+                onmousedown={(event) => select(event, toggleSecondScreen)}
+                onmouseup={(event) => select(event, toggleSecondScreen)}
+                onkeydown={(event) => select(event, toggleSecondScreen)}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
@@ -4122,8 +4133,10 @@
                 class:active={isFullscreen}
                 role="button"
                 tabindex="0"
-                onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); toggleFullscreen(); closeMenuImmediately() }}
-                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleFullscreen() } }}>
+                data-menu-action
+                onmousedown={(event) => select(event, toggleFullscreen)}
+                onmouseup={(event) => select(event, toggleFullscreen)}
+                onkeydown={(event) => select(event, toggleFullscreen)}>
                 <span class="settings-menu-icon-item menu-icon-item">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         {#if isFullscreen}
@@ -4197,87 +4210,11 @@
                 <span>Settings</span>
                 {#if openSidebars.has('settings')}<span class="checkmark">•</span>{/if}
             </div> -->
-        </div>
-    </div>
+            <div class="menu-divider"></div>
+            {@render helpMenu()}
+        {/snippet}
+    </HeaderOptionsMenu>
 
-    {#if devModeEnabled}
-        <div class="dev-menu-icon hover-menu-button" 
-            role="button"
-            tabindex="0"
-            title="Dev Menu"
-            style="right: 176px;"
-            class:hidden={focusModeEnabled && !focusModeHovered}
-            onmouseenter={() => menuForceClose = false}
-            onmousedown={(e) => { e.stopPropagation(); closeMenuImmediately() }}>
-            <svg class="w-4 h-4" fill="none" viewBox="1 1 21 21" stroke-width="2" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-            </svg>
-            <div class="dev-menu hover-menu menu-surface" class:menu-force-close={menuForceClose}>
-                <div class="dev-menu-header menu-caption">Developer</div>
-                <div class="dev-menu-item menu-item menu-action"
-                     role="button"
-                     tabindex="0"
-                     onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); data.loadSampleData(); closeMenuImmediately() }}
-                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.loadSampleData() } }}>
-                    <span class="dev-menu-icon-item menu-icon-item">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
-                        </svg>
-                    </span>
-                    <span>Load Sample Data</span>
-                </div>
-                <div class="dev-menu-item menu-item menu-action"
-                     role="button"
-                     tabindex="0"
-                     onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); openTestSuite(); closeMenuImmediately() }}
-                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openTestSuite() } }}>
-                    <span class="dev-menu-icon-item menu-icon-item">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 16.5a9.065 9.065 0 0 1-6.23-.693L5 15.5l.8-.2m13.2 0v3.394c0 .621-.504 1.125-1.125 1.125h-3.819M5.8 15.1v3.394c0 .621.504 1.125 1.125 1.125h3.819m0 0a1.125 1.125 0 0 1 1.125-1.125M13.05 19.62h.375a1.125 1.125 0 0 1 1.125 1.125M13.05 19.62v2.25M13.05 19.62a1.125 1.125 0 0 1 1.125-1.125m0 1.125v2.25m-8.25-4.5h.375c.621 0 1.125.504 1.125 1.125m-.75 0v2.25a1.125 1.125 0 0 0 1.125 1.125m0 0h.375a1.125 1.125 0 0 1 1.125 1.125M19.05 19.62v2.25a1.125 1.125 0 0 0 1.125-1.125" />
-                        </svg>
-                    </span>
-                    <span>Open Test Suite</span>
-                </div>
-                <div class="dev-menu-item menu-item menu-action"
-                        role="button"
-                        tabindex="0"
-                        onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }); closeMenuImmediately() }}
-                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }) } }}>
-                    <span class="dev-menu-icon-item menu-icon-item">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
-                    </span>
-                    <span>Logs</span>
-                </div>
-                <div class="dev-menu-item menu-item menu-action"
-                     role="button"
-                     tabindex="0"
-                     onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); openComposeUI() }}
-                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openComposeUI() } }}>
-                    <span class="dev-menu-icon-item menu-icon-item">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9L12 21.75M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-                        </svg>
-                    </span>
-                    <span>Compose UI</span>
-                </div>
-                <div class="dev-menu-item menu-item menu-action"
-                     role="button"
-                     tabindex="0"
-                     onmousedown={(e) => e.stopPropagation()} onmouseup={(e) => { e.stopPropagation(); openVSCodeWorkspace(); closeMenuImmediately() }}
-                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openVSCodeWorkspace() } }}>
-                    <span class="dev-menu-icon-item menu-icon-item">
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/>
-                        </svg>
-                    </span>
-                    <span>Code</span>
-                </div>
-            </div>
-        </div>
-    {/if}
-    
     <!-- Window controls when NOT showing dev badge and NOT on Mac -->
     {#if !(!controlledFrameSupported && fallbackColor) && !isMacPlatform}
         <div class="window-controls-container">
@@ -4316,6 +4253,86 @@
         </div>
     {/if}
 </header>
+
+    {#snippet developerMenu(select)}
+                <div class="dev-menu-header menu-caption">Developer</div>
+                <button type="button" class="menu-item menu-action" role="menuitem" data-menu-action
+                    onmousedown={(event) => select(event, () => toggleSidebar('devTools'))}
+                    onmouseup={(event) => select(event, () => toggleSidebar('devTools'))}
+                    onkeydown={(event) => select(event, () => toggleSidebar('devTools'))}>
+                    <span>Dev Tools</span>
+                </button>
+                <div class="dev-menu-item menu-item menu-action"
+                     role="button"
+                     tabindex="0"
+                     data-menu-action
+                     onmousedown={(event) => select(event, () => data.loadSampleData())}
+                     onmouseup={(event) => select(event, () => data.loadSampleData())}
+                     onkeydown={(event) => select(event, () => data.loadSampleData())}>
+                    <span class="dev-menu-icon-item menu-icon-item">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+                        </svg>
+                    </span>
+                    <span>Load Sample Data</span>
+                </div>
+                <div class="dev-menu-item menu-item menu-action"
+                     role="button"
+                     tabindex="0"
+                     data-menu-action
+                     onmousedown={(event) => select(event, openTestSuite)}
+                     onmouseup={(event) => select(event, openTestSuite)}
+                     onkeydown={(event) => select(event, openTestSuite)}>
+                    <span class="dev-menu-icon-item menu-icon-item">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 16.5a9.065 9.065 0 0 1-6.23-.693L5 15.5l.8-.2m13.2 0v3.394c0 .621-.504 1.125-1.125 1.125h-3.819M5.8 15.1v3.394c0 .621.504 1.125 1.125 1.125h3.819m0 0a1.125 1.125 0 0 1 1.125-1.125M13.05 19.62h.375a1.125 1.125 0 0 1 1.125 1.125M13.05 19.62v2.25M13.05 19.62a1.125 1.125 0 0 1 1.125-1.125m0 1.125v2.25m-8.25-4.5h.375c.621 0 1.125.504 1.125 1.125m-.75 0v2.25a1.125 1.125 0 0 0 1.125 1.125m0 0h.375a1.125 1.125 0 0 1 1.125 1.125M19.05 19.62v2.25a1.125 1.125 0 0 0 1.125-1.125" />
+                        </svg>
+                    </span>
+                    <span>Open Test Suite</span>
+                </div>
+                <div class="dev-menu-item menu-item menu-action"
+                        role="button"
+                        tabindex="0"
+                        data-menu-action
+                        onmousedown={(event) => select(event, () => data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }))}
+                        onmouseup={(event) => select(event, () => data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }))}
+                        onkeydown={(event) => select(event, () => data.newTab(data.spaceMeta.activeSpace, { url: 'http://localhost:5601', shouldFocus: true }))}>
+                    <span class="dev-menu-icon-item menu-icon-item">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                    </span>
+                    <span>Logs</span>
+                </div>
+                <div class="dev-menu-item menu-item menu-action"
+                     role="button"
+                     tabindex="0"
+                     data-menu-action
+                     onmousedown={(event) => select(event, openComposeUI)}
+                     onmouseup={(event) => select(event, openComposeUI)}
+                     onkeydown={(event) => select(event, openComposeUI)}>
+                    <span class="dev-menu-icon-item menu-icon-item">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9L12 21.75M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                        </svg>
+                    </span>
+                    <span>Compose UI</span>
+                </div>
+                <div class="dev-menu-item menu-item menu-action"
+                     role="button"
+                     tabindex="0"
+                     data-menu-action
+                     onmousedown={(event) => select(event, openVSCodeWorkspace)}
+                     onmouseup={(event) => select(event, openVSCodeWorkspace)}
+                     onkeydown={(event) => select(event, openVSCodeWorkspace)}>
+                    <span class="dev-menu-icon-item menu-icon-item">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/>
+                        </svg>
+                    </span>
+                    <span>Code</span>
+                </div>
+    {/snippet}
 
 {#if !controlledFrameSupported && fallbackColor}
     <div class="dev-color-badge" style="background-color: {fallbackColor};" title="Fallback Mode - ControlledFrame API not available">
@@ -4761,7 +4778,7 @@
 
 <!-- class:sidebar-right-hovered={sidebarRightHovered} onmouseenter={handleSidebarRightMouseEnter} onmouseleave={handleSidebarRightMouseLeave}  -->
 <div class="sidebar-right" class:autohide={rightToolbarAutohide}
-     class:menu-open={appearanceMenu?.area === 'right-toolbar'} role="region" aria-label="Right toolbar"
+     class:menu-open={appearanceMenu?.area === 'right-toolbar' || appearanceMenu?.area === 'status-lights'} role="region" aria-label="Right toolbar"
      onmousedowncapture={(event) => { if (event.button === 2) { event.preventDefault(); event.stopPropagation() } }}
      oncontextmenu={(event) => openAppearanceMenu(event, 'right-toolbar')}>
     <div class="sidebar-buttons">
@@ -4842,15 +4859,17 @@
         </button>
 
         {#if devModeEnabled}
-            <button class="sidebar-button" 
-                    class:active={openSidebars.has('devTools')}
-                    title="Dev Tools" 
-                    aria-label="Dev Tools"
-                    onmousedown={() => toggleSidebar('devTools')}>
+            <AppToolbarMenu label="Developer" class="sidebar-button" side>
+                {#snippet icon()}
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 12.75c1.148 0 2.278.08 3.383.237 1.037.146 1.866.966 1.866 2.013 0 3.728-2.35 6.75-5.25 6.75S6.75 18.728 6.75 15c0-1.046.83-1.867 1.866-2.013A24.204 24.204 0 0 1 12 12.75Zm0 0c2.883 0 5.647.508 8.207 1.44a23.91 23.91 0 0 1-1.152 6.06M12 12.75c-2.883 0-5.647.508-8.208 1.44.125 2.104.52 4.136 1.153 6.06M12 12.75a2.25 2.25 0 0 0 2.248-2.354M12 12.75a2.25 2.25 0 0 1-2.248-2.354M12 8.25c.995 0 1.971-.08 2.922-.236.403-.066.74-.358.795-.762a3.778 3.778 0 0 0-.399-2.25M12 8.25c-.995 0-1.97-.08-2.922-.236-.402-.066-.74-.358-.795-.762a3.734 3.734 0 0 1 .4-2.253M12 8.25a2.25 2.25 0 0 0 2.248 2.146M12 8.25a2.25 2.25 0 0 1-2.248 2.146" />
+                    <rect x="3" y="4" width="18" height="16" rx="3" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m7 9 3 3-3 3m6 0h4" />
                 </svg>
-            </button>
+                {/snippet}
+                {#snippet children(select)}
+                    {@render developerMenu(select)}
+                {/snippet}
+            </AppToolbarMenu>
         {/if}
 
         
@@ -4904,7 +4923,7 @@
     {#key appearanceMenu}
         <AppearanceContextMenu menu={appearanceMenu}
             items={appearanceMenu.area === 'status-lights' ? [
-                { id: 'status-lights', label: 'Status Lights', checked: statusLightsEnabled, toggle: toggleStatusLights }
+                { id: 'status-lights', label: 'Show Status Lights', actionLabel: true, checked: statusLightsEnabled, toggle: toggleStatusLights }
             ] : appearanceMenu.area === 'right-toolbar' ? [
                 { id: 'right-autohide', label: 'Autohide Right Toolbar', actionLabel: true, checked: rightToolbarAutohide, toggle: toggleRightToolbarAutohide }
             ] : [
