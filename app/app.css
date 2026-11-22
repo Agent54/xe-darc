@@ -2365,7 +2365,7 @@ header.window-controls-overlay + .content-area-scrim {
     opacity: 0;
     visibility: hidden;
     pointer-events: auto;
-    transition: opacity 0.25s ease 0.2s, visibility 0.25s ease 0.2s;
+    transition: opacity 0s var(--hover-menu-close-delay, 0.45s), visibility 0s var(--hover-menu-close-delay, 0.45s);
 }
 
 .hover-menu.menu-force-close,
@@ -2399,7 +2399,7 @@ header.window-controls-overlay + .content-area-scrim {
 }
 
 header:hover .hover-menu {
-    transition: opacity 0.25s ease, visibility 0.25s ease !important;
+    --hover-menu-close-delay: 0.25s;
 }
 
 :global(.hover-menu-button > svg) {
