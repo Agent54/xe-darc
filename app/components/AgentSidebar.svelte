@@ -870,6 +870,7 @@ The current system demonstrates strong performance and security characteristics.
 {/snippet}
 
 <RightSidebar
+    activeSidebar="aiAgent"
 	title="Agent"
 	padding={false}
 	{onClose}

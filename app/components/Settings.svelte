@@ -852,7 +852,7 @@ To import this data back into DARC, use the import function in Settings.
     })
 </script>
 
-<RightSidebar title="Settings" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
+<RightSidebar title="Settings" activeSidebar="settings" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
         <AcpSettings bind:this={acpSettingsPanel} />
 

@@ -197,7 +197,7 @@
     })
 </script>
 
-<RightSidebar title="Dev Tools" padding={false} {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
+<RightSidebar title="Dev Tools" activeSidebar="devTools" padding={false} {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
         <div class="devtools-content" bind:this={contentElement}>
             <div class="devtools-header">

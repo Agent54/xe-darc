@@ -156,7 +156,7 @@
     })
 </script>
 
-<RightSidebar title="Resources" onClose={handleClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
+<RightSidebar title="Resources" activeSidebar="resources" onClose={handleClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
         {#if data.permissionState.error}
             <p role="alert">{data.permissionState.error}</p>
