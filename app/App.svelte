@@ -5,7 +5,6 @@
     import Frame from './components/Frame.svelte'
     import Resources from './components/ResourcesPanel.svelte'
     import PermissionToasts from './components/PermissionToasts.svelte'
-    import TabToasts from './components/TabToasts.svelte'
     import Settings from './components/Settings.svelte'
     import { openTabDevTools } from './lib/tab-devtools.js'
     import { closeButtonHistory } from './lib/close-button-history.js'
@@ -4502,7 +4501,7 @@
   {/key}
 {/if}
 
-<TabSidebar {isDragEnabled} onShowApps={toggleAppsOverlay} 
+<TabSidebar {isDragEnabled} {headerPartOfMain} onShowApps={toggleAppsOverlay}
            onOpenPinMenu={(tabId, anchor) => { window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards')); menuPinAnchor = anchor; menuPin = menuPin === tabId ? null : tabId }}
            onSettings={switchToSettings}
            onHeaderContextMenu={(event) => openAppearanceMenu(event, 'tab-sidebar')}
@@ -4920,7 +4919,6 @@
 <div class="drag-handle-bottom" class:drag-enabled={isDragEnabled}></div>
 
 <PermissionToasts visible={!openSidebars.has('resources')} pendingCards={pendingPermissionCards} {headerPartOfMain} sidebarWidth={rightSidebarWidth} onOpenResources={switchToResources} />
-<TabToasts {headerPartOfMain} sidebarWidth={tabSidebarVisible ? (customTabSidebarWidth || 263) : 0} />
 
 {#if openSidebars.size > 0}
     <div class="sidebar-container" 

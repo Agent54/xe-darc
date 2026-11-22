@@ -11,6 +11,7 @@
     // Tab sidebar component with Firefox-like hover behavior
     let { 
         isDragEnabled = true,
+        headerPartOfMain = false,
         onShowApps = () => {},
         customTabSidebarWidth = null,
         tabSidebarVisible = false,
@@ -37,6 +38,7 @@
     import UrlRenderer from './UrlRenderer.svelte'
     import UrlBar from './UrlBar.svelte'
     import TabHoverCard from './TabHoverCard.svelte'
+    import TabToasts from './TabToasts.svelte'
     import LightboxTabTitle from './LightboxTabTitle.svelte'
     import TabGroupPreview from './TabGroupPreview.svelte'
     import TabContextMenu from './TabContextMenu.svelte'
@@ -44,7 +46,7 @@
     import { observeScrollEdges } from '../lib/scroll-edges.js'
     import { pinnedSectionScroll } from '../lib/pinned-section-scroll.js'
     import { scrollTension, stretchScrollTension, releaseScrollTension } from '../lib/scroll-tension.js'
-    import { getSidebarPinnedItems } from '../lib/tab-groups.js'
+    import { getSidebarPinnedItems, tabGroupMetadataId } from '../lib/tab-groups.js'
     import { getActivitySidebarItems, getActivityGroupTabs } from '../lib/tab-activity.js'
     import { formatPendingDateTime, formatPendingRemaining, getArchivedTabItems } from '../lib/pending-tabs.js'
     import { canFitSidebarHovercardHistory, fitSidebarHovercard, getSidebarHovercardPosition } from '../lib/hovercard-layout.js'
@@ -90,6 +92,12 @@
         }) ||
             data.getSpacePins(spaceId).length > 0 || pendingItems.some(item => item.spaceId === spaceId)
     }))
+    const movedItems = $derived(data.spaceMeta.recentTabMoves.map(move => ({
+        ...move,
+        spaceId: move.targetSpaceId,
+        tabGroupId: move.tabs.length > 1 ? move.tabs[0].tabGroupId : null,
+        metadata: move.tabs.length > 1 ? data.docs[tabGroupMetadataId(move.tabs[0].tabGroupId)] : null
+    })))
     $effect(() => {
         if (!pendingHoveredSpace) return
         pendingNow = Date.now()
@@ -167,7 +175,7 @@
     let hovercardAnchor = $state(null)
     let hovercardHistoryBeside = $state(false)
     const hoveredGroup = $derived(hoveredGroupTarget?.archived
-        ? [...closedItems, ...pendingItems].find(item => item.id === hoveredGroupTarget.id)
+        ? [...closedItems, ...pendingItems, ...movedItems].find(item => item.id === hoveredGroupTarget.id)
         : hoveredGroupTarget ? data.getTabGroup(hoveredGroupTarget.tabId, hoveredGroupTarget.spaceId) : null)
     const hovercardActivationTabId = $derived(hoveredGroup ? data.getGroupActiveTab(hoveredGroup, hoveredGroupTarget.spaceId)?.id : null)
     const hovercardTabs = $derived(hoveredGroupTarget ? getActivityGroupTabs(hoveredGroup?.tabs || [], data.docs, data.ui.tabActivityMode) : hoveredTab ? [hoveredTab] : [])
@@ -1110,6 +1118,15 @@
             else if (data.docs[tab.id]?.archive === 'deferred') data.closeTab(tab.spaceId, tab.id, { batchId, createReplacement: false })
         }
     }
+
+    function activateArchivedRow(item, pending, activateItem) {
+        if (activateItem) {
+            dismissHovercards()
+            activateItem(item)
+        } else {
+            restoreArchivedItem(item, pending)
+        }
+    }
     
     function handleClosedTabsMouseLeave() {
         if (closedTabsHideTimeout) {
@@ -1391,7 +1408,7 @@
         }
         if (!row) return null
         const archivedId = row.getAttribute('data-archived-id')
-        const archived = archivedId && [...closedItems, ...pendingItems].find(item => item.id === archivedId)
+        const archived = archivedId && [...closedItems, ...pendingItems, ...movedItems].find(item => item.id === archivedId)
         if (archived?.tabGroupId) return {
             element: row, tab: archived.tabs[0], tabs: archived.tabs,
             group: { id: archived.id, tabId: archived.tabs[0].id, spaceId: archived.spaceId, archived: true }
@@ -1777,27 +1794,27 @@
 
 </script>
 
-{#snippet archivedRows(items, pending = false)}
+{#snippet archivedRows(items, pending = false, activateItem = null, notification = false)}
     {#each items as item (item.id)}
-        {#if item.tabs.some(tabMatchesSearch) || (tabSearchQuery && item.title.toLowerCase().includes(tabSearchQuery.toLowerCase()))}
+        {#if notification || item.tabs.some(tabMatchesSearch) || (tabSearchQuery && item.title.toLowerCase().includes(tabSearchQuery.toLowerCase()))}
             {@const wakeTimes = pending ? item.tabs.map(tab => tab.pending?.wakeAt).filter(Number.isFinite) : []}
             {@const wakeAt = wakeTimes.length ? Math.min(...wakeTimes) : null}
             {@const resumeLabel = wakeAt === null ? 'Resume' : 'Unsnooze'}
             <div class="closed-tab-row" class:pending-tab-row={pending} data-tab-id={item.tabs[0].id} data-archived-id={item.id}
                  role={pending ? 'group' : undefined} aria-label={pending ? item.title : undefined}
+                 onmouseenter={(e) => handleTabMouseEnter(item.tabs[0], e)}
+                 onmouseleave={handleTabMouseLeave}
                  oncontextmenu={pending ? (e) => handleTabContextMenu(e, item.tabGroupId ? { ...item, type: 'tabgroup' } : item.tabs[0], 0, item) : undefined}>
                 <button class="closed-tab-item" data-tab-id={item.tabs[0].id} data-archived-id={item.id}
                         aria-label={pending ? `${resumeLabel} ${item.title}` : undefined}
-                        onmousedown={(e) => { if (e.button === 0) restoreArchivedItem(item, pending) }}
-                        onclick={(e) => { if (e.detail === 0) restoreArchivedItem(item, pending) }}
+                        onmousedown={(e) => { if (e.button === 0) activateArchivedRow(item, pending, activateItem) }}
+                        onclick={(e) => { if (e.detail === 0) activateArchivedRow(item, pending, activateItem) }}
                         onkeydown={pending ? (e) => {
                             if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
                                 e.preventDefault()
                                 e.currentTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
                             }
-                        } : undefined}
-                        onmouseenter={(e) => handleTabMouseEnter(item.tabs[0], e)}
-                        onmouseleave={handleTabMouseLeave}>
+                        } : undefined}>
                     {#if item.tabGroupId}
                         <TabGroupPreview group={item} />
                         <span class="closed-tabs-count">{item.tabs.length}</span>
@@ -1827,16 +1844,23 @@
                         </Tooltip>
                     {/if}
                 {/if}
-                <button class="closed-tab-remove" type="button" aria-label={pending ? 'Close pending tabs' : 'Remove from recently closed'}
-                        title={pending ? 'Close pending tabs' : 'Remove from recently closed'}
-                        onclick={() => removeArchivedItem(item, pending)}
-                        use:closeButtonHistory={{ cardVisible: hoveredTab?.id === item.tabs[0].id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
-                </button>
+                {#if !activateItem}
+                    <button class="closed-tab-remove" type="button" aria-label={pending ? 'Close pending tabs' : 'Remove from recently closed'}
+                            title={pending ? 'Close pending tabs' : 'Remove from recently closed'}
+                            onclick={() => removeArchivedItem(item, pending)}
+                            use:closeButtonHistory={{ cardVisible: hoveredTab?.id === item.tabs[0].id, onChange: (visible) => { closeButtonHoveredDelayed = visible } }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+                    </button>
+                {/if}
             </div>
         {/if}
     {/each}
 {/snippet}
+
+<TabToasts {headerPartOfMain} {movedItems} tabRows={archivedRows}
+    sidebarWidth={tabSidebarVisible ? (customTabSidebarWidth || 263) : 0}
+    hovercardActive={!!hovercardAnchor?.closest('.tab-toasts')}
+    onDismiss={() => { if (hovercardAnchor?.closest('.tab-toasts')) dismissHovercards() }} />
 
 <svelte:window onclick={(e) => { if (!tabContextMenu.visible) handleClickOutside(e); }} onmouseup={handleMouseUpOutside} onkeydown={(e) => { if (e.key === 'Escape') { if (tabContextMenu.visible) { hideTabContextMenu(e); return; } handleClickOutside(e); if (newSpaceMenuOpen) newSpaceMenuOpen = false; if (spaceContextMenuId !== null) spaceContextMenuId = null; } }} />
 

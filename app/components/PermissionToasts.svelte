@@ -44,6 +44,7 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;
+        filter: drop-shadow(0 8px 18px rgb(0 0 0 / 55%));
         padding: 0 0 8px;
         -webkit-app-region: no-drag;
     }

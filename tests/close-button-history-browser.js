@@ -4,7 +4,7 @@ import { withSidebarFixture } from './sidebar-browser-fixture.js'
 await withSidebarFixture('close-button-history', async ({ page, errors }) => {
     const targets = [
         { row: '.tab-item-container[data-tab-id="outside"]', close: '.tab-close' },
-        { row: '.closed-tab-item[data-tab-id="closed-two"]', close: '.closed-tab-remove' }
+        { row: '.closed-tab-row[data-tab-id="closed-two"]', close: '.closed-tab-remove' }
     ]
     for (const target of targets) {
         const prepare = async () => {

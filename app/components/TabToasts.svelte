@@ -2,11 +2,10 @@
     import { onMount, untrack } from 'svelte'
     import { fade } from 'svelte/transition'
     import data from '../data.svelte.js'
-    import { getTabTitle } from '../lib/tab-title.js'
-    import Favicon from './Favicon.svelte'
+    import { getArchivedTabItems } from '../lib/pending-tabs.js'
     import ToastCountdown from './ToastCountdown.svelte'
 
-    let { headerPartOfMain = false, sidebarWidth = 0 } = $props()
+    let { headerPartOfMain = false, sidebarWidth = 0, tabRows, movedItems, hovercardActive, onDismiss } = $props()
     const mountedAt = Date.now()
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let now = $state(mountedAt)
@@ -19,7 +18,8 @@
     const recentClosedTabs = $derived(data.spaceMeta.closedTabs.filter(tab =>
         tab.closedAt >= mountedAt && tab.closedAt > now - 10_000 && tab.closedAt <= now
     ))
-    const recentMoves = $derived((data.spaceMeta.recentTabMoves || []).filter(move =>
+    const recentClosedItems = $derived(getArchivedTabItems(recentClosedTabs, data.docs))
+    const recentMoves = $derived(movedItems.filter(move =>
         move.movedAt >= mountedAt && move.movedAt > now - 10_000 && move.movedAt <= now
     ))
     const movedSections = $derived.by(() => {
@@ -42,6 +42,7 @@
     }
 
     function dismiss() {
+        onDismiss()
         previewUntil = 0
         hovered = false
         focused = false
@@ -50,7 +51,7 @@
     // Observe fresh actions, not a history refresh or a newly mounted sidebar.
     $effect(() => {
         const closed = new Map(data.spaceMeta.closedTabs.map(tab => [tab.id, tab.closedAt]))
-        const moves = new Set((data.spaceMeta.recentTabMoves || []).map(move => move.id))
+        const moves = new Set(movedItems.map(move => move.id))
         const time = Date.now()
         const freshClose = previousClosedTabs && [...closed].some(([id, closedAt]) =>
             closedAt >= mountedAt && closedAt > time - 10_000 && closedAt <= time && previousClosedTabs.get(id) !== closedAt
@@ -70,9 +71,14 @@
     })
 
     $effect(() => {
-        if (!visible || hovered || focused) return
+        if (!visible || hovered || focused || hovercardActive) return
         const interval = setInterval(() => { now = Date.now() }, 50)
         return () => clearInterval(interval)
+    })
+
+    $effect(() => {
+        if (hovercardActive) return
+        untrack(() => { if (previewUntil) reveal() })
     })
 
     onMount(() => {
@@ -105,37 +111,17 @@
             {#each movedSections as section (section.spaceId)}
                 <section class="toast-section moved-section" aria-label={`Moved to ${data.spaces[section.spaceId]?.name || 'Unknown space'}`}>
                     <h2>Moved to {data.spaces[section.spaceId]?.name || 'Unknown space'}</h2>
-                    {#each section.moves as move (move.id)}
-                        <button class="tab-toast-item moved-tab-item" data-move-id={move.id}
-                            title={move.title || getTabTitle(data.docs[move.tabs[0].id] || move.tabs[0])}
-                            onclick={() => {
-                                data.activateSpace(move.targetSpaceId)
-                                data.activate(move.tabs[0].id)
-                                dismiss()
-                            }}>
-                            <Favicon tab={move.tabs[0]} showButton={false} />
-                            <span class="tab-text">{move.title || getTabTitle(data.docs[move.tabs[0].id] || move.tabs[0])}</span>
-                            {#if move.tabs.length > 1}<span class="tab-count">{move.tabs.length} tabs</span>{/if}
-                        </button>
-                    {/each}
+                    {@render tabRows(section.moves, false, (move) => {
+                        data.activateSpace(move.targetSpaceId)
+                        data.activate(move.tabs[0].id)
+                        dismiss()
+                    }, true)}
                 </section>
             {/each}
             {#if recentClosedTabs.length}
                 <section class="toast-section closed-section" aria-label="Recently closed tabs">
                     <h2>Recently closed tabs</h2>
-                    {#each recentClosedTabs as tab (tab.id)}
-                        <div class="closed-toast-row" data-tab-id={tab.id}>
-                            <button class="tab-toast-item" title={`Restore ${getTabTitle(data.docs[tab.id] || tab)}`}
-                                onclick={() => data.restoreClosedTab(tab.id)}>
-                                <Favicon {tab} showButton={false} />
-                                <span class="tab-text">{getTabTitle(data.docs[tab.id] || tab)}</span>
-                            </button>
-                            <button class="remove" aria-label={`Remove ${getTabTitle(data.docs[tab.id] || tab)} from recently closed tabs`}
-                                onclick={() => data.removeClosedTab(tab.id)}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" d="m6 6 12 12M6 18 18 6" /></svg>
-                            </button>
-                        </div>
-                    {/each}
+                    {@render tabRows(recentClosedItems, false, null, true)}
                 </section>
             {/if}
         </div>
@@ -154,6 +140,7 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;
+        filter: drop-shadow(0 8px 18px rgb(0 0 0 / 55%));
         padding: 0 0 8px;
         -webkit-app-region: no-drag;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -192,24 +179,6 @@
     }
     button:hover { background: rgb(255 255 255 / 7%); color: white; }
     button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: -2px; }
-    .tab-toast-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 7px 6px;
-        width: 100%;
-        min-width: 0;
-        text-align: left;
-        border-radius: 6px;
-        font-size: 12px;
-    }
-    .tab-text { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .tab-count { flex-shrink: 0; color: rgb(255 255 255 / 45%); font-size: 10px; }
-    .dismiss, .remove { display: flex; align-items: center; justify-content: center; border-radius: 3px; padding: 4px; }
+    .dismiss { display: flex; align-items: center; justify-content: center; padding: 4px; }
     .dismiss { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%; }
-    .closed-toast-row { display: flex; align-items: center; }
-    .closed-toast-row .tab-toast-item { flex: 1; }
-    .remove { flex-shrink: 0; opacity: 0; }
-    .closed-toast-row:hover .remove, .closed-toast-row:focus-within .remove { opacity: 1; }
-    @media (hover: none) { .remove { opacity: 1; } }
 </style>

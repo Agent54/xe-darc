@@ -20,6 +20,6 @@
         pointer-events: none;
         stroke-width: 1.5;
     }
-    .track { stroke: rgb(160 160 160 / 12%); }
-    .remaining { stroke: rgb(160 160 160 / 45%); }
+    .track { stroke: rgb(160 160 160 / 8%); }
+    .remaining { stroke: rgb(160 160 160 / 25%); }
 </style>

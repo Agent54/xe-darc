@@ -43,7 +43,7 @@ const modules = {
             ...Array.from({ length: 35 }, (_, i) => tab('tab-' + i, -i))]
         const data = $state({
             docs: {}, frames: {}, origins: {}, ui: { tabActivityMode: false },
-            spaceMeta: { spaceOrder: ['work', 'personal'], activeSpace: 'work', activeTabId: 'tab-0', globalPins: [tab('global-app', 0, { pinned: 'left', pinScope: 'global' })], closedTabs: [] },
+            spaceMeta: { spaceOrder: ['work', 'personal'], activeSpace: 'work', activeTabId: 'tab-0', globalPins: [tab('global-app', 0, { pinned: 'left', pinScope: 'global' })], closedTabs: [], recentTabMoves: [] },
             spaces: {
                 work: { name: 'Work', tabs, activeTabsOrder: ['tab-0'] },
                 personal: { name: 'Personal', tabs: [tab('personal', 0, { spaceId: 'personal' })], activeTabsOrder: [] }

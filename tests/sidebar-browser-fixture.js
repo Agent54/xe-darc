@@ -57,7 +57,7 @@ const modules = {
             let menuPin = $state(null)
             let anchor = $state.raw(null)
         </script>
-        <Sidebar {...props}
+        <Sidebar {...props} headerPartOfMain={!!data.ui.toastHeader}
             onHeaderContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); data.menuActions.push({ action: 'sidebar-context' }) }}
             onOpenPinMenu={(id, element) => { anchor = element; menuPin = menuPin === id ? null : id }} />
         {#if menuPin}
@@ -78,6 +78,7 @@ const modules = {
             docs: {}, frames: {}, origins: {}, menuActions: [], linkPreviewUrl: '',
             ui: { sidebarVisible: true, dragEnabled: true, sidebarWidth: 263 },
             spaceMeta: {
+                recentTabMoves: [],
                 globalPins: [tab('pin-one', '/one.svg'), tab('pin-two', '/two.svg')],
                 closedTabs: [tab('closed-one', '/one.svg'), tab('closed-missing', '/missing.svg'), tab('closed-two', '/two.svg', { closedAt: Date.now() - 120000, modified: Date.now() })],
                 spaceOrder: ['space'], activeSpace: 'space', activeTabId: null
