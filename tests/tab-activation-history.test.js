@@ -57,6 +57,21 @@ Deno.test('quick switching uses the existing previous action immediately and can
     assert.equal(h.data.spaceMeta.activeTabId, 'b')
 })
 
+Deno.test('scrolling opens history immediately without activating another tab or retaining a hold timer', () => {
+    const h = harness()
+    h.switcher.previous()
+    h.switcher.show()
+    assert.equal(h.state.visible, true)
+    assert.equal(h.state.source, 'scroll')
+    assert.equal(h.state.index, 0)
+    assert.deepEqual(h.calls, ['b'])
+    const state = h.state
+    h.advance(1000)
+    assert.equal(h.state, state)
+    h.switcher.finish()
+    assert.equal(h.state, null)
+})
+
 Deno.test('holding reveals History at 500 ms from the first Tab and cycles older visits without reordering the list', () => {
     const h = harness()
     h.switcher.previous()

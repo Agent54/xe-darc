@@ -53,5 +53,12 @@ export function createTabHistorySwitcher(data, onChange, { schedule = setTimeout
         }
     }
 
-    return { previous, finish }
+    function show () {
+        finish()
+        const entries = getTabActivationHistory(data)
+        session = { entries, index: 0, spaceId: data.spaceMeta.activeSpace, visible: true, source: 'scroll' }
+        onChange({ ...session })
+    }
+
+    return { previous, finish, show }
 }

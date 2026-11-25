@@ -19,7 +19,9 @@
     tabSidebarWidth = 0,
     spaceTaken = 0,
     onSpaceSwitch = () => {},
-    historySwitch = null
+    historySwitch = null,
+    onEnter = () => {},
+    topInset = 52
   } = $props()
 
   let savedActiveView = $state(localStorage.getItem('gridActiveView') || 'tabs')
@@ -88,6 +90,8 @@
   
   // Ensure the current space is expanded when opening the overview.
   onMount(() => {
+    const previousFocus = document.activeElement
+    const previousTabId = activeTabId
     gridInstanceId = window.darcInstanceId || ''
     gridWindowId = window.darcWindowId || ''
     loadCollapsedSpacesForWindow(gridWindowId)
@@ -100,12 +104,27 @@
         }
       })
       .catch(() => {})
+    const restoreLayout = onEnter()
+    gridContainer?.focus({ preventScroll: true })
+    return () => {
+      restoreLayout?.()
+      if (previousFocus?.isConnected && activeTabId === previousTabId &&
+          (gridContainer?.contains(document.activeElement) || document.activeElement === document.body)) {
+        previousFocus.focus({ preventScroll: true })
+      }
+    }
   })
 
   function toggleSpaceCollapsed(spaceId) {
     const next = new Set(collapsedSpaces)
     if (next.has(spaceId)) next.delete(spaceId)
     else next.add(spaceId)
+    collapsedSpaces = next
+    saveCollapsedSpaces(next)
+  }
+
+  function setAllSpacesCollapsed (collapse) {
+    const next = new Set(collapse ? spaceOrder : [])
     collapsedSpaces = next
     saveCollapsedSpaces(next)
   }
@@ -166,7 +185,10 @@
 
   function handleGridRenameKeydown(e) {
     if (e.key === 'Enter') commitGridRename()
-    else if (e.key === 'Escape') gridRenamingSpaceId = null
+    else if (e.key === 'Escape') {
+      e.stopPropagation()
+      gridRenamingSpaceId = null
+    }
   }
 
   function pickGridColor(spaceId, color) {
@@ -304,12 +326,18 @@
   }
 
   function handleCloseTab(event, tab, index, spaceId) {
+    if (event.type === 'mousedown' && event.button !== 0) {
+      return
+    }
     event.preventDefault()
     event.stopPropagation()
     onTabClose(tab, event)
   }
 
   function handleBackgroundClick(event) {
+    if (event.type === 'mousedown' && event.button !== 0) {
+      return
+    }
     const target = event.target
     
     // Interactive elements: clicking these should NOT close the grid view
@@ -343,36 +371,36 @@
   class="grid-view"
   bind:this={gridContainer}
   onmousedown={handleBackgroundClick}
-  onkeydown={(e) => { if (e.key === 'Escape') handleBackgroundClick(e) }}
+  onkeydown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); if (gridContextMenuId || gridColorPickerSpaceId || gridRenamingSpaceId) { dismissOverlays() } else { onViewModeChange({fromTileMode: true}) } } }}
   role="button"
   tabindex="0"
   aria-label="Close tab overview"
-  style="--left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --tab-sidebar-width: {tabSidebarWidth}px; --sidebar-width: {rightSidebarWidth}px; --space-taken: {spaceTaken}px;"
+  style="--left-pinned-width: {leftPinnedWidth}px; --right-pinned-width: {rightPinnedWidth}px; --tab-sidebar-width: {tabSidebarWidth}px; --sidebar-width: {rightSidebarWidth}px; --space-taken: {spaceTaken}px; --grid-top: {topInset}px;"
 >
   <div class="grid-top-bar">
     <div class="grid-view-tabs" role="tablist">
-      <button class="grid-view-tab" class:active={activeView === 'tabs'} aria-selected={activeView === 'tabs'} onclick={() => setActiveView('tabs')} role="tab" disabled={!!historySwitch}>
+      <button class="grid-view-tab" class:active={activeView === 'tabs'} aria-selected={activeView === 'tabs'} onmousedown={(e) => { if (e.button === 0) { setActiveView('tabs') } }} onclick={(e) => { if (e.detail === 0) { setActiveView('tabs') } }} role="tab" disabled={!!historySwitch}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="grid-tab-icon"><path d="M2 4.5A2.5 2.5 0 0 1 4.5 2h3.879a2.5 2.5 0 0 1 1.767.732l.732.732A1.5 1.5 0 0 0 11.94 4H15.5A2.5 2.5 0 0 1 18 6.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 2 14.5v-10Z"/></svg>
         Tabs
       </button>
-      <button class="grid-view-tab" class:active={activeView === 'history'} aria-selected={activeView === 'history'} onclick={() => setActiveView('history')} role="tab">
+      <button class="grid-view-tab" class:active={activeView === 'history'} aria-selected={activeView === 'history'} onmousedown={(e) => { if (e.button === 0) { setActiveView('history') } }} onclick={(e) => { if (e.detail === 0) { setActiveView('history') } }} role="tab">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="grid-tab-icon"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd"/></svg>
         History
       </button>
-      <button class="grid-view-tab" class:active={activeView === 'resources'} aria-selected={activeView === 'resources'} onclick={() => setActiveView('resources')} role="tab" disabled={!!historySwitch}>
+      <button class="grid-view-tab" class:active={activeView === 'resources'} aria-selected={activeView === 'resources'} onmousedown={(e) => { if (e.button === 0) { setActiveView('resources') } }} onclick={(e) => { if (e.detail === 0) { setActiveView('resources') } }} role="tab" disabled={!!historySwitch}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="grid-tab-icon"><path d="M10 1a6 6 0 0 0-3.815 10.631C7.237 12.5 8 13.443 8 14.456v.644a.75.75 0 0 0 .75.75h2.5a.75.75 0 0 0 .75-.75v-.644c0-1.013.762-1.957 1.815-2.825A6 6 0 0 0 10 1ZM8.863 17.414a.75.75 0 0 0-.226 1.483 9.066 9.066 0 0 0 2.726 0 .75.75 0 0 0-.226-1.483 7.563 7.563 0 0 1-2.274 0Z"/></svg>
         Resources
       </button>
     </div>
-    <button class="grid-scope-toggle" class:active={spaceScope === 'all'} onclick={toggleSpaceScope} aria-pressed={spaceScope === 'all'} disabled={!!historySwitch}>
+    <button class="grid-scope-toggle" class:active={spaceScope === 'all'} onmousedown={(e) => { if (e.button === 0) { toggleSpaceScope() } }} onclick={(e) => { if (e.detail === 0) { toggleSpaceScope() } }} aria-pressed={spaceScope === 'all'} disabled={!!historySwitch}>
       <span class="grid-scope-track"><span class="grid-scope-thumb"></span></span>
       <span class="grid-scope-label">All Spaces</span>
     </button>
     {#if spaceScope === 'all'}
-      <button class="grid-collapse-btn" onmousedown={() => { const next = new Set(spaceOrder); collapsedSpaces = next; saveCollapsedSpaces(next) }} title="Collapse All" aria-label="Collapse All" type="button">
+      <button class="grid-collapse-btn" onmousedown={(e) => { if (e.button === 0) { setAllSpacesCollapsed(true) } }} onclick={(e) => { if (e.detail === 0) { setAllSpacesCollapsed(true) } }} title="Collapse All" aria-label="Collapse All" type="button">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8ZM4.646 2.146a.5.5 0 0 1 .708 0L8 4.793l2.646-2.647a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 0-.708Zm0 11.708a.5.5 0 0 0 .708 0L8 11.207l2.646 2.647a.5.5 0 0 0 .708-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 0 0 0 .708Z" clip-rule="evenodd"/></svg>
       </button>
-      <button class="grid-collapse-btn" onmousedown={() => { const next = new Set(); collapsedSpaces = next; saveCollapsedSpaces(next) }} title="Expand All" aria-label="Expand All" type="button">
+      <button class="grid-collapse-btn" onmousedown={(e) => { if (e.button === 0) { setAllSpacesCollapsed(false) } }} onclick={(e) => { if (e.detail === 0) { setAllSpacesCollapsed(false) } }} title="Expand All" aria-label="Expand All" type="button">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8Zm3.646-2.146a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 1 1-.708.708L8.5 3.707V6.5a.5.5 0 0 1-1 0V3.707L5.354 5.854a.5.5 0 0 1-.708 0Zm0 4.292a.5.5 0 0 0 0 .708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 12.293V9.5a.5.5 0 0 0-1 0v2.793l-2.146-2.147a.5.5 0 0 0-.708 0Z" clip-rule="evenodd"/></svg>
       </button>
     {/if}
@@ -445,7 +473,8 @@
               class:active={spaceId === activeSpaceId}
               style="--space-color: {space?.color || '#5b5b5b'}"
               data-space-id={spaceId}
-              onclick={(e) => { if (spaceScope === 'all' && (e.detail === 0 || e.target.closest('.space-group-left'))) toggleSpaceCollapsed(spaceId) }}
+              onmousedown={(e) => { if (e.button === 0 && spaceScope === 'all' && e.target.closest('.space-group-left')) { toggleSpaceCollapsed(spaceId) } }}
+              onclick={(e) => { if (e.detail === 0 && spaceScope === 'all') { toggleSpaceCollapsed(spaceId) } }}
               oncontextmenu={(e) => handleSpaceHeaderContext(e, spaceId)}
               type="button"
             >
@@ -468,7 +497,7 @@
               <div class="empty-space">
                 <button 
                   class="empty-space-icon new-tab-button"
-                  onmousedown={(e) => { e.stopPropagation(); handleNewTabInSpace(spaceId); }}
+                  onmousedown={(e) => { e.stopPropagation(); if (e.button === 0) { handleNewTabInSpace(spaceId) } }}
                   onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleNewTabInSpace(spaceId); } }}
                   title="New Tab (⌘T)"
                   aria-label="New Tab"
@@ -493,6 +522,7 @@
                     <div class="tab-header">
                       <div class="tab-info clickable"
                            onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
                            tabindex="0" role="button" aria-label="Activate {getTabTitle(shown)}">
                         <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
                         <div class="tab-favicon"><Favicon tab={shown} /></div>
@@ -502,6 +532,7 @@
                     <div 
                       class="frame-screenshot clickable" 
                       onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
                       onwheel={(e) => handleFrameWheel(e, tab, index)}
                       tabindex="0" role="button" aria-label="Activate {getTabTitle(shown)}"
                     >
@@ -521,7 +552,6 @@
                   {@const firstActiveTabId = typeof firstActiveHistoryEntry === 'string' ? firstActiveHistoryEntry : firstActiveHistoryEntry?.id}
                   {#if group.tabGroupId}
                     <GridTabStack {group} {activeTabId}
-                      inline={spaceScope === 'current'}
                       spaceActiveTabId={spaceId !== activeSpaceId ? firstActiveTabId : null}
                       defaultTabId={data.getGroupActiveTab(group, spaceId)?.id}
                       onActivate={(tab, index) => handleFrameClick(tab, index, spaceId)}
@@ -551,6 +581,7 @@
                       <button 
                         class="close-button"
                         onmousedown={(e) => handleCloseTab(e, tab, index, spaceId)}
+                        onclick={(e) => { if (e.detail === 0) { handleCloseTab(e, tab, index, spaceId) } }}
                         aria-label="Close {getTabTitle(tab)}"
                         type="button"
                       >×</button>
@@ -589,6 +620,7 @@
                     <div class="tab-header">
                       <div class="tab-info clickable"
                            onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
                            tabindex="0" role="button" aria-label="Activate {getTabTitle(shown)}">
                         <svg class="pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 0-1.414 0L9.586 8l-.793-.793a1 1 0 0 0-1.414 0l-.586.586a1 1 0 0 0 0 1.414L9.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L11 13.414l2.793 2.793a1 1 0 0 0 1.414 0l.586-.586a1 1 0 0 0 0-1.414L15 13.414 20.414 8A1 1 0 0 0 20.414 6.586L16 3Z"/></svg>
                         <div class="tab-favicon"><Favicon tab={shown} /></div>
@@ -598,6 +630,7 @@
                     <div 
                       class="frame-screenshot clickable" 
                       onmousedown={(e) => { if (e.button === 0) handleFrameClick(tab, index, spaceId) }}
+                      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFrameClick(tab, index, spaceId) } }}
                       onwheel={(e) => handleFrameWheel(e, tab, index)}
                       tabindex="0" role="button" aria-label="Activate {getTabTitle(shown)}"
                     >
@@ -614,7 +647,8 @@
                 {/each}
                 <button 
                   class="grid-new-tab new-tab-button"
-                  onmousedown={(e) => { e.stopPropagation(); handleNewTabInSpace(spaceId); }}
+                  onmousedown={(e) => { e.stopPropagation(); if (e.button === 0) { handleNewTabInSpace(spaceId) } }}
+                  onclick={(e) => { if (e.detail === 0) { handleNewTabInSpace(spaceId) } }}
                   title="New Tab (⌘T)"
                   aria-label="New Tab"
                   type="button"
@@ -636,7 +670,7 @@
       <div class="activation-history-list">
         <div class="activation-history-heading">
           <h1>Activation history</h1>
-          <p>{historySwitch ? 'Ctrl+Tab for older visits · Release Ctrl to return' : 'Your recent tab visits, newest first'}</p>
+          <p>{historySwitch && historySwitch.source !== 'scroll' ? 'Ctrl+Tab for older visits · Release Ctrl to return' : 'Your recent tab visits, newest first'}</p>
         </div>
         {#each activationHistory as entry, index (`${entry.spaceId}:${entry.index}`)}
           {@const selected = historySwitch ? index === historySwitch.index : entry.id === activeTabId && index === 0}
@@ -730,14 +764,13 @@
 
   .grid-view {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    height: 100vh;
+    top: var(--grid-top);
+    left: var(--tab-sidebar-width);
+    right: var(--sidebar-width);
+    bottom: 0;
     background: rgb(0, 0, 0);
     overflow: hidden;
-    z-index: 10000;
+    z-index: 100;
     opacity: 0;
     animation: grid-fade-in 0.3s cubic-bezier(0, 1, 0.3, 1) forwards;
   }
@@ -1307,7 +1340,7 @@
     position: relative;
     contain: layout style paint;
     will-change: transform;
-    border: 1px solid transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .grid-frame.active {

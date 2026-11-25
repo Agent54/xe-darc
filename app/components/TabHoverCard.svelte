@@ -376,7 +376,7 @@
             <div class="hovercard-text">
                 <div class="hovercard-title-wrapper" use:initScrollFade>
                     <div class="fade-left"></div>
-                    <button type="button" class="hovercard-title" aria-label={activationLabel} onclick={activateTab} onscroll={handleScrollFade}>{title}</button>
+                    <button type="button" class="hovercard-title" aria-label={activationLabel} onmousedown={(event) => { if (event.button === 0) { activateTab() } }} onclick={(event) => { if (event.detail === 0) { activateTab() } }} onscroll={handleScrollFade}>{title}</button>
                     <div class="fade-right"></div>
                 </div>
             </div>
@@ -411,7 +411,7 @@
         />
     </div>
     {#if showPreview && screenshotTab.screenshot}
-        <button type="button" class="hovercard-preview hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0} aria-label={activationLabel} onclick={activateTab}>
+        <button type="button" class="hovercard-preview hovercard-screenshot" class:has-history={showHistory && historyEntries.length > 0} aria-label={activationLabel} onmousedown={(event) => { if (event.button === 0) { activateTab() } }} onclick={(event) => { if (event.detail === 0) { activateTab() } }}>
             <AttachmentImage src={screenshotTab.screenshot} digest={screenshotTab._attachments?.screenshot?.digest} alt="Page preview" />
             {#if showDelayedElements}
                 <span class="expand-button" aria-hidden="true">
@@ -433,7 +433,7 @@
                         <dt>Opened from</dt>
                         <dd>
                             {#if !openerTab.archive}
-                                <button type="button" title={getTabTitle(openerTab)} onclick={() => openRelatedTab(openerTab)}>{getTabTitle(openerTab)}</button>
+                                <button type="button" title={getTabTitle(openerTab)} onmousedown={(event) => { if (event.button === 0) { openRelatedTab(openerTab) } }} onclick={(event) => { if (event.detail === 0) { openRelatedTab(openerTab) } }}>{getTabTitle(openerTab)}</button>
                             {:else}
                                 <span title={getTabTitle(openerTab)}>{getTabTitle(openerTab)}</span>
                             {/if}
@@ -445,7 +445,7 @@
                         <dt>Opened tabs <span class="metadata-count">{openedTabs.length}</span></dt>
                         <dd>
                             {#each openedTabs as openedTab (openedTab.id)}
-                                <button type="button" title={getTabTitle(openedTab)} onclick={() => openRelatedTab(openedTab)}>{getTabTitle(openedTab)}</button>
+                                <button type="button" title={getTabTitle(openedTab)} onmousedown={(event) => { if (event.button === 0) { openRelatedTab(openedTab) } }} onclick={(event) => { if (event.detail === 0) { openRelatedTab(openedTab) } }}>{getTabTitle(openedTab)}</button>
                             {/each}
                         </dd>
                     </div>
@@ -456,7 +456,7 @@
     {#if showHistory && historyEntries.length > 0}
         <div class="history-section">
             <div class="history-section-header">
-                <button class="history-section-title" onclick={openTabHistory}>
+                <button class="history-section-title" onmousedown={(event) => { if (event.button === 0) { openTabHistory() } }} onclick={(event) => { if (event.detail === 0) { openTabHistory() } }}>
                     Tab History
                     {#if historyLastActiveText}
                         <span class="history-last-active">({historyLastActiveText})</span>
@@ -528,7 +528,7 @@
                                 </svg>
                             </button>
                         {/if}
-                        <button class="history-action-btn" class:success={copiedEntryId === historyTab.id} onclick={(e) => { e.stopPropagation(); copyUrl(historyTab.url, historyTab.id) }} title="Copy URL">
+                        <button class="history-action-btn" class:success={copiedEntryId === historyTab.id} onmousedown={(e) => { e.stopPropagation(); if (e.button === 0) { copyUrl(historyTab.url, historyTab.id) } }} onclick={(e) => { e.stopPropagation(); if (e.detail === 0) { copyUrl(historyTab.url, historyTab.id) } }} title="Copy URL">
                             {#if copiedEntryId === historyTab.id}
                                 <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />

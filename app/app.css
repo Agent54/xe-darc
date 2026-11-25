@@ -2449,6 +2449,45 @@ header:hover .hover-menu {
     pointer-events: none;
 }
 
+.controlled-frame-container.frame-scroll-mode {
+    transform: scale3d(var(--frame-scroll-scale), var(--frame-scroll-scale), 1);
+    transform-origin: center center;
+    backface-visibility: hidden;
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+}
+
+:root:has(.frame-scroll-mode) :is(controlledframe, iframe) {
+    pointer-events: none;
+}
+
+.scroll-gesture-progress {
+    position: fixed;
+    top: 62px;
+    right: 32px;
+    z-index: 2200;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px 6px 6px;
+    border: 1px solid #ffffff12;
+    border-radius: 24px;
+    background: #141414e6;
+    color: #b7c4cc;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 180ms ease, color 160ms ease, background 160ms ease;
+}
+.scroll-gesture-progress.visible { opacity: .85; }
+.scroll-gesture-progress.triggered { color: #e4f0f6; background: #28343be6; }
+.scroll-gesture-progress svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.gesture-ring-track { opacity: .12; }
+.gesture-ring-fill { stroke-dasharray: 1; transform: rotate(-90deg); transform-origin: center; transition: stroke-dashoffset 90ms linear; }
+@media (prefers-reduced-motion: reduce) {
+    .scroll-gesture-progress, .gesture-ring-fill { transition: none; }
+}
+
 :global(select) {
     background: black;
     border: 1px solid rgb(79, 79, 79);

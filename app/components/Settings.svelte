@@ -10,6 +10,12 @@
     let defaultSearchEngine = $state('google')
     let defaultNewTabUrl = $state('about:newtab')
     let newTabPosition = $state('right')
+    let scrollGestureModifier = $state(localStorage.getItem('scrollGestureModifier') === 'control' ? 'control' : 'option')
+
+    function changeScrollGestureModifier (modifier) {
+        scrollGestureModifier = modifier
+        localStorage.setItem('scrollGestureModifier', modifier)
+    }
     let acpSettingsPanel
     let customSearchUrl = $state('')
     let customNewTabUrl = $state('')
@@ -968,6 +974,21 @@ To import this data back into DARC, use the import function in Settings.
                             </div>
                         {/if}
                     </div>
+                {/each}
+            </div>
+        </div>
+
+        <div class="setting-section scroll-gesture-settings">
+            <h3 class="section-title">Scroll Gestures</h3>
+            <p class="setting-description">Scroll up for the tab grid and down for tab history. Add Shift to pan frames horizontally or zoom out vertically. Choose Control if Option-scroll is used for macOS Zoom. Restart Darc to apply modifier changes.</p>
+            <div class="setting-cards">
+                {#each [{ id: 'option', name: 'Option / Alt' }, { id: 'control', name: 'Control' }] as option}
+                    <button class="setting-card" class:selected={scrollGestureModifier === option.id}
+                        aria-pressed={scrollGestureModifier === option.id}
+                        onmousedown={(event) => { if (event.button === 0) { changeScrollGestureModifier(option.id) } }}
+                        onclick={(event) => { if (event.detail === 0) { changeScrollGestureModifier(option.id) } }}>
+                        <span class="setting-name">{option.name}</span>
+                    </button>
                 {/each}
             </div>
         </div>

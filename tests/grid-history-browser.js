@@ -3,6 +3,7 @@ import { withSidebarFixture } from './sidebar-browser-fixture.js'
 
 await withSidebarFixture('grid-history', async ({ page }) => {
     await page.setViewport({ width: 1200, height: 800 })
+    await page.mouse.move(1100, 400)
     await page.evaluate(() => window.startHistory())
     await page.keyboard.down('Control')
     await page.keyboard.press('Tab')
@@ -44,14 +45,25 @@ await withSidebarFixture('grid-history', async ({ page }) => {
 
     await page.evaluate(() => window.openHistory())
     await page.waitForSelector('.activation-history-entry')
-    await page.click('.activation-history-entry .hovercard-title')
+    await page.mouse.move(410, 400)
+    await page.waitForFunction(() => document.querySelector('.sidebar-box').getBoundingClientRect().right <= 9)
+    const title = await (await page.$('.activation-history-entry .hovercard-title')).boundingBox()
+    await page.mouse.move(title.x + title.width / 2, title.y + title.height / 2)
+    await page.mouse.down()
     await page.waitForFunction(() => !document.querySelector('.grid-view'))
+    await page.mouse.up()
+    assert.equal(await page.evaluate(() => window.data.ui.sidebarVisible), true, 'closing restores the original sidebar preference')
 }, `
     import GridView from './app/components/GridView.svelte'
     import { createTabHistorySwitcher } from './app/lib/tab-activation-history.js'
     import { createShortcutHandler, createShortcutMatcher, shortcuts } from './app/lib/shortcuts.js'
     let historyState = $state(null)
     let grid = null
+    function enterGrid() {
+        const wasVisible = data.ui.sidebarVisible
+        data.ui.sidebarVisible = false
+        return () => { data.ui.sidebarVisible = wasVisible }
+    }
     window.startHistory = () => {
         data.getTabGroups = () => []
         data.spaces.space.activeTabsOrder = Array.from({ length: 21 }, (_, index) => ({
@@ -62,6 +74,7 @@ await withSidebarFixture('grid-history', async ({ page }) => {
         const switcher = createTabHistorySwitcher(data, state => {
             historyState = state
             if (state?.visible && !grid) grid = mount(GridView, { target: document.body, props: {
+                onEnter: enterGrid,
                 get historySwitch() { return historyState },
                 onViewModeChange: () => switcher.finish()
             } })
@@ -77,6 +90,7 @@ await withSidebarFixture('grid-history', async ({ page }) => {
     window.openHistory = () => {
         localStorage.setItem('gridActiveView', 'history')
         grid = mount(GridView, { target: document.body, props: {
+            onEnter: enterGrid,
             onTabActivate: tab => data.activate(tab.id),
             onViewModeChange: () => { unmount(grid); grid = null }
         } })

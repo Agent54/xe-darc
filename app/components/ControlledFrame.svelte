@@ -18,6 +18,7 @@
     import { frameScreenshots } from '../lib/frame-screenshot.js'
     import contextMenu from '../inject/context-menu.js?raw'
     import zoomControl from '../inject/zoom-control.js?raw'
+    import { getScrollGestureModifier } from '../lib/scroll-gestures.js'
 
     let {
         tabId,
@@ -907,6 +908,7 @@ async function setupContentScripts(frame) {
             js: {
                 code: scopedGuestScript(frame, `
 const tabId = ${JSON.stringify(tab?.id || tabId)};
+const scrollModifierKey = ${JSON.stringify(getScrollGestureModifier() === 'control' ? 'ctrlKey' : 'altKey')};
 
 ${ipc}
 
@@ -1708,10 +1710,14 @@ document.addEventListener('input', function(event) {
             } else if (message.startsWith('iwa:input-event:')) {
                 try {
                     const detail = JSON.parse(message.slice('iwa:input-event:'.length))
-                    if (detail?.tabId !== mytab.id || !['keydown', 'keyup', 'pointerdown', 'auxclick', 'contextmenu', 'scrollstart', 'scrollend', 'touchstart', 'blur'].includes(detail.type)) {
+                    if (detail?.tabId !== mytab.id || !['keydown', 'keyup', 'wheel', 'pointerdown', 'auxclick', 'contextmenu', 'scrollstart', 'scrollend', 'touchstart', 'blur'].includes(detail.type)) {
                         return
                     }
                     if ((detail.type === 'keydown' || detail.type === 'keyup') && (typeof detail.key !== 'string' || !Number.isInteger(detail.pressedKeyCount) || detail.pressedKeyCount < 0)) {
+                        return
+                    }
+                    if (detail.type === 'wheel' && (!Number.isFinite(detail.deltaX) || !Number.isFinite(detail.deltaY) ||
+                        ![0, 1, 2].includes(detail.deltaMode) || ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'].some(key => typeof detail[key] !== 'boolean'))) {
                         return
                     }
                     if (detail.type === 'scrollstart') {

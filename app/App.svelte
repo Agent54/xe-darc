@@ -48,6 +48,7 @@
     import { shortcuts, shortcutActionIds, createShortcutMatcher, createShortcutHandler, listenForShortcutHelpCancellation, isMacPlatform as detectMacPlatform } from './lib/shortcuts.js'
     import { createShortcutActions } from './lib/shortcut-actions.js'
     import { createTabHistorySwitcher } from './lib/tab-activation-history.js'
+    import { createScrollGestures } from './lib/scroll-gestures.js'
     import { closeWindow, minimizeWindow, maximizeWindow, maximizeLeft, maximizeRight, maximizeTop, maximizeBottom, centerGoldenRatio, bottomRightPane, isWindowMaximized } from './lib/window-controls.js'
     import { tabDrag, startTabDrag, setActivateRafId, didDragOccurred, cancelDrag, onDrop } from './lib/tab-drag.svelte.js'
     const iwaVersion = __IWA_VERSION__
@@ -1011,6 +1012,48 @@
     }
 
     let tabHistorySwitch = $state(null)
+    let scrollGestureProgress = $state(null)
+    let frameScrollScale = $state(1)
+    const scrollGestures = createScrollGestures({
+        onProgress: progress => { scrollGestureProgress = progress },
+        onTrigger: direction => {
+            if (direction < 0) {
+                tabHistorySwitcher.finish()
+                selectViewMode('tile', { fromZoomOrKey: true })
+            } else {
+                tabHistorySwitcher.show()
+            }
+        },
+        onPan: delta => {
+            if (scrollContainer) {
+                scrollContainer.scrollBy({ left: delta / frameScrollScale, behavior: 'instant' })
+            }
+        },
+        onScale: scale => { frameScrollScale = scale },
+        isOverviewOpen: () => data.ui.viewMode === 'tile' || !!tabHistorySwitch?.visible
+    })
+
+    onMount(() => scrollGestures.listen(window))
+
+    function enterGridView () {
+        scrollGestures.setFrameMode(false)
+        const layout = { focusModeEnabled, tabSidebarVisible, rightToolbarAutohide, openSidebars }
+        if (!focusModeEnabled) {
+            toggleFocusMode()
+        }
+        tabSidebarVisible = false
+        rightToolbarAutohide = true
+        openSidebars = new Set()
+        return () => {
+            tabSidebarVisible = layout.tabSidebarVisible
+            rightToolbarAutohide = layout.rightToolbarAutohide
+            openSidebars = layout.openSidebars
+            if (focusModeEnabled !== layout.focusModeEnabled) {
+                toggleFocusMode()
+            }
+        }
+    }
+
     const tabHistorySwitcher = createTabHistorySwitcher(data, state => {
         if (state?.visible && !tabHistorySwitch?.visible) dismissViewOverlays()
         tabHistorySwitch = state
@@ -1020,7 +1063,7 @@
         openNewTabGroup: () => openNewTab(true),
         showShortcuts: (visible) => { shortcutOverlayVisible = visible },
         previousActiveTab: () => tabHistorySwitcher.previous(),
-        finishTabSwitch: () => tabHistorySwitcher.finish(),
+        finishTabSwitch: () => { if (tabHistorySwitch?.source !== 'scroll') { tabHistorySwitcher.finish() } },
         openLocation: openTabLocation,
         closeTab,
         dismissHovercards: () => window.dispatchEvent(new CustomEvent('darc-dismiss-hovercards')),
@@ -1070,12 +1113,12 @@
 
     function handleShortcutKeyUp(event) {
         handleKeyDown.keyup(event)
-        if (event.key === 'Control' || !event.ctrlKey) tabHistorySwitcher.finish()
+        if (tabHistorySwitch?.source !== 'scroll' && (event.key === 'Control' || !event.ctrlKey)) tabHistorySwitcher.finish()
     }
 
-    function closeGridView(options) {
+    function closeGridView() {
         if (tabHistorySwitch) tabHistorySwitcher.finish()
-        else toggleViewMode(options)
+        else selectViewMode('default')
     }
 
     function handleShortcutEscape(event) {
@@ -4645,8 +4688,21 @@
     </div>
 </div> -->
 
+<div class="scroll-gesture-progress" class:visible={!!scrollGestureProgress}
+    class:triggered={scrollGestureProgress?.progress === 1} role="status" aria-live="polite"
+    aria-label={scrollGestureProgress ? `${scrollGestureProgress.direction < 0 ? 'Tab grid' : 'Tab history'} ${Math.round(scrollGestureProgress.progress * 100)}%` : undefined}>
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+        <circle class="gesture-ring-track" cx="16" cy="16" r="13" />
+        <circle class="gesture-ring-fill" cx="16" cy="16" r="13" pathLength="1" style:stroke-dashoffset={1 - (scrollGestureProgress?.progress || 0)} />
+        <path d={scrollGestureProgress?.direction < 0 ? 'm11 18 5-5 5 5' : 'm11 14 5 5 5-5'} />
+    </svg>
+    <span>{scrollGestureProgress?.direction < 0 ? 'Tab grid' : 'Tab history'}</span>
+</div>
+
 <div
     class:overlay-open={data.ui.viewMode === 'tile' || tabHistorySwitch?.visible}
+    class:frame-scroll-mode={frameScrollScale !== 1}
+    style:--frame-scroll-scale={frameScrollScale}
     class:leaflet-mode={data.ui.viewMode === 'leaflet'}
     class="controlled-frame-container browser-frame"
     class:window-controls-overlay={headerPartOfMain}
@@ -4664,6 +4720,8 @@
 
     {#if data.ui.viewMode === 'tile' || tabHistorySwitch?.visible}
         <GridView 
+            onEnter={enterGridView}
+            topInset={headerPartOfMain ? 35 : 52}
             historySwitch={tabHistorySwitch?.visible ? tabHistorySwitch : null}
             {controlledFrameSupported} 
             onFrameFocus={handleFrameFocus} 

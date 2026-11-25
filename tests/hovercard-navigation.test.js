@@ -90,6 +90,7 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
     const frame = { addContentScripts(injections) { scripts.push(...injections); return Promise.resolve() } }
     const setup = new Function('frame', 'window', 'CustomEvent', 'tab', 'tabId', 'ipc', 'console', 'getFrameShortcutScript', 'connectFrameIPC', 'scopedGuestScript', 'readGuestMessage', 'releasedFrames', 'isLiveFrameTab', `
         const untrack = callback => callback()
+        const getScrollGestureModifier = () => 'option'
         const data = { docs: { [tabId]: tab }, frames: { [tabId]: { frame } }, isInternalPage: () => false }
         const userMods = { css: [], js: [] }, select = '', zoomControl = '', contextMenu = ''
         let isCommandKeyDown = false, commandKeyPressed = false
@@ -122,7 +123,7 @@ function contentClickBridge(shellWindow, tabId, subframe = false) {
     return {
         frame, messages, errors, registrations, contentWindow,
         click(properties = {}) {
-            const event = Object.assign(new Event('click', { cancelable: true }), {
+            const event = Object.assign(new Event('mousedown', { cancelable: true }), {
                 button: 0, clientX: 42, clientY: 73, screenX: 142, screenY: 173,
                 altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, detail: 1,
                 ...properties
@@ -169,12 +170,16 @@ function shortcutHelpHarness() {
 }
 
 Deno.test('guest clicks and scrolling abort the single shell help timer across nested documents until release', () => {
-    for (const type of ['pointerdown', 'click', 'auxclick', 'contextmenu', 'wheel', 'scroll', 'touchstart']) {
+    for (const type of ['pointerdown', 'mousedown', 'auxclick', 'contextmenu', 'wheel', 'scroll', 'touchstart']) {
         const h = shortcutHelpHarness()
         const [first, nested] = h.guests
         h.key(first, 'keydown', 'Meta', { metaKey: true })
         assert.equal(h.timers.size, 1)
-        nested.contentWindow.dispatchEvent(new Event(type))
+        if (type === 'mousedown') {
+            nested.click()
+        } else {
+            nested.contentWindow.dispatchEvent(new Event(type))
+        }
         h.key(nested, 'keydown', 'Meta', { metaKey: true, repeat: true })
         h.expire()
         assert.deepEqual(h.calls, [], type)
@@ -376,7 +381,7 @@ Deno.test('an injected page click crosses the console bridge and immediately dis
         altKey: false, ctrlKey: true, metaKey: false, shiftKey: true, detail: 2, isTopLevel: true
     }])
     assert.deepEqual(bridge.errors, [])
-    assert.deepEqual(bridge.registrations.find(event => event.type === 'click').options, { capture: true, passive: true })
+    assert.deepEqual(bridge.registrations.find(event => event.type === 'mousedown').options, { capture: true, passive: true })
 })
 
 Deno.test('click forwarding also works inside nested frames and before page handlers suppress the event', () => {
@@ -384,13 +389,13 @@ Deno.test('click forwarding also works inside nested frames and before page hand
     const bridge = contentClickBridge(h.window, 'tab', true)
     const clicks = []
     h.window.addEventListener('darc-controlled-frame-click', event => clicks.push(event.detail))
-    bridge.contentWindow.addEventListener('click', event => event.stopImmediatePropagation())
+    bridge.contentWindow.addEventListener('mousedown', event => event.stopImmediatePropagation())
     h.api.navigateTabHistory('tab', 'forward')
     bridge.click({ detail: 0 })
     assert.equal(h.api.visible, null)
     assert.equal(clicks.length, 1)
     assert.equal(clicks[0].isTopLevel, false)
-    assert.equal(clicks[0].detail, 0, 'keyboard-generated clicks also pass through the bridge')
+    assert.equal(clicks[0].detail, 0, 'the original press detail passes through the bridge')
 })
 
 Deno.test('the click bridge ignores malformed payloads and messages for other tabs', () => {

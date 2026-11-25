@@ -5,8 +5,9 @@ import { connectFrameIPC, scopedGuestScript, readGuestMessage, releaseFrameIPC }
 const source = Deno.readTextFileSync(new URL('../app/components/ControlledFrame.svelte', import.meta.url))
 const listener = parse(source).instance.content.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'setupMessageListener')
 const ipc = Deno.readTextFileSync(new URL('../app/inject/ipc.js', import.meta.url))
+const zoomControl = Deno.readTextFileSync(new URL('../app/inject/zoom-control.js', import.meta.url))
 
-function harness(subframe = false, timers = { setTimeout, clearTimeout }) {
+function harness(subframe = false, timers = { setTimeout, clearTimeout }, modifierKey = 'altKey') {
     const window = new EventTarget()
     const addListener = window.addEventListener.bind(window)
     window.addEventListener = (type, listener, options) => addListener(type, event => listener(new Proxy(event, {
@@ -46,7 +47,7 @@ function harness(subframe = false, timers = { setTimeout, clearTimeout }) {
     `)(frame, connectFrameIPC, readGuestMessage, shell)
     frame.focus = () => { focusCount++ }
 
-    new Function('window', 'document', 'globalThis', 'setTimeout', 'clearTimeout', scopedGuestScript(frame, `const tabId = 'tab';\n${ipc}`, 'https://embedder.example'))(window, document, { console: {
+    new Function('window', 'document', 'globalThis', 'setTimeout', 'clearTimeout', scopedGuestScript(frame, `const tabId = 'tab';\nconst scrollModifierKey = ${JSON.stringify(modifierKey)};\n${ipc}\n${zoomControl}`, 'https://embedder.example'))(window, document, { console: {
         log(message) {
             rawMessages.push(message)
             messages.push(readGuestMessage(frame, message) || message)
@@ -59,6 +60,7 @@ function harness(subframe = false, timers = { setTimeout, clearTimeout }) {
         get secret() { return JSON.parse(rawMessages.find(message => message.startsWith('darc:bridge:')).slice('darc:bridge:'.length)).secret },
         get focusCount() { return focusCount },
         close() {
+            window.dispatchEvent(new Event('pagehide'))
             for (const port of guestPorts) {
                 port.close()
             }
@@ -76,6 +78,62 @@ async function waitForReply(h, count = 1) {
     }
     assert.fail('The content script did not receive the parent reply over the MessagePort')
 }
+
+Deno.test('modified wheels use the existing input bridge and leave ordinary scrolling alone', async () => {
+    const h = harness()
+    try {
+        await waitForReply(h)
+        let pageWheels = 0
+        h.window.addEventListener('wheel', () => { pageWheels++ })
+        const event = Object.assign(new Event('wheel', { cancelable: true }), {
+            deltaX: 4, deltaY: -30, deltaMode: 0, altKey: true, shiftKey: true
+        })
+        h.window.dispatchEvent(event)
+        assert.equal(event.defaultPrevented, true)
+        assert.equal(pageWheels, 0)
+        assert.deepEqual(h.inputs.at(-1), { tabId: 'tab', type: 'wheel', deltaX: 4, deltaY: -30, deltaMode: 0,
+            shiftKey: true, altKey: true, ctrlKey: false, metaKey: false })
+        assert.equal(h.transfers.length, 1, 'wheel forwarding adds no channels')
+        const ordinary = Object.assign(new Event('wheel', { cancelable: true }), { deltaX: 0, deltaY: 10, deltaMode: 0 })
+        h.window.dispatchEvent(ordinary)
+        assert.equal(ordinary.defaultPrevented, false)
+        assert.equal(pageWheels, 1)
+        const synthetic = Object.assign(new Event('wheel', { cancelable: true }), { synthetic: true, ctrlKey: true })
+        h.window.dispatchEvent(synthetic)
+        assert.equal(synthetic.defaultPrevented, false)
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('nested guest scroll gestures use the signed console bridge', () => {
+    const h = harness(true)
+    try {
+        h.window.dispatchEvent(Object.assign(new Event('wheel', { cancelable: true }), {
+            deltaX: 0, deltaY: 20, deltaMode: 0, altKey: true, shiftKey: false
+        }))
+        assert.deepEqual(h.inputs.at(-1), { tabId: 'tab', type: 'wheel', deltaX: 0, deltaY: 20, deltaMode: 0,
+            shiftKey: false, altKey: true, ctrlKey: false, metaKey: false })
+        assert.equal(h.transfers.length, 0)
+    } finally {
+        h.close()
+    }
+})
+
+Deno.test('a Control startup assignment captures Control wheels without consuming Option scrolling', () => {
+    const h = harness(true, { setTimeout, clearTimeout }, 'ctrlKey')
+    try {
+        const control = Object.assign(new Event('wheel', { cancelable: true }), { ctrlKey: true, deltaX: 0, deltaY: -80, deltaMode: 0 })
+        h.window.dispatchEvent(control)
+        assert.equal(control.defaultPrevented, true)
+        assert.equal(h.inputs.at(-1).ctrlKey, true)
+        const option = Object.assign(new Event('wheel', { cancelable: true }), { altKey: true, deltaX: 0, deltaY: -80, deltaMode: 0 })
+        h.window.dispatchEvent(option)
+        assert.equal(option.defaultPrevented, false)
+    } finally {
+        h.close()
+    }
+})
 
 Deno.test('tab readiness starts a real transferred MessagePort hello/reply alongside console events', async () => {
     const h = harness()
@@ -206,11 +264,12 @@ Deno.test('wheel and scroll share one burst across short pauses and send only it
     }
 })
 
-Deno.test('the input bridge rejects malformed keyboard events, unknown types and other tab IDs', () => {
+Deno.test('the input bridge rejects malformed keyboard and wheel events, unknown types and other tab IDs', () => {
     const h = harness(true)
     try {
         for (const detail of [null, [], { tabId: 'other', type: 'scrollstart' },
             ...['cancel', 'wheel', 'scroll', 'mousemove', 'pointermove', 'touchmove'].map(type => ({ tabId: 'tab', type })),
+            { tabId: 'tab', type: 'wheel', deltaX: 0, deltaY: '80', deltaMode: 0, altKey: true, ctrlKey: false, metaKey: false, shiftKey: false },
             { tabId: 'tab', type: 'keydown' }, { tabId: 'tab', type: 'keyup', key: 'Meta', pressedKeyCount: -1 }]) {
             const message = 'iwa:input-event:' + JSON.stringify(detail)
             new Function('globalThis', scopedGuestScript(h.frame, `console.log(${JSON.stringify(message)})`, 'https://embedder.example'))({ console: {

@@ -82,6 +82,11 @@ function reportInputEvent(event) {
             shiftKey: !!event.shiftKey,
             pressedKeyCount: pressedInputKeys.size
         })
+    } else if (event.type === 'wheel') {
+        Object.assign(detail, {
+            deltaX: event.deltaX, deltaY: event.deltaY, deltaMode: event.deltaMode,
+            altKey: !!event.altKey, ctrlKey: !!event.ctrlKey, metaKey: !!event.metaKey, shiftKey: !!event.shiftKey
+        })
     } else if (event.type === 'blur') {
         pressedInputKeys.clear()
     } else {
@@ -116,9 +121,14 @@ function trackScroll(event) {
     if (starting) {
         console.log('iwa:input-event:' + JSON.stringify({ tabId, type: 'scrollstart' }))
     }
+    if (event.type === 'wheel' && event[scrollModifierKey] && !event.metaKey && !(event.altKey && event.ctrlKey)) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        reportInputEvent(event)
+    }
 }
 
-window.addEventListener('wheel', trackScroll, { capture: true, passive: true })
+window.addEventListener('wheel', trackScroll, { capture: true, passive: false })
 window.addEventListener('scroll', trackScroll, { capture: true, passive: true })
 window.addEventListener('pagehide', event => {
     if (event.isTrusted) {
