@@ -213,7 +213,7 @@
     })
 </script>
 
-<RightSidebar title="User Mods" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
+<RightSidebar title="User Mods" activeSidebar="userMods" {onClose} {openSidebars} {switchToResources} {switchToSettings} {switchToUserMods} {switchToActivity} {switchToAgent} {switchToDevTools} {devModeEnabled}>
     {#snippet children()}
         <div style="margin-top: 16px;"></div>
         <!-- Add/Edit Form -->

@@ -1,0 +1,43 @@
+# Sidebar browser tests
+
+ACP and MCP checks:
+
+- `deno run --allow-env --allow-read --allow-net tests/acp.test.js`
+- `deno test --no-check --allow-env --allow-read --allow-net tests/acp-connections.test.js`
+- `deno test --no-check --allow-env --allow-read --allow-sys --allow-net tests/acp-mcp-proxy.test.js`
+- `deno test --no-check --allow-env --allow-read --allow-sys tests/mcp-permissions.test.js tests/permissions.test.js`
+- `deno run --allow-env --allow-read --allow-sys --allow-write=./,/tmp --allow-ffi --allow-net --allow-run tests/mcp-worker.test.js`
+- `deno run --allow-env --allow-read --allow-sys --allow-write=./,/tmp --allow-ffi --allow-net --allow-run tests/mcp-browser.js`
+
+The worker test starts an isolated Miniflare/workerd instance. The ACP and MCP
+browser tests use temporary fixture servers and workspace-local build artifacts;
+they never connect to the user's running proxy. The connection test covers migration
+of existing grants, separate live ACP sessions, reload, and removal.
+
+Run a suite with `deno run --allow-env --allow-read --allow-sys --allow-write=./,/tmp --allow-ffi --allow-net --allow-run tests/<suite>.js`. Each suite starts its own local
+fixture server and headless Chromium session.
+
+The former `favicon-browser.js` scenarios now have independent entry points:
+
+| Suite | Coverage | Former flag |
+| --- | --- | --- |
+| `favicon-browser.js` | Favicon identity, fallback, loading/audio overlays, link favicons and activity sorting | `--audio-only`, `--activity-only` still supported |
+| `tab-creation-browser.js` | Creation drags, cancellation, clicks, keyboard creation and hover suppression | `--creation-only` |
+| `new-tab-menu-browser.js` | Clipboard previews, URL/search navigation, menu refresh, keyboard selection and container tabs | |
+| `closed-tabs-preview-browser.js` | Shared moved/closed tab toasts, expiry, restore actions, hover/focus retention and responsive placement | `--closed-tabs-preview-only` |
+| `close-button-history-browser.js` | Close-button history delays, cancellation and retention | `--close-button-history-only` |
+| `sidebar-layout-browser.js` | Header layout, window drag regions and control reachability | |
+| `sidebar-pins-browser.js` | Pin dragging, transfers, sidebar sections and unpinning | `--pins-only` |
+| `pin-modes-browser.js` | Pinned groups, manual pin order, Normal activation and Menu sizing/dismissal | |
+| `sidebar-scroll-browser.js` | Sticky New Tab, crowded pins and active-tab scrolling | `--sidebar-scroll-only` |
+| `sidebar-pinned-scroll-browser.js` | Pinned/snoozed reveal tension, snapping, divider tooltip and empty pin drop | |
+| `sidebar-multi-space-browser.js` | Space navigation, new-tab-only spaces, search and full-width closing | |
+| `tab-overrides-browser.js` | Custom titles, emoji, image icons and resets | `--tab-overrides-only` |
+| `tab-title-browser.js` | Shared URL fallback, reactive titles and internal New Tab titles across tab surfaces | |
+| `sidebar-hovercards-browser.js` | Hovercard gaps, responsive history, screenshots and metadata | |
+| `sidebar-groups-browser.js` | Group activation previews, menus and resizing | |
+| `sidebar-activation-browser.js` | Immediate mouseup activation, held presses, drag/Escape cancellation and keyboard activation | |
+| `archived-tabs-menu-browser.js` | Shared pending/closed menu gestures, delayed closing, global history sections, action spacing and loading states | |
+
+Use the independent entry point in place of its former flag. Shared setup and
+cleanup live in `sidebar-browser-fixture.js`.
